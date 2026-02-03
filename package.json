@@ -1,0 +1,59 @@
+{
+  "name": "@blockrun/openclaw-provider",
+  "version": "0.1.0",
+  "description": "BlockRun LLM provider plugin for OpenClaw — 30+ AI models with x402 micropayments",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "openclaw",
+    "blockrun",
+    "x402",
+    "llm",
+    "ai",
+    "payment",
+    "usdc",
+    "crypto"
+  ],
+  "author": "BlockRun <hello@blockrun.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blockrunai/openclaw-provider"
+  },
+  "dependencies": {
+    "@x402/evm": "^2.2.0",
+    "@x402/fetch": "^2.2.0",
+    "viem": "^2.39.3"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2025.1.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "openclaw": "latest",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
