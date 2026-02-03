@@ -1,6 +1,6 @@
 # @blockrun/openclaw
 
-LLM cost optimization for OpenClaw. One API key, 30+ models, smart routing, spend controls. Pay with crypto (x402) or credit card (Stripe).
+LLM cost optimization for OpenClaw. One wallet, 30+ models, smart routing, spend controls. Pay per request with x402 USDC micropayments — no account needed.
 
 ## The Problem
 
@@ -15,17 +15,14 @@ The related pain points:
 
 ## The Solution
 
-BlockRun gives OpenClaw operators one API key for 30+ models with automatic cost optimization.
+BlockRun gives OpenClaw operators one wallet for 30+ models with automatic cost optimization. No account, no API key — your wallet signs a USDC micropayment on Base for each request.
 
 ```bash
 # Install the provider plugin
 openclaw plugin install @blockrun/openclaw
 
-# Option A: Pay with crypto (no account needed)
+# Set your wallet key
 export BLOCKRUN_WALLET_KEY=0x...
-
-# Option B: Pay with credit card
-export BLOCKRUN_API_KEY=br_live_...
 
 # Set your model (or let smart routing choose)
 openclaw config set model blockrun/auto
@@ -35,7 +32,7 @@ openclaw config set model blockrun/auto
 
 | Feature | What It Does |
 |---------|-------------|
-| **One API key, 30+ models** | OpenAI, Anthropic, Google, DeepSeek, xAI — all through one key |
+| **One wallet, 30+ models** | OpenAI, Anthropic, Google, DeepSeek, xAI — all through one wallet |
 | **Smart routing** | Auto-routes queries to the cheapest model that can handle them |
 | **Spend controls** | Set daily/weekly/monthly budgets. Hard stop when limit hit — no surprise bills |
 | **Graceful fallback** | When one provider rate-limits, auto-switches to another. No silent failures |
@@ -55,7 +52,7 @@ openclaw config set model blockrun/auto
 │  │  • Intercepts LLM requests                                │  │
 │  │  • Checks spend limits                                    │  │
 │  │  • Forwards to BlockRun API                               │  │
-│  │  • Handles payment (x402 or API key)                      │  │
+│  │  • Handles x402 micropayment                               │  │
 │  │  • Streams response back                                  │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
@@ -64,7 +61,7 @@ openclaw config set model blockrun/auto
 ┌─────────────────────────────────────────────────────────────────┐
 │                     BlockRun API                                │
 │                                                                 │
-│  1. Authenticate (API key or x402 payment)                      │
+│  1. Verify x402 payment                                         │
 │  2. Smart routing: pick cheapest capable model                  │
 │  3. Enforce spend limits                                        │
 │  4. Forward to provider (OpenAI, Anthropic, Google, etc.)       │
@@ -98,31 +95,19 @@ Operators can also pin a specific model (`openclaw config set model openai/gpt-4
 
 ## Payment
 
-### x402 Wallet (Crypto-Native)
+No account needed. Payment IS authentication via [x402](https://www.x402.org/).
 
-No account needed. Payment IS authentication. Your wallet signs a USDC micropayment on Base for each API call.
+Your wallet signs a USDC micropayment on Base for each API call. The plugin handles the payment dance transparently:
+
+```
+Request → 402 (price: $0.002) → sign USDC → retry with payment → stream response
+```
 
 ```bash
 export BLOCKRUN_WALLET_KEY=0x...your_private_key...
 ```
 
-The plugin handles the x402 payment dance transparently:
-```
-Request → 402 (price: $0.002) → sign USDC → retry with payment → stream response
-```
-
-### API Key + Stripe (Credit Card)
-
-Create an account at blockrun.ai, fund via Stripe, use your API key.
-
-```bash
-# 1. Sign up at blockrun.ai
-# 2. Add funds via Stripe ($5 / $25 / $100)
-# 3. Copy API key
-export BLOCKRUN_API_KEY=br_live_xxxxxxxxxxxx
-```
-
-Both paths work with the same plugin. Set one or the other — the plugin auto-detects which to use.
+That's it. No signup, no dashboard, no credit card. Fund your wallet with USDC on Base and start making requests.
 
 ## Spend Controls
 
@@ -181,7 +166,7 @@ src/
 ├── router.ts     # Smart routing logic (model selection)
 ├── budget.ts     # Spend controls and budget enforcement
 ├── models.ts     # Model definitions and pricing
-├── auth.ts       # Wallet key or API key resolution
+├── auth.ts       # Wallet key resolution
 └── types.ts      # Type definitions
 ```
 
@@ -211,9 +196,8 @@ GET  /api/v1/budget              — Current spend vs. limits
 # Install
 openclaw plugin install @blockrun/openclaw
 
-# Configure payment (pick one)
-export BLOCKRUN_WALLET_KEY=0x...   # crypto
-export BLOCKRUN_API_KEY=br_live_...  # credit card
+# Set your wallet key (USDC on Base)
+export BLOCKRUN_WALLET_KEY=0x...
 
 # Use smart routing
 openclaw config set model blockrun/auto

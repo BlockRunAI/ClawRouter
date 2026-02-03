@@ -1,7 +1,7 @@
 {
   "name": "@blockrun/openclaw",
   "version": "0.1.0",
-  "description": "LLM cost optimization for OpenClaw — one API key, 30+ models, smart routing, spend controls",
+  "description": "LLM cost optimization for OpenClaw — one wallet, 30+ models, smart routing, spend controls via x402",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
