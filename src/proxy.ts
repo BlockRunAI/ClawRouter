@@ -6,7 +6,7 @@
  *
  * Flow:
  *   pi-ai → http://localhost:{port}/v1/chat/completions
- *        → proxy forwards to https://api.blockrun.ai/api/v1/chat/completions
+ *        → proxy forwards to https://blockrun.ai/api/v1/chat/completions
  *        → gets 402 → @x402/fetch signs payment → retries
  *        → streams response back to pi-ai
  *
@@ -18,13 +18,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { privateKeyToAccount } from "viem/accounts";
-import { toClientEvmSigner, ExactEvmScheme } from "@x402/evm";
-import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { createPaymentFetch } from "./x402.js";
 import { route, getFallbackChain, DEFAULT_ROUTING_CONFIG, type RouterOptions, type RoutingDecision, type RoutingConfig, type ModelPricing } from "./router/index.js";
 import { BLOCKRUN_MODELS } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
 
-const BLOCKRUN_API = "https://api.blockrun.ai/api";
+const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
 const USER_AGENT = "claw-router/0.1.0";
 
@@ -80,12 +79,9 @@ function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
 export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const apiBase = options.apiBase ?? BLOCKRUN_API;
 
-  // Create x402 payment client from wallet private key
-  // Base mainnet = eip155:8453
+  // Create x402 payment-enabled fetch from wallet private key
   const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const signer = toClientEvmSigner(account);
-  const client = new x402Client().register("eip155:8453", new ExactEvmScheme(signer));
-  const payFetch = wrapFetchWithPayment(fetch, client);
+  const payFetch = createPaymentFetch(options.walletKey as `0x${string}`);
 
   // Build router options
   const routingConfig = mergeRoutingConfig(options.routingConfig);
@@ -168,7 +164,7 @@ async function proxyRequest(
 ): Promise<void> {
   const startTime = Date.now();
 
-  // Build upstream URL: /v1/chat/completions → https://api.blockrun.ai/api/v1/chat/completions
+  // Build upstream URL: /v1/chat/completions → https://blockrun.ai/api/v1/chat/completions
   const upstreamUrl = `${apiBase}${req.url}`;
 
   // Collect request body
@@ -214,10 +210,11 @@ async function proxyRequest(
     }
   }
 
-  // Forward headers, stripping host and connection
+  // Forward headers, stripping host, connection, and content-length
+  // (content-length may be wrong after body modification for routing)
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
-    if (key === "host" || key === "connection" || key === "transfer-encoding") continue;
+    if (key === "host" || key === "connection" || key === "transfer-encoding" || key === "content-length") continue;
     if (typeof value === "string") {
       headers[key] = value;
     }

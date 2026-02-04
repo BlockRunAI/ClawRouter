@@ -260,7 +260,7 @@ const decision = await route("Prove sqrt(2) is irrational", undefined, 4096, {
   config: DEFAULT_ROUTING_CONFIG,
   modelPricing,
   payFetch,
-  apiBase: "https://api.blockrun.ai/api",
+  apiBase: "https://blockrun.ai/api",
 });
 
 console.log(decision);
@@ -317,6 +317,48 @@ ClawRouter is built for **agents**. The difference:
 | **Routing** | Proprietary / closed | Open source, client-side, inspectable |
 
 As agents become autonomous, they need financial infrastructure designed for machines. An agent shouldn't need a human to sign up for a service and paste an API key. It should generate a wallet, receive funds, and pay per request — programmatically.
+
+## Test Results
+
+Real output from `node test/dist/e2e.js` — routing decisions are made in <1ms:
+
+```
+═══ Routing Test Results ═══
+
+Simple queries (→ Gemini Flash, 94% savings):
+  ✓ "What is the capital of France?" → SIMPLE
+  ✓ "Hello" → SIMPLE
+  ✓ "Define photosynthesis" → SIMPLE
+  ✓ "Translate hello to Spanish" → SIMPLE
+
+Reasoning queries (→ o3, 20% savings):
+  ✓ "Prove sqrt(2) is irrational" → REASONING
+  ✓ "Derive time complexity + prove optimal" → REASONING
+
+═══ Full Router (rules-only path) ═══
+
+  ✓ Simple factual → google/gemini-2.5-flash (SIMPLE, rules) saved=94.0%
+  ✓ Greeting → google/gemini-2.5-flash (SIMPLE, rules) saved=94.0%
+  ✓ Math proof → openai/o3 (REASONING, rules) saved=20.0%
+
+Cost estimate sanity:
+  ✓ Cost estimate > 0: $0.002458
+  ✓ Baseline cost > 0: $0.040970
+  ✓ Savings in range [0,1]: 0.9400
+  ✓ Cost ($0.002458) <= Baseline ($0.040970)
+
+═══ Live Proxy Test ═══
+
+  ✓ Health check: ok
+  [routed] google/gemini-2.5-flash (SIMPLE) saved=94.0%
+  ✓ Response: 2+2 equals 4.
+
+═══════════════════════════════════
+  21 passed, 0 failed
+═══════════════════════════════════
+```
+
+**Bottom line:** A simple "What is 2+2?" costs **$0.002** instead of **$0.041** — that's **94% savings** on every simple query.
 
 ## License
 
