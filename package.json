@@ -1,10 +1,13 @@
 {
   "name": "claw-router",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Smart LLM router — save 63% on inference costs. 30+ models, one wallet, x402 micropayments.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -12,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "openclaw.plugin.json"
   ],
   "scripts": {
     "build": "tsup",
