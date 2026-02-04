@@ -47,20 +47,20 @@ const config = DEFAULT_ROUTING_CONFIG;
 // Simple queries
 {
   console.log("Simple queries:");
-  const r1 = classifyByRules("What is the capital of France?", undefined, 8, config.scoring, config.classifier.ambiguousZone);
-  assert(r1.tier === "SIMPLE", `"What is the capital of France?" → ${r1.tier} (score=${r1.score})`);
+  const r1 = classifyByRules("What is the capital of France?", undefined, 8, config.scoring);
+  assert(r1.tier === "SIMPLE", `"What is the capital of France?" → ${r1.tier} (score=${r1.score.toFixed(3)})`);
 
-  const r2 = classifyByRules("Hello", undefined, 2, config.scoring, config.classifier.ambiguousZone);
-  assert(r2.tier === "SIMPLE", `"Hello" → ${r2.tier} (score=${r2.score})`);
+  const r2 = classifyByRules("Hello", undefined, 2, config.scoring);
+  assert(r2.tier === "SIMPLE", `"Hello" → ${r2.tier} (score=${r2.score.toFixed(3)})`);
 
-  const r3 = classifyByRules("Define photosynthesis", undefined, 4, config.scoring, config.classifier.ambiguousZone);
-  assert(r3.tier === "SIMPLE", `"Define photosynthesis" → ${r3.tier} (score=${r3.score})`);
+  const r3 = classifyByRules("Define photosynthesis", undefined, 4, config.scoring);
+  assert(r3.tier === "SIMPLE", `"Define photosynthesis" → ${r3.tier} (score=${r3.score.toFixed(3)})`);
 
-  const r4 = classifyByRules("Translate hello to Spanish", undefined, 6, config.scoring, config.classifier.ambiguousZone);
-  assert(r4.tier === "SIMPLE", `"Translate hello to Spanish" → ${r4.tier} (score=${r4.score})`);
+  const r4 = classifyByRules("Translate hello to Spanish", undefined, 6, config.scoring);
+  assert(r4.tier === "SIMPLE", `"Translate hello to Spanish" → ${r4.tier} (score=${r4.score.toFixed(3)})`);
 
-  const r5 = classifyByRules("Yes or no: is the sky blue?", undefined, 8, config.scoring, config.classifier.ambiguousZone);
-  assert(r5.tier === "SIMPLE", `"Yes or no: is the sky blue?" → ${r5.tier} (score=${r5.score})`);
+  const r5 = classifyByRules("Yes or no: is the sky blue?", undefined, 8, config.scoring);
+  assert(r5.tier === "SIMPLE", `"Yes or no: is the sky blue?" → ${r5.tier} (score=${r5.score.toFixed(3)})`);
 }
 
 // Medium queries (may be ambiguous — that's ok, LLM classifier handles them)
@@ -68,33 +68,33 @@ const config = DEFAULT_ROUTING_CONFIG;
   console.log("\nMedium/Ambiguous queries:");
   const r1 = classifyByRules(
     "Summarize the key differences between REST and GraphQL APIs",
-    undefined, 30, config.scoring, config.classifier.ambiguousZone,
+    undefined, 30, config.scoring,
   );
-  console.log(`  → "Summarize REST vs GraphQL" → tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score}) [${r1.signals.join(", ")}]`);
+  console.log(`  → "Summarize REST vs GraphQL" → tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)}) [${r1.signals.join(", ")}]`);
 
   const r2 = classifyByRules(
     "Write a Python function to sort a list using merge sort",
-    undefined, 40, config.scoring, config.classifier.ambiguousZone,
+    undefined, 40, config.scoring,
   );
-  console.log(`  → "Write merge sort" → tier=${r2.tier ?? "AMBIGUOUS"} (score=${r2.score}) [${r2.signals.join(", ")}]`);
+  console.log(`  → "Write merge sort" → tier=${r2.tier ?? "AMBIGUOUS"} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)}) [${r2.signals.join(", ")}]`);
 }
 
-// Complex queries — these score in the ambiguous zone [1,2], which is correct.
-// In production, the LLM classifier would route them to COMPLEX.
+// Complex queries — these produce low confidence, which is correct.
+// In production, the fallback classifier would route them to COMPLEX.
 // Here we verify they're ambiguous (null) since rules alone can't be confident.
 {
-  console.log("\nComplex queries (expected: ambiguous → LLM classifier):");
+  console.log("\nComplex queries (expected: ambiguous → fallback classifier):");
   const r1 = classifyByRules(
     "Build a React component with TypeScript that implements a drag-and-drop kanban board with async data loading, error handling, and unit tests",
-    undefined, 200, config.scoring, config.classifier.ambiguousZone,
+    undefined, 200, config.scoring,
   );
-  assert(r1.tier === null, `Kanban board → AMBIGUOUS (score=${r1.score}) — correctly defers to LLM classifier`);
+  assert(r1.tier === null, `Kanban board → AMBIGUOUS (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)}) — correctly defers to classifier`);
 
   const r2 = classifyByRules(
     "Design a distributed microservice architecture for a real-time trading platform. Include the database schema, API endpoints, message queue topology, and kubernetes deployment manifests.",
-    undefined, 250, config.scoring, config.classifier.ambiguousZone,
+    undefined, 250, config.scoring,
   );
-  assert(r2.tier === null, `Distributed trading platform → AMBIGUOUS (score=${r2.score}) — correctly defers to LLM classifier`);
+  assert(r2.tier === null, `Distributed trading platform → AMBIGUOUS (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)}) — correctly defers to classifier`);
 }
 
 // Reasoning queries
@@ -102,30 +102,30 @@ const config = DEFAULT_ROUTING_CONFIG;
   console.log("\nReasoning queries:");
   const r1 = classifyByRules(
     "Prove that the square root of 2 is irrational using proof by contradiction. Show each step formally.",
-    undefined, 60, config.scoring, config.classifier.ambiguousZone,
+    undefined, 60, config.scoring,
   );
-  assert(r1.tier === "REASONING", `"Prove sqrt(2) irrational" → ${r1.tier} (score=${r1.score})`);
+  assert(r1.tier === "REASONING", `"Prove sqrt(2) irrational" → ${r1.tier} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`);
 
   const r2 = classifyByRules(
     "Derive the time complexity of the following algorithm step by step, then prove it is optimal using a lower bound argument.",
-    undefined, 80, config.scoring, config.classifier.ambiguousZone,
+    undefined, 80, config.scoring,
   );
-  assert(r2.tier === "REASONING", `"Derive time complexity + prove optimal" → ${r2.tier} (score=${r2.score})`);
+  assert(r2.tier === "REASONING", `"Derive time complexity + prove optimal" → ${r2.tier} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)})`);
 
   const r3 = classifyByRules(
     "Using chain of thought, solve this mathematical proof: for all n >= 1, prove that 1 + 2 + ... + n = n(n+1)/2",
-    undefined, 70, config.scoring, config.classifier.ambiguousZone,
+    undefined, 70, config.scoring,
   );
-  assert(r3.tier === "REASONING", `"Chain of thought proof" → ${r3.tier} (score=${r3.score})`);
+  assert(r3.tier === "REASONING", `"Chain of thought proof" → ${r3.tier} (score=${r3.score.toFixed(3)}, conf=${r3.confidence.toFixed(3)})`);
 }
 
 // Override: large context
 {
   console.log("\nOverride: large context:");
-  const r1 = classifyByRules("What is 2+2?", undefined, 150000, config.scoring, config.classifier.ambiguousZone);
+  const r1 = classifyByRules("What is 2+2?", undefined, 150000, config.scoring);
   // The rules classifier doesn't handle the override — that's in router/index.ts
   // But token count should push score up
-  console.log(`  → 150K tokens "What is 2+2?" → tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score})`);
+  console.log(`  → 150K tokens "What is 2+2?" → tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`);
 }
 
 // ─── Part 2: Full Router (route function, no LLM classifier — uses mock) ───

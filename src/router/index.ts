@@ -63,7 +63,6 @@ export async function route(
     systemPrompt,
     estimatedTokens,
     config.scoring,
-    config.classifier.ambiguousZone,
   );
 
   let tier: Tier;

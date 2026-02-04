@@ -4,14 +4,16 @@
  * Four classification tiers — REASONING is distinct from COMPLEX because
  * reasoning tasks need different models (o3, gemini-pro) than general
  * complex tasks (gpt-4o, sonnet-4).
+ *
+ * Scoring uses weighted float dimensions with sigmoid confidence calibration.
  */
 
 export type Tier = "SIMPLE" | "MEDIUM" | "COMPLEX" | "REASONING";
 
 export type ScoringResult = {
-  score: number;
-  tier: Tier | null; // null = ambiguous, needs LLM classifier
-  confidence: number;
+  score: number; // weighted float (roughly [-0.3, 0.4])
+  tier: Tier | null; // null = ambiguous, needs fallback classifier
+  confidence: number; // sigmoid-calibrated [0, 1]
   signals: string[];
 };
 
@@ -38,10 +40,25 @@ export type ScoringConfig = {
   simpleKeywords: string[];
   technicalKeywords: string[];
   creativeKeywords: string[];
+  // New dimension keyword lists
+  imperativeVerbs: string[];
+  constraintIndicators: string[];
+  outputFormatKeywords: string[];
+  referenceKeywords: string[];
+  negationKeywords: string[];
+  domainSpecificKeywords: string[];
+  // Weighted scoring parameters
+  dimensionWeights: Record<string, number>;
+  tierBoundaries: {
+    simpleMedium: number;
+    mediumComplex: number;
+    complexReasoning: number;
+  };
+  confidenceSteepness: number;
+  confidenceThreshold: number;
 };
 
 export type ClassifierConfig = {
-  ambiguousZone: [number, number];
   llmModel: string;
   llmMaxTokens: number;
   llmTemperature: number;
