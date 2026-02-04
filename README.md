@@ -30,17 +30,19 @@ ClawRouter is a smart LLM router for [OpenClaw](https://github.com/openclaw/open
 ## Quick Start
 
 ```bash
-# 1. Install
+# 1. Install — auto-generates a wallet on Base
 openclaw plugin install claw-router
 
-# 2. Set your wallet key
-export BLOCKRUN_WALLET_KEY=0x...
+# 2. Fund your wallet with USDC on Base (address printed on install)
+#    A few dollars is enough to start — each request costs fractions of a cent
 
 # 3. Enable smart routing
 openclaw config set model blockrun/auto
 ```
 
-Every request now routes to the cheapest capable model. Fund your wallet with USDC on Base to start.
+Every request now routes to the cheapest capable model.
+
+Already have a funded wallet? Bring your own: `export BLOCKRUN_WALLET_KEY=0x...`
 
 Want a specific model instead? `openclaw config set model openai/gpt-4o` — you still get x402 payments and usage logging.
 
