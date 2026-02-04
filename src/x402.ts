@@ -175,13 +175,24 @@ export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResul
       }
 
       // Pre-auth rejected (wrong amount, payTo changed, etc.)
-      // Fall through to normal 402 flow using THIS 402 response
+      // Try to use this 402's payment header for a proper retry
       const paymentHeader = response.headers.get("x-payment-required");
       if (paymentHeader) {
         return handle402(input, init, url, endpointPath, paymentHeader);
       }
-      // No payment header in rejection — return as-is
-      return response;
+
+      // No payment header — invalidate cache and retry clean (no payment header)
+      // to get a proper 402 with payment requirements
+      paymentCache.invalidate(endpointPath);
+      const cleanResponse = await fetch(input, init);
+      if (cleanResponse.status !== 402) {
+        return cleanResponse;
+      }
+      const cleanHeader = cleanResponse.headers.get("x-payment-required");
+      if (!cleanHeader) {
+        throw new Error("402 response missing x-payment-required header");
+      }
+      return handle402(input, init, url, endpointPath, cleanHeader);
     }
 
     // --- Normal path: first request may get 402 ---

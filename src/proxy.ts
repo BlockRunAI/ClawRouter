@@ -32,7 +32,7 @@ import { RequestDeduplicator, type CachedResponse } from "./dedup.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
-const USER_AGENT = "clawrouter/0.3.1";
+const USER_AGENT = "clawrouter/0.3.2";
 const HEARTBEAT_INTERVAL_MS = 2_000;
 
 export type ProxyOptions = {
@@ -96,7 +96,8 @@ function estimateAmount(modelId: string, bodyLength: number, maxTokens: number):
     (estimatedOutputTokens / 1_000_000) * model.outputPrice;
 
   // Convert to USDC 6-decimal integer, add 20% buffer for estimation error
-  const amountMicros = Math.ceil(costUsd * 1.2 * 1_000_000);
+  // Minimum 100 ($0.0001) to avoid zero-amount rejections
+  const amountMicros = Math.max(100, Math.ceil(costUsd * 1.2 * 1_000_000));
   return amountMicros.toString();
 }
 
