@@ -12,7 +12,7 @@
  */
 
 import { signTypedData, privateKeyToAccount } from "viem/accounts";
-import { PaymentCache, type CachedPaymentParams } from "./payment-cache.js";
+import { PaymentCache } from "./payment-cache.js";
 
 const BASE_CHAIN_ID = 8453;
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
@@ -38,7 +38,9 @@ const TRANSFER_TYPES = {
 function createNonce(): `0x${string}` {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return `0x${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`;
+  return `0x${Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")}` as `0x${string}`;
 }
 
 interface PaymentOption {
@@ -67,7 +69,7 @@ async function createPaymentPayload(
   fromAddress: string,
   recipient: string,
   amount: string,
-  resourceUrl: string
+  resourceUrl: string,
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const validAfter = now - 600;
@@ -129,7 +131,11 @@ export type PreAuthParams = {
 
 /** Result from createPaymentFetch — includes the fetch wrapper and payment cache. */
 export type PaymentFetchResult = {
-  fetch: (input: RequestInfo | URL, init?: RequestInit, preAuth?: PreAuthParams) => Promise<Response>;
+  fetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    preAuth?: PreAuthParams,
+  ) => Promise<Response>;
   cache: PaymentCache;
 };
 

@@ -72,45 +72,45 @@ No external classifier calls. Ambiguous queries default to the MEDIUM tier (Deep
 
 ### 14-Dimension Weighted Scoring
 
-| Dimension | Weight | What It Detects |
-|-----------|--------|-----------------|
-| Reasoning markers | 0.18 | "prove", "theorem", "step by step" |
-| Code presence | 0.15 | "function", "async", "import", "```" |
-| Simple indicators | 0.12 | "what is", "define", "translate" |
-| Multi-step patterns | 0.12 | "first...then", "step 1", numbered lists |
-| Technical terms | 0.10 | "algorithm", "kubernetes", "distributed" |
-| Token count | 0.08 | short (<50) vs long (>500) prompts |
-| Creative markers | 0.05 | "story", "poem", "brainstorm" |
-| Question complexity | 0.05 | Multiple question marks |
-| Constraint count | 0.04 | "at most", "O(n)", "maximum" |
-| Imperative verbs | 0.03 | "build", "create", "implement" |
-| Output format | 0.03 | "json", "yaml", "schema" |
-| Domain specificity | 0.02 | "quantum", "fpga", "genomics" |
-| Reference complexity | 0.02 | "the docs", "the api", "above" |
-| Negation complexity | 0.01 | "don't", "avoid", "without" |
+| Dimension            | Weight | What It Detects                          |
+| -------------------- | ------ | ---------------------------------------- |
+| Reasoning markers    | 0.18   | "prove", "theorem", "step by step"       |
+| Code presence        | 0.15   | "function", "async", "import", "```"     |
+| Simple indicators    | 0.12   | "what is", "define", "translate"         |
+| Multi-step patterns  | 0.12   | "first...then", "step 1", numbered lists |
+| Technical terms      | 0.10   | "algorithm", "kubernetes", "distributed" |
+| Token count          | 0.08   | short (<50) vs long (>500) prompts       |
+| Creative markers     | 0.05   | "story", "poem", "brainstorm"            |
+| Question complexity  | 0.05   | Multiple question marks                  |
+| Constraint count     | 0.04   | "at most", "O(n)", "maximum"             |
+| Imperative verbs     | 0.03   | "build", "create", "implement"           |
+| Output format        | 0.03   | "json", "yaml", "schema"                 |
+| Domain specificity   | 0.02   | "quantum", "fpga", "genomics"            |
+| Reference complexity | 0.02   | "the docs", "the api", "above"           |
+| Negation complexity  | 0.01   | "don't", "avoid", "without"              |
 
 Weighted sum → sigmoid confidence calibration → tier selection.
 
 ### Tier → Model Mapping
 
-| Tier | Primary Model | Cost/M | Savings vs Opus |
-|------|--------------|--------|-----------------|
-| SIMPLE | deepseek-chat | $0.27 | **99.6%** |
-| MEDIUM | gpt-4o-mini | $0.60 | **99.2%** |
-| COMPLEX | claude-sonnet-4 | $15.00 | **80%** |
-| REASONING | o3 | $10.00 | **87%** |
+| Tier      | Primary Model   | Cost/M | Savings vs Opus |
+| --------- | --------------- | ------ | --------------- |
+| SIMPLE    | deepseek-chat   | $0.27  | **99.6%**       |
+| MEDIUM    | gpt-4o-mini     | $0.60  | **99.2%**       |
+| COMPLEX   | claude-sonnet-4 | $15.00 | **80%**         |
+| REASONING | o3              | $10.00 | **87%**         |
 
 Special rule: 2+ reasoning markers → REASONING at 0.97 confidence.
 
 ### Cost Savings (Real Numbers)
 
-| Tier | % of Traffic | Cost/M |
-|------|-------------|--------|
-| SIMPLE | ~45% | $0.27 |
-| MEDIUM | ~35% | $0.60 |
-| COMPLEX | ~15% | $15.00 |
-| REASONING | ~5% | $10.00 |
-| **Blended average** | | **$3.17/M** |
+| Tier                | % of Traffic | Cost/M      |
+| ------------------- | ------------ | ----------- |
+| SIMPLE              | ~45%         | $0.27       |
+| MEDIUM              | ~35%         | $0.60       |
+| COMPLEX             | ~15%         | $15.00      |
+| REASONING           | ~5%          | $10.00      |
+| **Blended average** |              | **$3.17/M** |
 
 Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 
@@ -120,27 +120,27 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 
 30+ models across 5 providers, one wallet:
 
-| Model | Input $/M | Output $/M | Context | Reasoning |
-|-------|----------|-----------|---------|:---------:|
-| **OpenAI** | | | | |
-| gpt-5.2 | $1.75 | $14.00 | 400K | * |
-| gpt-4o | $2.50 | $10.00 | 128K | |
-| gpt-4o-mini | $0.15 | $0.60 | 128K | |
-| o3 | $2.00 | $8.00 | 200K | * |
-| o3-mini | $1.10 | $4.40 | 128K | * |
-| **Anthropic** | | | | |
-| claude-opus-4.5 | $15.00 | $75.00 | 200K | * |
-| claude-sonnet-4 | $3.00 | $15.00 | 200K | * |
-| claude-haiku-4.5 | $1.00 | $5.00 | 200K | |
-| **Google** | | | | |
-| gemini-2.5-pro | $1.25 | $10.00 | 1M | * |
-| gemini-2.5-flash | $0.15 | $0.60 | 1M | |
-| **DeepSeek** | | | | |
-| deepseek-chat | $0.14 | $0.28 | 128K | |
-| deepseek-reasoner | $0.55 | $2.19 | 128K | * |
-| **xAI** | | | | |
-| grok-3 | $3.00 | $15.00 | 131K | * |
-| grok-3-mini | $0.30 | $0.50 | 131K | |
+| Model             | Input $/M | Output $/M | Context | Reasoning |
+| ----------------- | --------- | ---------- | ------- | :-------: |
+| **OpenAI**        |           |            |         |           |
+| gpt-5.2           | $1.75     | $14.00     | 400K    |    \*     |
+| gpt-4o            | $2.50     | $10.00     | 128K    |           |
+| gpt-4o-mini       | $0.15     | $0.60      | 128K    |           |
+| o3                | $2.00     | $8.00      | 200K    |    \*     |
+| o3-mini           | $1.10     | $4.40      | 128K    |    \*     |
+| **Anthropic**     |           |            |         |           |
+| claude-opus-4.5   | $15.00    | $75.00     | 200K    |    \*     |
+| claude-sonnet-4   | $3.00     | $15.00     | 200K    |    \*     |
+| claude-haiku-4.5  | $1.00     | $5.00      | 200K    |           |
+| **Google**        |           |            |         |           |
+| gemini-2.5-pro    | $1.25     | $10.00     | 1M      |    \*     |
+| gemini-2.5-flash  | $0.15     | $0.60      | 1M      |           |
+| **DeepSeek**      |           |            |         |           |
+| deepseek-chat     | $0.14     | $0.28      | 128K    |           |
+| deepseek-reasoner | $0.55     | $2.19      | 128K    |    \*     |
+| **xAI**           |           |            |         |           |
+| grok-3            | $3.00     | $15.00     | 131K    |    \*     |
+| grok-3-mini       | $0.30     | $0.50      | 131K    |           |
 
 Full list: [`src/models.ts`](src/models.ts)
 
@@ -157,6 +157,7 @@ Request → 402 (price: $0.003) → wallet signs USDC → retry → response
 USDC stays in your wallet until spent — non-custodial. Price is visible in the 402 header before signing.
 
 **Fund your wallet:**
+
 - Coinbase: Buy USDC, send to Base
 - Bridge: Move USDC from any chain to Base
 - CEX: Withdraw USDC to Base network
@@ -306,12 +307,12 @@ console.log(decision);
 
 They're built for developers. ClawRouter is built for **agents**.
 
-| | OpenRouter / LiteLLM | ClawRouter |
-|---|---|---|
-| **Setup** | Human creates account | Agent generates wallet |
-| **Auth** | API key (shared secret) | Wallet signature (cryptographic) |
-| **Payment** | Prepaid balance (custodial) | Per-request (non-custodial) |
-| **Routing** | Proprietary / closed | Open source, client-side |
+|             | OpenRouter / LiteLLM        | ClawRouter                       |
+| ----------- | --------------------------- | -------------------------------- |
+| **Setup**   | Human creates account       | Agent generates wallet           |
+| **Auth**    | API key (shared secret)     | Wallet signature (cryptographic) |
+| **Payment** | Prepaid balance (custodial) | Per-request (non-custodial)      |
+| **Routing** | Proprietary / closed        | Open source, client-side         |
 
 Agents shouldn't need a human to paste API keys. They should generate a wallet, receive funds, and pay per request — programmatically.
 

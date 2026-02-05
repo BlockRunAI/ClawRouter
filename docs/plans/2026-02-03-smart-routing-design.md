@@ -14,12 +14,12 @@ Every existing smart router (OpenRouter, LiteLLM, etc.) runs server-side. The ro
 
 BlockRun's structural advantage: **x402 per-model transparent pricing**. Each model has an independent price visible in the 402 response. This means the routing decision can live in the open-source plugin where it's inspectable, customizable, and auditable.
 
-| | Server-side (OpenRouter) | Client-side (ClawRouter) |
-|---|---|---|
-| Routing logic | Proprietary black box | Open-source in plugin |
-| Pricing | Bundled, opaque | Per-model, transparent via x402 |
-| Customization | None | Operators edit config |
-| Trust model | "Trust us" | "Read the code" |
+|               | Server-side (OpenRouter) | Client-side (ClawRouter)        |
+| ------------- | ------------------------ | ------------------------------- |
+| Routing logic | Proprietary black box    | Open-source in plugin           |
+| Pricing       | Bundled, opaque          | Per-model, transparent via x402 |
+| Customization | None                     | Operators edit config           |
+| Trust model   | "Trust us"               | "Read the code"                 |
 
 ## Research Summary
 
@@ -86,11 +86,11 @@ OpenClaw Agent
 
 Four tiers. REASONING is distinct from COMPLEX because reasoning tasks need different models (o3, gemini-pro) than general complex tasks (claude-opus-4, gpt-4o).
 
-| Tier | Description | Example Queries |
-|------|-------------|-----------------|
-| **SIMPLE** | Short factual Q&A, translations, definitions | "What's the capital of France?", "Translate hello to Spanish" |
-| **MEDIUM** | Summaries, explanations, moderate code | "Summarize this article", "Write a Python function to sort a list" |
-| **COMPLEX** | Multi-step code, system design, creative writing | "Build a React component with tests", "Design a REST API" |
+| Tier          | Description                                      | Example Queries                                                    |
+| ------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| **SIMPLE**    | Short factual Q&A, translations, definitions     | "What's the capital of France?", "Translate hello to Spanish"      |
+| **MEDIUM**    | Summaries, explanations, moderate code           | "Summarize this article", "Write a Python function to sort a list" |
+| **COMPLEX**   | Multi-step code, system design, creative writing | "Build a React component with tests", "Design a REST API"          |
 | **REASONING** | Proofs, multi-step logic, mathematical reasoning | "Prove this theorem", "Solve step by step", "Debug this algorithm" |
 
 ## Weighted Scoring Engine (v2)
@@ -99,22 +99,22 @@ Implemented in [`src/router/rules.ts`](../../src/router/rules.ts).
 
 14 dimensions, each scored in [-1, 1] and multiplied by a learned weight:
 
-| Dimension | Weight | Signal |
-|-----------|--------|--------|
-| Reasoning markers | 0.18 | "prove", "theorem", "step by step" |
-| Code presence | 0.15 | "function", "async", "import", "```" |
-| Simple indicators | 0.12 | "what is", "define", "translate" |
-| Multi-step patterns | 0.12 | "first...then", "step 1", numbered lists |
-| Technical terms | 0.10 | "algorithm", "kubernetes", "distributed" |
-| Token count | 0.08 | short (<50) vs long (>500) |
-| Creative markers | 0.05 | "story", "poem", "brainstorm" |
-| Question complexity | 0.05 | 4+ question marks |
-| Constraint count | 0.04 | "at most", "O(n)", "maximum" |
-| Imperative verbs | 0.03 | "build", "create", "implement" |
-| Output format | 0.03 | "json", "yaml", "schema" |
-| Domain specificity | 0.02 | "quantum", "fpga", "genomics" |
-| Reference complexity | 0.02 | "the docs", "the api", "above" |
-| Negation complexity | 0.01 | "don't", "avoid", "without" |
+| Dimension            | Weight | Signal                                   |
+| -------------------- | ------ | ---------------------------------------- |
+| Reasoning markers    | 0.18   | "prove", "theorem", "step by step"       |
+| Code presence        | 0.15   | "function", "async", "import", "```"     |
+| Simple indicators    | 0.12   | "what is", "define", "translate"         |
+| Multi-step patterns  | 0.12   | "first...then", "step 1", numbered lists |
+| Technical terms      | 0.10   | "algorithm", "kubernetes", "distributed" |
+| Token count          | 0.08   | short (<50) vs long (>500)               |
+| Creative markers     | 0.05   | "story", "poem", "brainstorm"            |
+| Question complexity  | 0.05   | 4+ question marks                        |
+| Constraint count     | 0.04   | "at most", "O(n)", "maximum"             |
+| Imperative verbs     | 0.03   | "build", "create", "implement"           |
+| Output format        | 0.03   | "json", "yaml", "schema"                 |
+| Domain specificity   | 0.02   | "quantum", "fpga", "genomics"            |
+| Reference complexity | 0.02   | "the docs", "the api", "above"           |
+| Negation complexity  | 0.01   | "don't", "avoid", "without"              |
 
 Weighted score maps to a tier via configurable boundaries. Confidence is calibrated using a sigmoid function — distance from the nearest tier boundary determines how sure the classifier is.
 
@@ -141,11 +141,11 @@ function calibrateConfidence(distance: number, steepness: number): number {
 
 ### Special Case Overrides
 
-| Condition | Override | Reason |
-|-----------|----------|--------|
-| 2+ reasoning markers | Force REASONING at >= 0.85 confidence | Reasoning markers are strong signals |
-| Input > 100K tokens | Force COMPLEX tier | Large context = expensive regardless |
-| System prompt contains "JSON" or "structured" | Minimum MEDIUM tier | Structured output needs capable models |
+| Condition                                     | Override                              | Reason                                 |
+| --------------------------------------------- | ------------------------------------- | -------------------------------------- |
+| 2+ reasoning markers                          | Force REASONING at >= 0.85 confidence | Reasoning markers are strong signals   |
+| Input > 100K tokens                           | Force COMPLEX tier                    | Large context = expensive regardless   |
+| System prompt contains "JSON" or "structured" | Minimum MEDIUM tier                   | Structured output needs capable models |
 
 ## LLM Classifier (Fallback)
 
@@ -169,22 +169,22 @@ When weighted scoring confidence is below 0.70, sends a classification request t
 
 Implemented in [`src/router/selector.ts`](../../src/router/selector.ts) and [`src/router/config.ts`](../../src/router/config.ts).
 
-| Tier | Primary Model | Cost (output per M) | Fallback Chain |
-|------|--------------|---------------------|----------------|
-| **SIMPLE** | `google/gemini-2.5-flash` | $0.60 | deepseek-chat → gpt-4o-mini |
-| **MEDIUM** | `deepseek/deepseek-chat` | $0.42 | gemini-flash → gpt-4o-mini |
-| **COMPLEX** | `anthropic/claude-opus-4.5` | $75.00 | gpt-4o → gemini-2.5-pro |
-| **REASONING** | `openai/o3` | $8.00 | gemini-2.5-pro → claude-sonnet-4 |
+| Tier          | Primary Model               | Cost (output per M) | Fallback Chain                   |
+| ------------- | --------------------------- | ------------------- | -------------------------------- |
+| **SIMPLE**    | `google/gemini-2.5-flash`   | $0.60               | deepseek-chat → gpt-4o-mini      |
+| **MEDIUM**    | `deepseek/deepseek-chat`    | $0.42               | gemini-flash → gpt-4o-mini       |
+| **COMPLEX**   | `anthropic/claude-opus-4.5` | $75.00              | gpt-4o → gemini-2.5-pro          |
+| **REASONING** | `openai/o3`                 | $8.00               | gemini-2.5-pro → claude-sonnet-4 |
 
 ### Cost Savings (vs Claude Opus at $75/M)
 
-| Tier | % of Traffic | Output $/M | Savings |
-|------|-------------|-----------|---------|
-| SIMPLE | 40% | $0.60 | **99% cheaper** |
-| MEDIUM | 30% | $0.42 | **99% cheaper** |
-| COMPLEX | 20% | $75.00 | best quality |
-| REASONING | 10% | $8.00 | **89% cheaper** |
-| **Weighted avg** | | **$16.17/M** | **78% savings** |
+| Tier             | % of Traffic | Output $/M   | Savings         |
+| ---------------- | ------------ | ------------ | --------------- |
+| SIMPLE           | 40%          | $0.60        | **99% cheaper** |
+| MEDIUM           | 30%          | $0.42        | **99% cheaper** |
+| COMPLEX          | 20%          | $75.00       | best quality    |
+| REASONING        | 10%          | $8.00        | **89% cheaper** |
+| **Weighted avg** |              | **$16.17/M** | **78% savings** |
 
 ## RoutingDecision Object
 
@@ -192,14 +192,14 @@ Defined in [`src/router/types.ts`](../../src/router/types.ts).
 
 ```typescript
 type RoutingDecision = {
-  model: string;           // "deepseek/deepseek-chat"
-  tier: Tier;              // "MEDIUM"
-  confidence: number;      // 0.82
+  model: string; // "deepseek/deepseek-chat"
+  tier: Tier; // "MEDIUM"
+  confidence: number; // 0.82
   method: "rules" | "llm"; // How the decision was made
-  reasoning: string;       // "score=-0.200 | short (8 tokens), simple indicator (what is)"
-  costEstimate: number;    // 0.0004
-  baselineCost: number;    // 0.3073 (what Claude Opus would have cost)
-  savings: number;         // 0.992 (0-1)
+  reasoning: string; // "score=-0.200 | short (8 tokens), simple indicator (what is)"
+  costEstimate: number; // 0.0004
+  baselineCost: number; // 0.3073 (what Claude Opus would have cost)
+  savings: number; // 0.992 (0-1)
 };
 ```
 

@@ -48,7 +48,11 @@ async function generateAndSaveWallet(): Promise<{ key: string; address: string }
  * Resolve wallet key: load saved → env var → auto-generate.
  * Called by index.ts before the auth wizard runs.
  */
-export async function resolveOrGenerateWalletKey(): Promise<{ key: string; address: string; source: "saved" | "env" | "generated" }> {
+export async function resolveOrGenerateWalletKey(): Promise<{
+  key: string;
+  address: string;
+  source: "saved" | "env" | "generated";
+}> {
   // 1. Previously saved wallet
   const saved = await loadSavedWallet();
   if (saved) {
@@ -122,7 +126,7 @@ export const envKeyAuth: ProviderAuthMethod = {
     if (!key) {
       throw new Error(
         "BLOCKRUN_WALLET_KEY environment variable is not set. " +
-        "Set it to your EVM wallet private key (0x...).",
+          "Set it to your EVM wallet private key (0x...).",
       );
     }
 

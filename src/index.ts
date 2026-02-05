@@ -88,7 +88,6 @@ const plugin: OpenClawPluginDefinition = {
   },
 };
 
-
 export default plugin;
 
 // Re-export for programmatic use

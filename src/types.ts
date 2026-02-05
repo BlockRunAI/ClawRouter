@@ -54,7 +54,10 @@ export type ProviderAuthResult = {
 };
 
 export type WizardPrompter = {
-  text: (opts: { message: string; validate?: (value: string) => string | undefined }) => Promise<string | symbol>;
+  text: (opts: {
+    message: string;
+    validate?: (value: string) => string | undefined;
+  }) => Promise<string | symbol>;
   note: (message: string) => void;
   progress: (message: string) => { stop: (message?: string) => void };
 };
@@ -101,7 +104,9 @@ export type OpenClawPluginApi = {
   version?: string;
   description?: string;
   source: string;
-  config: Record<string, unknown> & { models?: { providers?: Record<string, ModelProviderConfig> } };
+  config: Record<string, unknown> & {
+    models?: { providers?: Record<string, ModelProviderConfig> };
+  };
   pluginConfig?: Record<string, unknown>;
   logger: PluginLogger;
   registerProvider: (provider: ProviderPlugin) => void;

@@ -8,7 +8,7 @@
 
 import type { Tier, RoutingDecision, RoutingConfig } from "./types.js";
 import { classifyByRules } from "./rules.js";
-import { selectModel, getFallbackChain, type ModelPricing } from "./selector.js";
+import { selectModel, type ModelPricing } from "./selector.js";
 
 export type RouterOptions = {
   config: RoutingConfig;
@@ -51,21 +51,14 @@ export function route(
   }
 
   // Structured output detection
-  const hasStructuredOutput = systemPrompt
-    ? /json|structured|schema/i.test(systemPrompt)
-    : false;
+  const hasStructuredOutput = systemPrompt ? /json|structured|schema/i.test(systemPrompt) : false;
 
   // --- Rule-based classification ---
-  const ruleResult = classifyByRules(
-    prompt,
-    systemPrompt,
-    estimatedTokens,
-    config.scoring,
-  );
+  const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
 
   let tier: Tier;
   let confidence: number;
-  let method: "rules" | "llm" = "rules";
+  const method: "rules" | "llm" = "rules";
   let reasoning = `score=${ruleResult.score} | ${ruleResult.signals.join(", ")}`;
 
   if (ruleResult.tier !== null) {

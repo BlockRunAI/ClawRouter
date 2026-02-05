@@ -53,14 +53,16 @@ export class RequestDeduplicator {
     if (!entry) return undefined;
     const promise = new Promise<CachedResponse>((resolve) => {
       // Will be resolved when the original request completes
-      entry.waiters.push(new Promise<CachedResponse>((r) => {
-        const orig = entry.resolve;
-        entry.resolve = (result) => {
-          orig(result);
-          resolve(result);
-          r(result);
-        };
-      }));
+      entry.waiters.push(
+        new Promise<CachedResponse>((r) => {
+          const orig = entry.resolve;
+          entry.resolve = (result) => {
+            orig(result);
+            resolve(result);
+            r(result);
+          };
+        }),
+      );
     });
     return promise;
   }

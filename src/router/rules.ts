@@ -38,10 +38,18 @@ function scoreKeywordMatch(
 ): DimensionScore {
   const matches = keywords.filter((kw) => text.includes(kw.toLowerCase()));
   if (matches.length >= thresholds.high) {
-    return { name, score: scores.high, signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})` };
+    return {
+      name,
+      score: scores.high,
+      signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})`,
+    };
   }
   if (matches.length >= thresholds.low) {
-    return { name, score: scores.low, signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})` };
+    return {
+      name,
+      score: scores.low,
+      signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})`,
+    };
   }
   return { name, score: scores.none, signal: null };
 }
@@ -77,38 +85,102 @@ export function classifyByRules(
   const dimensions: DimensionScore[] = [
     // Original 8 dimensions
     scoreTokenCount(estimatedTokens, config.tokenCountThresholds),
-    scoreKeywordMatch(text, config.codeKeywords, "codePresence", "code",
-      { low: 1, high: 2 }, { none: 0, low: 0.5, high: 1.0 }),
-    scoreKeywordMatch(text, config.reasoningKeywords, "reasoningMarkers", "reasoning",
-      { low: 1, high: 2 }, { none: 0, low: 0.7, high: 1.0 }),
-    scoreKeywordMatch(text, config.technicalKeywords, "technicalTerms", "technical",
-      { low: 2, high: 4 }, { none: 0, low: 0.5, high: 1.0 }),
-    scoreKeywordMatch(text, config.creativeKeywords, "creativeMarkers", "creative",
-      { low: 1, high: 2 }, { none: 0, low: 0.5, high: 0.7 }),
-    scoreKeywordMatch(text, config.simpleKeywords, "simpleIndicators", "simple",
-      { low: 1, high: 2 }, { none: 0, low: -1.0, high: -1.0 }),
+    scoreKeywordMatch(
+      text,
+      config.codeKeywords,
+      "codePresence",
+      "code",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.5, high: 1.0 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.reasoningKeywords,
+      "reasoningMarkers",
+      "reasoning",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.7, high: 1.0 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.technicalKeywords,
+      "technicalTerms",
+      "technical",
+      { low: 2, high: 4 },
+      { none: 0, low: 0.5, high: 1.0 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.creativeKeywords,
+      "creativeMarkers",
+      "creative",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.5, high: 0.7 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.simpleKeywords,
+      "simpleIndicators",
+      "simple",
+      { low: 1, high: 2 },
+      { none: 0, low: -1.0, high: -1.0 },
+    ),
     scoreMultiStep(text),
     scoreQuestionComplexity(prompt),
 
     // 6 new dimensions
-    scoreKeywordMatch(text, config.imperativeVerbs, "imperativeVerbs", "imperative",
-      { low: 1, high: 2 }, { none: 0, low: 0.3, high: 0.5 }),
-    scoreKeywordMatch(text, config.constraintIndicators, "constraintCount", "constraints",
-      { low: 1, high: 3 }, { none: 0, low: 0.3, high: 0.7 }),
-    scoreKeywordMatch(text, config.outputFormatKeywords, "outputFormat", "format",
-      { low: 1, high: 2 }, { none: 0, low: 0.4, high: 0.7 }),
-    scoreKeywordMatch(text, config.referenceKeywords, "referenceComplexity", "references",
-      { low: 1, high: 2 }, { none: 0, low: 0.3, high: 0.5 }),
-    scoreKeywordMatch(text, config.negationKeywords, "negationComplexity", "negation",
-      { low: 2, high: 3 }, { none: 0, low: 0.3, high: 0.5 }),
-    scoreKeywordMatch(text, config.domainSpecificKeywords, "domainSpecificity", "domain-specific",
-      { low: 1, high: 2 }, { none: 0, low: 0.5, high: 0.8 }),
+    scoreKeywordMatch(
+      text,
+      config.imperativeVerbs,
+      "imperativeVerbs",
+      "imperative",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.3, high: 0.5 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.constraintIndicators,
+      "constraintCount",
+      "constraints",
+      { low: 1, high: 3 },
+      { none: 0, low: 0.3, high: 0.7 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.outputFormatKeywords,
+      "outputFormat",
+      "format",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.4, high: 0.7 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.referenceKeywords,
+      "referenceComplexity",
+      "references",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.3, high: 0.5 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.negationKeywords,
+      "negationComplexity",
+      "negation",
+      { low: 2, high: 3 },
+      { none: 0, low: 0.3, high: 0.5 },
+    ),
+    scoreKeywordMatch(
+      text,
+      config.domainSpecificKeywords,
+      "domainSpecificity",
+      "domain-specific",
+      { low: 1, high: 2 },
+      { none: 0, low: 0.5, high: 0.8 },
+    ),
   ];
 
   // Collect signals
-  const signals = dimensions
-    .filter((d) => d.signal !== null)
-    .map((d) => d.signal!);
+  const signals = dimensions.filter((d) => d.signal !== null).map((d) => d.signal!);
 
   // Compute weighted score
   const weights = config.dimensionWeights;
@@ -119,9 +191,7 @@ export function classifyByRules(
   }
 
   // Count reasoning markers for override
-  const reasoningMatches = config.reasoningKeywords.filter((kw) =>
-    text.includes(kw.toLowerCase()),
-  );
+  const reasoningMatches = config.reasoningKeywords.filter((kw) => text.includes(kw.toLowerCase()));
 
   // Direct reasoning override: 2+ reasoning markers = high confidence REASONING
   if (reasoningMatches.length >= 2) {
@@ -147,10 +217,7 @@ export function classifyByRules(
     distanceFromBoundary = simpleMedium - weightedScore;
   } else if (weightedScore < mediumComplex) {
     tier = "MEDIUM";
-    distanceFromBoundary = Math.min(
-      weightedScore - simpleMedium,
-      mediumComplex - weightedScore,
-    );
+    distanceFromBoundary = Math.min(weightedScore - simpleMedium, mediumComplex - weightedScore);
   } else if (weightedScore < complexReasoning) {
     tier = "COMPLEX";
     distanceFromBoundary = Math.min(

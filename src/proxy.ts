@@ -25,10 +25,17 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { privateKeyToAccount } from "viem/accounts";
 import { createPaymentFetch, type PreAuthParams } from "./x402.js";
-import { route, getFallbackChain, DEFAULT_ROUTING_CONFIG, type RouterOptions, type RoutingDecision, type RoutingConfig, type ModelPricing } from "./router/index.js";
+import {
+  route,
+  DEFAULT_ROUTING_CONFIG,
+  type RouterOptions,
+  type RoutingDecision,
+  type RoutingConfig,
+  type ModelPricing,
+} from "./router/index.js";
 import { BLOCKRUN_MODELS } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
-import { RequestDeduplicator, type CachedResponse } from "./dedup.js";
+import { RequestDeduplicator } from "./dedup.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
@@ -83,8 +90,12 @@ function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
  * Estimate USDC cost for a request based on model pricing.
  * Returns amount string in USDC smallest unit (6 decimals) or undefined if unknown.
  */
-function estimateAmount(modelId: string, bodyLength: number, maxTokens: number): string | undefined {
-  const model = BLOCKRUN_MODELS.find(m => m.id === modelId);
+function estimateAmount(
+  modelId: string,
+  bodyLength: number,
+  maxTokens: number,
+): string | undefined {
+  const model = BLOCKRUN_MODELS.find((m) => m.id === modelId);
   if (!model) return undefined;
 
   // Rough estimate: ~4 chars per token for input
@@ -111,7 +122,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   // Create x402 payment-enabled fetch from wallet private key
   const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const { fetch: payFetch, cache: paymentCache } = createPaymentFetch(options.walletKey as `0x${string}`);
+  const { fetch: payFetch } = createPaymentFetch(options.walletKey as `0x${string}`);
 
   // Build router options (100% local — no external API calls for routing)
   const routingConfig = mergeRoutingConfig(options.routingConfig);
@@ -147,12 +158,16 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
       if (!res.headersSent) {
         res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          error: { message: `Proxy error: ${error.message}`, type: "proxy_error" },
-        }));
+        res.end(
+          JSON.stringify({
+            error: { message: `Proxy error: ${error.message}`, type: "proxy_error" },
+          }),
+        );
       } else if (!res.writableEnded) {
         // Headers already sent (streaming) — send error as SSE event
-        res.write(`data: ${JSON.stringify({ error: { message: error.message, type: "proxy_error" } })}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({ error: { message: error.message, type: "proxy_error" } })}\n\n`,
+        );
         res.write("data: [DONE]\n\n");
         res.end();
       }
@@ -197,7 +212,11 @@ async function proxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
   apiBase: string,
-  payFetch: (input: RequestInfo | URL, init?: RequestInit, preAuth?: PreAuthParams) => Promise<Response>,
+  payFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    preAuth?: PreAuthParams,
+  ) => Promise<Response>,
   options: ProxyOptions,
   routerOpts: RouterOptions,
   deduplicator: RequestDeduplicator,
@@ -235,7 +254,10 @@ async function proxyRequest(
         let lastUserMsg: ChatMessage | undefined;
         if (messages) {
           for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === "user") { lastUserMsg = messages[i]; break; }
+            if (messages[i].role === "user") {
+              lastUserMsg = messages[i];
+              break;
+            }
           }
         }
         const systemMsg = messages?.find((m: ChatMessage) => m.role === "system");
@@ -288,7 +310,7 @@ async function proxyRequest(
     res.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
-      "connection": "keep-alive",
+      connection: "keep-alive",
     });
     headersSentEarly = true;
 
@@ -306,7 +328,13 @@ async function proxyRequest(
   // Forward headers, stripping host, connection, and content-length
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
-    if (key === "host" || key === "connection" || key === "transfer-encoding" || key === "content-length") continue;
+    if (
+      key === "host" ||
+      key === "connection" ||
+      key === "transfer-encoding" ||
+      key === "content-length"
+    )
+      continue;
     if (typeof value === "string") {
       headers[key] = value;
     }
@@ -327,11 +355,15 @@ async function proxyRequest(
 
   try {
     // Make the request through x402-wrapped fetch (with optional pre-auth)
-    const upstream = await payFetch(upstreamUrl, {
-      method: req.method ?? "POST",
-      headers,
-      body: body.length > 0 ? body : undefined,
-    }, preAuth);
+    const upstream = await payFetch(
+      upstreamUrl,
+      {
+        method: req.method ?? "POST",
+        headers,
+        body: body.length > 0 ? body : undefined,
+      },
+      preAuth,
+    );
 
     // Clear heartbeat — real data is about to flow
     if (heartbeatInterval) {

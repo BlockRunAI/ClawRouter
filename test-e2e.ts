@@ -18,11 +18,7 @@ if (!WALLET_KEY) {
   process.exit(1);
 }
 
-async function test(
-  name: string,
-  fn: (proxy: ProxyHandle) => Promise<void>,
-  proxy: ProxyHandle,
-) {
+async function test(name: string, fn: (proxy: ProxyHandle) => Promise<void>, proxy: ProxyHandle) {
   process.stdout.write(`  ${name} ... `);
   try {
     await fn(proxy);
@@ -48,8 +44,7 @@ async function main() {
       console.log(
         `  [routed] ${d.model} (${d.tier}, ${d.method}, confidence=${d.confidence.toFixed(2)}, cost=$${d.costEstimate.toFixed(4)}, saved=${(d.savings * 100).toFixed(0)}%)`,
       ),
-    onPayment: (info) =>
-      console.log(`  [payment] ${info.model} ${info.amount} on ${info.network}`),
+    onPayment: (info) => console.log(`  [payment] ${info.model} ${info.amount} on ${info.network}`),
   });
 
   let allPassed = true;
@@ -135,7 +130,9 @@ async function main() {
             // skip
           }
         }
-        console.log(`(heartbeat=${hasHeartbeat}, done=${hasDone}, content="${fullContent.trim()}") `);
+        console.log(
+          `(heartbeat=${hasHeartbeat}, done=${hasDone}, content="${fullContent.trim()}") `,
+        );
         if (!hasDone) throw new Error("Missing [DONE] marker");
       },
       proxy,

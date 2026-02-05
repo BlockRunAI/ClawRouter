@@ -8,7 +8,7 @@
 import type { Tier, TierConfig, RoutingDecision } from "./types.js";
 
 export type ModelPricing = {
-  inputPrice: number;  // per 1M tokens
+  inputPrice: number; // per 1M tokens
   outputPrice: number; // per 1M tokens
 };
 
@@ -29,12 +29,8 @@ export function selectModel(
   const model = tierConfig.primary;
   const pricing = modelPricing.get(model);
 
-  const inputCost = pricing
-    ? (estimatedInputTokens / 1_000_000) * pricing.inputPrice
-    : 0;
-  const outputCost = pricing
-    ? (maxOutputTokens / 1_000_000) * pricing.outputPrice
-    : 0;
+  const inputCost = pricing ? (estimatedInputTokens / 1_000_000) * pricing.inputPrice : 0;
+  const outputCost = pricing ? (maxOutputTokens / 1_000_000) * pricing.outputPrice : 0;
   const costEstimate = inputCost + outputCost;
 
   // Baseline: what Claude Opus would cost (the premium default)
@@ -42,15 +38,10 @@ export function selectModel(
   const baselineInput = opusPricing
     ? (estimatedInputTokens / 1_000_000) * opusPricing.inputPrice
     : 0;
-  const baselineOutput = opusPricing
-    ? (maxOutputTokens / 1_000_000) * opusPricing.outputPrice
-    : 0;
+  const baselineOutput = opusPricing ? (maxOutputTokens / 1_000_000) * opusPricing.outputPrice : 0;
   const baselineCost = baselineInput + baselineOutput;
 
-  const savings =
-    baselineCost > 0
-      ? Math.max(0, (baselineCost - costEstimate) / baselineCost)
-      : 0;
+  const savings = baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
 
   return {
     model,
@@ -67,10 +58,7 @@ export function selectModel(
 /**
  * Get the ordered fallback chain for a tier: [primary, ...fallbacks].
  */
-export function getFallbackChain(
-  tier: Tier,
-  tierConfigs: Record<Tier, TierConfig>,
-): string[] {
+export function getFallbackChain(tier: Tier, tierConfigs: Record<Tier, TierConfig>): string[] {
   const config = tierConfigs[tier];
   return [config.primary, ...config.fallback];
 }
