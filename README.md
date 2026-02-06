@@ -353,6 +353,58 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 
 ---
 
+## Troubleshooting
+
+### "Unknown model: blockrun/auto"
+
+This error means the ClawRouter plugin isn't loaded. **Don't change the model name** — `blockrun/auto` is correct.
+
+**Fix:**
+
+```bash
+# 1. Verify plugin is installed
+openclaw plugins list
+# Should show @blockrun/clawrouter
+
+# 2. If not installed
+openclaw plugins install @blockrun/clawrouter
+
+# 3. Restart OpenClaw after installing
+
+# 4. Verify proxy is running
+curl http://localhost:8402/health
+# Should return {"status":"ok","wallet":"0x..."}
+```
+
+### Proxy won't start / Health check fails
+
+**Cause:** Wallet has no USDC balance.
+
+**Fix:**
+1. Find your wallet address (printed during install, or check `~/.openclaw/blockrun/wallet.key`)
+2. Send USDC on **Base network** to that address
+3. $1-5 is enough for hundreds of requests
+4. Restart OpenClaw
+
+### Port 8402 already in use
+
+**Fix:**
+
+```bash
+# Find what's using the port
+lsof -i :8402
+
+# Kill it or restart OpenClaw
+```
+
+### "RPC error" / Balance check failed
+
+**Cause:** Can't reach Base RPC to check wallet balance.
+
+**Fix:** Check internet connection. If persistent, the public RPC may be rate-limited — try again in a few minutes.
+
+---
+
 ## Development
 
 ```bash
