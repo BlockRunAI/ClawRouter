@@ -14,9 +14,11 @@ import { BalanceMonitor, BALANCE_THRESHOLDS, type BalanceInfo } from "./src/bala
 import {
   InsufficientFundsError,
   EmptyWalletError,
+  RpcError,
   isInsufficientFundsError,
   isEmptyWalletError,
   isBalanceError,
+  isRpcError,
 } from "./src/errors.js";
 
 let passed = 0;
@@ -117,6 +119,41 @@ async function main() {
     assert(isBalanceError(insuffErr), "Should detect InsufficientFundsError");
     assert(isBalanceError(emptyErr), "Should detect EmptyWalletError");
     assert(!isBalanceError(genericErr), "Should not detect generic Error");
+  });
+
+  // --- RpcError ---
+  console.log("\nRpcError:");
+
+  await test("RpcError has correct properties", () => {
+    const originalErr = new Error("connection refused");
+    const err = new RpcError("Failed to connect to Base RPC", originalErr);
+    assertEqual(err.code, "RPC_ERROR");
+    assertEqual(err.originalError, originalErr);
+    assert(err.message.includes("Failed to connect to Base RPC"), "Message should include error details");
+    assert(err.message.includes("Check network connectivity"), "Message should include help text");
+  });
+
+  await test("RpcError without original error", () => {
+    const err = new RpcError("Unknown RPC failure");
+    assertEqual(err.code, "RPC_ERROR");
+    assertEqual(err.originalError, undefined);
+  });
+
+  await test("isRpcError type guard works", () => {
+    const rpcErr = new RpcError("test");
+    const emptyErr = new EmptyWalletError("0x");
+    const genericErr = new Error("generic");
+
+    assert(isRpcError(rpcErr), "Should detect RpcError");
+    assert(!isRpcError(emptyErr), "Should not detect EmptyWalletError as RpcError");
+    assert(!isRpcError(genericErr), "Should not detect generic Error");
+    assert(!isRpcError(null), "Should handle null");
+    assert(!isRpcError("string"), "Should handle string");
+  });
+
+  await test("RpcError is not a balance error", () => {
+    const rpcErr = new RpcError("test");
+    assert(!isBalanceError(rpcErr), "RpcError should not be detected as balance error");
   });
 
   // --- BalanceMonitor ---

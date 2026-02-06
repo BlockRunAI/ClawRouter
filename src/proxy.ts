@@ -43,6 +43,7 @@ const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
 const USER_AGENT = "clawrouter/0.3.2";
 const HEARTBEAT_INTERVAL_MS = 2_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
 
 /** Callback info for low balance warning */
 export type LowBalanceInfo = {
@@ -62,6 +63,8 @@ export type ProxyOptions = {
   apiBase?: string;
   port?: number;
   routingConfig?: Partial<RoutingConfig>;
+  /** Request timeout in ms (default: 180000 = 3 minutes). Covers on-chain tx + LLM response. */
+  requestTimeoutMs?: number;
   onReady?: (port: number) => void;
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
@@ -160,10 +163,29 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const deduplicator = new RequestDeduplicator();
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    // Health check
-    if (req.url === "/health") {
+    // Health check with optional balance info
+    if (req.url === "/health" || req.url?.startsWith("/health?")) {
+      const url = new URL(req.url, "http://localhost");
+      const full = url.searchParams.get("full") === "true";
+
+      const response: Record<string, unknown> = {
+        status: "ok",
+        wallet: account.address,
+      };
+
+      if (full) {
+        try {
+          const balanceInfo = await balanceMonitor.checkBalance();
+          response.balance = balanceInfo.balanceUSD;
+          response.isLow = balanceInfo.isLow;
+          response.isEmpty = balanceInfo.isEmpty;
+        } catch {
+          response.balanceError = "Could not fetch balance";
+        }
+      }
+
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", wallet: account.address }));
+      res.end(JSON.stringify(response));
       return;
     }
 
@@ -426,6 +448,24 @@ async function proxyRequest(
     preAuth = { estimatedAmount: estimatedCostMicros.toString() };
   }
 
+  // --- Client disconnect cleanup ---
+  let completed = false;
+  res.on("close", () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = undefined;
+    }
+    // Remove from in-flight if client disconnected before completion
+    if (!completed) {
+      deduplicator.removeInflight(dedupKey);
+    }
+  });
+
+  // --- Request timeout ---
+  const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     // Make the request through x402-wrapped fetch (with optional pre-auth)
     const upstream = await payFetch(
@@ -434,9 +474,13 @@ async function proxyRequest(
         method: req.method ?? "POST",
         headers,
         body: body.length > 0 ? body : undefined,
+        signal: controller.signal,
       },
       preAuth,
     );
+
+    // Clear timeout — request succeeded
+    clearTimeout(timeoutId);
 
     // Clear heartbeat — real data is about to flow
     if (heartbeatInterval) {
@@ -530,10 +574,17 @@ async function proxyRequest(
     if (estimatedCostMicros !== undefined) {
       balanceMonitor.deductEstimated(estimatedCostMicros);
     }
+
+    // Mark request as completed (for client disconnect cleanup)
+    completed = true;
   } catch (err) {
+    // Clear timeout on error
+    clearTimeout(timeoutId);
+
     // Clear heartbeat on error
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
+      heartbeatInterval = undefined;
     }
 
     // Remove in-flight entry so retries aren't blocked
@@ -541,6 +592,11 @@ async function proxyRequest(
 
     // Invalidate balance cache on payment failure (might be out of date)
     balanceMonitor.invalidate();
+
+    // Convert abort error to more descriptive timeout error
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
 
     throw err;
   }

@@ -12,6 +12,7 @@
 
 import { createPublicClient, http, erc20Abi } from "viem";
 import { base } from "viem/chains";
+import { RpcError } from "./errors.js";
 
 /** USDC contract address on Base mainnet */
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
@@ -172,9 +173,12 @@ export class BalanceMonitor {
       });
       return balance;
     } catch (error) {
-      // On RPC error, return 0 to be safe (will trigger low/empty warnings)
-      console.error("Failed to fetch USDC balance:", error);
-      return 0n;
+      // Throw typed error instead of silently returning 0
+      // This allows callers to distinguish "node down" from "wallet empty"
+      throw new RpcError(
+        error instanceof Error ? error.message : "Unknown error",
+        error,
+      );
     }
   }
 

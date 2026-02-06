@@ -129,4 +129,6 @@ export { createPaymentFetch } from "./x402.js";
 export type { PreAuthParams, PaymentFetchResult } from "./x402.js";
 export { BalanceMonitor, BALANCE_THRESHOLDS } from "./balance.js";
 export type { BalanceInfo, SufficiencyResult } from "./balance.js";
-export { InsufficientFundsError, EmptyWalletError, isInsufficientFundsError, isEmptyWalletError, isBalanceError } from "./errors.js";
+export { InsufficientFundsError, EmptyWalletError, RpcError, isInsufficientFundsError, isEmptyWalletError, isBalanceError, isRpcError } from "./errors.js";
+export { fetchWithRetry, isRetryable, DEFAULT_RETRY_CONFIG } from "./retry.js";
+export type { RetryConfig } from "./retry.js";

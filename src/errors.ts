@@ -59,3 +59,25 @@ export function isEmptyWalletError(error: unknown): error is EmptyWalletError {
 export function isBalanceError(error: unknown): error is InsufficientFundsError | EmptyWalletError {
   return isInsufficientFundsError(error) || isEmptyWalletError(error);
 }
+
+/**
+ * Thrown when RPC call fails (network error, node down, etc).
+ * Distinguishes infrastructure failures from actual empty wallets.
+ */
+export class RpcError extends Error {
+  readonly code = "RPC_ERROR" as const;
+  readonly originalError: unknown;
+
+  constructor(message: string, originalError?: unknown) {
+    super(`RPC error: ${message}. Check network connectivity.`);
+    this.name = "RpcError";
+    this.originalError = originalError;
+  }
+}
+
+/**
+ * Type guard to check if an error is RpcError.
+ */
+export function isRpcError(error: unknown): error is RpcError {
+  return error instanceof Error && (error as RpcError).code === "RPC_ERROR";
+}
