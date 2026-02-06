@@ -373,23 +373,64 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 
 ### "Unknown model: blockrun/auto"
 
-This error means the ClawRouter plugin isn't loaded. **Don't change the model name** — `blockrun/auto` is correct.
+This error means the ClawRouter plugin isn't loaded or is outdated. **Don't change the model name** — `blockrun/auto` is correct.
 
 **Fix:**
 
 ```bash
-# 1. Verify plugin is installed
-openclaw plugins list
-# Should show @blockrun/clawrouter
-
-# 2. If not installed
+# 1. Update to latest version
+rm -rf ~/.openclaw/extensions/clawrouter
 openclaw plugins install @blockrun/clawrouter
 
-# 3. Restart OpenClaw after installing
+# 2. Restart OpenClaw after installing
+
+# 3. Verify plugin is loaded
+openclaw plugins list
+# Should show: clawrouter (version 0.3.8+)
 
 # 4. Verify proxy is running
 curl http://localhost:8402/health
 # Should return {"status":"ok","wallet":"0x..."}
+```
+
+### "No API key found for provider blockrun"
+
+This error occurs on versions before 0.3.8. The fix removes the auth requirement since the proxy handles payments internally.
+
+**Fix:**
+
+```bash
+# Update to v0.3.8+
+rm -rf ~/.openclaw/extensions/clawrouter
+openclaw plugins install @blockrun/clawrouter
+```
+
+### "Config validation failed: plugin not found: clawrouter"
+
+This happens when the plugin directory was removed but config still references it.
+
+**Fix:**
+
+```bash
+# Option 1: Reinstall the plugin
+openclaw plugins install @blockrun/clawrouter
+
+# Option 2: If that fails, manually edit config
+# Edit ~/.openclaw/openclaw.json and remove "clawrouter" from:
+#   - plugins.entries
+#   - plugins.installs
+# Then reinstall:
+openclaw plugins install @blockrun/clawrouter
+```
+
+### How to Update ClawRouter
+
+```bash
+# Clean reinstall (recommended)
+rm -rf ~/.openclaw/extensions/clawrouter
+openclaw plugins install @blockrun/clawrouter
+
+# Then restart OpenClaw
 ```
 
 ### Proxy won't start / Health check fails
