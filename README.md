@@ -371,51 +371,55 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 
 ## Troubleshooting
 
+> 💬 **Need help?** [Open a Discussion](https://github.com/BlockRunAI/ClawRouter/discussions) or check [existing issues](https://github.com/BlockRunAI/ClawRouter/issues).
+
+### Quick Checklist
+
+```bash
+# 1. Check your version (should be 0.3.10+)
+cat ~/.openclaw/extensions/clawrouter/package.json | grep version
+
+# 2. Check proxy is running
+curl http://localhost:8402/health
+
+# 3. Watch routing in action
+openclaw logs --follow
+# Should see: gemini-2.5-flash $0.0012 (saved 99%)
+```
+
 ### "Unknown model: blockrun/auto"
 
-This error means the ClawRouter plugin isn't loaded or is outdated. **Don't change the model name** — `blockrun/auto` is correct.
+Plugin isn't loaded or outdated. **Don't change the model name** — `blockrun/auto` is correct.
 
 **Fix:**
 
 ```bash
-# 1. Update to latest version
 rm -rf ~/.openclaw/extensions/clawrouter
 openclaw plugins install @blockrun/clawrouter
-
-# 2. Restart OpenClaw after installing
-
-# 3. Verify plugin is loaded
-openclaw plugins list
-# Should show: clawrouter (version 0.3.8+)
-
-# 4. Verify proxy is running
-curl http://localhost:8402/health
-# Should return {"status":"ok","wallet":"0x..."}
+# Restart OpenClaw
 ```
 
 ### "No API key found for provider blockrun"
 
-This error occurs on versions before 0.3.8. The fix removes the auth requirement since the proxy handles payments internally.
+Version < 0.3.10 doesn't inject auth profiles for the agent system.
 
 **Fix:**
 
 ```bash
-# Update to v0.3.8+
 rm -rf ~/.openclaw/extensions/clawrouter
 openclaw plugins install @blockrun/clawrouter
+# Restart OpenClaw
 ```
+
+After update, logs should show: `Injected BlockRun auth profile for agent: main`
 
 ### "Config validation failed: plugin not found: clawrouter"
 
-This happens when the plugin directory was removed but config still references it.
+Plugin directory was removed but config still references it.
 
 **Fix:**
 
 ```bash
-# Option 1: Reinstall the plugin
-openclaw plugins install @blockrun/clawrouter
-
-# Option 2: If that fails, manually edit config
 # Edit ~/.openclaw/openclaw.json and remove "clawrouter" from:
 #   - plugins.entries
 #   - plugins.installs
@@ -423,43 +427,47 @@ openclaw plugins install @blockrun/clawrouter
 openclaw plugins install @blockrun/clawrouter
 ```
 
-### How to Update ClawRouter
+### "No USDC balance" / "Insufficient funds"
 
-```bash
-# Clean reinstall (recommended)
-rm -rf ~/.openclaw/extensions/clawrouter
-openclaw plugins install @blockrun/clawrouter
-
-# Then restart OpenClaw
-```
-
-### Proxy won't start / Health check fails
-
-**Cause:** Wallet has no USDC balance.
+Wallet needs funding.
 
 **Fix:**
 
-1. Find your wallet address (printed during install, or check `~/.openclaw/blockrun/wallet.key`)
+1. Find your wallet address (printed during install)
 2. Send USDC on **Base network** to that address
 3. $1-5 is enough for hundreds of requests
 4. Restart OpenClaw
 
 ### Port 8402 already in use
 
-**Fix:**
-
 ```bash
-# Find what's using the port
 lsof -i :8402
-
-# Kill it or restart OpenClaw
+# Kill the process or restart OpenClaw
 ```
 
-### "RPC error" / Balance check failed
+### How to Update ClawRouter
 
-**Cause:** Can't reach Base RPC to check wallet balance.
+Always do a clean reinstall:
 
-**Fix:** Check internet connection. If persistent, the public RPC may be rate-limited — try again in a few minutes.
+```bash
+rm -rf ~/.openclaw/extensions/clawrouter
+openclaw plugins install @blockrun/clawrouter
+# Restart OpenClaw
+```
+
+### Verify Routing is Working
+
+```bash
+openclaw logs --follow
+```
+
+You should see model selection for each request:
+
+```
+[plugins] google/gemini-2.5-flash $0.0012 (saved 99%)
+[plugins] deepseek/deepseek-chat $0.0003 (saved 99%)
+[plugins] anthropic/claude-sonnet-4 $0.0450 (saved 80%)
+```
 
 ---
 
