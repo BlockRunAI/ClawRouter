@@ -44,7 +44,7 @@ One wallet, 30+ models, zero API keys.
 
 ```bash
 # 1. Install — auto-generates a wallet on Base
-openclaw plugin install @blockrun/clawrouter
+openclaw plugins install @blockrun/clawrouter
 
 # 2. Fund your wallet with USDC on Base (address printed on install)
 $5 is enough for thousands of requests
