@@ -24,6 +24,45 @@ import { resolveOrGenerateWalletKey } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
 import { OPENCLAW_MODELS } from "./models.js";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Inject BlockRun models config into OpenClaw config file.
+ * This is required because registerProvider() alone doesn't make models available.
+ */
+function injectModelsConfig(logger: { info: (msg: string) => void }): void {
+  const configPath = join(homedir(), ".openclaw", "openclaw.json");
+  if (!existsSync(configPath)) {
+    logger.info("OpenClaw config not found, skipping models injection");
+    return;
+  }
+
+  try {
+    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+
+    // Check if already configured
+    if (config.models?.providers?.blockrun) {
+      return; // Already configured
+    }
+
+    // Inject models config
+    if (!config.models) config.models = {};
+    if (!config.models.providers) config.models.providers = {};
+
+    config.models.providers.blockrun = {
+      baseUrl: "http://127.0.0.1:8402/v1",
+      api: "openai-completions",
+      models: OPENCLAW_MODELS,
+    };
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    logger.info("Injected BlockRun models into OpenClaw config");
+  } catch (err) {
+    // Silently fail — config injection is best-effort
+  }
+}
 
 /**
  * Start the x402 proxy in the background.
@@ -104,8 +143,11 @@ const plugin: OpenClawPluginDefinition = {
     // Register BlockRun as a provider (sync — available immediately)
     api.registerProvider(blockrunProvider);
 
-    // Inject models config so OpenClaw recognizes blockrun/* models
-    // This is required because registerProvider() alone doesn't add models to config
+    // Inject models config into OpenClaw config file
+    // This persists the config so models are recognized on restart
+    injectModelsConfig(api.logger);
+
+    // Also set runtime config for immediate availability
     if (!api.config.models) {
       api.config.models = { providers: {} };
     }
