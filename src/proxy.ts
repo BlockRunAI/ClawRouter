@@ -41,7 +41,8 @@ import { InsufficientFundsError, EmptyWalletError } from "./errors.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
-const USER_AGENT = "clawrouter/0.3.5";
+const AUTO_MODEL_SHORT = "auto"; // OpenClaw strips provider prefix
+const USER_AGENT = "clawrouter/0.3.19";
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
 const DEFAULT_PORT = 8402;
@@ -307,7 +308,7 @@ async function proxyRequest(
       modelId = (parsed.model as string) || "";
       maxTokens = (parsed.max_tokens as number) || 4096;
 
-      if (parsed.model === AUTO_MODEL) {
+      if (parsed.model === AUTO_MODEL || parsed.model === AUTO_MODEL_SHORT) {
         // Extract prompt from messages
         type ChatMessage = { role: string; content: string };
         const messages = parsed.messages as ChatMessage[] | undefined;
