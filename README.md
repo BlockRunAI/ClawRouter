@@ -420,7 +420,7 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 ### Quick Checklist
 
 ```bash
-# 1. Check your version (should be 0.3.16+)
+# 1. Check your version (should be 0.3.21+)
 cat ~/.openclaw/extensions/clawrouter/package.json | grep version
 
 # 2. Check proxy is running
@@ -431,11 +431,11 @@ openclaw logs --follow
 # Should see: gemini-2.5-flash $0.0012 (saved 99%)
 ```
 
-### "Unknown model: blockrun/auto"
+### "Unknown model: blockrun/auto" or "Unknown model: auto"
 
 Plugin isn't loaded or outdated. **Don't change the model name** — `blockrun/auto` is correct.
 
-**Fix:** See [How to Update ClawRouter](#how-to-update-clawrouter) for clean reinstall steps.
+**Fix:** Update to v0.3.21+ which handles both `blockrun/auto` and `auto` (OpenClaw strips provider prefix). See [How to Update ClawRouter](#how-to-update-clawrouter).
 
 ### "No API key found for provider blockrun"
 
@@ -469,10 +469,21 @@ lsof -i :8402
 
 ### How to Update ClawRouter
 
+**Recommended:** Run the reinstall script (handles everything automatically):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/BlockRunAI/ClawRouter/main/scripts/reinstall.sh | bash
-openclaw gateway restart
 ```
+
+**Manual update:** If you prefer manual steps or the script fails:
+
+```bash
+# Remove old plugin and reinstall
+rm -rf ~/.openclaw/extensions/clawrouter
+openclaw plugins install @blockrun/clawrouter
+```
+
+**Note:** OpenClaw doesn't auto-update plugins. You must reinstall to get new versions.
 
 ### Verify Routing is Working
 
