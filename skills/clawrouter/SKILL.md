@@ -12,7 +12,7 @@ Smart LLM router that saves 78% on inference costs by routing each request to th
 ## Install
 
 ```bash
-openclaw plugin install @blockrun/clawrouter
+openclaw plugins install @blockrun/clawrouter
 ```
 
 ## Setup

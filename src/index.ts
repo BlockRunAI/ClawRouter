@@ -6,7 +6,7 @@
  *
  * Usage:
  *   # Install the plugin
- *   openclaw plugin install @blockrun/clawrouter
+ *   openclaw plugins install @blockrun/clawrouter
  *
  *   # Fund your wallet with USDC on Base (address printed on install)
  *
