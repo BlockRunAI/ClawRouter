@@ -77,7 +77,9 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
     try {
       mkdirSync(agentsDir, { recursive: true });
     } catch (err) {
-      logger.info(`Could not create agents dir: ${err instanceof Error ? err.message : String(err)}`);
+      logger.info(
+        `Could not create agents dir: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return;
     }
   }
@@ -134,7 +136,9 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
         writeFileSync(authPath, JSON.stringify(authProfiles, null, 2));
         logger.info(`Injected BlockRun auth profile for agent: ${agentId}`);
       } catch (err) {
-        logger.info(`Could not inject auth for ${agentId}: ${err instanceof Error ? err.message : String(err)}`);
+        logger.info(
+          `Could not inject auth for ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   } catch (err) {
