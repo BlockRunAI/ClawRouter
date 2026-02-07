@@ -56,26 +56,32 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   try {
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
 
-    // Check if already configured
-    if (config.models?.providers?.blockrun) {
-      return; // Already configured
-    }
+    // Track if we need to write
+    let needsWrite = false;
 
-    // Inject models config
+    // Inject models config if not present
     if (!config.models) config.models = {};
     if (!config.models.providers) config.models.providers = {};
 
-    config.models.providers.blockrun = {
-      baseUrl: "http://127.0.0.1:8402/v1",
-      api: "openai-completions",
-      models: OPENCLAW_MODELS,
-    };
+    if (!config.models.providers.blockrun) {
+      config.models.providers.blockrun = {
+        baseUrl: "http://127.0.0.1:8402/v1",
+        api: "openai-completions",
+        models: OPENCLAW_MODELS,
+      };
+      needsWrite = true;
+    }
 
-    // Set blockrun/auto as the default model for smart routing
-    config.models.default = "blockrun/auto";
+    // Always set blockrun/auto as default (even on upgrade)
+    if (config.models.default !== "blockrun/auto") {
+      config.models.default = "blockrun/auto";
+      needsWrite = true;
+    }
 
-    writeFileSync(configPath, JSON.stringify(config, null, 2));
-    logger.info("Injected BlockRun models into OpenClaw config (default: blockrun/auto)");
+    if (needsWrite) {
+      writeFileSync(configPath, JSON.stringify(config, null, 2));
+      logger.info("Set default model to blockrun/auto (smart routing enabled)");
+    }
   } catch {
     // Silently fail — config injection is best-effort
   }
