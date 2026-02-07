@@ -15,8 +15,13 @@ const f = require('os').homedir() + '/.openclaw/openclaw.json';
 const fs = require('fs');
 if (fs.existsSync(f)) {
   const c = JSON.parse(fs.readFileSync(f, 'utf8'));
+  // Clean plugin entries
   if (c.plugins?.entries?.clawrouter) delete c.plugins.entries.clawrouter;
   if (c.plugins?.installs?.clawrouter) delete c.plugins.installs.clawrouter;
+  // Clean plugins.allow (removes stale clawrouter reference)
+  if (Array.isArray(c.plugins?.allow)) {
+    c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
+  }
   fs.writeFileSync(f, JSON.stringify(c, null, 2));
 }
 "
