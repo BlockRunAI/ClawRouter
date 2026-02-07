@@ -71,15 +71,27 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
  */
 function injectAuthProfile(logger: { info: (msg: string) => void }): void {
   const agentsDir = join(homedir(), ".openclaw", "agents");
+
+  // Create agents directory if it doesn't exist
   if (!existsSync(agentsDir)) {
-    return; // No agents directory yet
+    try {
+      mkdirSync(agentsDir, { recursive: true });
+    } catch (err) {
+      logger.info(`Could not create agents dir: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
   }
 
   try {
     // Find all agent directories
-    const agents = readdirSync(agentsDir, { withFileTypes: true })
+    let agents = readdirSync(agentsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
+
+    // Always ensure "main" agent has auth (most common agent)
+    if (!agents.includes("main")) {
+      agents = ["main", ...agents];
+    }
 
     for (const agentId of agents) {
       const authDir = join(agentsDir, agentId, "agent");
@@ -87,7 +99,11 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
 
       // Create agent dir if needed
       if (!existsSync(authDir)) {
-        mkdirSync(authDir, { recursive: true });
+        try {
+          mkdirSync(authDir, { recursive: true });
+        } catch {
+          continue; // Skip if we can't create the dir
+        }
       }
 
       // Load or create auth-profiles.json
@@ -114,11 +130,15 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
         },
       };
 
-      writeFileSync(authPath, JSON.stringify(authProfiles, null, 2));
-      logger.info(`Injected BlockRun auth profile for agent: ${agentId}`);
+      try {
+        writeFileSync(authPath, JSON.stringify(authProfiles, null, 2));
+        logger.info(`Injected BlockRun auth profile for agent: ${agentId}`);
+      } catch (err) {
+        logger.info(`Could not inject auth for ${agentId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-  } catch {
-    // Silently fail — auth injection is best-effort
+  } catch (err) {
+    logger.info(`Auth injection failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -195,7 +215,7 @@ const plugin: OpenClawPluginDefinition = {
   id: "clawrouter",
   name: "ClawRouter",
   description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
-  version: "0.3.2",
+  version: "0.3.11",
 
   register(api: OpenClawPluginApi) {
     // Register BlockRun as a provider (sync — available immediately)
