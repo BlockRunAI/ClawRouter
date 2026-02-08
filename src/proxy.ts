@@ -49,6 +49,11 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx
 const DEFAULT_PORT = 8402;
 const MAX_FALLBACK_ATTEMPTS = 3; // Maximum models to try in fallback chain
 const HEALTH_CHECK_TIMEOUT_MS = 2_000; // Timeout for checking existing proxy
+// Extra buffer for balance check (on top of estimateAmount's 20% buffer)
+// Total effective buffer: 1.2 * 1.5 = 1.8x (80% safety margin)
+// This prevents x402 payment failures after streaming headers are sent,
+// which would trigger OpenClaw's 5-24 hour billing cooldown.
+const BALANCE_CHECK_BUFFER = 1.5;
 
 /**
  * Get the proxy port from environment variable or default.
@@ -698,8 +703,13 @@ async function proxyRequest(
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
 
-      // Check balance before proceeding
-      const sufficiency = await balanceMonitor.checkSufficient(estimatedCostMicros);
+      // Apply extra buffer for balance check to prevent x402 failures after streaming starts.
+      // This is aggressive to avoid triggering OpenClaw's 5-24 hour billing cooldown.
+      const bufferedCostMicros =
+        (estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
+
+      // Check balance before proceeding (using buffered amount)
+      const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
 
       if (sufficiency.info.isEmpty) {
         // Wallet is empty — cannot proceed
@@ -707,7 +717,7 @@ async function proxyRequest(
         const error = new EmptyWalletError(sufficiency.info.walletAddress);
         options.onInsufficientFunds?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(estimatedCostMicros),
+          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
           walletAddress: sufficiency.info.walletAddress,
         });
         throw error;
@@ -718,12 +728,12 @@ async function proxyRequest(
         deduplicator.removeInflight(dedupKey);
         const error = new InsufficientFundsError({
           currentBalanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(estimatedCostMicros),
+          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
           walletAddress: sufficiency.info.walletAddress,
         });
         options.onInsufficientFunds?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(estimatedCostMicros),
+          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
           walletAddress: sufficiency.info.walletAddress,
         });
         throw error;
