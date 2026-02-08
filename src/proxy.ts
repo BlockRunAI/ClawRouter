@@ -47,6 +47,39 @@ const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
 const DEFAULT_PORT = 8402;
 
+// Kimi/Moonshot models use special Unicode tokens for thinking boundaries.
+// Pattern: <｜begin▁of▁thinking｜>content<｜end▁of▁thinking｜>
+// The ｜ is fullwidth vertical bar (U+FF5C), ▁ is lower one-eighth block (U+2581).
+
+// Match full Kimi thinking blocks: <｜begin...｜>content<｜end...｜>
+const KIMI_BLOCK_RE = /<[｜|][^<>]*begin[^<>]*[｜|]>[\s\S]*?<[｜|][^<>]*end[^<>]*[｜|]>/gi;
+
+// Match standalone Kimi tokens like <｜end▁of▁thinking｜>
+const KIMI_TOKEN_RE = /<[｜|][^<>]*[｜|]>/g;
+
+// Standard thinking tags that may leak through from various models
+const THINKING_TAG_RE = /<\s*\/?\s*(?:think(?:ing)?|thought|antthinking)\b[^>]*>/gi;
+
+// Full thinking blocks: <think>content</think>
+const THINKING_BLOCK_RE = /<\s*(?:think(?:ing)?|thought|antthinking)\b[^>]*>[\s\S]*?<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\s*>/gi;
+
+/**
+ * Strip thinking tokens and blocks from model response content.
+ * Handles both Kimi-style Unicode tokens and standard XML-style tags.
+ */
+function stripThinkingTokens(content: string): string {
+  if (!content) return content;
+  // Strip full Kimi thinking blocks first (begin...end with content)
+  let cleaned = content.replace(KIMI_BLOCK_RE, "");
+  // Strip remaining standalone Kimi tokens
+  cleaned = cleaned.replace(KIMI_TOKEN_RE, "");
+  // Strip full thinking blocks (<think>...</think>)
+  cleaned = cleaned.replace(THINKING_BLOCK_RE, "");
+  // Strip remaining standalone thinking tags
+  cleaned = cleaned.replace(THINKING_TAG_RE, "");
+  return cleaned;
+}
+
 /** Callback info for low balance warning */
 export type LowBalanceInfo = {
   balanceUSD: string;
@@ -597,7 +630,9 @@ async function proxyRequest(
           // Process each choice (usually just one)
           if (rsp.choices && Array.isArray(rsp.choices)) {
             for (const choice of rsp.choices) {
-              const content = choice.message?.content ?? choice.delta?.content ?? "";
+              // Strip thinking tokens (Kimi <｜...｜> and standard <think> tags)
+              const rawContent = choice.message?.content ?? choice.delta?.content ?? "";
+              const content = stripThinkingTokens(rawContent);
               const role = choice.message?.role ?? choice.delta?.role ?? "assistant";
               const index = choice.index ?? 0;
 
