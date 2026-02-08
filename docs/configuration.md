@@ -15,10 +15,10 @@ Complete reference for ClawRouter configuration options.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BLOCKRUN_WALLET_KEY` | - | Ethereum private key (hex, 0x-prefixed). Used if no saved wallet exists. |
-| `BLOCKRUN_PROXY_PORT` | `8402` | Port for the local x402 proxy server. |
+| Variable              | Default | Description                                                              |
+| --------------------- | ------- | ------------------------------------------------------------------------ |
+| `BLOCKRUN_WALLET_KEY` | -       | Ethereum private key (hex, 0x-prefixed). Used if no saved wallet exists. |
+| `BLOCKRUN_PROXY_PORT` | `8402`  | Port for the local x402 proxy server.                                    |
 
 ### BLOCKRUN_WALLET_KEY
 
@@ -29,6 +29,7 @@ export BLOCKRUN_WALLET_KEY=0x...your_private_key...
 ```
 
 **Resolution order:**
+
 1. Saved file (`~/.openclaw/blockrun/wallet.key`) — checked first
 2. `BLOCKRUN_WALLET_KEY` environment variable — used if no saved file
 3. Auto-generate — creates new wallet and saves to file
@@ -45,6 +46,7 @@ openclaw gateway restart
 ```
 
 **Behavior:**
+
 - If a proxy is already running on the configured port, ClawRouter will **reuse it** instead of failing with `EADDRINUSE`
 - The proxy returns the wallet address of the existing instance, not the configured wallet
 - A warning is logged if the existing proxy uses a different wallet
@@ -66,6 +68,7 @@ curl "http://localhost:8402/health?full=true" | jq
 ```
 
 Response:
+
 ```json
 {
   "status": "ok",
@@ -115,6 +118,7 @@ Session 2: startProxy() → detects existing, reuses handle
 ```
 
 **Behavior:**
+
 - Health check is performed on the configured port before starting
 - If responsive, returns a handle that uses the existing proxy
 - `close()` on reused handles is a no-op (doesn't stop the original server)
@@ -129,10 +133,10 @@ const proxy = await startProxy({
   walletKey: "0x...",
 
   // Port configuration
-  port: 8402,                    // Default: 8402 or BLOCKRUN_PROXY_PORT
+  port: 8402, // Default: 8402 or BLOCKRUN_PROXY_PORT
 
   // Timeouts
-  requestTimeoutMs: 180000,      // 3 minutes (covers on-chain tx + LLM response)
+  requestTimeoutMs: 180000, // 3 minutes (covers on-chain tx + LLM response)
 
   // API base (for testing)
   apiBase: "https://blockrun.ai/api",
@@ -191,8 +195,8 @@ plugins:
 
         # Context-based overrides
         overrides:
-          largeContextTokens: 100000  # Force COMPLEX above this
-          structuredOutput: true       # Bump to min MEDIUM for JSON/YAML
+          largeContextTokens: 100000 # Force COMPLEX above this
+          structuredOutput: true # Bump to min MEDIUM for JSON/YAML
 ```
 
 ---
@@ -201,12 +205,12 @@ plugins:
 
 ### Default Tier Mappings
 
-| Tier | Primary Model | Fallback Chain |
-|------|---------------|----------------|
-| SIMPLE | `google/gemini-2.5-flash` | `deepseek/deepseek-chat` |
-| MEDIUM | `deepseek/deepseek-chat` | `openai/gpt-4o-mini`, `google/gemini-2.5-flash` |
-| COMPLEX | `anthropic/claude-sonnet-4` | `openai/gpt-4o`, `google/gemini-2.5-pro` |
-| REASONING | `deepseek/deepseek-reasoner` | `openai/o3-mini`, `anthropic/claude-sonnet-4` |
+| Tier      | Primary Model                | Fallback Chain                                  |
+| --------- | ---------------------------- | ----------------------------------------------- |
+| SIMPLE    | `google/gemini-2.5-flash`    | `deepseek/deepseek-chat`                        |
+| MEDIUM    | `deepseek/deepseek-chat`     | `openai/gpt-4o-mini`, `google/gemini-2.5-flash` |
+| COMPLEX   | `anthropic/claude-sonnet-4`  | `openai/gpt-4o`, `google/gemini-2.5-pro`        |
+| REASONING | `deepseek/deepseek-reasoner` | `openai/o3-mini`, `anthropic/claude-sonnet-4`   |
 
 ### Fallback Chain
 
@@ -226,7 +230,7 @@ Max fallback attempts: 3 models per request.
 routing:
   tiers:
     COMPLEX:
-      primary: "openai/gpt-4o"  # Use GPT-4o instead of Claude
+      primary: "openai/gpt-4o" # Use GPT-4o instead of Claude
       fallback:
         - "anthropic/claude-sonnet-4"
         - "google/gemini-2.5-pro"
@@ -238,22 +242,22 @@ routing:
 
 The 14-dimension weighted scorer determines query complexity:
 
-| Dimension | Weight | Detection |
-|-----------|--------|-----------|
-| `reasoningMarkers` | 0.18 | "prove", "theorem", "step by step" |
-| `codePresence` | 0.15 | "function", "async", "import", "```" |
-| `simpleIndicators` | 0.12 | "what is", "define", "translate" |
-| `multiStepPatterns` | 0.12 | "first...then", "step 1", numbered lists |
-| `technicalTerms` | 0.10 | "algorithm", "kubernetes", "distributed" |
-| `tokenCount` | 0.08 | short (<50) vs long (>500) |
-| `creativeMarkers` | 0.05 | "story", "poem", "brainstorm" |
-| `questionComplexity` | 0.05 | Multiple question marks |
-| `constraintCount` | 0.04 | "at most", "O(n)", "maximum" |
-| `imperativeVerbs` | 0.03 | "build", "create", "implement" |
-| `outputFormat` | 0.03 | "json", "yaml", "schema" |
-| `domainSpecificity` | 0.02 | "quantum", "fpga", "genomics" |
-| `referenceComplexity` | 0.02 | "the docs", "the api", "above" |
-| `negationComplexity` | 0.01 | "don't", "avoid", "without" |
+| Dimension             | Weight | Detection                                |
+| --------------------- | ------ | ---------------------------------------- |
+| `reasoningMarkers`    | 0.18   | "prove", "theorem", "step by step"       |
+| `codePresence`        | 0.15   | "function", "async", "import", "```"     |
+| `simpleIndicators`    | 0.12   | "what is", "define", "translate"         |
+| `multiStepPatterns`   | 0.12   | "first...then", "step 1", numbered lists |
+| `technicalTerms`      | 0.10   | "algorithm", "kubernetes", "distributed" |
+| `tokenCount`          | 0.08   | short (<50) vs long (>500)               |
+| `creativeMarkers`     | 0.05   | "story", "poem", "brainstorm"            |
+| `questionComplexity`  | 0.05   | Multiple question marks                  |
+| `constraintCount`     | 0.04   | "at most", "O(n)", "maximum"             |
+| `imperativeVerbs`     | 0.03   | "build", "create", "implement"           |
+| `outputFormat`        | 0.03   | "json", "yaml", "schema"                 |
+| `domainSpecificity`   | 0.02   | "quantum", "fpga", "genomics"            |
+| `referenceComplexity` | 0.02   | "the docs", "the api", "above"           |
+| `negationComplexity`  | 0.01   | "don't", "avoid", "without"              |
 
 ### Custom Keywords
 
@@ -265,13 +269,13 @@ routing:
       - "prove"
       - "theorem"
       - "formal verification"
-      - "type theory"  # Custom
+      - "type theory" # Custom
 
     # Add framework-specific code triggers
     codeKeywords:
       - "function"
-      - "useEffect"   # React-specific
-      - "prisma"      # ORM-specific
+      - "useEffect" # React-specific
+      - "prisma" # ORM-specific
 ```
 
 ---
@@ -285,6 +289,7 @@ confidence = 1 / (1 + exp(-k * (score - midpoint)))
 ```
 
 Parameters:
+
 - `k = 8` — steepness of the sigmoid curve
 - `midpoint = 0.5` — score at which confidence = 50%
 
@@ -294,10 +299,10 @@ Parameters:
 routing:
   classifier:
     # Require higher confidence for tier assignment
-    confidenceThreshold: 0.8  # Default: 0.7
+    confidenceThreshold: 0.8 # Default: 0.7
 
     # Force REASONING tier at lower confidence
-    reasoningConfidence: 0.90  # Default: 0.97
+    reasoningConfidence: 0.90 # Default: 0.97
 ```
 
 ---

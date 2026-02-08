@@ -43,6 +43,7 @@ Technical deep-dive into ClawRouter's internals.
 ```
 
 **Key Principles:**
+
 - **100% local routing** — No API calls for model selection
 - **Client-side only** — Your wallet key never leaves your machine
 - **Non-custodial** — USDC stays in your wallet until spent
@@ -85,7 +86,7 @@ if (inflight) {
 
 ```typescript
 // Extract user's last message
-const prompt = messages.findLast(m => m.role === "user")?.content;
+const prompt = messages.findLast((m) => m.role === "user")?.content;
 
 // Run 14-dimension weighted scorer
 const decision = route(prompt, systemPrompt, maxTokens, {
@@ -210,7 +211,7 @@ function classifyByRules(
   prompt: string,
   systemPrompt: string | undefined,
   tokenCount: number,
-  config: ScoringConfig
+  config: ScoringConfig,
 ): ClassificationResult {
   let score = 0;
   const signals: string[] = [];
@@ -218,7 +219,7 @@ function classifyByRules(
   // Dimension 1: Reasoning markers (weight: 0.18)
   const reasoningCount = countKeywords(prompt, config.reasoningKeywords);
   if (reasoningCount >= 2) {
-    score += 0.18 * 2;  // Double weight for multiple markers
+    score += 0.18 * 2; // Double weight for multiple markers
     signals.push("reasoning");
   }
 
@@ -231,7 +232,7 @@ function classifyByRules(
   // ... 12 more dimensions
 
   // Sigmoid calibration
-  const confidence = sigmoid(score, k=8, midpoint=0.5);
+  const confidence = sigmoid(score, (k = 8), (midpoint = 0.5));
 
   return { score, confidence, tier: selectTier(score, confidence), signals };
 }
@@ -247,7 +248,7 @@ function selectTier(score: number, confidence: number): Tier | null {
   }
 
   if (confidence < 0.7) {
-    return null;  // Ambiguous → default to MEDIUM
+    return null; // Ambiguous → default to MEDIUM
   }
 
   if (score < 0.3) return "SIMPLE";
@@ -322,7 +323,7 @@ const typedData = {
   message: {
     scheme: "exact",
     network: "base",
-    amount: "5000",  // 0.005 USDC (6 decimals)
+    amount: "5000", // 0.005 USDC (6 decimals)
     resource: "https://blockrun.ai/api/v1/chat/completions",
     payTo: "0x...",
     nonce: Date.now(),
@@ -398,11 +399,10 @@ Avoids RPC calls on every request:
 class BalanceMonitor {
   private cachedBalance: bigint | undefined;
   private cacheTime = 0;
-  private CACHE_TTL_MS = 60_000;  // 1 minute
+  private CACHE_TTL_MS = 60_000; // 1 minute
 
   async checkBalance(): Promise<BalanceInfo> {
-    if (this.cachedBalance !== undefined &&
-        Date.now() - this.cacheTime < this.CACHE_TTL_MS) {
+    if (this.cachedBalance !== undefined && Date.now() - this.cacheTime < this.CACHE_TTL_MS) {
       return this.formatBalance(this.cachedBalance);
     }
 
@@ -478,10 +478,10 @@ src/
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `proxy.ts` | Core request handling, SSE simulation, fallback chain |
-| `router/rules.ts` | 14-dimension weighted scorer, multilingual keywords |
-| `x402.ts` | EIP-712 typed data signing, payment header formatting |
-| `balance.ts` | USDC balance via Base RPC, caching, thresholds |
-| `dedup.ts` | SHA-256 hashing, 30s response cache |
+| File              | Purpose                                               |
+| ----------------- | ----------------------------------------------------- |
+| `proxy.ts`        | Core request handling, SSE simulation, fallback chain |
+| `router/rules.ts` | 14-dimension weighted scorer, multilingual keywords   |
+| `x402.ts`         | EIP-712 typed data signing, payment header formatting |
+| `balance.ts`      | USDC balance via Base RPC, caching, thresholds        |
+| `dedup.ts`        | SHA-256 hashing, 30s response cache                   |

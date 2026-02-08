@@ -33,7 +33,6 @@ import {
   type RoutingDecision,
   type RoutingConfig,
   type ModelPricing,
-  type Tier,
 } from "./router/index.js";
 import { BLOCKRUN_MODELS } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
@@ -518,9 +517,7 @@ async function tryModelRequest(
 
   // Estimate cost for pre-auth
   const estimated = estimateAmount(modelId, requestBody.length, maxTokens);
-  const preAuth: PreAuthParams | undefined = estimated
-    ? { estimatedAmount: estimated }
-    : undefined;
+  const preAuth: PreAuthParams | undefined = estimated ? { estimatedAmount: estimated } : undefined;
 
   try {
     const response = await payFetch(
@@ -825,9 +822,7 @@ async function proxyRequest(
       const tryModel = modelsToTry[i];
       const isLastAttempt = i === modelsToTry.length - 1;
 
-      console.log(
-        `[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`,
-      );
+      console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
 
       const result = await tryModelRequest(
         upstreamUrl,
@@ -921,7 +916,9 @@ async function proxyRequest(
         deduplicator.complete(dedupKey, {
           status: errStatus,
           headers: { "content-type": "application/json" },
-          body: Buffer.from(JSON.stringify({ error: { message: errBody, type: "provider_error" } })),
+          body: Buffer.from(
+            JSON.stringify({ error: { message: errBody, type: "provider_error" } }),
+          ),
           completedAt: Date.now(),
         });
       }

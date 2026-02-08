@@ -156,7 +156,9 @@ async function runTests() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "auto",
-        messages: [{ role: "user", content: uniqueMessage("Prove step by step that sqrt(2) is irrational") }],
+        messages: [
+          { role: "user", content: uniqueMessage("Prove step by step that sqrt(2) is irrational") },
+        ],
         max_tokens: 50,
       }),
     });
@@ -165,11 +167,11 @@ async function runTests() {
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
     assert(content.includes("kimi"), `Response from fallback model: ${content}`);
-    assert(modelCalls.length === 2, `2 models called (primary + fallback): ${modelCalls.join(", ")}`);
     assert(
-      modelCalls[0] === "deepseek/deepseek-reasoner",
-      `First tried primary: ${modelCalls[0]}`,
+      modelCalls.length === 2,
+      `2 models called (primary + fallback): ${modelCalls.join(", ")}`,
     );
+    assert(modelCalls[0] === "deepseek/deepseek-reasoner", `First tried primary: ${modelCalls[0]}`);
     assert(modelCalls[1] === "moonshot/kimi-k2.5", `Then tried fallback: ${modelCalls[1]}`);
   }
 
@@ -184,7 +186,9 @@ async function runTests() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "auto",
-        messages: [{ role: "user", content: uniqueMessage("Prove step by step that sqrt(2) is irrational") }],
+        messages: [
+          { role: "user", content: uniqueMessage("Prove step by step that sqrt(2) is irrational") },
+        ],
         max_tokens: 50,
       }),
     });
@@ -207,14 +211,19 @@ async function runTests() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "auto",
-        messages: [{ role: "user", content: uniqueMessage("Prove step by step that sqrt(2) is irrational") }],
+        messages: [
+          { role: "user", content: uniqueMessage("Prove step by step that sqrt(2) is irrational") },
+        ],
         max_tokens: 50,
       }),
     });
 
     assert(!res.ok, `Response is error: ${res.status}`);
     const data = (await res.json()) as { error?: { message?: string; type?: string } };
-    assert(data.error?.type === "provider_error", `Error type is provider_error: ${data.error?.type}`);
+    assert(
+      data.error?.type === "provider_error",
+      `Error type is provider_error: ${data.error?.type}`,
+    );
     assert(modelCalls.length === 3, `Tried all 3 models: ${modelCalls.join(", ")}`);
   }
 
