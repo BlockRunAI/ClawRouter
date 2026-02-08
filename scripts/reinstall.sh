@@ -13,17 +13,35 @@ echo "→ Cleaning config entries..."
 node -e "
 const f = require('os').homedir() + '/.openclaw/openclaw.json';
 const fs = require('fs');
-if (fs.existsSync(f)) {
-  const c = JSON.parse(fs.readFileSync(f, 'utf8'));
-  // Clean plugin entries
-  if (c.plugins?.entries?.clawrouter) delete c.plugins.entries.clawrouter;
-  if (c.plugins?.installs?.clawrouter) delete c.plugins.installs.clawrouter;
-  // Clean plugins.allow (removes stale clawrouter reference)
-  if (Array.isArray(c.plugins?.allow)) {
-    c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
-  }
-  fs.writeFileSync(f, JSON.stringify(c, null, 2));
+if (!fs.existsSync(f)) {
+  console.log('  No openclaw.json found, skipping');
+  process.exit(0);
 }
+
+let c;
+try {
+  c = JSON.parse(fs.readFileSync(f, 'utf8'));
+} catch (err) {
+  const backupPath = f + '.corrupt.' + Date.now();
+  console.error('  ERROR: Invalid JSON in openclaw.json');
+  console.error('  ' + err.message);
+  try {
+    fs.copyFileSync(f, backupPath);
+    console.log('  Backed up to: ' + backupPath);
+  } catch {}
+  console.log('  Skipping config cleanup...');
+  process.exit(0);
+}
+
+// Clean plugin entries
+if (c.plugins?.entries?.clawrouter) delete c.plugins.entries.clawrouter;
+if (c.plugins?.installs?.clawrouter) delete c.plugins.installs.clawrouter;
+// Clean plugins.allow (removes stale clawrouter reference)
+if (Array.isArray(c.plugins?.allow)) {
+  c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
+}
+fs.writeFileSync(f, JSON.stringify(c, null, 2));
+console.log('  Config cleaned');
 "
 
 # 3. Kill old proxy
@@ -58,7 +76,9 @@ if (fs.existsSync(authPath)) {
       // Old format - keep version/profiles structure, old data is discarded
       store = { version: 1, profiles: {} };
     }
-  } catch {}
+  } catch (err) {
+    console.log('  Warning: Could not parse auth-profiles.json, creating fresh');
+  }
 }
 
 // Inject blockrun auth if missing (OpenClaw format: profiles['provider:profileId'])
