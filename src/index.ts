@@ -270,6 +270,15 @@ const plugin: OpenClawPluginDefinition = {
   version: VERSION,
 
   register(api: OpenClawPluginApi) {
+    // Check if ClawRouter is disabled via environment variable
+    // Usage: CLAWROUTER_DISABLED=true openclaw gateway start
+    const isDisabled =
+      process.env.CLAWROUTER_DISABLED === "true" || process.env.CLAWROUTER_DISABLED === "1";
+    if (isDisabled) {
+      api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
+      return;
+    }
+
     // Skip heavy initialization in completion mode — only completion script is needed
     // Logging to stdout during completion pollutes the script and causes zsh errors
     if (isCompletionMode()) {
