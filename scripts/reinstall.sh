@@ -100,7 +100,40 @@ if (!store.profiles[profileKey]) {
 }
 "
 
-# 6. Enable smart routing and ensure apiKey is present for /model picker
+# 6. Add plugin to allow list (required for OpenClaw to load it)
+echo "→ Adding to plugins allow list..."
+node -e "
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+
+if (fs.existsSync(configPath)) {
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+    // Ensure plugins.allow exists and includes clawrouter
+    if (!config.plugins) config.plugins = {};
+    if (!Array.isArray(config.plugins.allow)) {
+      config.plugins.allow = [];
+    }
+    if (!config.plugins.allow.includes('clawrouter') && !config.plugins.allow.includes('@blockrun/clawrouter')) {
+      config.plugins.allow.push('clawrouter');
+      console.log('  Added clawrouter to plugins.allow');
+    } else {
+      console.log('  Plugin already in allow list');
+    }
+
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } catch (e) {
+    console.log('  Could not update config:', e.message);
+  }
+} else {
+  console.log('  No openclaw.json found, skipping');
+}
+"
+
+# 7. Enable smart routing and ensure apiKey is present for /model picker
 echo "→ Enabling smart routing..."
 node -e "
 const os = require('os');
