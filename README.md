@@ -684,14 +684,17 @@ OpenClaw's security scanner may flag ClawRouter with:
 [env-harvesting] Environment variable access combined with network send
 ```
 
-**This is a false positive.** ClawRouter reads `BLOCKRUN_WALLET_KEY` to sign x402 payment transactions — this is required and intentional:
+**This is a false positive.** The scanner's heuristic (`env variable + network request = suspicious`) flags all payment plugins, but this pattern is inherently required for non-custodial payments.
+
+ClawRouter reads `BLOCKRUN_WALLET_KEY` to sign x402 payment transactions — this is required and intentional:
 
 - The wallet key is used **locally** for cryptographic signing (EIP-712)
 - The **signature** is transmitted, not the private key itself
-- This is standard x402 payment protocol behavior
+- The key **never leaves the machine** — only cryptographic proofs are sent
+- This is standard [x402 payment protocol](https://x402.org) behavior
 - Source code is [MIT licensed and fully auditable](https://github.com/BlockRunAI/ClawRouter)
 
-See [`openclaw.security.json`](openclaw.security.json) for detailed security documentation.
+See [`openclaw.security.json`](openclaw.security.json) for detailed security documentation and [this discussion](https://x.com/bc1beat/status/2020158972561428686) for more context.
 
 ### Port 8402 already in use
 
