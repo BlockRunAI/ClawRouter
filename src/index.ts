@@ -94,6 +94,12 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
         config.models.providers.blockrun.apiKey = "x402-proxy-handles-auth";
         needsWrite = true;
       }
+      // Always refresh models list (ensures new aliases are available)
+      const currentModels = config.models.providers.blockrun.models as unknown[];
+      if (!currentModels || currentModels.length !== OPENCLAW_MODELS.length) {
+        config.models.providers.blockrun.models = OPENCLAW_MODELS;
+        needsWrite = true;
+      }
     }
 
     // Set blockrun/auto as default model (path: agents.defaults.model.primary)
