@@ -28,13 +28,14 @@ import { createPaymentFetch, type PreAuthParams } from "./x402.js";
 import {
   route,
   getFallbackChain,
+  getFallbackChainFiltered,
   DEFAULT_ROUTING_CONFIG,
   type RouterOptions,
   type RoutingDecision,
   type RoutingConfig,
   type ModelPricing,
 } from "./router/index.js";
-import { BLOCKRUN_MODELS, resolveModelAlias } from "./models.js";
+import { BLOCKRUN_MODELS, resolveModelAlias, getModelContextWindow } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
@@ -961,9 +962,34 @@ async function proxyRequest(
     // Otherwise, just use the current model (no fallback for explicit model requests)
     let modelsToTry: string[];
     if (routingDecision) {
-      modelsToTry = getFallbackChain(routingDecision.tier, routerOpts.config.tiers);
+      // Estimate total context: input tokens (~4 chars per token) + max output tokens
+      const estimatedInputTokens = Math.ceil(body.length / 4);
+      const estimatedTotalTokens = estimatedInputTokens + maxTokens;
+
+      // Get tier configs (use agentic tiers if routing decided to use them)
+      const useAgenticTiers =
+        routingDecision.reasoning?.includes("agentic") && routerOpts.config.agenticTiers;
+      const tierConfigs = useAgenticTiers ? routerOpts.config.agenticTiers! : routerOpts.config.tiers;
+
+      // Get full chain first, then filter by context
+      const fullChain = getFallbackChain(routingDecision.tier, tierConfigs);
+      const contextFiltered = getFallbackChainFiltered(
+        routingDecision.tier,
+        tierConfigs,
+        estimatedTotalTokens,
+        getModelContextWindow,
+      );
+
+      // Log if models were filtered out due to context limits
+      const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
+      if (contextExcluded.length > 0) {
+        console.log(
+          `[ClawRouter] Context filter (~${estimatedTotalTokens} tokens): excluded ${contextExcluded.join(", ")}`,
+        );
+      }
+
       // Limit to MAX_FALLBACK_ATTEMPTS to prevent infinite loops
-      modelsToTry = modelsToTry.slice(0, MAX_FALLBACK_ATTEMPTS);
+      modelsToTry = contextFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
     } else {
       modelsToTry = modelId ? [modelId] : [];
     }

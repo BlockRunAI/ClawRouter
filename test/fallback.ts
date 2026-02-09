@@ -150,10 +150,11 @@ async function runTests() {
   }
 
   // Test 2: Primary fails with billing error - should fallback
+  // Note: Agentic mode is auto-detected (test keywords), so uses agentic tier fallbacks:
+  // REASONING agentic: [grok-4-fast-reasoning, kimi-k2.5, claude-sonnet-4, deepseek-reasoner]
   {
     console.log("\n--- Test 2: Primary fails, fallback succeeds ---");
     modelCalls.length = 0;
-    // For REASONING tier: primary=xai/grok-4-fast-reasoning, fallback=deepseek/deepseek-reasoner
     failModels = ["xai/grok-4-fast-reasoning"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
@@ -171,21 +172,22 @@ async function runTests() {
     assert(res.ok, `Response OK after fallback: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    assert(content.includes("deepseek-reasoner"), `Response from fallback model: ${content}`);
+    // Agentic tier fallback order: kimi-k2.5 is first fallback
+    assert(content.includes("kimi-k2.5"), `Response from fallback model: ${content}`);
     assert(
       modelCalls.length === 2,
       `2 models called (primary + fallback): ${modelCalls.join(", ")}`,
     );
     assert(modelCalls[0] === "xai/grok-4-fast-reasoning", `First tried primary: ${modelCalls[0]}`);
-    assert(modelCalls[1] === "deepseek/deepseek-reasoner", `Then tried fallback: ${modelCalls[1]}`);
+    assert(modelCalls[1] === "moonshot/kimi-k2.5", `Then tried fallback: ${modelCalls[1]}`);
   }
 
   // Test 3: Primary and first fallback fail - should try second fallback
+  // Agentic REASONING tier: [grok-4-fast-reasoning, kimi-k2.5, claude-sonnet-4, deepseek-reasoner]
   {
     console.log("\n--- Test 3: Primary + first fallback fail, second fallback succeeds ---");
     modelCalls.length = 0;
-    // For REASONING tier: primary=grok-4-fast-reasoning, fallbacks=[deepseek-reasoner, kimi-k2.5, gemini-2.5-pro]
-    failModels = ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner"];
+    failModels = ["xai/grok-4-fast-reasoning", "moonshot/kimi-k2.5"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -202,16 +204,16 @@ async function runTests() {
     assert(res.ok, `Response OK after 2nd fallback: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    assert(content.includes("kimi-k2.5"), `Response from 2nd fallback: ${content}`);
+    assert(content.includes("claude-sonnet-4"), `Response from 2nd fallback: ${content}`);
     assert(modelCalls.length === 3, `3 models called: ${modelCalls.join(", ")}`);
   }
 
   // Test 4: All models fail - should return error
+  // Agentic REASONING tier first 3: [grok-4-fast-reasoning, kimi-k2.5, claude-sonnet-4]
   {
     console.log("\n--- Test 4: All models fail - returns error ---");
     modelCalls.length = 0;
-    // Proxy tries max 3 models (primary + 2 fallbacks) to avoid excessive retries
-    failModels = ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner", "moonshot/kimi-k2.5"];
+    failModels = ["xai/grok-4-fast-reasoning", "moonshot/kimi-k2.5", "anthropic/claude-sonnet-4"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",

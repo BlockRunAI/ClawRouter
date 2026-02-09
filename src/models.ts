@@ -484,3 +484,13 @@ export function isAgenticModel(modelId: string): boolean {
 export function getAgenticModels(): string[] {
   return BLOCKRUN_MODELS.filter((m) => m.agentic).map((m) => m.id);
 }
+
+/**
+ * Get context window size for a model.
+ * Returns undefined if model not found.
+ */
+export function getModelContextWindow(modelId: string): number | undefined {
+  const normalized = modelId.replace("blockrun/", "");
+  const model = BLOCKRUN_MODELS.find((m) => m.id === normalized);
+  return model?.contextWindow;
+}
