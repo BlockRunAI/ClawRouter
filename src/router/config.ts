@@ -652,19 +652,19 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   tiers: {
     SIMPLE: {
       primary: "google/gemini-2.5-flash",
-      fallback: ["deepseek/deepseek-chat", "openai/gpt-4o-mini"],
+      fallback: ["nvidia/gpt-oss-120b", "deepseek/deepseek-chat", "openai/gpt-4o-mini"],
     },
     MEDIUM: {
-      primary: "deepseek/deepseek-chat",
-      fallback: ["google/gemini-2.5-flash", "openai/gpt-4o-mini"],
+      primary: "xai/grok-code-fast-1", // Code specialist, $0.20/$1.50
+      fallback: ["deepseek/deepseek-chat", "xai/grok-4-fast-non-reasoning", "google/gemini-2.5-flash"],
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4",
-      fallback: ["anthropic/claude-sonnet-4", "openai/gpt-4o"],
+      primary: "google/gemini-2.5-pro",
+      fallback: ["anthropic/claude-sonnet-4", "xai/grok-4-0709", "openai/gpt-4o"],
     },
     REASONING: {
-      primary: "deepseek/deepseek-reasoner",
-      fallback: ["moonshot/kimi-k2.5", "google/gemini-2.5-pro"],
+      primary: "xai/grok-4-fast-reasoning", // Ultra-cheap reasoning $0.20/$0.50
+      fallback: ["deepseek/deepseek-reasoner", "moonshot/kimi-k2.5", "google/gemini-2.5-pro"],
     },
   },
 
@@ -672,19 +672,19 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   agenticTiers: {
     SIMPLE: {
       primary: "anthropic/claude-haiku-4.5",
-      fallback: ["moonshot/kimi-k2.5", "openai/gpt-4o-mini"],
+      fallback: ["moonshot/kimi-k2.5", "xai/grok-4-fast-non-reasoning", "openai/gpt-4o-mini"],
     },
     MEDIUM: {
-      primary: "moonshot/kimi-k2.5",
-      fallback: ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4"],
+      primary: "xai/grok-code-fast-1", // Code specialist for agentic coding
+      fallback: ["moonshot/kimi-k2.5", "anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4"],
     },
     COMPLEX: {
       primary: "anthropic/claude-sonnet-4",
-      fallback: ["anthropic/claude-opus-4", "openai/gpt-4o"],
+      fallback: ["anthropic/claude-opus-4", "xai/grok-4-0709", "openai/gpt-4o"],
     },
     REASONING: {
-      primary: "moonshot/kimi-k2.5",
-      fallback: ["anthropic/claude-sonnet-4", "anthropic/claude-opus-4"],
+      primary: "xai/grok-4-fast-reasoning", // Cheap reasoning for agentic tasks
+      fallback: ["moonshot/kimi-k2.5", "anthropic/claude-sonnet-4", "deepseek/deepseek-reasoner"],
     },
   },
 

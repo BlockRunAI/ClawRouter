@@ -51,6 +51,7 @@ import {
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
 const AUTO_MODEL_SHORT = "auto"; // OpenClaw strips provider prefix
+const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
 const DEFAULT_PORT = 8402;
@@ -806,9 +807,11 @@ async function proxyRequest(
 
   // --- Pre-request balance check ---
   // Estimate cost and check if wallet has sufficient balance
-  // Skip if skipBalanceCheck is set (for testing)
+  // Skip if skipBalanceCheck is set (for testing) or if using free model
   let estimatedCostMicros: bigint | undefined;
-  if (modelId && !options.skipBalanceCheck) {
+  const isFreeModel = modelId === FREE_MODEL;
+
+  if (modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
@@ -821,35 +824,50 @@ async function proxyRequest(
       // Check balance before proceeding (using buffered amount)
       const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
 
-      if (sufficiency.info.isEmpty) {
-        // Wallet is empty — cannot proceed
-        deduplicator.removeInflight(dedupKey);
-        const error = new EmptyWalletError(sufficiency.info.walletAddress);
-        options.onInsufficientFunds?.({
-          balanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-          walletAddress: sufficiency.info.walletAddress,
-        });
-        throw error;
-      }
+      if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
+        // Wallet is empty or insufficient — fallback to free model if using auto routing
+        if (routingDecision) {
+          // User was using auto routing, fallback to free model
+          console.log(
+            `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} ($${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL}`,
+          );
+          modelId = FREE_MODEL;
+          // Update the body with new model
+          const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
+          parsed.model = FREE_MODEL;
+          body = Buffer.from(JSON.stringify(parsed));
 
-      if (!sufficiency.sufficient) {
-        // Insufficient balance — cannot proceed
-        deduplicator.removeInflight(dedupKey);
-        const error = new InsufficientFundsError({
-          currentBalanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-          walletAddress: sufficiency.info.walletAddress,
-        });
-        options.onInsufficientFunds?.({
-          balanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-          walletAddress: sufficiency.info.walletAddress,
-        });
-        throw error;
-      }
-
-      if (sufficiency.info.isLow) {
+          // Notify about the fallback (as low balance warning)
+          options.onLowBalance?.({
+            balanceUSD: sufficiency.info.balanceUSD,
+            walletAddress: sufficiency.info.walletAddress,
+          });
+        } else {
+          // User explicitly requested a paid model, throw error
+          deduplicator.removeInflight(dedupKey);
+          if (sufficiency.info.isEmpty) {
+            const error = new EmptyWalletError(sufficiency.info.walletAddress);
+            options.onInsufficientFunds?.({
+              balanceUSD: sufficiency.info.balanceUSD,
+              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
+              walletAddress: sufficiency.info.walletAddress,
+            });
+            throw error;
+          } else {
+            const error = new InsufficientFundsError({
+              currentBalanceUSD: sufficiency.info.balanceUSD,
+              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
+              walletAddress: sufficiency.info.walletAddress,
+            });
+            options.onInsufficientFunds?.({
+              balanceUSD: sufficiency.info.balanceUSD,
+              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
+              walletAddress: sufficiency.info.walletAddress,
+            });
+            throw error;
+          }
+        }
+      } else if (sufficiency.info.isLow) {
         // Balance is low but sufficient — warn and proceed
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,

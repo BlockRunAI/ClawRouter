@@ -41,6 +41,11 @@ export const MODEL_ALIASES: Record<string, string> = {
 
   // xAI
   grok: "xai/grok-3",
+  "grok-fast": "xai/grok-4-fast-reasoning",
+  "grok-code": "xai/grok-code-fast-1",
+
+  // NVIDIA
+  "nvidia": "nvidia/gpt-oss-120b",
 };
 
 /**
@@ -338,6 +343,87 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0.5,
     contextWindow: 131072,
     maxOutput: 16384,
+  },
+
+  // xAI Grok 4 Family - Ultra-cheap fast models
+  {
+    id: "xai/grok-4-fast-reasoning",
+    name: "Grok 4 Fast Reasoning",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "xai/grok-4-fast-non-reasoning",
+    name: "Grok 4 Fast",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+  {
+    id: "xai/grok-4-1-fast-reasoning",
+    name: "Grok 4.1 Fast Reasoning",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "xai/grok-4-1-fast-non-reasoning",
+    name: "Grok 4.1 Fast",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+  {
+    id: "xai/grok-code-fast-1",
+    name: "Grok Code Fast",
+    inputPrice: 0.2,
+    outputPrice: 1.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    agentic: true, // Good for coding tasks
+  },
+  {
+    id: "xai/grok-4-0709",
+    name: "Grok 4 (0709)",
+    inputPrice: 3.0,
+    outputPrice: 15.0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "xai/grok-2-vision",
+    name: "Grok 2 Vision",
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    vision: true,
+  },
+
+  // NVIDIA - Free/cheap models
+  {
+    id: "nvidia/gpt-oss-120b",
+    name: "NVIDIA GPT-OSS 120B",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 128000,
+    maxOutput: 8192,
+  },
+  {
+    id: "nvidia/kimi-k2.5",
+    name: "NVIDIA Kimi K2.5",
+    inputPrice: 0.001,
+    outputPrice: 0.001,
+    contextWindow: 262144,
+    maxOutput: 8192,
   },
 ];
 

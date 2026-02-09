@@ -140,8 +140,12 @@ async function runTests() {
     assert(res.ok, `Response OK: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    // SIMPLE tier may use deepseek-chat or gemini depending on routing
-    assert(content.includes("deepseek") || content.includes("gemini"), `Response from primary (SIMPLE tier): ${content}`);
+    // uniqueMessage adds "[test-N]" which triggers agentic detection -> MEDIUM tier
+    // MEDIUM tier uses grok-code-fast-1, or SIMPLE uses gemini/deepseek
+    assert(
+      content.includes("grok-code") || content.includes("deepseek") || content.includes("gemini"),
+      `Response from routed model: ${content}`,
+    );
     assert(modelCalls.length === 1, `Only 1 model called: ${modelCalls.join(", ")}`);
   }
 
@@ -149,8 +153,8 @@ async function runTests() {
   {
     console.log("\n--- Test 2: Primary fails, fallback succeeds ---");
     modelCalls.length = 0;
-    // For REASONING tier: primary=deepseek/deepseek-reasoner, fallback=moonshot/kimi-k2.5
-    failModels = ["deepseek/deepseek-reasoner"];
+    // For REASONING tier: primary=xai/grok-4-fast-reasoning, fallback=deepseek/deepseek-reasoner
+    failModels = ["xai/grok-4-fast-reasoning"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -167,20 +171,21 @@ async function runTests() {
     assert(res.ok, `Response OK after fallback: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    assert(content.includes("kimi"), `Response from fallback model: ${content}`);
+    assert(content.includes("deepseek-reasoner"), `Response from fallback model: ${content}`);
     assert(
       modelCalls.length === 2,
       `2 models called (primary + fallback): ${modelCalls.join(", ")}`,
     );
-    assert(modelCalls[0] === "deepseek/deepseek-reasoner", `First tried primary: ${modelCalls[0]}`);
-    assert(modelCalls[1] === "moonshot/kimi-k2.5", `Then tried fallback: ${modelCalls[1]}`);
+    assert(modelCalls[0] === "xai/grok-4-fast-reasoning", `First tried primary: ${modelCalls[0]}`);
+    assert(modelCalls[1] === "deepseek/deepseek-reasoner", `Then tried fallback: ${modelCalls[1]}`);
   }
 
   // Test 3: Primary and first fallback fail - should try second fallback
   {
     console.log("\n--- Test 3: Primary + first fallback fail, second fallback succeeds ---");
     modelCalls.length = 0;
-    failModels = ["deepseek/deepseek-reasoner", "moonshot/kimi-k2.5"];
+    // For REASONING tier: primary=grok-4-fast-reasoning, fallbacks=[deepseek-reasoner, kimi-k2.5, gemini-2.5-pro]
+    failModels = ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -197,7 +202,7 @@ async function runTests() {
     assert(res.ok, `Response OK after 2nd fallback: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    assert(content.includes("gemini-2.5-pro"), `Response from 2nd fallback: ${content}`);
+    assert(content.includes("kimi-k2.5"), `Response from 2nd fallback: ${content}`);
     assert(modelCalls.length === 3, `3 models called: ${modelCalls.join(", ")}`);
   }
 
@@ -205,7 +210,8 @@ async function runTests() {
   {
     console.log("\n--- Test 4: All models fail - returns error ---");
     modelCalls.length = 0;
-    failModels = ["deepseek/deepseek-reasoner", "moonshot/kimi-k2.5", "google/gemini-2.5-pro"];
+    // Proxy tries max 3 models (primary + 2 fallbacks) to avoid excessive retries
+    failModels = ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner", "moonshot/kimi-k2.5"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -225,7 +231,7 @@ async function runTests() {
       data.error?.type === "provider_error",
       `Error type is provider_error: ${data.error?.type}`,
     );
-    assert(modelCalls.length === 3, `Tried all 3 models: ${modelCalls.join(", ")}`);
+    assert(modelCalls.length === 3, `Tried 3 models (primary + 2 fallbacks): ${modelCalls.join(", ")}`);
   }
 
   // Test 5: Explicit model (not auto) - no fallback

@@ -295,13 +295,13 @@ test("SIMPLE tier selects a cheap model", () => {
   );
 });
 
-test("REASONING tier selects deepseek-reasoner", () => {
+test("REASONING tier selects grok-4-fast-reasoning", () => {
   const result = route("Prove sqrt(2) is irrational step by step", undefined, 100, {
     config: DEFAULT_ROUTING_CONFIG,
     modelPricing,
   });
-  // REASONING tier now uses deepseek-reasoner as primary (cheaper than o3)
-  assertTrue(result.model.includes("deepseek-reasoner"), `Got ${result.model}`);
+  // REASONING tier now uses grok-4-fast-reasoning as primary (ultra-cheap $0.20/$0.50)
+  assertTrue(result.model.includes("grok-4-fast-reasoning"), `Got ${result.model}`);
 });
 
 console.log("\n═══ Edge Cases ═══\n");
