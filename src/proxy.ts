@@ -34,7 +34,7 @@ import {
   type RoutingConfig,
   type ModelPricing,
 } from "./router/index.js";
-import { BLOCKRUN_MODELS } from "./models.js";
+import { BLOCKRUN_MODELS, resolveModelAlias } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats, generateDashboardHtml } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
@@ -691,14 +691,26 @@ async function proxyRequest(
       // Normalize model name for comparison (trim whitespace, lowercase)
       const normalizedModel =
         typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
+
+      // Resolve model aliases (e.g., "claude" -> "anthropic/claude-sonnet-4")
+      const resolvedModel = resolveModelAlias(normalizedModel);
+      const wasAlias = resolvedModel !== normalizedModel;
+
       const isAutoModel =
         normalizedModel === AUTO_MODEL.toLowerCase() ||
         normalizedModel === AUTO_MODEL_SHORT.toLowerCase();
 
       // Debug: log received model name
       console.log(
-        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}", isAuto: ${isAutoModel}`,
+        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}, isAuto: ${isAutoModel}`,
       );
+
+      // If alias was resolved, update the model in the request
+      if (wasAlias && !isAutoModel) {
+        parsed.model = resolvedModel;
+        modelId = resolvedModel;
+        bodyModified = true;
+      }
 
       if (isAutoModel) {
         // Extract prompt from messages

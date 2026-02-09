@@ -10,6 +10,58 @@
 
 import type { ModelDefinitionConfig, ModelProviderConfig } from "./types.js";
 
+/**
+ * Model aliases for convenient shorthand access.
+ * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4`.
+ */
+export const MODEL_ALIASES: Record<string, string> = {
+  // Claude
+  claude: "anthropic/claude-sonnet-4",
+  sonnet: "anthropic/claude-sonnet-4",
+  opus: "anthropic/claude-opus-4",
+  haiku: "anthropic/claude-haiku-4.5",
+
+  // OpenAI
+  gpt: "openai/gpt-4o",
+  gpt4: "openai/gpt-4o",
+  gpt5: "openai/gpt-5.2",
+  mini: "openai/gpt-4o-mini",
+  o3: "openai/o3",
+
+  // DeepSeek
+  deepseek: "deepseek/deepseek-chat",
+  reasoner: "deepseek/deepseek-reasoner",
+
+  // Kimi / Moonshot
+  kimi: "moonshot/kimi-k2.5",
+
+  // Google
+  gemini: "google/gemini-2.5-pro",
+  flash: "google/gemini-2.5-flash",
+
+  // xAI
+  grok: "xai/grok-3",
+};
+
+/**
+ * Resolve a model alias to its full model ID.
+ * Returns the original model if not an alias.
+ */
+export function resolveModelAlias(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  const resolved = MODEL_ALIASES[normalized];
+  if (resolved) return resolved;
+
+  // Check with "blockrun/" prefix stripped
+  if (normalized.startsWith("blockrun/")) {
+    const withoutPrefix = normalized.slice("blockrun/".length);
+    const resolvedWithoutPrefix = MODEL_ALIASES[withoutPrefix];
+    if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
+  }
+
+  return model;
+}
+
 type BlockRunModel = {
   id: string;
   name: string;

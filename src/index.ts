@@ -526,7 +526,13 @@ export default plugin;
 export { startProxy, getProxyPort } from "./proxy.js";
 export type { ProxyOptions, ProxyHandle, LowBalanceInfo, InsufficientFundsInfo } from "./proxy.js";
 export { blockrunProvider } from "./provider.js";
-export { OPENCLAW_MODELS, BLOCKRUN_MODELS, buildProviderModels } from "./models.js";
+export {
+  OPENCLAW_MODELS,
+  BLOCKRUN_MODELS,
+  buildProviderModels,
+  MODEL_ALIASES,
+  resolveModelAlias,
+} from "./models.js";
 export { route, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
 export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
 export { logUsage } from "./logger.js";
