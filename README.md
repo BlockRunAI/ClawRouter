@@ -85,7 +85,7 @@ No API keys. No accounts. Just fund and go.
 **100% local, <1ms, zero API calls.**
 
 ```
-Request → Weighted Scorer (14 dimensions)
+Request → Weighted Scorer (15 dimensions)
               │
               ├── High confidence → Pick model from tier → Done
               │
@@ -208,6 +208,42 @@ ClawRouter automatically filters out models that can't handle your context size:
 
 This prevents wasted API calls and faster fallback to capable models.
 
+### Model Aliases (v0.5)
+
+Use short aliases instead of full model paths:
+
+```bash
+/model free      # nvidia/gpt-oss-120b (FREE!)
+/model sonnet    # anthropic/claude-sonnet-4
+/model opus      # anthropic/claude-opus-4
+/model haiku     # anthropic/claude-haiku-4.5
+/model gpt       # openai/gpt-4o
+/model gpt5      # openai/gpt-5.2
+/model deepseek  # deepseek/deepseek-chat
+/model reasoner  # deepseek/deepseek-reasoner
+/model kimi      # moonshot/kimi-k2.5
+/model gemini    # google/gemini-2.5-pro
+/model flash     # google/gemini-2.5-flash
+/model grok      # xai/grok-3
+/model grok-fast # xai/grok-4-fast-reasoning
+```
+
+All aliases work with `/model blockrun/xxx` or just `/model xxx`.
+
+### Free Tier Fallback (v0.5)
+
+When your wallet balance hits $0, ClawRouter automatically falls back to the free model (`nvidia/gpt-oss-120b`):
+
+```
+Wallet: $0.00
+Request: "Help me write a function"
+→ Routes to nvidia/gpt-oss-120b (FREE)
+→ No "insufficient funds" error
+→ Keep building while you top up
+```
+
+You'll never get blocked by an empty wallet — the free tier keeps you running.
+
 ### Session Persistence (v0.5)
 
 For multi-turn conversations, ClawRouter pins the model to prevent mid-task switching:
@@ -264,8 +300,10 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 | grok-code-fast-1      | $0.20     | $1.50      | 131K    |           |
 | **Moonshot**          |           |            |         |           |
 | kimi-k2.5             | $0.50     | $2.40      | 262K    |    \*     |
-| **NVIDIA**            |           |            |         |           |
-| gpt-oss-120b          | **FREE**  | **FREE**   | 128K    |           |
+| **NVIDIA (Free)**     |           |            |         |           |
+| gpt-oss-120b          | **$0**    | **$0**     | 128K    |           |
+
+> **Free tier:** `nvidia/gpt-oss-120b` costs nothing and serves as automatic fallback when wallet is empty.
 
 Full list: [`src/models.ts`](src/models.ts)
 
@@ -410,7 +448,7 @@ If you lose your wallet key, **there is no way to recover it**. The wallet is se
 │                   ClawRouter (localhost)                     │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
 │  │ Weighted Scorer │→ │ Model Selector  │→ │ x402 Signer │ │
-│  │  (14 dimensions)│  │ (cheapest tier) │  │   (USDC)    │ │
+│  │  (15 dimensions)│  │ (cheapest tier) │  │   (USDC)    │ │
 │  └─────────────────┘  └─────────────────┘  └─────────────┘ │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -586,7 +624,7 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 ### Quick Checklist
 
 ```bash
-# 1. Check your version (should be 0.5.0+)
+# 1. Check your version (should be 0.5.7+)
 cat ~/.openclaw/extensions/clawrouter/package.json | grep version
 
 # 2. Check proxy is running
