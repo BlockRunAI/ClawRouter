@@ -1,5 +1,4 @@
-![GitHub Repo Banner](https://ghrb.waren.build/banner?header=%F0%9F%A6%9E+ClawRouter&subheader=Save+78%25+on+LLM+costs.+Automatically.&bg=FFF&color=BB2C2C&headerfont=Roboto&subheaderfont=Open+Sans&watermarkpos=top-right)
-<!-- Created with GitHub Repo Banner by Waren Gonzaga: https://ghrb.waren.build -->
+![ClawRouter Banner](assets/banner.png)
 
 <div align="center">
 
