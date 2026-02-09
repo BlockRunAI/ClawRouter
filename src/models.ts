@@ -45,7 +45,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   "grok-code": "xai/grok-code-fast-1",
 
   // NVIDIA
-  "nvidia": "nvidia/gpt-oss-120b",
+  nvidia: "nvidia/gpt-oss-120b",
 };
 
 /**

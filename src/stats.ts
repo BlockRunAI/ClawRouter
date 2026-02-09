@@ -212,11 +212,11 @@ export function formatStatsAscii(stats: AggregatedStats): string {
   lines.push(`║  Period: ${stats.period.padEnd(49)}║`);
   lines.push(`║  Total Requests: ${stats.totalRequests.toString().padEnd(41)}║`);
   lines.push(`║  Total Cost: $${stats.totalCost.toFixed(4).padEnd(43)}║`);
+  lines.push(`║  Baseline Cost (Opus): $${stats.totalBaselineCost.toFixed(4).padEnd(33)}║`);
   lines.push(
-    `║  Baseline Cost (Opus): $${stats.totalBaselineCost.toFixed(4).padEnd(33)}║`,
-  );
-  lines.push(
-    `║  💰 Total Saved: $${stats.totalSavings.toFixed(4)} (${stats.savingsPercentage.toFixed(1)}%)`.padEnd(61) + "║",
+    `║  💰 Total Saved: $${stats.totalSavings.toFixed(4)} (${stats.savingsPercentage.toFixed(1)}%)`.padEnd(
+      61,
+    ) + "║",
   );
   lines.push(`║  Avg Latency: ${stats.avgLatencyMs.toFixed(0)}ms`.padEnd(61) + "║");
 

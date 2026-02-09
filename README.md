@@ -130,12 +130,12 @@ Mixed-language prompts are supported — keywords from all languages are checked
 
 ### Tier → Model Mapping
 
-| Tier      | Primary Model          | Cost/M | Savings vs Opus |
-| --------- | ---------------------- | ------ | --------------- |
-| SIMPLE    | gemini-2.5-flash       | $0.60  | **99.2%**       |
-| MEDIUM    | grok-code-fast-1       | $1.50  | **98.0%**       |
-| COMPLEX   | gemini-2.5-pro         | $10.00 | **86.7%**       |
-| REASONING | grok-4-fast-reasoning  | $0.50  | **99.3%**       |
+| Tier      | Primary Model         | Cost/M | Savings vs Opus |
+| --------- | --------------------- | ------ | --------------- |
+| SIMPLE    | gemini-2.5-flash      | $0.60  | **99.2%**       |
+| MEDIUM    | grok-code-fast-1      | $1.50  | **98.0%**       |
+| COMPLEX   | gemini-2.5-pro        | $10.00 | **86.7%**       |
+| REASONING | grok-4-fast-reasoning | $0.50  | **99.3%**       |
 
 Special rule: 2+ reasoning markers → REASONING at 0.97 confidence.
 
@@ -150,18 +150,19 @@ ClawRouter automatically detects multi-step agentic tasks and routes to models o
 ```
 
 **How it works:**
+
 - Detects agentic keywords: file ops ("read", "edit"), execution ("run", "test", "deploy"), iteration ("fix", "debug", "verify")
 - Threshold: 2+ signals triggers auto-switch to agentic tiers
 - No config needed — works automatically
 
 **Agentic tier models** (optimized for multi-step autonomy):
 
-| Tier      | Agentic Model        | Why                                    |
-| --------- | -------------------- | -------------------------------------- |
-| SIMPLE    | claude-haiku-4.5     | Fast + reliable tool use              |
-| MEDIUM    | kimi-k2.5            | 200+ tool chains, 76% cheaper         |
-| COMPLEX   | claude-sonnet-4      | Best balance for complex tasks        |
-| REASONING | kimi-k2.5            | Extended reasoning + execution        |
+| Tier      | Agentic Model    | Why                            |
+| --------- | ---------------- | ------------------------------ |
+| SIMPLE    | claude-haiku-4.5 | Fast + reliable tool use       |
+| MEDIUM    | kimi-k2.5        | 200+ tool chains, 76% cheaper  |
+| COMPLEX   | claude-sonnet-4  | Best balance for complex tasks |
+| REASONING | kimi-k2.5        | Extended reasoning + execution |
 
 You can also force agentic mode via config:
 
@@ -172,7 +173,7 @@ plugins:
     config:
       routing:
         overrides:
-          agenticMode: true  # Always use agentic tiers
+          agenticMode: true # Always use agentic tiers
 ```
 
 ### Tool Detection (v0.5)
@@ -235,34 +236,34 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 
 30+ models across 6 providers, one wallet:
 
-| Model             | Input $/M | Output $/M | Context | Reasoning |
-| ----------------- | --------- | ---------- | ------- | :-------: |
-| **OpenAI**        |           |            |         |           |
-| gpt-5.2           | $1.75     | $14.00     | 400K    |    \*     |
-| gpt-4o            | $2.50     | $10.00     | 128K    |           |
-| gpt-4o-mini       | $0.15     | $0.60      | 128K    |           |
-| o3                | $2.00     | $8.00      | 200K    |    \*     |
-| o3-mini           | $1.10     | $4.40      | 128K    |    \*     |
-| **Anthropic**     |           |            |         |           |
-| claude-opus-4.5   | $5.00     | $25.00     | 200K    |    \*     |
-| claude-sonnet-4   | $3.00     | $15.00     | 200K    |    \*     |
-| claude-haiku-4.5  | $1.00     | $5.00      | 200K    |           |
-| **Google**        |           |            |         |           |
-| gemini-2.5-pro    | $1.25     | $10.00     | 1M      |    \*     |
-| gemini-2.5-flash  | $0.15     | $0.60      | 1M      |           |
-| **DeepSeek**      |           |            |         |           |
-| deepseek-chat     | $0.14     | $0.28      | 128K    |           |
-| deepseek-reasoner | $0.55     | $2.19      | 128K    |    \*     |
-| **xAI**           |           |            |         |           |
-| grok-3            | $3.00     | $15.00     | 131K    |    \*     |
-| grok-3-mini       | $0.30     | $0.50      | 131K    |           |
-| grok-4-fast-reasoning | $0.20 | $0.50      | 131K    |    \*     |
-| grok-4-fast       | $0.20     | $0.50      | 131K    |           |
-| grok-code-fast-1  | $0.20     | $1.50      | 131K    |           |
-| **Moonshot**      |           |            |         |           |
-| kimi-k2.5         | $0.50     | $2.40      | 262K    |    \*     |
-| **NVIDIA**        |           |            |         |           |
-| gpt-oss-120b      | **FREE**  | **FREE**   | 128K    |           |
+| Model                 | Input $/M | Output $/M | Context | Reasoning |
+| --------------------- | --------- | ---------- | ------- | :-------: |
+| **OpenAI**            |           |            |         |           |
+| gpt-5.2               | $1.75     | $14.00     | 400K    |    \*     |
+| gpt-4o                | $2.50     | $10.00     | 128K    |           |
+| gpt-4o-mini           | $0.15     | $0.60      | 128K    |           |
+| o3                    | $2.00     | $8.00      | 200K    |    \*     |
+| o3-mini               | $1.10     | $4.40      | 128K    |    \*     |
+| **Anthropic**         |           |            |         |           |
+| claude-opus-4.5       | $5.00     | $25.00     | 200K    |    \*     |
+| claude-sonnet-4       | $3.00     | $15.00     | 200K    |    \*     |
+| claude-haiku-4.5      | $1.00     | $5.00      | 200K    |           |
+| **Google**            |           |            |         |           |
+| gemini-2.5-pro        | $1.25     | $10.00     | 1M      |    \*     |
+| gemini-2.5-flash      | $0.15     | $0.60      | 1M      |           |
+| **DeepSeek**          |           |            |         |           |
+| deepseek-chat         | $0.14     | $0.28      | 128K    |           |
+| deepseek-reasoner     | $0.55     | $2.19      | 128K    |    \*     |
+| **xAI**               |           |            |         |           |
+| grok-3                | $3.00     | $15.00     | 131K    |    \*     |
+| grok-3-mini           | $0.30     | $0.50      | 131K    |           |
+| grok-4-fast-reasoning | $0.20     | $0.50      | 131K    |    \*     |
+| grok-4-fast           | $0.20     | $0.50      | 131K    |           |
+| grok-code-fast-1      | $0.20     | $1.50      | 131K    |           |
+| **Moonshot**          |           |            |         |           |
+| kimi-k2.5             | $0.50     | $2.40      | 262K    |    \*     |
+| **NVIDIA**            |           |            |         |           |
+| gpt-oss-120b          | **FREE**  | **FREE**   | 128K    |           |
 
 Full list: [`src/models.ts`](src/models.ts)
 
@@ -538,6 +539,7 @@ Track your savings in real-time:
 ```
 
 Output:
+
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║              ClawRouter Usage Statistics                   ║

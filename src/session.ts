@@ -42,10 +42,7 @@ export class SessionStore {
 
     // Start cleanup interval (every 5 minutes)
     if (this.config.enabled) {
-      this.cleanupInterval = setInterval(
-        () => this.cleanup(),
-        5 * 60 * 1000,
-      );
+      this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
     }
   }
 

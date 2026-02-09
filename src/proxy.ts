@@ -722,7 +722,9 @@ async function proxyRequest(
 
       if (isAutoModel) {
         // Check for session persistence - use pinned model if available
-        const sessionId = getSessionId(req.headers as Record<string, string | string[] | undefined>);
+        const sessionId = getSessionId(
+          req.headers as Record<string, string | string[] | undefined>,
+        );
         const existingSession = sessionId ? sessionStore.getSession(sessionId) : undefined;
 
         if (existingSession) {
@@ -750,7 +752,8 @@ async function proxyRequest(
           }
           const systemMsg = messages?.find((m: ChatMessage) => m.role === "system");
           const prompt = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
-          const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : undefined;
+          const systemPrompt =
+            typeof systemMsg?.content === "string" ? systemMsg.content : undefined;
 
           // Detect tool requests - force agentic mode for better tool-use models
           const tools = parsed.tools as unknown[] | undefined;
@@ -969,7 +972,9 @@ async function proxyRequest(
       // Get tier configs (use agentic tiers if routing decided to use them)
       const useAgenticTiers =
         routingDecision.reasoning?.includes("agentic") && routerOpts.config.agenticTiers;
-      const tierConfigs = useAgenticTiers ? routerOpts.config.agenticTiers! : routerOpts.config.tiers;
+      const tierConfigs = useAgenticTiers
+        ? routerOpts.config.agenticTiers!
+        : routerOpts.config.tiers;
 
       // Get full chain first, then filter by context
       const fullChain = getFallbackChain(routingDecision.tier, tierConfigs);
@@ -1141,8 +1146,24 @@ async function proxyRequest(
             model?: string;
             choices?: Array<{
               index?: number;
-              message?: { role?: string; content?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
-              delta?: { role?: string; content?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
+              message?: {
+                role?: string;
+                content?: string;
+                tool_calls?: Array<{
+                  id: string;
+                  type: string;
+                  function: { name: string; arguments: string };
+                }>;
+              };
+              delta?: {
+                role?: string;
+                content?: string;
+                tool_calls?: Array<{
+                  id: string;
+                  type: string;
+                  function: { name: string; arguments: string };
+                }>;
+              };
               finish_reason?: string | null;
             }>;
             usage?: unknown;
@@ -1232,7 +1253,8 @@ async function proxyRequest(
       const responseHeaders: Record<string, string> = {};
       upstream.headers.forEach((value, key) => {
         // Skip hop-by-hop headers and content-encoding (fetch already decompresses)
-        if (key === "transfer-encoding" || key === "connection" || key === "content-encoding") return;
+        if (key === "transfer-encoding" || key === "connection" || key === "content-encoding")
+          return;
         responseHeaders[key] = value;
       });
 

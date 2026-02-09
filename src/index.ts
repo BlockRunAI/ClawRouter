@@ -299,11 +299,7 @@ async function createStatsCommand(): Promise<OpenClawPluginCommandDefinition> {
         const ascii = formatStatsAscii(stats);
 
         return {
-          text: [
-            "```",
-            ascii,
-            "```",
-          ].join("\n"),
+          text: ["```", ascii, "```"].join("\n"),
         };
       } catch (err) {
         return {
@@ -534,7 +530,12 @@ export {
   getAgenticModels,
   getModelContextWindow,
 } from "./models.js";
-export { route, DEFAULT_ROUTING_CONFIG, getFallbackChain, getFallbackChainFiltered } from "./router/index.js";
+export {
+  route,
+  DEFAULT_ROUTING_CONFIG,
+  getFallbackChain,
+  getFallbackChainFiltered,
+} from "./router/index.js";
 export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
 export { logUsage } from "./logger.js";
 export type { UsageEntry } from "./logger.js";

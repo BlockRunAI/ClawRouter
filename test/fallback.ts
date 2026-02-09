@@ -233,7 +233,10 @@ async function runTests() {
       data.error?.type === "provider_error",
       `Error type is provider_error: ${data.error?.type}`,
     );
-    assert(modelCalls.length === 3, `Tried 3 models (primary + 2 fallbacks): ${modelCalls.join(", ")}`);
+    assert(
+      modelCalls.length === 3,
+      `Tried 3 models (primary + 2 fallbacks): ${modelCalls.join(", ")}`,
+    );
   }
 
   // Test 5: Explicit model (not auto) - no fallback

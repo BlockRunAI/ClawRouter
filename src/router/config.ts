@@ -633,7 +633,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       referenceComplexity: 0.02,
       negationComplexity: 0.01,
       domainSpecificity: 0.02,
-      agenticTask: 0.10, // Significant weight for agentic detection
+      agenticTask: 0.1, // Significant weight for agentic detection
     },
 
     // Tier boundaries on weighted score axis
@@ -656,7 +656,11 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     },
     MEDIUM: {
       primary: "xai/grok-code-fast-1", // Code specialist, $0.20/$1.50
-      fallback: ["deepseek/deepseek-chat", "xai/grok-4-fast-non-reasoning", "google/gemini-2.5-flash"],
+      fallback: [
+        "deepseek/deepseek-chat",
+        "xai/grok-4-fast-non-reasoning",
+        "google/gemini-2.5-flash",
+      ],
     },
     COMPLEX: {
       primary: "google/gemini-2.5-pro",
