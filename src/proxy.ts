@@ -46,6 +46,7 @@ import { BalanceMonitor } from "./balance.js";
 // import { InsufficientFundsError, EmptyWalletError } from "./errors.js";
 import { USER_AGENT } from "./version.js";
 import { SessionStore, getSessionId, type SessionConfig } from "./session.js";
+import { getLocalBackend, handleLocalClaudeRequest, type LocalBackendsConfig } from "./local-backend.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
@@ -416,6 +417,11 @@ export type ProxyOptions = {
    * across requests within a session to prevent mid-task model switching.
    */
   sessionConfig?: Partial<SessionConfig>;
+  /**
+   * Local backends config. When enabled, routes specific providers to local CLI
+   * instead of x402 payments. Useful for Claude Pro/Max subscribers.
+   */
+  localBackends?: LocalBackendsConfig;
   onReady?: (port: number) => void;
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
@@ -1048,6 +1054,18 @@ async function proxyRequest(
       console.error(`[ClawRouter] Routing error: ${errorMsg}`);
       options.onError?.(new Error(`Routing failed: ${errorMsg}`));
     }
+  }
+
+  // --- Local backend check ---
+  // Check if this model should be handled by a local backend (e.g., Claude CLI)
+  const localBackend = getLocalBackend(modelId, options.localBackends);
+  if (localBackend && isChatCompletion) {
+    console.log(`[ClawRouter] Routing ${modelId} to local backend (skipping x402)`);
+    await handleLocalClaudeRequest(body, localBackend, res, {
+      info: (msg) => console.log(msg),
+      error: (msg) => console.error(msg),
+    });
+    return;
   }
 
   // --- Dedup check ---

@@ -282,10 +282,16 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 
   // Resolve routing config overrides from plugin config
   const routingConfig = api.pluginConfig?.routing as Partial<RoutingConfig> | undefined;
+  
+  // Resolve local backends config (e.g., Claude CLI for Pro/Max subscribers)
+  const localBackends = api.pluginConfig?.localBackends as {
+    claude?: { enabled: boolean; command: string; args?: string[] };
+  } | undefined;
 
   const proxy = await startProxy({
     walletKey,
     routingConfig,
+    localBackends,
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
     },
