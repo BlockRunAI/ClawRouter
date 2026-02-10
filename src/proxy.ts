@@ -248,6 +248,129 @@ const ROLE_MAPPINGS: Record<string, string> = {
 type ChatMessage = { role: string; content: string | unknown };
 
 /**
+ * Anthropic tool ID pattern: only alphanumeric, underscore, and hyphen allowed.
+ * Error: "messages.X.content.Y.tool_use.id: String should match pattern '^[a-zA-Z0-9_-]+$'"
+ */
+const VALID_TOOL_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Sanitize a tool ID to match Anthropic's required pattern.
+ * Replaces invalid characters with underscores.
+ */
+function sanitizeToolId(id: string | undefined): string | undefined {
+  if (!id || typeof id !== "string") return id;
+  if (VALID_TOOL_ID_PATTERN.test(id)) return id;
+
+  // Replace invalid characters with underscores
+  return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
+ * Type for messages with tool calls (OpenAI format).
+ */
+type MessageWithTools = ChatMessage & {
+  tool_calls?: Array<{ id?: string; type?: string; function?: unknown }>;
+  tool_call_id?: string;
+};
+
+/**
+ * Type for content blocks that may contain tool IDs (Anthropic format in OpenAI wrapper).
+ */
+type ContentBlock = {
+  type?: string;
+  id?: string;
+  tool_use_id?: string;
+  [key: string]: unknown;
+};
+
+/**
+ * Sanitize all tool IDs in messages to match Anthropic's pattern.
+ * Handles both OpenAI format (tool_calls, tool_call_id) and content block formats.
+ */
+function sanitizeToolIds(messages: ChatMessage[]): ChatMessage[] {
+  if (!messages || messages.length === 0) return messages;
+
+  let hasChanges = false;
+  const sanitized = messages.map((msg) => {
+    const typedMsg = msg as MessageWithTools;
+    let msgChanged = false;
+    let newMsg = { ...msg } as MessageWithTools;
+
+    // Sanitize tool_calls[].id in assistant messages
+    if (typedMsg.tool_calls && Array.isArray(typedMsg.tool_calls)) {
+      const newToolCalls = typedMsg.tool_calls.map((tc) => {
+        if (tc.id && typeof tc.id === "string") {
+          const sanitized = sanitizeToolId(tc.id);
+          if (sanitized !== tc.id) {
+            msgChanged = true;
+            return { ...tc, id: sanitized };
+          }
+        }
+        return tc;
+      });
+      if (msgChanged) {
+        newMsg = { ...newMsg, tool_calls: newToolCalls };
+      }
+    }
+
+    // Sanitize tool_call_id in tool messages
+    if (typedMsg.tool_call_id && typeof typedMsg.tool_call_id === "string") {
+      const sanitized = sanitizeToolId(typedMsg.tool_call_id);
+      if (sanitized !== typedMsg.tool_call_id) {
+        msgChanged = true;
+        newMsg = { ...newMsg, tool_call_id: sanitized };
+      }
+    }
+
+    // Sanitize content blocks if content is an array (Anthropic-style content)
+    if (Array.isArray(typedMsg.content)) {
+      const newContent = (typedMsg.content as ContentBlock[]).map((block) => {
+        if (!block || typeof block !== "object") return block;
+
+        let blockChanged = false;
+        let newBlock = { ...block };
+
+        // tool_use blocks have "id"
+        if (block.type === "tool_use" && block.id && typeof block.id === "string") {
+          const sanitized = sanitizeToolId(block.id);
+          if (sanitized !== block.id) {
+            blockChanged = true;
+            newBlock = { ...newBlock, id: sanitized };
+          }
+        }
+
+        // tool_result blocks have "tool_use_id"
+        if (block.type === "tool_result" && block.tool_use_id && typeof block.tool_use_id === "string") {
+          const sanitized = sanitizeToolId(block.tool_use_id);
+          if (sanitized !== block.tool_use_id) {
+            blockChanged = true;
+            newBlock = { ...newBlock, tool_use_id: sanitized };
+          }
+        }
+
+        if (blockChanged) {
+          msgChanged = true;
+          return newBlock;
+        }
+        return block;
+      });
+
+      if (msgChanged) {
+        newMsg = { ...newMsg, content: newContent };
+      }
+    }
+
+    if (msgChanged) {
+      hasChanges = true;
+      return newMsg;
+    }
+    return msg;
+  });
+
+  return hasChanges ? sanitized : messages;
+}
+
+/**
  * Normalize message roles to standard OpenAI format.
  * Converts non-standard roles (e.g., "developer") to valid ones.
  */
@@ -825,6 +948,11 @@ async function tryModelRequest(
     // Normalize message roles (e.g., "developer" -> "system")
     if (Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessageRoles(parsed.messages as ChatMessage[]);
+    }
+
+    // Sanitize tool IDs to match Anthropic's pattern (alphanumeric, underscore, hyphen only)
+    if (Array.isArray(parsed.messages)) {
+      parsed.messages = sanitizeToolIds(parsed.messages as ChatMessage[]);
     }
 
     // Normalize messages for Google models (first non-system message must be "user")
