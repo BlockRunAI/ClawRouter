@@ -92,7 +92,6 @@ export async function handleLocalClaudeRequest(
       // Build Claude CLI arguments
       const args = [...(backend.args || [])];
       args.push("--print"); // Output only the response
-      args.push("--max-tokens", String(parsed.max_tokens || 4096));
       
       // Map model name to Claude CLI model
       const modelMap: Record<string, string> = {
@@ -125,6 +124,11 @@ export async function handleLocalClaudeRequest(
 
       child.stderr.on("data", (data) => {
         stderr += data.toString();
+      });
+
+      // Handle stdin errors (EPIPE if child exits before write completes)
+      child.stdin.on("error", (err) => {
+        logger.error(`[LocalBackend] stdin error: ${err.message}`);
       });
 
       // Send the prompt to stdin
