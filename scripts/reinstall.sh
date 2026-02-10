@@ -165,7 +165,10 @@ if (fs.existsSync(configPath)) {
 "
 
 echo ""
-echo "✓ Done! Smart routing enabled by default."
+echo "✓ Done! ClawRouter installed."
+echo ""
+echo "To enable smart routing, run:"
+echo "  /model blockrun/auto"
 echo ""
 echo "Run: openclaw gateway restart"
 echo ""

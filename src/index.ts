@@ -102,15 +102,6 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       }
     }
 
-    // Set blockrun/auto as default model for smart routing
-    if (!config.agents) config.agents = {};
-    if (!config.agents.defaults) config.agents.defaults = {};
-    if (!config.agents.defaults.model) config.agents.defaults.model = {};
-    if (config.agents.defaults.model.primary !== "blockrun/auto") {
-      config.agents.defaults.model.primary = "blockrun/auto";
-      needsWrite = true;
-    }
-
     // Add key model aliases to allowlist for /model picker visibility
     // Only add essential aliases, not all 50+ models to avoid config pollution
     const KEY_MODEL_ALIASES = [
@@ -143,7 +134,7 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
 
     if (needsWrite) {
       writeFileSync(configPath, JSON.stringify(config, null, 2));
-      logger.info("Smart routing enabled (blockrun/auto)");
+      logger.info("BlockRun models injected");
     }
   } catch {
     // Silently fail — config injection is best-effort
@@ -485,15 +476,8 @@ const plugin: OpenClawPluginDefinition = {
       models: OPENCLAW_MODELS,
     };
 
-    // Set blockrun/auto as default for smart routing
-    if (!api.config.agents) api.config.agents = {};
-    const agents = api.config.agents as Record<string, unknown>;
-    if (!agents.defaults) agents.defaults = {};
-    const defaults = agents.defaults as Record<string, unknown>;
-    if (!defaults.model) defaults.model = {};
-    (defaults.model as Record<string, unknown>).primary = "blockrun/auto";
-
     api.logger.info("BlockRun provider registered (30+ models via x402)");
+    api.logger.info("Use /model blockrun/auto to enable smart routing");
 
     // Register /wallet command for wallet management
     createWalletCommand()
