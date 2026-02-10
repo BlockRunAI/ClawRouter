@@ -33,7 +33,8 @@
     "test:resilience:stability:full": "DURATION_MINUTES=240 npx tsx test/resilience-stability.ts",
     "test:resilience:lifecycle": "npx tsx test/resilience-lifecycle.ts",
     "test:resilience:quick": "npm run test:resilience:errors && npm run test:resilience:lifecycle",
-    "test:resilience:full": "npm run test:resilience:errors && npm run test:resilience:lifecycle && npm run test:resilience:stability:full"
+    "test:resilience:full": "npm run test:resilience:errors && npm run test:resilience:lifecycle && npm run test:resilience:stability:full",
+    "test:e2e:tool-ids": "npx tsx test/e2e-tool-id-sanitization.ts"
   },
   "keywords": [
     "llm",
