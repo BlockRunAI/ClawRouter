@@ -282,10 +282,16 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 
   // Resolve routing config overrides from plugin config
   const routingConfig = api.pluginConfig?.routing as Partial<RoutingConfig> | undefined;
+  
+  // Resolve local backends config (e.g., Claude CLI for Pro/Max subscribers)
+  const localBackends = api.pluginConfig?.localBackends as {
+    claude?: { enabled: boolean; command: string; args?: string[] };
+  } | undefined;
 
   const proxy = await startProxy({
     walletKey,
     routingConfig,
+    localBackends,
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
     },
@@ -460,7 +466,7 @@ const plugin: OpenClawPluginDefinition = {
   description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
   version: VERSION,
 
-  async register(api: OpenClawPluginApi) {
+  register(api: OpenClawPluginApi) {
     // Check if ClawRouter is disabled via environment variable
     // Usage: CLAWROUTER_DISABLED=true openclaw gateway start
     const isDisabled =
@@ -536,12 +542,27 @@ const plugin: OpenClawPluginDefinition = {
         );
       });
 
-    // Register a service with stop() for cleanup on gateway shutdown
-    // This prevents EADDRINUSE when the gateway restarts
+    // Register a service with start/stop for proxy lifecycle.
+    // SIGUSR1 hot-reloads call stop() then start() without re-calling register(),
+    // so the proxy must be started from start(), not from register() directly.
     api.registerService({
       id: "clawrouter-proxy",
       start: () => {
-        // No-op: proxy is started in register() below for immediate availability
+        // Fire-and-forget: start proxy in background.
+        // OpenClaw may not await start(), so we handle errors ourselves.
+        startProxyInBackground(api)
+          .then(async () => {
+            const port = getProxyPort();
+            const healthy = await waitForProxyHealth(port);
+            if (!healthy) {
+              api.logger.warn(`Proxy health check timed out, commands may not work immediately`);
+            }
+          })
+          .catch((err) => {
+            api.logger.error(
+              `Failed to start BlockRun proxy: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
       },
       stop: async () => {
         // Close proxy on gateway shutdown to release port 8402
@@ -558,23 +579,6 @@ const plugin: OpenClawPluginDefinition = {
         }
       },
     });
-
-    // Start x402 proxy and wait for it to be ready
-    // Must happen in register() for CLI command support (services only start with gateway)
-    try {
-      await startProxyInBackground(api);
-
-      // Wait for proxy to be healthy (quick HTTP check, no RPC)
-      const port = getProxyPort();
-      const healthy = await waitForProxyHealth(port);
-      if (!healthy) {
-        api.logger.warn(`Proxy health check timed out, commands may not work immediately`);
-      }
-    } catch (err) {
-      api.logger.error(
-        `Failed to start BlockRun proxy: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
   },
 };
 

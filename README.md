@@ -258,6 +258,30 @@ For basic usage, no configuration needed. For advanced options:
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 
+### Local Backend Support (Claude CLI)
+
+Have a Claude Pro/Max subscription? Route Anthropic models to your local Claude CLI instead of x402:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "clawrouter": {
+        "localBackends": {
+          "claude": {
+            "enabled": true,
+            "command": "/path/to/claude",
+            "args": ["--output-format", "json"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+When enabled, requests to `anthropic/*`, `sonnet`, `opus`, or `haiku` models are routed to your local Claude CLI, bypassing x402 payments. Other models (GPT, Gemini, Grok, etc.) continue through ClawRouter.
+
 ---
 
 ## Programmatic Usage

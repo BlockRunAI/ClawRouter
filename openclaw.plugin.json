@@ -12,6 +12,21 @@
       "routing": {
         "type": "object",
         "description": "Override default routing configuration"
+      },
+      "localBackends": {
+        "type": "object",
+        "description": "Route specific providers to local CLI instead of x402 payments (e.g., Claude Pro/Max subscribers)",
+        "properties": {
+          "claude": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "command": { "type": "string" },
+              "args": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["enabled", "command"]
+          }
+        }
       }
     }
   },
