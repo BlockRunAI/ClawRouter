@@ -14,7 +14,9 @@ Write-Host "  (This may take up to 2 minutes...)"
 
 $installOutput = openclaw plugins install "@blockrun/clawrouter@latest" 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  ❌ FAIL: Plugin install failed" -ForegroundColor Red
+    Write-Host "  FAIL: Plugin install failed" -ForegroundColor Red
+    Write-Host "  Error output:" -ForegroundColor Red
+    Write-Host $installOutput
     exit 1
 }
 
