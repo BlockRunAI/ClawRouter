@@ -10,7 +10,7 @@ One wallet, 30+ models, zero API keys.
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 
-[Docs](https://blockrun.ai/docs) &middot; [Models](https://blockrun.ai/models) &middot; [Configuration](docs/configuration.md) &middot; [Features](docs/features.md) &middot; [Troubleshooting](docs/troubleshooting.md) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
+[Docs](https://blockrun.ai/docs) &middot; [Models](https://blockrun.ai/models) &middot; [Configuration](docs/configuration.md) &middot; [Features](docs/features.md) &middot; [Windows](docs/windows-installation.md) &middot; [Troubleshooting](docs/troubleshooting.md) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
 
 </div>
 
@@ -52,6 +52,21 @@ openclaw gateway restart
 ```
 
 Done! Smart routing (`blockrun/auto`) is now your default model.
+
+### Windows Installation
+
+⚠️ **Current Status:** Windows installation is temporarily unavailable due to an OpenClaw CLI bug. The issue is with the OpenClaw framework, not ClawRouter itself.
+
+**📖 Full Windows Guide:** [docs/windows-installation.md](docs/windows-installation.md)
+
+**Quick Summary:**
+- ✅ ClawRouter code is Windows-compatible
+- ❌ OpenClaw CLI has a `spawn EINVAL` bug on Windows
+- ✅ Works perfectly on **Linux** and **macOS**
+- 🔧 Manual installation workaround available for advanced users
+- 🧪 Full Windows test infrastructure ready ([.github/workflows/test-windows.yml](.github/workflows/test-windows.yml))
+
+**For advanced users:** See the [complete manual installation guide](docs/windows-installation.md) with step-by-step PowerShell instructions.
 
 ### Tips
 
