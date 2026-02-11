@@ -178,7 +178,8 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     }
   }
 
-  // Set blockrun/auto as default model for smart routing
+  // Set blockrun/auto as default model ONLY on first install (not every load!)
+  // This respects user's model selection and prevents hijacking their choice.
   if (!config.agents) {
     config.agents = {};
     needsWrite = true;
@@ -194,8 +195,12 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     needsWrite = true;
   }
   const model = defaults.model as Record<string, unknown>;
-  if (model.primary !== "blockrun/auto") {
+
+  // ONLY set default if no primary model exists (first install)
+  // Do NOT override user's selection on subsequent loads
+  if (!model.primary) {
     model.primary = "blockrun/auto";
+    logger.info("Set default model to blockrun/auto (first install)");
     needsWrite = true;
   }
 
@@ -577,13 +582,17 @@ const plugin: OpenClawPluginDefinition = {
       models: OPENCLAW_MODELS,
     };
 
-    // Set blockrun/auto as default for smart routing
+    // Set blockrun/auto as default ONLY if no model is set (first install)
+    // Do NOT override user's model selection on subsequent loads
     if (!api.config.agents) api.config.agents = {};
     const agents = api.config.agents as Record<string, unknown>;
     if (!agents.defaults) agents.defaults = {};
     const defaults = agents.defaults as Record<string, unknown>;
     if (!defaults.model) defaults.model = {};
-    (defaults.model as Record<string, unknown>).primary = "blockrun/auto";
+    const model = defaults.model as Record<string, unknown>;
+    if (!model.primary) {
+      model.primary = "blockrun/auto";
+    }
 
     api.logger.info("BlockRun provider registered (30+ models via x402)");
 
