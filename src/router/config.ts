@@ -659,8 +659,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   // Agentic tier configs - models that excel at multi-step autonomous tasks
   agenticTiers: {
     SIMPLE: {
-      primary: "anthropic/claude-haiku-4.5",
-      fallback: ["moonshot/kimi-k2.5", "xai/grok-4-fast-non-reasoning", "openai/gpt-4o-mini"],
+      primary: "moonshot/kimi-k2.5", // Cheaper than Haiku ($0.5/$2.4 vs $1/$5), larger context
+      fallback: ["anthropic/claude-haiku-4.5", "xai/grok-4-fast-non-reasoning", "openai/gpt-4o-mini"],
     },
     MEDIUM: {
       primary: "xai/grok-code-fast-1", // Code specialist for agentic coding
