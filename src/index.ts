@@ -623,7 +623,7 @@ const plugin: OpenClawPluginDefinition = {
     api.registerService({
       id: "clawrouter-proxy",
       start: () => {
-        // No-op: proxy is started in register() below for immediate availability
+        // No-op: proxy is started below in non-blocking mode
       },
       stop: async () => {
         // Close proxy on gateway shutdown to release port 8402
@@ -641,22 +641,23 @@ const plugin: OpenClawPluginDefinition = {
       },
     });
 
-    // Start x402 proxy and wait for it to be ready
-    // Must happen in register() for CLI command support (services only start with gateway)
-    try {
-      await startProxyInBackground(api);
-
-      // Wait for proxy to be healthy (quick HTTP check, no RPC)
-      const port = getProxyPort();
-      const healthy = await waitForProxyHealth(port);
-      if (!healthy) {
-        api.logger.warn(`Proxy health check timed out, commands may not work immediately`);
-      }
-    } catch (err) {
-      api.logger.error(
-        `Failed to start BlockRun proxy: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    // Start x402 proxy in background WITHOUT blocking register()
+    // CRITICAL: Do NOT await here - this was blocking model selection UI for 3+ seconds
+    // causing Chandler's "infinite loop" issue where model selection never finishes
+    startProxyInBackground(api)
+      .then(async () => {
+        // Proxy started successfully - verify health
+        const port = getProxyPort();
+        const healthy = await waitForProxyHealth(port, 5000);
+        if (!healthy) {
+          api.logger.warn(`Proxy health check timed out, commands may not work immediately`);
+        }
+      })
+      .catch((err) => {
+        api.logger.error(
+          `Failed to start BlockRun proxy: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
   },
 };
 
