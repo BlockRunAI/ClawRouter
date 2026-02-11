@@ -104,9 +104,7 @@ async function main(): Promise<void> {
     onRouted: (decision) => {
       const cost = decision.costEstimate.toFixed(4);
       const saved = (decision.savings * 100).toFixed(0);
-      console.log(
-        `[ClawRouter] [${decision.tier}] ${decision.model} $${cost} (saved ${saved}%)`,
-      );
+      console.log(`[ClawRouter] [${decision.tier}] ${decision.model} $${cost} (saved ${saved}%)`);
     },
     onLowBalance: (info) => {
       console.warn(`[ClawRouter] Low balance: ${info.balanceUSD}. Fund: ${info.walletAddress}`);
