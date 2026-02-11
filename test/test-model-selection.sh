@@ -11,8 +11,10 @@ rm -rf ~/.openclaw
 mkdir -p ~/.openclaw
 
 echo "  Installing ClawRouter..."
-timeout 30 openclaw plugins install @blockrun/clawrouter@latest || {
-    echo "  ❌ FAIL: Plugin install timed out after 30s"
+echo "  (This may take up to 2 minutes...)"
+timeout 120 openclaw plugins install @blockrun/clawrouter@latest || {
+    echo "  ❌ FAIL: Plugin install timed out after 120s"
+    echo "  This suggests the plugin is still blocking during installation"
     exit 1
 }
 

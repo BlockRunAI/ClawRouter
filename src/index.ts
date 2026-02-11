@@ -68,6 +68,19 @@ function isCompletionMode(): boolean {
 }
 
 /**
+ * Detect if we're running during plugin installation.
+ * During `openclaw plugins install`, we should NOT start the proxy server
+ * because it keeps the process alive and prevents the install command from exiting.
+ * The proxy will start automatically when the gateway starts.
+ */
+function isInstallMode(): boolean {
+  const args = process.argv;
+  // Check for: openclaw plugins install/uninstall
+  // argv includes: openclaw, plugins, install/uninstall
+  return args.some((arg) => arg === "plugins") && args.some((arg) => arg === "install" || arg === "uninstall");
+}
+
+/**
  * Inject BlockRun models config into OpenClaw config file.
  * This is required because registerProvider() alone doesn't make models available.
  *
@@ -640,6 +653,14 @@ const plugin: OpenClawPluginDefinition = {
         }
       },
     });
+
+    // During plugin installation, skip proxy startup to prevent install command from hanging
+    // The proxy keeps the Node.js event loop alive, preventing the install command from exiting
+    // The proxy will start automatically when the gateway runs
+    if (isInstallMode()) {
+      api.logger.info("Installation mode — proxy will start when gateway runs");
+      return;
+    }
 
     // Start x402 proxy in background WITHOUT blocking register()
     // CRITICAL: Do NOT await here - this was blocking model selection UI for 3+ seconds
