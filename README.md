@@ -137,6 +137,7 @@ ClawRouter v0.5+ includes intelligent features that work automatically:
 - **Model aliases** — `/model free`, `/model sonnet`, `/model grok`
 - **Session persistence** — pins model for multi-turn conversations
 - **Free tier fallback** — keeps working when wallet is empty
+- **Auto-update check** — notifies you when a new version is available
 
 **Full details:** [docs/features.md](docs/features.md)
 
@@ -334,12 +335,17 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 Quick checklist:
 
 ```bash
-# Check version (should be 0.5.7+)
+# Check version (should be 0.8.20+)
 cat ~/.openclaw/extensions/clawrouter/package.json | grep version
 
 # Check proxy running
 curl http://localhost:8402/health
+
+# Update to latest version
+curl -fsSL https://blockrun.ai/ClawRouter-update | bash
 ```
+
+ClawRouter automatically checks for updates on startup and shows a notification if a newer version is available.
 
 **Full guide:** [docs/troubleshooting.md](docs/troubleshooting.md)
 
@@ -374,6 +380,7 @@ BLOCKRUN_WALLET_KEY=0x... npx tsx test-e2e.ts
 - [x] Cost tracking — /stats command with savings dashboard
 - [x] Model aliases — `/model free`, `/model sonnet`, `/model grok`, etc.
 - [x] Free tier — gpt-oss-120b for $0 when wallet is empty
+- [x] Auto-update — startup version check with one-command update
 - [ ] Cascade routing — try cheap model first, escalate on low quality
 - [ ] Spend controls — daily/monthly budgets
 - [ ] Remote analytics — cost tracking at blockrun.ai
