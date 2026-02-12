@@ -18,6 +18,7 @@ This is an **OpenClaw framework bug**, not a ClawRouter issue. The OpenClaw CLI 
 ## Recommended Approach
 
 **Wait for OpenClaw to fix Windows support.** ClawRouter works perfectly on:
+
 - ✅ **Linux** (Ubuntu, Debian, RHEL, Alpine, etc.)
 - ✅ **macOS** (Intel and Apple Silicon)
 
@@ -93,6 +94,7 @@ openclaw gateway restart
 The wallet address will be displayed in the gateway logs or use the `/wallet` command in OpenClaw.
 
 Fund it with $5 USDC on Base network:
+
 - Coinbase: Buy USDC, send to Base
 - Bridge: Move USDC from any chain to Base
 - CEX: Withdraw USDC to Base network
@@ -100,6 +102,7 @@ Fund it with $5 USDC on Base network:
 ## Testing Infrastructure
 
 ClawRouter has full Windows testing infrastructure ready:
+
 - **GitHub Actions workflow**: [.github/workflows/test-windows.yml](../.github/workflows/test-windows.yml)
 - **Windows test script**: [test/test-model-selection.ps1](../test/test-model-selection.ps1)
 - **Docker support**: [test/Dockerfile.windows](../test/Dockerfile.windows)

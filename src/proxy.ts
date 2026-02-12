@@ -101,7 +101,8 @@ function transformPaymentError(errorBody: string): string {
             const currentUSD = (currentMicros / 1_000_000).toFixed(6);
             const requiredUSD = (requiredMicros / 1_000_000).toFixed(6);
             const wallet = innerJson.payer || "unknown";
-            const shortWallet = wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
+            const shortWallet =
+              wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
 
             return JSON.stringify({
               error: {
@@ -1094,7 +1095,11 @@ async function tryModelRequest(
 
     // Normalize messages for thinking-enabled requests (add reasoning_content to tool calls)
     // Check request flags AND target model - reasoning models have thinking enabled server-side
-    const hasThinkingEnabled = !!(parsed.thinking || parsed.extended_thinking || isReasoningModel(modelId));
+    const hasThinkingEnabled = !!(
+      parsed.thinking ||
+      parsed.extended_thinking ||
+      isReasoningModel(modelId)
+    );
     if (hasThinkingEnabled && Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessagesForThinking(parsed.messages as ExtendedChatMessage[]);
     }
@@ -1592,7 +1597,9 @@ async function proxyRequest(
           const parsed = JSON.parse(transformedErr);
           errPayload = JSON.stringify(parsed);
         } catch {
-          errPayload = JSON.stringify({ error: { message: rawErrBody, type: "provider_error", status: errStatus } });
+          errPayload = JSON.stringify({
+            error: { message: rawErrBody, type: "provider_error", status: errStatus },
+          });
         }
         const errEvent = `data: ${errPayload}\n\n`;
         safeWrite(res, errEvent);
