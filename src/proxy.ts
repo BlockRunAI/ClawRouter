@@ -37,7 +37,12 @@ import {
   type RoutingConfig,
   type ModelPricing,
 } from "./router/index.js";
-import { BLOCKRUN_MODELS, resolveModelAlias, getModelContextWindow } from "./models.js";
+import {
+  BLOCKRUN_MODELS,
+  resolveModelAlias,
+  getModelContextWindow,
+  isReasoningModel,
+} from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
@@ -1088,7 +1093,9 @@ async function tryModelRequest(
     }
 
     // Normalize messages for thinking-enabled requests (add reasoning_content to tool calls)
-    if (parsed.thinking && Array.isArray(parsed.messages)) {
+    // Check request flags AND target model - reasoning models have thinking enabled server-side
+    const hasThinkingEnabled = !!(parsed.thinking || parsed.extended_thinking || isReasoningModel(modelId));
+    if (hasThinkingEnabled && Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessagesForThinking(parsed.messages as ExtendedChatMessage[]);
     }
 
@@ -1473,7 +1480,13 @@ async function proxyRequest(
       // Deprioritize rate-limited models (put them at the end)
       modelsToTry = prioritizeNonRateLimited(modelsToTry);
     } else {
-      modelsToTry = modelId ? [modelId] : [];
+      // For explicit model requests, add free model as emergency fallback
+      // in case the primary model fails due to insufficient funds mid-request
+      if (modelId && modelId !== FREE_MODEL) {
+        modelsToTry = [modelId, FREE_MODEL];
+      } else {
+        modelsToTry = modelId ? [modelId] : [];
+      }
     }
 
     // --- Fallback loop: try each model until success ---
