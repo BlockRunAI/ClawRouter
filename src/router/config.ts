@@ -635,24 +635,34 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
 
   tiers: {
     SIMPLE: {
-      primary: "google/gemini-2.5-flash",
-      fallback: ["nvidia/gpt-oss-120b", "deepseek/deepseek-chat", "openai/gpt-4o-mini"],
+      primary: "nvidia/kimi-k2.5", // Ultra-cheap $0.001/$0.001
+      fallback: [
+        "google/gemini-2.5-flash",
+        "nvidia/gpt-oss-120b",
+        "nvidia/gpt-oss-20b",
+        "deepseek/deepseek-chat",
+      ],
     },
     MEDIUM: {
       primary: "xai/grok-code-fast-1", // Code specialist, $0.20/$1.50
       fallback: [
+        "xai/grok-4-1-fast-non-reasoning", // Upgraded Grok 4.1
         "deepseek/deepseek-chat",
-        "xai/grok-4-fast-non-reasoning",
         "google/gemini-2.5-flash",
       ],
     },
     COMPLEX: {
       primary: "google/gemini-2.5-pro",
-      fallback: ["anthropic/claude-sonnet-4", "xai/grok-4-0709", "openai/gpt-4o"],
+      fallback: ["openai/gpt-5.2", "anthropic/claude-sonnet-4", "xai/grok-4-0709", "openai/gpt-4o"],
     },
     REASONING: {
-      primary: "xai/grok-4-fast-reasoning", // Ultra-cheap reasoning $0.20/$0.50
-      fallback: ["deepseek/deepseek-reasoner", "moonshot/kimi-k2.5", "google/gemini-2.5-pro"],
+      primary: "xai/grok-4-1-fast-reasoning", // Upgraded Grok 4.1 reasoning $0.20/$0.50
+      fallback: [
+        "xai/grok-4-fast-reasoning",
+        "openai/o3", // Strong reasoning model
+        "deepseek/deepseek-reasoner",
+        "moonshot/kimi-k2.5",
+      ],
     },
   },
 
@@ -672,7 +682,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     },
     COMPLEX: {
       primary: "anthropic/claude-sonnet-4",
-      fallback: ["anthropic/claude-opus-4", "xai/grok-4-0709", "openai/gpt-4o"],
+      fallback: ["anthropic/claude-opus-4.5", "openai/gpt-5.2", "xai/grok-4-0709"], // Opus 4.5 is 3x cheaper than Opus 4
     },
     REASONING: {
       primary: "anthropic/claude-sonnet-4", // Strong tool use + reasoning for agentic tasks
