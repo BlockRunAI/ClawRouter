@@ -103,7 +103,9 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       mkdirSync(configDir, { recursive: true });
       logger.info("Created OpenClaw config directory");
     } catch (err) {
-      logger.info(`Failed to create config dir: ${err instanceof Error ? err.message : String(err)}`);
+      logger.info(
+        `Failed to create config dir: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return;
     }
   }
@@ -119,7 +121,9 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
         needsWrite = true;
       }
     } catch (err) {
-      logger.info(`Failed to parse config (will recreate): ${err instanceof Error ? err.message : String(err)}`);
+      logger.info(
+        `Failed to parse config (will recreate): ${err instanceof Error ? err.message : String(err)}`,
+      );
       config = {};
       needsWrite = true;
     }
@@ -178,7 +182,11 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     }
     // Always refresh models list (ensures new aliases are available)
     const currentModels = blockrun.models as unknown[];
-    if (!currentModels || !Array.isArray(currentModels) || currentModels.length !== OPENCLAW_MODELS.length) {
+    if (
+      !currentModels ||
+      !Array.isArray(currentModels) ||
+      currentModels.length !== OPENCLAW_MODELS.length
+    ) {
       blockrun.models = OPENCLAW_MODELS;
       fixed = true;
     }

@@ -258,9 +258,15 @@ async function runTests() {
 
     // Should succeed via fallback to free model
     assert(res.ok, `Explicit model with fallback succeeds: ${res.status}`);
-    assert(modelCalls.length === 2, `2 models called (primary + free fallback): ${modelCalls.join(", ")}`);
+    assert(
+      modelCalls.length === 2,
+      `2 models called (primary + free fallback): ${modelCalls.join(", ")}`,
+    );
     assert(modelCalls[0] === "openai/gpt-4o", `First tried explicit model: ${modelCalls[0]}`);
-    assert(modelCalls[1] === "nvidia/gpt-oss-120b", `Then fell back to free model: ${modelCalls[1]}`);
+    assert(
+      modelCalls[1] === "nvidia/gpt-oss-120b",
+      `Then fell back to free model: ${modelCalls[1]}`,
+    );
   }
 
   // Cleanup

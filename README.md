@@ -60,6 +60,7 @@ Done! Smart routing (`blockrun/auto`) is now your default model.
 **📖 Full Windows Guide:** [docs/windows-installation.md](docs/windows-installation.md)
 
 **Quick Summary:**
+
 - ✅ ClawRouter code is Windows-compatible
 - ❌ OpenClaw CLI has a `spawn EINVAL` bug on Windows
 - ✅ Works perfectly on **Linux** and **macOS**
