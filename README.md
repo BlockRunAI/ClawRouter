@@ -14,7 +14,7 @@ One wallet, 30+ models, zero API keys.
 [Docs](https://blockrun.ai/docs) &middot; [Models](https://blockrun.ai/models) &middot; [Configuration](docs/configuration.md) &middot; [Features](docs/features.md) &middot; [Windows](docs/windows-installation.md) &middot; [Troubleshooting](docs/troubleshooting.md) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
 
 **Winner — Agentic Commerce Track** at the [USDC AI Agent Hackathon](https://x.com/USDC/status/2021625822294216977)<br>
-*The world's first hackathon run entirely by AI agents, powered by USDC*
+_The world's first hackathon run entirely by AI agents, powered by USDC_
 
 </div>
 
@@ -118,12 +118,12 @@ No external classifier calls. Ambiguous queries default to the MEDIUM tier (Grok
 
 ### Tier → Model Mapping
 
-| Tier      | Primary Model         | Cost/M  | Savings vs Opus |
-| --------- | --------------------- | ------- | --------------- |
-| SIMPLE    | nvidia/kimi-k2.5      | $0.001  | **~100%**       |
-| MEDIUM    | grok-code-fast-1      | $1.50   | **94.0%**       |
-| COMPLEX   | gemini-2.5-pro        | $10.00  | **60.0%**       |
-| REASONING | grok-4-1-fast-reasoning | $0.50 | **98.0%**       |
+| Tier      | Primary Model           | Cost/M | Savings vs Opus |
+| --------- | ----------------------- | ------ | --------------- |
+| SIMPLE    | nvidia/kimi-k2.5        | $0.001 | **~100%**       |
+| MEDIUM    | grok-code-fast-1        | $1.50  | **94.0%**       |
+| COMPLEX   | gemini-2.5-pro          | $10.00 | **60.0%**       |
+| REASONING | grok-4-1-fast-reasoning | $0.50  | **98.0%**       |
 
 Special rule: 2+ reasoning markers → REASONING at 0.97 confidence.
 
