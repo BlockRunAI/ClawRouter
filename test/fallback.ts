@@ -150,8 +150,7 @@ async function runTests() {
   }
 
   // Test 2: Primary fails with billing error - should fallback
-  // Note: Agentic mode is auto-detected (test keywords), so uses agentic tier fallbacks:
-  // REASONING agentic: [grok-4-fast-reasoning, kimi-k2.5, claude-sonnet-4, deepseek-reasoner]
+  // REASONING tier (non-agentic, no tools): primary=grok-4-fast-reasoning, fallback=[deepseek-reasoner, kimi-k2.5, gemini-2.5-pro]
   {
     console.log("\n--- Test 2: Primary fails, fallback succeeds ---");
     modelCalls.length = 0;
@@ -172,22 +171,22 @@ async function runTests() {
     assert(res.ok, `Response OK after fallback: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    // Agentic tier fallback order: kimi-k2.5 is first fallback
-    assert(content.includes("kimi-k2.5"), `Response from fallback model: ${content}`);
+    // First fallback is deepseek-reasoner
+    assert(content.includes("deepseek-reasoner"), `Response from fallback model: ${content}`);
     assert(
       modelCalls.length === 2,
       `2 models called (primary + fallback): ${modelCalls.join(", ")}`,
     );
     assert(modelCalls[0] === "xai/grok-4-fast-reasoning", `First tried primary: ${modelCalls[0]}`);
-    assert(modelCalls[1] === "moonshot/kimi-k2.5", `Then tried fallback: ${modelCalls[1]}`);
+    assert(modelCalls[1] === "deepseek/deepseek-reasoner", `Then tried fallback: ${modelCalls[1]}`);
   }
 
   // Test 3: Primary and first fallback fail - should try second fallback
-  // Agentic REASONING tier: [grok-4-fast-reasoning, kimi-k2.5, claude-sonnet-4, deepseek-reasoner]
+  // REASONING tier: primary=grok-4-fast-reasoning, fallback=[deepseek-reasoner, kimi-k2.5, gemini-2.5-pro]
   {
     console.log("\n--- Test 3: Primary + first fallback fail, second fallback succeeds ---");
     modelCalls.length = 0;
-    failModels = ["xai/grok-4-fast-reasoning", "moonshot/kimi-k2.5"];
+    failModels = ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -204,16 +203,16 @@ async function runTests() {
     assert(res.ok, `Response OK after 2nd fallback: ${res.status}`);
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content || "";
-    assert(content.includes("claude-sonnet-4"), `Response from 2nd fallback: ${content}`);
+    assert(content.includes("kimi-k2.5"), `Response from 2nd fallback: ${content}`);
     assert(modelCalls.length === 3, `3 models called: ${modelCalls.join(", ")}`);
   }
 
   // Test 4: All models fail - should return error
-  // Agentic REASONING tier first 3: [grok-4-fast-reasoning, kimi-k2.5, claude-sonnet-4]
+  // REASONING tier first 3 (MAX_FALLBACK_ATTEMPTS=3): [grok-4-fast-reasoning, deepseek-reasoner, kimi-k2.5]
   {
     console.log("\n--- Test 4: All models fail - returns error ---");
     modelCalls.length = 0;
-    failModels = ["xai/grok-4-fast-reasoning", "moonshot/kimi-k2.5", "anthropic/claude-sonnet-4"];
+    failModels = ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner", "moonshot/kimi-k2.5"];
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -239,9 +238,11 @@ async function runTests() {
     );
   }
 
-  // Test 5: Explicit model (not auto) - no fallback
+  // Test 5: Explicit model (not auto) - falls back to free model on failure
+  // Changed behavior: explicit models now have emergency fallback to nvidia/gpt-oss-120b
+  // This ensures users always get a response even if their wallet runs out mid-request
   {
-    console.log("\n--- Test 5: Explicit model - no fallback ---");
+    console.log("\n--- Test 5: Explicit model - fallback to free model ---");
     modelCalls.length = 0;
     failModels = ["openai/gpt-4o"];
 
@@ -255,9 +256,11 @@ async function runTests() {
       }),
     });
 
-    // Should fail without fallback since explicit model was requested
-    assert(!res.ok, `Explicit model failure not retried: ${res.status}`);
-    assert(modelCalls.length === 1, `Only 1 model called (no fallback): ${modelCalls.join(", ")}`);
+    // Should succeed via fallback to free model
+    assert(res.ok, `Explicit model with fallback succeeds: ${res.status}`);
+    assert(modelCalls.length === 2, `2 models called (primary + free fallback): ${modelCalls.join(", ")}`);
+    assert(modelCalls[0] === "openai/gpt-4o", `First tried explicit model: ${modelCalls[0]}`);
+    assert(modelCalls[1] === "nvidia/gpt-oss-120b", `Then fell back to free model: ${modelCalls[1]}`);
   }
 
   // Cleanup
