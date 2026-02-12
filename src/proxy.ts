@@ -1752,7 +1752,10 @@ async function proxyRequest(
                     index,
                     delta: {},
                     logprobs: null,
-                    finish_reason: choice.finish_reason ?? "stop",
+                    finish_reason:
+                      toolCalls && toolCalls.length > 0
+                        ? "tool_calls"
+                        : (choice.finish_reason ?? "stop"),
                   },
                 ],
               };
