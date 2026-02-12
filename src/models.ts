@@ -528,3 +528,13 @@ export function getModelContextWindow(modelId: string): number | undefined {
   const model = BLOCKRUN_MODELS.find((m) => m.id === normalized);
   return model?.contextWindow;
 }
+
+/**
+ * Check if a model has reasoning/thinking capabilities.
+ * Reasoning models may require reasoning_content in assistant tool_call messages.
+ */
+export function isReasoningModel(modelId: string): boolean {
+  const normalized = modelId.replace("blockrun/", "");
+  const model = BLOCKRUN_MODELS.find((m) => m.id === normalized);
+  return model?.reasoning ?? false;
+}
