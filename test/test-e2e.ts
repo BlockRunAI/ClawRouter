@@ -10,7 +10,7 @@
  *   BLOCKRUN_WALLET_KEY=0x... npx tsx test-e2e.ts
  */
 
-import { startProxy, type ProxyHandle } from "./src/proxy.js";
+import { startProxy, type ProxyHandle } from "../src/proxy.js";
 
 const WALLET_KEY = process.env.BLOCKRUN_WALLET_KEY;
 if (!WALLET_KEY) {
@@ -273,6 +273,293 @@ async function main() {
       async (p) => {
         const res = await fetch(`${p.baseUrl}/unknown`);
         if (res.status !== 404) throw new Error(`Expected 404, got ${res.status}`);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 8: 413 Payload Too Large (150KB limit)
+  allPassed =
+    (await test(
+      "413 Payload Too Large (>150KB)",
+      async (p) => {
+        // Create a payload larger than 150KB
+        const largeContent = "x".repeat(160 * 1024); // 160KB
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "deepseek/deepseek-chat",
+            messages: [{ role: "user", content: largeContent }],
+            max_tokens: 10,
+            stream: false,
+          }),
+        });
+        if (res.status !== 413) {
+          const text = await res.text();
+          throw new Error(`Expected 413, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error?.message?.toLowerCase().includes("payload"))
+          throw new Error("Expected error message about payload size");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 9: 400 Bad Request (malformed JSON)
+  allPassed =
+    (await test(
+      "400 Bad Request (malformed JSON)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{invalid json}",
+        });
+        if (res.status !== 400) {
+          const text = await res.text();
+          throw new Error(`Expected 400, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error) throw new Error("Expected error in response");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 10: 400 Bad Request (missing required fields)
+  allPassed =
+    (await test(
+      "400 Bad Request (missing messages field)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "deepseek/deepseek-chat",
+            max_tokens: 10,
+            stream: false,
+          }),
+        });
+        if (res.status !== 400) {
+          const text = await res.text();
+          throw new Error(`Expected 400, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error?.message?.toLowerCase().includes("messages"))
+          throw new Error("Expected error message about missing messages");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 11: Large message array (200 messages limit)
+  allPassed =
+    (await test(
+      "400 Bad Request (>200 messages)",
+      async (p) => {
+        const messages = Array.from({ length: 201 }, (_, i) => ({
+          role: i % 2 === 0 ? "user" : "assistant",
+          content: `Message ${i}`,
+        }));
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "deepseek/deepseek-chat",
+            messages,
+            max_tokens: 10,
+            stream: false,
+          }),
+        });
+        if (res.status !== 400) {
+          const text = await res.text();
+          throw new Error(`Expected 400, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error?.message?.toLowerCase().includes("message"))
+          throw new Error("Expected error message about message count");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 12: Invalid model name
+  allPassed =
+    (await test(
+      "400 Bad Request (invalid model name)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "invalid/nonexistent-model",
+            messages: [{ role: "user", content: "Hello" }],
+            max_tokens: 10,
+            stream: false,
+          }),
+        });
+        if (res.status !== 400 && res.status !== 404) {
+          const text = await res.text();
+          throw new Error(`Expected 400 or 404, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error) throw new Error("Expected error in response");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 13: Concurrent requests (stress test)
+  allPassed =
+    (await test(
+      "Concurrent requests (5 parallel)",
+      async (p) => {
+        const requests = Array.from({ length: 5 }, (_, i) =>
+          fetch(`${p.baseUrl}/v1/chat/completions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "deepseek/deepseek-chat",
+              messages: [{ role: "user", content: `Count to ${i + 1}` }],
+              max_tokens: 20,
+              stream: false,
+            }),
+          }),
+        );
+
+        const results = await Promise.all(requests);
+        const statuses = results.map((r) => r.status);
+        const allSuccess = statuses.every((s) => s === 200);
+
+        if (!allSuccess) {
+          throw new Error(`Not all requests succeeded: ${statuses.join(", ")}`);
+        }
+
+        const bodies = await Promise.all(results.map((r) => r.json()));
+        const allHaveContent = bodies.every((b) => b.choices?.[0]?.message?.content);
+
+        if (!allHaveContent) {
+          throw new Error("Not all responses have content");
+        }
+
+        console.log(`(all ${results.length} requests succeeded) `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 14: Negative max_tokens
+  allPassed =
+    (await test(
+      "400 Bad Request (negative max_tokens)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "deepseek/deepseek-chat",
+            messages: [{ role: "user", content: "Hello" }],
+            max_tokens: -100,
+            stream: false,
+          }),
+        });
+        if (res.status !== 400) {
+          const text = await res.text();
+          throw new Error(`Expected 400, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error) throw new Error("Expected error in response");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 15: Empty messages array
+  allPassed =
+    (await test(
+      "400 Bad Request (empty messages array)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "deepseek/deepseek-chat",
+            messages: [],
+            max_tokens: 10,
+            stream: false,
+          }),
+        });
+        if (res.status !== 400) {
+          const text = await res.text();
+          throw new Error(`Expected 400, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const body = await res.json();
+        if (!body.error?.message?.toLowerCase().includes("message"))
+          throw new Error("Expected error message about messages");
+        console.log(`(error: "${body.error.message}") `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 16: Streaming with large response
+  allPassed =
+    (await test(
+      "Streaming with large response (verify token counting)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [{ role: "user", content: "Write a 50-word story about a cat." }],
+            max_tokens: 100,
+            stream: true,
+          }),
+        });
+        if (res.status !== 200) {
+          const text = await res.text();
+          throw new Error(`Expected 200, got ${res.status}: ${text.slice(0, 200)}`);
+        }
+
+        const text = await res.text();
+        const hasDone = text.includes("data: [DONE]");
+        let fullContent = "";
+        let chunkCount = 0;
+
+        for (const line of text.split("\n")) {
+          if (line.startsWith("data: ") && line !== "data: [DONE]") {
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if (delta) {
+                fullContent += delta;
+                chunkCount++;
+              }
+            } catch {
+              // skip
+            }
+          }
+        }
+
+        if (!hasDone) throw new Error("Missing [DONE] marker");
+        if (fullContent.length < 100) throw new Error("Response too short");
+
+        console.log(
+          `(chunks=${chunkCount}, length=${fullContent.length}, content="${fullContent.trim().slice(0, 50)}...") `,
+        );
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 17: Balance check
+  allPassed =
+    (await test(
+      "Balance check (verify wallet has funds)",
+      async (p) => {
+        if (!p.balanceMonitor) throw new Error("Balance monitor not available");
+        const balance = p.balanceMonitor.getBalance();
+        if (balance.isEmpty) throw new Error("Wallet is empty - please fund it");
+        console.log(`(balance=$${balance.balanceUSD.toFixed(2)}) `);
       },
       proxy,
     )) && allPassed;
