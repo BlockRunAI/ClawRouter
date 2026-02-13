@@ -28,6 +28,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import type { ProviderAuthMethod, ProviderAuthContext, ProviderAuthResult } from "./types.js";
+import { getEnv } from "./config.js";
 
 const WALLET_DIR = join(homedir(), ".openclaw", "blockrun");
 const WALLET_FILE = join(WALLET_DIR, "wallet.key");
@@ -76,7 +77,7 @@ export async function resolveOrGenerateWalletKey(): Promise<{
   }
 
   // 2. Environment variable
-  const envKey = process.env.BLOCKRUN_WALLET_KEY;
+  const envKey = getEnv("BLOCKRUN_WALLET_KEY");
   if (typeof envKey === "string" && envKey.startsWith("0x") && envKey.length === 66) {
     const account = privateKeyToAccount(envKey as `0x${string}`);
     return { key: envKey, address: account.address, source: "env" };
@@ -136,7 +137,7 @@ export const envKeyAuth: ProviderAuthMethod = {
   hint: "Use BLOCKRUN_WALLET_KEY environment variable",
   kind: "api_key",
   run: async (): Promise<ProviderAuthResult> => {
-    const key = process.env.BLOCKRUN_WALLET_KEY;
+    const key = getEnv("BLOCKRUN_WALLET_KEY");
 
     if (!key) {
       throw new Error(

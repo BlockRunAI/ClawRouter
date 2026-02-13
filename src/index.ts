@@ -28,6 +28,7 @@ import { startProxy, getProxyPort } from "./proxy.js";
 import { resolveOrGenerateWalletKey, WALLET_FILE } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
+import { getEnv } from "./config.js";
 
 /**
  * Wait for proxy health check to pass (quick check, not RPC).
@@ -583,8 +584,8 @@ const plugin: OpenClawPluginDefinition = {
   async register(api: OpenClawPluginApi) {
     // Check if ClawRouter is disabled via environment variable
     // Usage: CLAWROUTER_DISABLED=true openclaw gateway start
-    const isDisabled =
-      process.env.CLAWROUTER_DISABLED === "true" || process.env.CLAWROUTER_DISABLED === "1";
+    const disabledEnv = getEnv("CLAWROUTER_DISABLED");
+    const isDisabled = disabledEnv === "true" || disabledEnv === "1";
     if (isDisabled) {
       api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
       return;
