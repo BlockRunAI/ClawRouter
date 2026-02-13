@@ -41,21 +41,49 @@ export { WALLET_FILE };
 async function loadSavedWallet(): Promise<string | undefined> {
   try {
     const key = (await readFile(WALLET_FILE, "utf-8")).trim();
-    if (key.startsWith("0x") && key.length === 66) return key;
-  } catch {
-    // File doesn't exist yet
+    if (key.startsWith("0x") && key.length === 66) {
+      console.log(`[ClawRouter] ✓ Loaded existing wallet from ${WALLET_FILE}`);
+      return key;
+    }
+    console.warn(`[ClawRouter] ⚠ Wallet file exists but is invalid (wrong format)`);
+  } catch (err) {
+    // File doesn't exist yet - this is expected on first run
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(
+        `[ClawRouter] ✗ Failed to read wallet file: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
   return undefined;
 }
 
 /**
  * Generate a new wallet, save to disk, return the private key.
+ * CRITICAL: Verifies the file was actually written after generation.
  */
 async function generateAndSaveWallet(): Promise<{ key: string; address: string }> {
   const key = generatePrivateKey();
   const account = privateKeyToAccount(key);
+
+  // Create directory
   await mkdir(WALLET_DIR, { recursive: true });
+
+  // Write wallet file
   await writeFile(WALLET_FILE, key + "\n", { mode: 0o600 });
+
+  // CRITICAL: Verify the file was actually written
+  try {
+    const verification = (await readFile(WALLET_FILE, "utf-8")).trim();
+    if (verification !== key) {
+      throw new Error("Wallet file verification failed - content mismatch");
+    }
+    console.log(`[ClawRouter] ✓ Wallet saved and verified at ${WALLET_FILE}`);
+  } catch (err) {
+    throw new Error(
+      `Failed to verify wallet file after creation: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   return { key, address: account.address };
 }
 
