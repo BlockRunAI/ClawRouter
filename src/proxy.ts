@@ -53,6 +53,7 @@ import { BalanceMonitor } from "./balance.js";
 import { USER_AGENT } from "./version.js";
 import { SessionStore, getSessionId, type SessionConfig } from "./session.js";
 import { checkForUpdates } from "./updater.js";
+import { PROXY_PORT } from "./config.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 // Routing profile models - virtual models that trigger intelligent routing
@@ -71,7 +72,6 @@ const ROUTING_PROFILES = new Set([
 const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
-const DEFAULT_PORT = 8402;
 const MAX_FALLBACK_ATTEMPTS = 3; // Maximum models to try in fallback chain
 const HEALTH_CHECK_TIMEOUT_MS = 2_000; // Timeout for checking existing proxy
 const RATE_LIMIT_COOLDOWN_MS = 60_000; // 60 seconds cooldown for rate-limited models
@@ -242,17 +242,11 @@ function safeWrite(res: ServerResponse, data: string | Buffer): boolean {
 const BALANCE_CHECK_BUFFER = 1.5;
 
 /**
- * Get the proxy port from environment variable or default.
+ * Get the proxy port from pre-loaded configuration.
+ * Port is validated at module load time, this just returns the cached value.
  */
 export function getProxyPort(): number {
-  const envPort = process.env.BLOCKRUN_PROXY_PORT;
-  if (envPort) {
-    const parsed = parseInt(envPort, 10);
-    if (!isNaN(parsed) && parsed > 0 && parsed < 65536) {
-      return parsed;
-    }
-  }
-  return DEFAULT_PORT;
+  return PROXY_PORT;
 }
 
 /**
