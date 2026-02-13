@@ -215,14 +215,15 @@ export function formatStatsAscii(stats: AggregatedStats): string {
 
   // Header
   lines.push("╔════════════════════════════════════════════════════════════╗");
-  lines.push("║              ClawRouter Usage Statistics                   ║");
+  lines.push("║          ClawRouter by BlockRun v0.8.20                    ║");
+  lines.push("║                Usage Statistics                            ║");
   lines.push("╠════════════════════════════════════════════════════════════╣");
 
   // Summary
   lines.push(`║  Period: ${stats.period.padEnd(49)}║`);
   lines.push(`║  Total Requests: ${stats.totalRequests.toString().padEnd(41)}║`);
   lines.push(`║  Total Cost: $${stats.totalCost.toFixed(4).padEnd(43)}║`);
-  lines.push(`║  Baseline Cost (Opus): $${stats.totalBaselineCost.toFixed(4).padEnd(33)}║`);
+  lines.push(`║  Baseline Cost (Opus 4.5): $${stats.totalBaselineCost.toFixed(4).padEnd(30)}║`);
 
   // Show savings with note if some entries lack baseline tracking
   const savingsLine = `║  💰 Total Saved: $${stats.totalSavings.toFixed(4)} (${stats.savingsPercentage.toFixed(1)}%)`;

@@ -84,15 +84,39 @@ type BlockRunModel = {
 };
 
 export const BLOCKRUN_MODELS: BlockRunModel[] = [
-  // Smart routing meta-model — proxy replaces with actual model
+  // Smart routing meta-models — proxy replaces with actual model
   // NOTE: Model IDs are WITHOUT provider prefix (OpenClaw adds "blockrun/" automatically)
   {
     id: "auto",
-    name: "BlockRun Smart Router",
+    name: "Auto (Smart Router - Balanced)",
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 1_050_000,
     maxOutput: 128_000,
+  },
+  {
+    id: "free",
+    name: "Free (NVIDIA GPT-OSS-120B only)",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 128_000,
+    maxOutput: 4_096,
+  },
+  {
+    id: "eco",
+    name: "Eco (Smart Router - Cost Optimized)",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 1_050_000,
+    maxOutput: 128_000,
+  },
+  {
+    id: "premium",
+    name: "Premium (Smart Router - Best Quality)",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 2_000_000,
+    maxOutput: 200_000,
   },
 
   // OpenAI GPT-5 Family
@@ -403,8 +427,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   {
     id: "xai/grok-4-0709",
     name: "Grok 4 (0709)",
-    inputPrice: 3.0,
-    outputPrice: 15.0,
+    inputPrice: 0.2,
+    outputPrice: 1.5,
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,

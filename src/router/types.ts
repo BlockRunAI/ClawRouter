@@ -88,5 +88,9 @@ export type RoutingConfig = {
   tiers: Record<Tier, TierConfig>;
   /** Tier configs for agentic mode - models that excel at multi-step tasks */
   agenticTiers?: Record<Tier, TierConfig>;
+  /** Tier configs for eco profile - ultra cost-optimized (blockrun/eco) */
+  ecoTiers?: Record<Tier, TierConfig>;
+  /** Tier configs for premium profile - best quality (blockrun/premium) */
+  premiumTiers?: Record<Tier, TierConfig>;
   overrides: OverridesConfig;
 };

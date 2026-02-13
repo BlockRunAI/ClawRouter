@@ -55,8 +55,20 @@ import { SessionStore, getSessionId, type SessionConfig } from "./session.js";
 import { checkForUpdates } from "./updater.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
+// Routing profile models - virtual models that trigger intelligent routing
 const AUTO_MODEL = "blockrun/auto";
 const AUTO_MODEL_SHORT = "auto"; // OpenClaw strips provider prefix
+
+const ROUTING_PROFILES = new Set([
+  "blockrun/free",
+  "free",
+  "blockrun/eco",
+  "eco",
+  "blockrun/auto",
+  "auto",
+  "blockrun/premium",
+  "premium",
+]);
 const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
@@ -1231,6 +1243,7 @@ async function proxyRequest(
   let isStreaming = false;
   let modelId = "";
   let maxTokens = 4096;
+  let routingProfile: "free" | "eco" | "auto" | "premium" | null = null;
   const isChatCompletion = req.url?.includes("/chat/completions");
 
   if (isChatCompletion && body.length > 0) {
@@ -1256,23 +1269,48 @@ async function proxyRequest(
       const resolvedModel = resolveModelAlias(normalizedModel);
       const wasAlias = resolvedModel !== normalizedModel;
 
-      const isAutoModel =
-        normalizedModel === AUTO_MODEL.toLowerCase() ||
-        normalizedModel === AUTO_MODEL_SHORT.toLowerCase();
+      const isRoutingProfile = ROUTING_PROFILES.has(normalizedModel);
+
+      // Extract routing profile type (free/eco/auto/premium)
+      if (isRoutingProfile) {
+        const profileName = normalizedModel.replace("blockrun/", "");
+        routingProfile = profileName as "free" | "eco" | "auto" | "premium";
+      }
 
       // Debug: log received model name
       console.log(
-        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}, isAuto: ${isAutoModel}`,
+        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}${routingProfile ? `, profile: ${routingProfile}` : ""}`,
       );
 
       // If alias was resolved, update the model in the request
-      if (wasAlias && !isAutoModel) {
+      if (wasAlias && !isRoutingProfile) {
         parsed.model = resolvedModel;
         modelId = resolvedModel;
         bodyModified = true;
       }
 
-      if (isAutoModel) {
+      // Handle routing profiles (free/eco/auto/premium)
+      if (isRoutingProfile) {
+        // Free profile - direct shortcut to nvidia/gpt-oss-120b (no tier routing)
+        if (routingProfile === "free") {
+          const freeModel = "nvidia/gpt-oss-120b";
+          console.log(`[ClawRouter] Free profile - using ${freeModel} directly`);
+          parsed.model = freeModel;
+          modelId = freeModel;
+          bodyModified = true;
+
+          // Log usage for free profile
+          await logUsage({
+            timestamp: new Date().toISOString(),
+            model: freeModel,
+            tier: "SIMPLE",
+            cost: 0,
+            baselineCost: 0,
+            savings: 1.0, // 100% savings
+            latencyMs: 0,
+          });
+        } else {
+          // eco/auto/premium - use tier routing
         // Check for session persistence - use pinned model if available
         const sessionId = getSessionId(
           req.headers as Record<string, string | string[] | undefined>,
@@ -1317,7 +1355,10 @@ async function proxyRequest(
             console.log(`[ClawRouter] Tools detected (${tools.length}), agentic mode via keywords`);
           }
 
-          routingDecision = route(prompt, systemPrompt, maxTokens, routerOpts);
+          routingDecision = route(prompt, systemPrompt, maxTokens, {
+            ...routerOpts,
+            routingProfile: routingProfile ?? undefined,
+          });
 
           // Replace model in body
           parsed.model = routingDecision.model;
@@ -1334,6 +1375,7 @@ async function proxyRequest(
 
           options.onRouted?.(routingDecision);
         }
+      }
       }
 
       // Rebuild body if modified
@@ -1607,6 +1649,7 @@ async function proxyRequest(
         routerOpts.modelPricing,
         estimatedInputTokens,
         maxTokens,
+        routingProfile ?? undefined,
       );
       routingDecision = {
         ...routingDecision,
@@ -1902,6 +1945,7 @@ async function proxyRequest(
       routerOpts.modelPricing,
       estimatedInputTokens,
       maxTokens,
+      routingProfile ?? undefined,
     );
     // Apply 20% buffer to match x402 pre-auth
     const costWithBuffer = accurateCosts.costEstimate * 1.2;
