@@ -57,7 +57,6 @@ import { checkForUpdates } from "./updater.js";
 const BLOCKRUN_API = "https://blockrun.ai/api";
 // Routing profile models - virtual models that trigger intelligent routing
 const AUTO_MODEL = "blockrun/auto";
-const AUTO_MODEL_SHORT = "auto"; // OpenClaw strips provider prefix
 
 const ROUTING_PROFILES = new Set([
   "blockrun/free",
