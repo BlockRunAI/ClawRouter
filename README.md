@@ -11,7 +11,7 @@ One wallet, 30+ models, zero API keys.
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![USDC Hackathon Winner](https://img.shields.io/badge/🏆_USDC_Hackathon-Agentic_Commerce_Winner-gold)](https://x.com/USDC/status/2021625822294216977)
 
-[Docs](https://blockrun.ai/docs) &middot; [Models](https://blockrun.ai/models) &middot; [Configuration](docs/configuration.md) &middot; [Features](docs/features.md) &middot; [Windows](docs/windows-installation.md) &middot; [Troubleshooting](docs/troubleshooting.md) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
+[Docs](https://blockrun.ai/docs) &middot; [Models](https://blockrun.ai/models) &middot; [vs OpenRouter](docs/vs-openrouter.md) &middot; [Configuration](docs/configuration.md) &middot; [Features](docs/features.md) &middot; [Troubleshooting](docs/troubleshooting.md) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
 
 **Winner — Agentic Commerce Track** at the [USDC AI Agent Hackathon](https://x.com/USDC/status/2021625822294216977)<br>
 _The world's first hackathon run entirely by AI agents, powered by USDC_
@@ -57,22 +57,6 @@ openclaw gateway restart
 ```
 
 Done! Smart routing (`blockrun/auto`) is now your default model.
-
-### Windows Installation
-
-⚠️ **Current Status:** Windows installation is temporarily unavailable due to an OpenClaw CLI bug. The issue is with the OpenClaw framework, not ClawRouter itself.
-
-**📖 Full Windows Guide:** [docs/windows-installation.md](docs/windows-installation.md)
-
-**Quick Summary:**
-
-- ✅ ClawRouter code is Windows-compatible
-- ❌ OpenClaw CLI has a `spawn EINVAL` bug on Windows
-- ✅ Works perfectly on **Linux** and **macOS**
-- 🔧 Manual installation workaround available for advanced users
-- 🧪 Full Windows test infrastructure ready ([.github/workflows/test-windows.yml](.github/workflows/test-windows.yml))
-
-**For advanced users:** See the [complete manual installation guide](docs/windows-installation.md) with step-by-step PowerShell instructions.
 
 ### Routing Profiles
 
@@ -357,8 +341,24 @@ They're built for developers. ClawRouter is built for **agents**.
 | **Auth**    | API key (shared secret)     | Wallet signature (cryptographic) |
 | **Payment** | Prepaid balance (custodial) | Per-request (non-custodial)      |
 | **Routing** | Proprietary / closed        | Open source, client-side         |
+| **Rate limits** | Per-key quotas          | None (your wallet, your limits)  |
+| **Cost**    | $25/M (Opus equivalent)     | $2.05/M blended average          |
 
 Agents shouldn't need a human to paste API keys. They should generate a wallet, receive funds, and pay per request — programmatically.
+
+### Real Problems with OpenRouter
+
+Based on [50+ OpenClaw issues](https://github.com/openclaw/openclaw/issues?q=openrouter):
+
+| Issue | Problem | ClawRouter |
+|-------|---------|------------|
+| [#11202](https://github.com/openclaw/openclaw/issues/11202) | API keys leaked in every LLM prompt | No API keys to leak |
+| [#2373](https://github.com/openclaw/openclaw/issues/2373) | `openrouter/auto` path broken | `blockrun/auto` just works |
+| [#8615](https://github.com/openclaw/openclaw/issues/8615) | Single API key rate limit hell | Non-custodial, no limits |
+| [#2963](https://github.com/openclaw/openclaw/issues/2963) | Tool calling fails silently | Full tool support |
+| [#10687](https://github.com/openclaw/openclaw/issues/10687) | "Unknown model" errors | 30+ models, auto-update |
+
+**[Full comparison →](docs/vs-openrouter.md)**
 
 ---
 
