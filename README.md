@@ -399,6 +399,17 @@ BLOCKRUN_WALLET_KEY=0x... npx tsx test-e2e.ts
 
 ---
 
+## Uninstall
+
+```bash
+openclaw plugins uninstall clawrouter
+openclaw gateway restart
+```
+
+Your wallet key remains at `~/.openclaw/blockrun/wallet.key` — back it up before deleting if you have funds.
+
+---
+
 ## Roadmap
 
 - [x] Smart routing — 15-dimension weighted scoring, 4-tier model selection
