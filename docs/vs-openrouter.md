@@ -4,20 +4,22 @@ OpenRouter is a popular LLM routing service. Here's why ClawRouter is built diff
 
 ## TL;DR
 
+**OpenRouter is built for developers. ClawRouter is built for agents.**
+
 | Aspect | OpenRouter | ClawRouter |
 |--------|------------|------------|
-| **Setup** | Create account, get API key, configure | Generate wallet, fund with USDC, done |
+| **Setup** | Human creates account, pastes API key | Agent generates wallet, receives funds |
 | **Authentication** | API key (shared secret) | Wallet signature (cryptographic) |
 | **Payment** | Prepaid balance (custodial) | Per-request USDC (non-custodial) |
 | **Routing** | Server-side, proprietary | Client-side, open source, <1ms |
 | **Rate limits** | Per-key quotas | None (your wallet, your limits) |
-| **Cost** | $25/M (Opus equivalent) | $2.05/M blended average |
+| **Empty balance** | Request fails | Auto-fallback to free tier |
 
 ---
 
-## The Problems with API Keys
+## The Problem with API Keys
 
-OpenRouter (and every traditional LLM gateway) uses API keys for authentication. This creates several issues:
+OpenRouter (and every traditional LLM gateway) uses API keys for authentication. This breaks agent autonomy:
 
 ### 1. Key Leakage in LLM Context
 
@@ -25,19 +27,75 @@ OpenRouter (and every traditional LLM gateway) uses API keys for authentication.
 
 > "OpenRouter sees your NVIDIA key, Anthropic sees your Google key... keys are sent on every turn."
 
-**ClawRouter solution**: No API keys. Authentication happens via cryptographic wallet signatures. There's nothing to leak because there are no shared secrets.
+**ClawRouter**: No API keys. Authentication happens via cryptographic wallet signatures. There's nothing to leak because there are no shared secrets.
 
 ### 2. Rate Limit Hell
 
 **OpenClaw Issue [#8615](https://github.com/openclaw/openclaw/issues/8615)**: Single API key support means heavy users hit rate limits (429 errors) quickly. Users request multi-key load balancing, but that's just patching a broken model.
 
-**ClawRouter solution**: Non-custodial wallets. You control your own keys. No shared rate limits. Scale by funding more wallets if needed.
+**ClawRouter**: Non-custodial wallets. You control your own keys. No shared rate limits. Scale by funding more wallets if needed.
 
-### 3. Model Path Confusion
+### 3. Setup Friction
+
+**OpenClaw Issues [#16257](https://github.com/openclaw/openclaw/issues/16257), [#16226](https://github.com/openclaw/openclaw/issues/16226)**: Latest installer skips model selection, shows "No auth configured for provider anthropic". Users can't even get started without debugging config.
+
+**ClawRouter**: One-line install. 30+ models auto-configured. No API keys to paste.
+
+### 4. Model Path Collision
 
 **OpenClaw Issue [#2373](https://github.com/openclaw/openclaw/issues/2373)**: `openrouter/auto` is broken because OpenClaw prefixes all OpenRouter models with `openrouter/`, so the actual model becomes `openrouter/openrouter/auto`.
 
-**ClawRouter solution**: Clean namespace. `blockrun/auto` just works. No prefix collision.
+**ClawRouter**: Clean namespace. `blockrun/auto` just works. No prefix collision.
+
+### 5. False Billing Errors
+
+**OpenClaw Issue [#16237](https://github.com/openclaw/openclaw/issues/16237)**: The regex `/\b402\b/` falsely matches normal content (e.g., "402 calories") as a billing error, replacing valid AI responses with error messages.
+
+**ClawRouter**: Native x402 protocol support. Precise error handling. No regex hacks.
+
+### 6. Unknown Model Failures
+
+**OpenClaw Issues [#16277](https://github.com/openclaw/openclaw/issues/16277), [#10687](https://github.com/openclaw/openclaw/issues/10687)**: Static model catalog causes "Unknown model" errors when providers add new models or during sub-agent spawns.
+
+**ClawRouter**: 30+ models pre-configured, auto-updated catalog.
+
+---
+
+## Agent-Native: Why It Matters
+
+Traditional LLM gateways require a human in the loop:
+
+```
+Traditional Flow (Human-in-the-loop):
+  Human → creates account → gets API key → pastes into config → agent runs
+
+Agent-Native Flow (Fully autonomous):
+  Agent → generates wallet → receives USDC → pays per request → runs
+```
+
+| Capability | OpenRouter | ClawRouter |
+|------------|------------|------------|
+| **Account creation** | Requires human | Agent generates wallet |
+| **Authentication** | Shared secret (API key) | Cryptographic signature |
+| **Payment** | Human prepays balance | Agent pays per request |
+| **Funds custody** | They hold your money | You hold your keys |
+| **Empty balance** | Request fails | Auto-fallback to free tier |
+
+### The x402 Difference
+
+```
+Request → 402 Response (price: $0.003)
+       → Agent's wallet signs payment
+       → Response delivered
+
+No accounts. No API keys. No human intervention.
+```
+
+**Agents can:**
+- Spawn with a fresh wallet
+- Receive funds programmatically
+- Pay for exactly what they use
+- Never trust a third party with their funds
 
 ---
 
@@ -57,104 +115,9 @@ OpenRouter (and every traditional LLM gateway) uses API keys for authentication.
 - **Open source** — inspect the exact scoring logic in [`src/router.ts`](../src/router.ts)
 - **Transparent** — see why each model is chosen
 
-```
-Request → Weighted Scorer (15 dimensions) → Model Selection → Done
-             (runs locally, <1ms)
-```
-
 ---
 
-## Payment Model
-
-### OpenRouter (Custodial)
-
-1. Create account with email
-2. Add payment method
-3. Prepay balance into their system
-4. They hold your money until spent
-5. If they get hacked, your balance is at risk
-
-### ClawRouter (Non-Custodial)
-
-1. Wallet auto-generated locally
-2. Fund with USDC on Base (L2)
-3. **You hold your funds** — wallet key stays on your machine
-4. Pay per request via x402 signatures
-5. Never trust a third party with your money
-
-```
-Request → 402 (price: $0.003) → wallet signs → response
-         ↑                            ↑
-    price shown before signing    non-custodial
-```
-
----
-
-## Feature Gaps in OpenRouter Integration
-
-Based on [OpenClaw GitHub issues](https://github.com/openclaw/openclaw/issues?q=openrouter), users are frustrated by:
-
-| Issue | Problem | ClawRouter Status |
-|-------|---------|-------------------|
-| [#14664](https://github.com/openclaw/openclaw/issues/14664) | `/think` directives not mapped to `reasoning.effort` | Built-in — routes to reasoning tier automatically |
-| [#9600](https://github.com/openclaw/openclaw/issues/9600) | Missing `cache_control` for prompt caching | Planned — server-side caching |
-| [#10687](https://github.com/openclaw/openclaw/issues/10687) | Static model catalog causes "Unknown model" errors | 30+ models pre-configured, auto-update |
-| [#14749](https://github.com/openclaw/openclaw/issues/14749) | Duplicate tool names (Grok collision) | Handled — clean tool namespace |
-| [#8017](https://github.com/openclaw/openclaw/issues/8017) | Sub-agents fail with "Unknown model" | Works — all models available to sub-agents |
-| [#2963](https://github.com/openclaw/openclaw/issues/2963) | Tool calling broken (responses never arrive) | Works — full tool support across all models |
-
----
-
-## Cost Comparison
-
-### OpenRouter Pricing (typical usage)
-
-- Claude Opus 4.5: $15/$75 per M tokens
-- GPT-4o: $2.50/$10 per M tokens
-- Gemini Pro: $1.25/$5 per M tokens
-
-### ClawRouter Smart Routing
-
-| Tier | Model | Cost/M | % of Traffic |
-|------|-------|--------|--------------|
-| SIMPLE | nvidia/kimi-k2.5 | $0.001 | ~45% |
-| MEDIUM | grok-code-fast-1 | $1.50 | ~35% |
-| COMPLEX | gemini-2.5-pro | $10.00 | ~15% |
-| REASONING | grok-4.1-fast | $0.50 | ~5% |
-| **Blended** | | **$2.05/M** | |
-
-**92% savings** compared to using Opus for everything.
-
----
-
-## Quick Comparison
-
-### Setup Time
-
-**OpenRouter**: ~5 minutes
-1. Go to openrouter.ai
-2. Create account
-3. Add payment method
-4. Generate API key
-5. Configure in OpenClaw
-6. Debug model path issues
-
-**ClawRouter**: ~2 minutes
-```bash
-curl -fsSL https://blockrun.ai/ClawRouter-update | bash
-openclaw gateway restart
-# Fund wallet address printed during install
-```
-
-### When Wallet is Empty
-
-**OpenRouter**: Requests fail with 402/insufficient balance errors
-
-**ClawRouter**: Automatic fallback to free tier (`gpt-oss-120b`) — keeps working
-
----
-
-## Migration Guide
+## Quick Start
 
 Already using OpenRouter? Switch in 60 seconds:
 
@@ -178,12 +141,11 @@ Your OpenRouter config stays intact — ClawRouter is additive, not replacement.
 
 ## Summary
 
-| If you want... | Use |
-|----------------|-----|
-| API key management, prepaid balance | OpenRouter |
-| Non-custodial, open source, 92% savings | ClawRouter |
+> **OpenRouter**: Built for developers who paste API keys
+>
+> **ClawRouter**: Built for agents that manage their own wallets
 
-**ClawRouter is built for agents** — they shouldn't need a human to create accounts and paste API keys. They should generate a wallet, receive funds, and pay per request programmatically.
+The future of AI isn't humans configuring API keys. It's agents autonomously acquiring and paying for resources.
 
 ---
 
