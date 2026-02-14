@@ -47,7 +47,15 @@ async function waitForProxyHealth(port: number, timeoutMs = 3000): Promise<boole
   return false;
 }
 import { OPENCLAW_MODELS } from "./models.js";
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  readdirSync,
+  mkdirSync,
+  copyFileSync,
+  renameSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { VERSION } from "./version.js";
@@ -111,6 +119,10 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   }
 
   // Load existing config or create new one
+  // IMPORTANT: On parse failure, we backup and skip writing to avoid clobbering
+  // other plugins' config (e.g. Telegram channels). This prevents a race condition
+  // where a partial/corrupt config file causes us to overwrite everything with
+  // only our models+agents sections.
   if (existsSync(configPath)) {
     try {
       const content = readFileSync(configPath, "utf-8").trim();
@@ -121,11 +133,20 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
         needsWrite = true;
       }
     } catch (err) {
+      // Config file exists but is corrupt/invalid JSON — likely a partial write
+      // from another plugin or a race condition during gateway restart.
+      // Backup the corrupt file and SKIP writing to avoid losing other config.
+      const backupPath = `${configPath}.backup.${Date.now()}`;
+      try {
+        copyFileSync(configPath, backupPath);
+        logger.info(`Config parse failed, backed up to ${backupPath}`);
+      } catch {
+        logger.info("Config parse failed, could not create backup");
+      }
       logger.info(
-        `Failed to parse config (will recreate): ${err instanceof Error ? err.message : String(err)}`,
+        `Skipping config injection (corrupt file): ${err instanceof Error ? err.message : String(err)}`,
       );
-      config = {};
-      needsWrite = true;
+      return; // Don't write — we'd lose other plugins' config
     }
   } else {
     logger.info("OpenClaw config not found, creating");
@@ -273,9 +294,13 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   }
 
   // Write config file if any changes were made
+  // Use atomic write (temp file + rename) to prevent partial writes that could
+  // corrupt the config and cause other plugins to lose their settings on next load.
   if (needsWrite) {
     try {
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
+      const tmpPath = `${configPath}.tmp.${process.pid}`;
+      writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+      renameSync(tmpPath, configPath);
       logger.info("Smart routing enabled (blockrun/auto)");
     } catch (err) {
       logger.info(`Failed to write config: ${err instanceof Error ? err.message : String(err)}`);
