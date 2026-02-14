@@ -308,6 +308,7 @@ const FALLBACK_STATUS_CODES = [
   401, // Unauthorized - provider API key issues
   402, // Payment required - but from upstream, not x402
   403, // Forbidden - provider restrictions
+  413, // Payload too large - request exceeds model's context limit
   429, // Rate limited
   500, // Internal server error
   502, // Bad gateway
