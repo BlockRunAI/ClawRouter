@@ -113,7 +113,9 @@ const baselineOutputPrice = opus45Pricing?.outputPrice || 0;
 console.log("╔════════════════════════════════════════════════════════════╗");
 console.log("║     ClawRouter Final Comprehensive Test - v0.8.20         ║");
 console.log("╠════════════════════════════════════════════════════════════╣");
-console.log(`║  Baseline: Claude Opus 4.5 ($${baselineInputPrice}/$${baselineOutputPrice} per M)                  ║`);
+console.log(
+  `║  Baseline: Claude Opus 4.5 ($${baselineInputPrice}/$${baselineOutputPrice} per M)                  ║`,
+);
 console.log("╚════════════════════════════════════════════════════════════╝");
 console.log("");
 
@@ -159,7 +161,10 @@ for (const category of testCases) {
         );
       }
 
-      if (decision.tier !== test.expectedTier && test.name !== "Large context (should force COMPLEX)") {
+      if (
+        decision.tier !== test.expectedTier &&
+        test.name !== "Large context (should force COMPLEX)"
+      ) {
         // Large context is expected to override
         issues.push(
           `⚠️  ${test.name} [${profile}]: Expected tier ${test.expectedTier}, got ${decision.tier}`,

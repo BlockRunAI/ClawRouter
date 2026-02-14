@@ -245,12 +245,7 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   ];
 
   // Deprecated aliases to remove from config (cleaned up from picker)
-  const DEPRECATED_ALIASES = [
-    "blockrun/nvidia",
-    "blockrun/gpt",
-    "blockrun/o3",
-    "blockrun/grok",
-  ];
+  const DEPRECATED_ALIASES = ["blockrun/nvidia", "blockrun/gpt", "blockrun/o3", "blockrun/grok"];
 
   if (!defaults.models) {
     defaults.models = {};

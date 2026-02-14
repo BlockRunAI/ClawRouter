@@ -3,7 +3,7 @@
  * Simple test to verify the 4 configuration changes
  */
 
-import { DEFAULT_ROUTING_CONFIG } from './dist/index.js';
+import { DEFAULT_ROUTING_CONFIG } from "./dist/index.js";
 
 console.log("\n═══════════════════════════════════════════════════════════");
 console.log("  CONFIGURATION CHANGES VERIFICATION");
@@ -11,8 +11,12 @@ console.log("══════════════════════�
 
 // 1. Tier Boundaries
 console.log("✅ CHANGE 1: Tier Boundaries");
-console.log("   mediumComplex:    0.18 → " + DEFAULT_ROUTING_CONFIG.scoring.tierBoundaries.mediumComplex);
-console.log("   complexReasoning: 0.40 → " + DEFAULT_ROUTING_CONFIG.scoring.tierBoundaries.complexReasoning);
+console.log(
+  "   mediumComplex:    0.18 → " + DEFAULT_ROUTING_CONFIG.scoring.tierBoundaries.mediumComplex,
+);
+console.log(
+  "   complexReasoning: 0.40 → " + DEFAULT_ROUTING_CONFIG.scoring.tierBoundaries.complexReasoning,
+);
 console.log("");
 
 // 2. COMPLEX Tier Fallback Order
@@ -20,9 +24,11 @@ console.log("✅ CHANGE 2: COMPLEX Tier Fallback (Grok before Sonnet)");
 console.log("   Primary:  " + DEFAULT_ROUTING_CONFIG.tiers.COMPLEX.primary);
 console.log("   Fallback:");
 DEFAULT_ROUTING_CONFIG.tiers.COMPLEX.fallback.forEach((model, idx) => {
-  const marker = model.includes('grok') ? '🟢 CHEAP' :
-                 model.includes('sonnet') ? '🔴 EXPENSIVE' :
-                 '🟡 MID';
+  const marker = model.includes("grok")
+    ? "🟢 CHEAP"
+    : model.includes("sonnet")
+      ? "🔴 EXPENSIVE"
+      : "🟡 MID";
   console.log(`      ${idx + 1}. ${marker} ${model}`);
 });
 console.log("");
@@ -31,9 +37,9 @@ console.log("");
 console.log("✅ CHANGE 3: SIMPLE Tier Fallback (Grok added)");
 console.log("   Primary:  " + DEFAULT_ROUTING_CONFIG.tiers.SIMPLE.primary);
 console.log("   Fallback:");
-const hasGrok = DEFAULT_ROUTING_CONFIG.tiers.SIMPLE.fallback.some(m => m.includes('grok'));
+const hasGrok = DEFAULT_ROUTING_CONFIG.tiers.SIMPLE.fallback.some((m) => m.includes("grok"));
 DEFAULT_ROUTING_CONFIG.tiers.SIMPLE.fallback.forEach((model, idx) => {
-  const marker = model.includes('grok') ? '✨ NEW' : '   ';
+  const marker = model.includes("grok") ? "✨ NEW" : "   ";
   console.log(`      ${idx + 1}. ${marker} ${model}`);
 });
 if (!hasGrok) {

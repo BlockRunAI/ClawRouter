@@ -78,14 +78,15 @@ Done! Smart routing (`blockrun/auto`) is now your default model.
 
 Choose your routing strategy with `/model <profile>`:
 
-| Profile | Strategy | Savings | Use Case |
-|---------|----------|---------|----------|
-| `/model auto` | Balanced (default) | 74-100% | Best overall balance |
-| `/model eco` | Cost optimized | 95.9-100% | Maximum savings |
-| `/model premium` | Quality focused | 0% | Best quality (Opus 4.5) |
-| `/model free` | Free tier only | 100% | Zero cost |
+| Profile          | Strategy           | Savings   | Use Case                |
+| ---------------- | ------------------ | --------- | ----------------------- |
+| `/model auto`    | Balanced (default) | 74-100%   | Best overall balance    |
+| `/model eco`     | Cost optimized     | 95.9-100% | Maximum savings         |
+| `/model premium` | Quality focused    | 0%        | Best quality (Opus 4.5) |
+| `/model free`    | Free tier only     | 100%      | Zero cost               |
 
 **Other shortcuts:**
+
 - **Model aliases:** `/model sonnet`, `/model grok`, `/model gpt5`, `/model o3`
 - **Specific models:** `blockrun/openai/gpt-4o` or `blockrun/anthropic/claude-sonnet-4`
 - **Bring your wallet:** `export BLOCKRUN_WALLET_KEY=0x...`
@@ -129,16 +130,17 @@ No external classifier calls. Ambiguous queries default to the MEDIUM tier (Grok
 
 ClawRouter now offers 4 routing profiles to match different priorities:
 
-| Profile | Strategy | Savings vs Opus 4.5 | When to Use |
-|---------|----------|---------------------|-------------|
-| **auto** (default) | Balanced quality + cost | 74-100% | General use, best overall |
-| **eco** | Maximum cost savings | 95.9-100% | Budget-conscious, high volume |
-| **premium** | Best quality only | 0% | Mission-critical tasks |
-| **free** | Free tier only | 100% | Testing, empty wallet |
+| Profile            | Strategy                | Savings vs Opus 4.5 | When to Use                   |
+| ------------------ | ----------------------- | ------------------- | ----------------------------- |
+| **auto** (default) | Balanced quality + cost | 74-100%             | General use, best overall     |
+| **eco**            | Maximum cost savings    | 95.9-100%           | Budget-conscious, high volume |
+| **premium**        | Best quality only       | 0%                  | Mission-critical tasks        |
+| **free**           | Free tier only          | 100%                | Testing, empty wallet         |
 
 Switch profiles anytime: `/model eco`, `/model premium`, `/model auto`
 
 **Example:**
+
 ```
 /model eco                    # Switch to cost-optimized routing
 "Write a React component"     # Routes to DeepSeek ($0.28/$0.42)

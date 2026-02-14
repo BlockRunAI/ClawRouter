@@ -36,8 +36,8 @@ function hashMessage(message: NormalizedMessage): string {
         message.tool_calls.map((tc) => ({
           name: tc.function.name,
           args: tc.function.arguments,
-        }))
-      )
+        })),
+      ),
     );
   }
 
@@ -56,9 +56,7 @@ function hashMessage(message: NormalizedMessage): string {
  * - CRITICAL: Never dedupe assistant messages with tool_calls that are
  *   referenced by subsequent tool messages (breaks Anthropic tool_use/tool_result pairing)
  */
-export function deduplicateMessages(
-  messages: NormalizedMessage[]
-): DeduplicationResult {
+export function deduplicateMessages(messages: NormalizedMessage[]): DeduplicationResult {
   const seen = new Set<string>();
   const result: NormalizedMessage[] = [];
   let duplicatesRemoved = 0;
@@ -95,8 +93,8 @@ export function deduplicateMessages(
     // For assistant messages with tool_calls, check if any are referenced
     // by subsequent tool messages - if so, we MUST keep this message
     if (message.role === "assistant" && message.tool_calls) {
-      const hasReferencedToolCall = message.tool_calls.some(
-        (tc) => referencedToolCallIds.has(tc.id)
+      const hasReferencedToolCall = message.tool_calls.some((tc) =>
+        referencedToolCallIds.has(tc.id),
       );
       if (hasReferencedToolCall) {
         // This assistant message has tool_calls that are referenced - keep it

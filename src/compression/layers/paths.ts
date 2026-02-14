@@ -12,7 +12,7 @@ import { NormalizedMessage } from "../types";
 
 export interface PathShorteningResult {
   messages: NormalizedMessage[];
-  pathMap: Record<string, string>;  // $P1 -> /home/user/project/
+  pathMap: Record<string, string>; // $P1 -> /home/user/project/
   charsSaved: number;
 }
 
@@ -89,16 +89,14 @@ function findFrequentPrefixes(paths: string[]): string[] {
   return Array.from(prefixCounts.entries())
     .filter(([_, count]) => count >= 3)
     .sort((a, b) => b[0].length - a[0].length)
-    .slice(0, 5)  // Max 5 path codes
+    .slice(0, 5) // Max 5 path codes
     .map(([prefix]) => prefix);
 }
 
 /**
  * Apply path shortening to all messages.
  */
-export function shortenPaths(
-  messages: NormalizedMessage[]
-): PathShorteningResult {
+export function shortenPaths(messages: NormalizedMessage[]): PathShorteningResult {
   const allPaths = extractPaths(messages);
 
   if (allPaths.length < 5) {

@@ -162,7 +162,7 @@ async function runTests() {
         key3: "value".repeat(200),
       },
       null,
-      2
+      2,
     ).repeat(100);
 
     const originalBody = JSON.stringify({
@@ -226,11 +226,7 @@ async function runTests() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "auto",
-        messages: [
-          { role: "user", content: largeContent },
-          toolCallMessage,
-          toolResultMessage,
-        ],
+        messages: [{ role: "user", content: largeContent }, toolCallMessage, toolResultMessage],
         max_tokens: 50,
       }),
     });
@@ -239,17 +235,19 @@ async function runTests() {
 
     // Parse what server received and verify tool structures
     const serverReceived = JSON.parse(requestBodies[0]) as {
-      messages?: Array<{ role: string; tool_calls?: unknown[]; tool_call_id?: string; content?: string | null }>;
+      messages?: Array<{
+        role: string;
+        tool_calls?: unknown[];
+        tool_call_id?: string;
+        content?: string | null;
+      }>;
     };
 
     assert(
       serverReceived.messages?.[1]?.tool_calls?.[0] !== undefined,
-      "Tool call structure preserved"
+      "Tool call structure preserved",
     );
-    assert(
-      serverReceived.messages?.[2]?.tool_call_id === "call_123",
-      "Tool call ID preserved"
-    );
+    assert(serverReceived.messages?.[2]?.tool_call_id === "call_123", "Tool call ID preserved");
 
     // Verify tool_calls function name and arguments are intact
     const receivedToolCall = serverReceived.messages?.[1]?.tool_calls?.[0] as {
@@ -260,7 +258,7 @@ async function runTests() {
     assert(receivedToolCall?.function?.name === "get_weather", "Tool function name preserved");
     assert(
       receivedToolCall?.function?.arguments.includes("San Francisco"),
-      "Tool function arguments preserved"
+      "Tool function arguments preserved",
     );
   }
 
@@ -291,7 +289,7 @@ async function runTests() {
     const data = (await res.json()) as { error?: { type?: string; message?: string } };
     assert(
       data.error?.type === "request_too_large",
-      `Error type is request_too_large: ${data.error?.type}`
+      `Error type is request_too_large: ${data.error?.type}`,
     );
   }
 

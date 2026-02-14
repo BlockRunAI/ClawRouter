@@ -31,20 +31,20 @@ function compressToolResult(content: string): string {
     return content;
   }
 
-  const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = content
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   // Priority 1: Error messages (always keep)
   const errorLines = lines.filter(
-    (l) =>
-      /error|exception|failed|denied|refused|timeout|invalid/i.test(l) &&
-      l.length < 200
+    (l) => /error|exception|failed|denied|refused|timeout|invalid/i.test(l) && l.length < 200,
   );
 
   // Priority 2: Status/result lines
   const statusLines = lines.filter(
     (l) =>
-      /success|complete|created|updated|found|result|status|total|count/i.test(l) &&
-      l.length < 150
+      /success|complete|created|updated|found|result|status|total|count/i.test(l) && l.length < 150,
   );
 
   // Priority 3: Key JSON fields (extract important values)
@@ -132,9 +132,7 @@ function deduplicateLargeBlocks(messages: NormalizedMessage[]): {
 /**
  * Compress tool results in messages.
  */
-export function compressObservations(
-  messages: NormalizedMessage[]
-): ObservationResult {
+export function compressObservations(messages: NormalizedMessage[]): ObservationResult {
   let charsSaved = 0;
   let observationsCompressed = 0;
 

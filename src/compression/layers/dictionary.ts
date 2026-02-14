@@ -24,7 +24,7 @@ export interface DictionaryResult {
  */
 function encodeContent(
   content: string,
-  inverseCodebook: Record<string, string>
+  inverseCodebook: Record<string, string>,
 ): { encoded: string; substitutions: number; codes: Set<string>; charsSaved: number } {
   let encoded = content;
   let substitutions = 0;
@@ -60,9 +60,7 @@ function escapeRegex(str: string): string {
 /**
  * Apply dictionary encoding to all messages.
  */
-export function encodeMessages(
-  messages: NormalizedMessage[]
-): DictionaryResult {
+export function encodeMessages(messages: NormalizedMessage[]): DictionaryResult {
   const inverseCodebook = getInverseCodebook();
   let totalSubstitutions = 0;
   let totalCharsSaved = 0;
@@ -73,7 +71,7 @@ export function encodeMessages(
 
     const { encoded, substitutions, codes, charsSaved } = encodeContent(
       message.content,
-      inverseCodebook
+      inverseCodebook,
     );
 
     totalSubstitutions += substitutions;

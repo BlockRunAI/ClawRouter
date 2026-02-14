@@ -3,15 +3,12 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-echo "🐳 Building Docker test environment..."
-docker build -f test/Dockerfile.test -t clawrouter-test .
+echo "🐳 Building Docker installation test environment..."
+docker build -f test/Dockerfile.install-test -t clawrouter-install-test .
 
 echo ""
-echo "🧪 Running model selection tests..."
-docker run --rm \
-    -v "$(pwd)/test/test-model-selection.sh:/test-ro.sh:ro" \
-    clawrouter-test \
-    bash -c "cp /test-ro.sh /tmp/test.sh && chmod +x /tmp/test.sh && /tmp/test.sh"
+echo "🧪 Running installation tests..."
+docker run --rm clawrouter-install-test /home/testuser/docker-install-tests.sh
 
 echo ""
-echo "✅ Docker tests completed successfully!"
+echo "✅ Installation tests completed successfully!"

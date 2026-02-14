@@ -47,8 +47,7 @@ const testPrompts = [
     name: "Multi-step agentic task",
     prompt:
       "Research the latest trends in AI agents, analyze the top 3 frameworks, compare their features, and create a recommendation report",
-    systemPrompt:
-      "You are an AI research analyst with access to web search and analysis tools.",
+    systemPrompt: "You are an AI research analyst with access to web search and analysis tools.",
     maxTokens: 4000,
   },
 ];

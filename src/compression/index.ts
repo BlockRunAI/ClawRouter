@@ -60,7 +60,7 @@ function cloneMessages(messages: NormalizedMessage[]): NormalizedMessage[] {
 function prependCodebookHeader(
   messages: NormalizedMessage[],
   usedCodes: Set<string>,
-  pathMap: Record<string, string>
+  pathMap: Record<string, string>,
 ): NormalizedMessage[] {
   const header = generateCodebookHeader(usedCodes, pathMap);
   if (!header) return messages;
@@ -70,10 +70,7 @@ function prependCodebookHeader(
 
   if (userIndex === -1) {
     // No user message, add codebook as system (fallback)
-    return [
-      { role: "system", content: header },
-      ...messages,
-    ];
+    return [{ role: "system", content: header }, ...messages];
   }
 
   // Prepend to first user message
@@ -102,7 +99,7 @@ function prependCodebookHeader(
  */
 export async function compressContext(
   messages: NormalizedMessage[],
-  config: Partial<CompressionConfig> = {}
+  config: Partial<CompressionConfig> = {},
 ): Promise<CompressionResult> {
   const fullConfig: CompressionConfig = {
     ...DEFAULT_COMPRESSION_CONFIG,
@@ -144,9 +141,7 @@ export async function compressContext(
   }
 
   // Preserve originals for logging
-  const originalMessages = fullConfig.preserveRaw
-    ? cloneMessages(messages)
-    : messages;
+  const originalMessages = fullConfig.preserveRaw ? cloneMessages(messages) : messages;
   const originalChars = calculateTotalChars(messages);
 
   // Initialize stats

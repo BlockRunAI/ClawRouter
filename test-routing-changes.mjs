@@ -4,7 +4,7 @@
  * Tests: tier boundaries, fallback order, agentic threshold
  */
 
-import { route, DEFAULT_ROUTING_CONFIG } from './dist/index.js';
+import { route, DEFAULT_ROUTING_CONFIG } from "./dist/index.js";
 
 // Test prompts representing different complexity levels
 const testPrompts = [
@@ -16,19 +16,22 @@ const testPrompts = [
   },
   {
     name: "Borderline complex",
-    prompt: "Write a React component with useState and useEffect hooks that fetches data from an API",
+    prompt:
+      "Write a React component with useState and useEffect hooks that fetches data from an API",
     expectedOld: "COMPLEX (score ~0.25)",
     expectedNew: "MEDIUM (score 0.25 < 0.30)",
   },
   {
     name: "Truly complex",
-    prompt: "Design a distributed caching system with Redis cluster, handle failover, and implement consistent hashing for data sharding across nodes",
+    prompt:
+      "Design a distributed caching system with Redis cluster, handle failover, and implement consistent hashing for data sharding across nodes",
     expectedOld: "COMPLEX (score ~0.35)",
     expectedNew: "COMPLEX (score 0.35 >= 0.30)",
   },
   {
     name: "Reasoning task",
-    prompt: "Given a complex logic puzzle: If A implies B, B implies C, and C is false, what can we deduce about A? Explain step by step with formal logic",
+    prompt:
+      "Given a complex logic puzzle: If A implies B, B implies C, and C is false, what can we deduce about A? Explain step by step with formal logic",
     expectedOld: "REASONING (score ~0.55)",
     expectedNew: "REASONING (score 0.55 >= 0.5)",
   },
@@ -63,31 +66,28 @@ console.log("──────────────────────�
 // Create minimal modelPricing map
 const modelPricing = new Map();
 modelPricing.set("nvidia/kimi-k2.5", { input: 0.001, output: 0.001, contextWindow: 128000 });
-modelPricing.set("google/gemini-2.5-flash", { input: 0.075, output: 0.30, contextWindow: 1000000 });
+modelPricing.set("google/gemini-2.5-flash", { input: 0.075, output: 0.3, contextWindow: 1000000 });
 modelPricing.set("deepseek/deepseek-chat", { input: 0.14, output: 0.28, contextWindow: 64000 });
-modelPricing.set("xai/grok-code-fast-1", { input: 0.20, output: 1.50, contextWindow: 131000 });
-modelPricing.set("xai/grok-4-0709", { input: 0.20, output: 1.50, contextWindow: 131000 });
-modelPricing.set("openai/gpt-4o-mini", { input: 0.15, output: 0.60, contextWindow: 128000 });
-modelPricing.set("openai/gpt-4o", { input: 2.50, output: 10, contextWindow: 128000 });
-modelPricing.set("google/gemini-2.5-pro", { input: 0.625, output: 2.50, contextWindow: 2000000 });
-modelPricing.set("openai/gpt-5.2", { input: 2.50, output: 10, contextWindow: 200000 });
+modelPricing.set("xai/grok-code-fast-1", { input: 0.2, output: 1.5, contextWindow: 131000 });
+modelPricing.set("xai/grok-4-0709", { input: 0.2, output: 1.5, contextWindow: 131000 });
+modelPricing.set("openai/gpt-4o-mini", { input: 0.15, output: 0.6, contextWindow: 128000 });
+modelPricing.set("openai/gpt-4o", { input: 2.5, output: 10, contextWindow: 128000 });
+modelPricing.set("google/gemini-2.5-pro", { input: 0.625, output: 2.5, contextWindow: 2000000 });
+modelPricing.set("openai/gpt-5.2", { input: 2.5, output: 10, contextWindow: 200000 });
 modelPricing.set("anthropic/claude-sonnet-4", { input: 3, output: 15, contextWindow: 200000 });
 
 // Test each prompt
 for (const test of testPrompts) {
   console.log(`🔍 ${test.name}:`);
-  console.log(`   Prompt: "${test.prompt.substring(0, 70)}${test.prompt.length > 70 ? '...' : ''}"`);
+  console.log(
+    `   Prompt: "${test.prompt.substring(0, 70)}${test.prompt.length > 70 ? "..." : ""}"`,
+  );
 
   try {
-    const result = route(
-      test.prompt,
-      "",
-      4000,
-      {
-        config: DEFAULT_ROUTING_CONFIG,
-        modelPricing: modelPricing,
-      }
-    );
+    const result = route(test.prompt, "", 4000, {
+      config: DEFAULT_ROUTING_CONFIG,
+      modelPricing: modelPricing,
+    });
 
     const tier = result.tier;
     const model = result.selectedModel;
@@ -103,7 +103,6 @@ for (const test of testPrompts) {
     if (reasoning.includes("agentic")) {
       console.log(`   🎯 Agentic mode: ACTIVE`);
     }
-
   } catch (error) {
     console.log(`   ❌ Error: ${error.message}`);
   }

@@ -623,7 +623,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     // Tier boundaries on weighted score axis
     tierBoundaries: {
       simpleMedium: 0.0,
-      mediumComplex: 0.30, // Raised from 0.18 - prevent simple tasks from reaching expensive COMPLEX tier
+      mediumComplex: 0.3, // Raised from 0.18 - prevent simple tasks from reaching expensive COMPLEX tier
       complexReasoning: 0.5, // Raised from 0.4 - reserve for true reasoning tasks
     },
 
@@ -638,23 +638,25 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     SIMPLE: {
       primary: "nvidia/kimi-k2.5", // $0.55/$2.5 - best quality/price for simple tasks
       fallback: [
+        "google/gemini-2.5-flash", // 1M context, cost-effective
         "nvidia/gpt-oss-120b", // FREE fallback
-        "google/gemini-2.5-flash",
         "deepseek/deepseek-chat",
       ],
     },
     MEDIUM: {
       primary: "xai/grok-code-fast-1", // Code specialist, $0.20/$1.50
       fallback: [
-        "xai/grok-4-1-fast-non-reasoning", // Upgraded Grok 4.1
+        "google/gemini-2.5-flash", // 1M context, cost-effective
         "deepseek/deepseek-chat",
-        "google/gemini-2.5-flash",
+        "xai/grok-4-1-fast-non-reasoning", // Upgraded Grok 4.1
       ],
     },
     COMPLEX: {
       primary: "google/gemini-3-pro-preview", // Latest Gemini - upgraded from 2.5
       fallback: [
+        "google/gemini-2.5-flash", // CRITICAL: 1M context, cheap failsafe before expensive models
         "google/gemini-2.5-pro",
+        "deepseek/deepseek-chat", // Another cheap option
         "xai/grok-4-0709",
         "openai/gpt-4o",
         "openai/gpt-5.2",
@@ -664,10 +666,10 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     REASONING: {
       primary: "xai/grok-4-1-fast-reasoning", // Upgraded Grok 4.1 reasoning $0.20/$0.50
       fallback: [
+        "deepseek/deepseek-reasoner", // Cheap reasoning model as first fallback
         "xai/grok-4-fast-reasoning",
         "openai/o3",
         "openai/o4-mini", // Latest o-series mini
-        "deepseek/deepseek-reasoner",
         "moonshot/kimi-k2.5",
       ],
     },

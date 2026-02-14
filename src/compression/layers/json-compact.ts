@@ -59,9 +59,7 @@ function compactToolCalls(toolCalls: ToolCall[]): ToolCall[] {
  * - tool_call arguments (in assistant messages)
  * - tool message content (often JSON)
  */
-export function compactMessagesJson(
-  messages: NormalizedMessage[]
-): JsonCompactResult {
+export function compactMessagesJson(messages: NormalizedMessage[]): JsonCompactResult {
   let charsSaved = 0;
 
   const result = messages.map((message) => {

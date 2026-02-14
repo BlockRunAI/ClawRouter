@@ -35,10 +35,7 @@ function findRepeatedPhrases(allContent: string): Map<string, number> {
 
   for (const segment of segments) {
     const trimmed = segment.trim();
-    if (
-      trimmed.length >= MIN_PHRASE_LENGTH &&
-      trimmed.length <= MAX_PHRASE_LENGTH
-    ) {
+    if (trimmed.length >= MIN_PHRASE_LENGTH && trimmed.length <= MAX_PHRASE_LENGTH) {
       phrases.set(trimmed, (phrases.get(trimmed) || 0) + 1);
     }
   }
@@ -47,10 +44,7 @@ function findRepeatedPhrases(allContent: string): Map<string, number> {
   const lines = allContent.split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
-    if (
-      trimmed.length >= MIN_PHRASE_LENGTH &&
-      trimmed.length <= MAX_PHRASE_LENGTH
-    ) {
+    if (trimmed.length >= MIN_PHRASE_LENGTH && trimmed.length <= MAX_PHRASE_LENGTH) {
       phrases.set(trimmed, (phrases.get(trimmed) || 0) + 1);
     }
   }
@@ -61,9 +55,7 @@ function findRepeatedPhrases(allContent: string): Map<string, number> {
 /**
  * Build dynamic codebook from message content.
  */
-function buildDynamicCodebook(
-  messages: NormalizedMessage[]
-): Record<string, string> {
+function buildDynamicCodebook(messages: NormalizedMessage[]): Record<string, string> {
   // Combine all content
   let allContent = "";
   for (const msg of messages) {
@@ -76,8 +68,7 @@ function buildDynamicCodebook(
   const phrases = findRepeatedPhrases(allContent);
 
   // Filter by frequency and sort by savings potential
-  const candidates: Array<{ phrase: string; count: number; savings: number }> =
-    [];
+  const candidates: Array<{ phrase: string; count: number; savings: number }> = [];
   for (const [phrase, count] of phrases.entries()) {
     if (count >= MIN_FREQUENCY) {
       // Savings = (phrase length - code length) * occurrences
@@ -113,9 +104,7 @@ function escapeRegex(str: string): string {
 /**
  * Apply dynamic codebook to messages.
  */
-export function applyDynamicCodebook(
-  messages: NormalizedMessage[]
-): DynamicCodebookResult {
+export function applyDynamicCodebook(messages: NormalizedMessage[]): DynamicCodebookResult {
   // Build codebook from content
   const codebook = buildDynamicCodebook(messages);
 
@@ -135,9 +124,7 @@ export function applyDynamicCodebook(
   }
 
   // Sort phrases by length (longest first) to avoid partial replacements
-  const sortedPhrases = Object.keys(phraseToCode).sort(
-    (a, b) => b.length - a.length
-  );
+  const sortedPhrases = Object.keys(phraseToCode).sort((a, b) => b.length - a.length);
 
   let charsSaved = 0;
   let substitutions = 0;
@@ -172,17 +159,14 @@ export function applyDynamicCodebook(
 /**
  * Generate header for dynamic codes (to include in system message).
  */
-export function generateDynamicCodebookHeader(
-  codebook: Record<string, string>
-): string {
+export function generateDynamicCodebookHeader(codebook: Record<string, string>): string {
   if (Object.keys(codebook).length === 0) return "";
 
   const entries = Object.entries(codebook)
     .slice(0, 20) // Limit header size
     .map(([code, phrase]) => {
       // Truncate long phrases in header
-      const displayPhrase =
-        phrase.length > 40 ? phrase.slice(0, 37) + "..." : phrase;
+      const displayPhrase = phrase.length > 40 ? phrase.slice(0, 37) + "..." : phrase;
       return `${code}=${displayPhrase}`;
     })
     .join(", ");
