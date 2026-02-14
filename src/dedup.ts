@@ -15,8 +15,7 @@ export type CachedResponse = {
 };
 
 type InflightEntry = {
-  resolve: (result: CachedResponse) => void;
-  waiters: Promise<CachedResponse>[];
+  resolvers: Array<(result: CachedResponse) => void>;
 };
 
 const DEFAULT_TTL_MS = 30_000; // 30 seconds
@@ -109,27 +108,15 @@ export class RequestDeduplicator {
   getInflight(key: string): Promise<CachedResponse> | undefined {
     const entry = this.inflight.get(key);
     if (!entry) return undefined;
-    const promise = new Promise<CachedResponse>((resolve) => {
-      // Will be resolved when the original request completes
-      entry.waiters.push(
-        new Promise<CachedResponse>((r) => {
-          const orig = entry.resolve;
-          entry.resolve = (result) => {
-            orig(result);
-            resolve(result);
-            r(result);
-          };
-        }),
-      );
+    return new Promise<CachedResponse>((resolve) => {
+      entry.resolvers.push(resolve);
     });
-    return promise;
   }
 
   /** Mark a request as in-flight. */
   markInflight(key: string): void {
     this.inflight.set(key, {
-      resolve: () => {},
-      waiters: [],
+      resolvers: [],
     });
   }
 
@@ -142,16 +129,35 @@ export class RequestDeduplicator {
 
     const entry = this.inflight.get(key);
     if (entry) {
-      entry.resolve(result);
+      for (const resolve of entry.resolvers) {
+        resolve(result);
+      }
       this.inflight.delete(key);
     }
 
     this.prune();
   }
 
-  /** Remove an in-flight entry on error (don't cache failures). */
+  /** Remove an in-flight entry on error (don't cache failures).
+   *  Also rejects any waiters so they can retry independently. */
   removeInflight(key: string): void {
-    this.inflight.delete(key);
+    const entry = this.inflight.get(key);
+    if (entry) {
+      // Resolve waiters with a sentinel error response so they don't hang forever.
+      // Waiters will see a 503 and can retry on their own.
+      const errorBody = Buffer.from(JSON.stringify({
+        error: { message: "Original request failed, please retry", type: "dedup_origin_failed" },
+      }));
+      for (const resolve of entry.resolvers) {
+        resolve({
+          status: 503,
+          headers: { "content-type": "application/json" },
+          body: errorBody,
+          completedAt: Date.now(),
+        });
+      }
+      this.inflight.delete(key);
+    }
   }
 
   /** Prune expired completed entries. */
