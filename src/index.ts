@@ -480,16 +480,80 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 }
 
 /**
+ * Check if a sender is in the allowed users list.
+ * Supports exact match and flexible matching:
+ *   - "telegram:123" in set matches sender "telegram:123" (exact)
+ *   - "123" in set matches sender "telegram:123" (bare ID matches prefixed sender)
+ */
+function isAllowedUser(allowedUsers: Set<string>, senderId: string | undefined): boolean {
+  if (!senderId) return false;
+  // Exact match
+  if (allowedUsers.has(senderId)) return true;
+  // Bare ID match: if sender is "platform:id", check if "id" is in the set
+  const colonIdx = senderId.indexOf(":");
+  if (colonIdx !== -1) {
+    const bareId = senderId.slice(colonIdx + 1);
+    if (allowedUsers.has(bareId)) return true;
+  }
+  return false;
+}
+
+/**
+ * Resolve the set of allowed user IDs from environment variable and plugin config.
+ * Users should set CLAWROUTER_ALLOWED_USERS as a comma-separated list of IDs,
+ * e.g. "telegram:123456,whatsapp:628123456789".
+ * Plugin config can also specify allowedUsers as a string array.
+ */
+function resolveAllowedUsers(pluginConfig?: Record<string, unknown>): Set<string> {
+  const users = new Set<string>();
+
+  // 1. Environment variable: CLAWROUTER_ALLOWED_USERS (comma-separated)
+  const envUsers = process.env.CLAWROUTER_ALLOWED_USERS;
+  if (envUsers) {
+    for (const id of envUsers.split(",")) {
+      const trimmed = id.trim();
+      if (trimmed) users.add(trimmed);
+    }
+  }
+
+  // 2. Plugin config: allowedUsers array
+  const configUsers = pluginConfig?.allowedUsers;
+  if (Array.isArray(configUsers)) {
+    for (const id of configUsers) {
+      if (typeof id === "string" && id.trim()) users.add(id.trim());
+    }
+  }
+
+  return users;
+}
+
+/**
  * /stats command handler for ClawRouter.
  * Shows usage statistics and cost savings.
  */
-async function createStatsCommand(): Promise<OpenClawPluginCommandDefinition> {
+async function createStatsCommand(
+  allowedUsers: Set<string>,
+): Promise<OpenClawPluginCommandDefinition> {
   return {
     name: "stats",
     description: "Show ClawRouter usage statistics and cost savings",
     acceptsArgs: true,
-    requireAuth: false,
+    requireAuth: true,
     handler: async (ctx: PluginCommandContext) => {
+      // Owner guard: require sender to be in the allowed users list
+      if (allowedUsers.size === 0) {
+        return {
+          text: "⛔ No allowed users configured. Set CLAWROUTER_ALLOWED_USERS environment variable (comma-separated list of user IDs, e.g. \"telegram:123456,whatsapp:628123456789\").",
+          isError: true,
+        };
+      }
+      if (!isAllowedUser(allowedUsers, ctx.senderId)) {
+        return {
+          text: "⛔ Unauthorized: your user ID is not in the allowed users list for this command.",
+          isError: true,
+        };
+      }
+
       const arg = ctx.args?.trim().toLowerCase() || "7";
       const days = parseInt(arg, 10) || 7;
 
@@ -515,13 +579,29 @@ async function createStatsCommand(): Promise<OpenClawPluginCommandDefinition> {
  * - /wallet or /wallet status: Show wallet address, balance, and key file location
  * - /wallet export: Show private key for backup (with security warning)
  */
-async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
+async function createWalletCommand(
+  allowedUsers: Set<string>,
+): Promise<OpenClawPluginCommandDefinition> {
   return {
     name: "wallet",
     description: "Show BlockRun wallet info or export private key for backup",
     acceptsArgs: true,
     requireAuth: true,
     handler: async (ctx: PluginCommandContext) => {
+      // Owner guard: require sender to be in the allowed users list
+      if (allowedUsers.size === 0) {
+        return {
+          text: "⛔ No allowed users configured. Set CLAWROUTER_ALLOWED_USERS environment variable (comma-separated list of user IDs, e.g. \"telegram:123456,whatsapp:628123456789\").",
+          isError: true,
+        };
+      }
+      if (!isAllowedUser(allowedUsers, ctx.senderId)) {
+        return {
+          text: "⛔ Unauthorized: your user ID is not in the allowed users list for this command.",
+          isError: true,
+        };
+      }
+
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
 
       // Read wallet key if it exists
@@ -662,8 +742,18 @@ const plugin: OpenClawPluginDefinition = {
 
     api.logger.info("BlockRun provider registered (30+ models via x402)");
 
+    // Resolve allowed users from env var and plugin config
+    const allowedUsers = resolveAllowedUsers(api.pluginConfig);
+    if (allowedUsers.size > 0) {
+      api.logger.info(`Allowed users for sensitive commands: ${allowedUsers.size} configured`);
+    } else {
+      api.logger.warn(
+        "No CLAWROUTER_ALLOWED_USERS configured — /stats and /wallet will be blocked until set",
+      );
+    }
+
     // Register /wallet command for wallet management
-    createWalletCommand()
+    createWalletCommand(allowedUsers)
       .then((walletCommand) => {
         api.registerCommand(walletCommand);
       })
@@ -674,7 +764,7 @@ const plugin: OpenClawPluginDefinition = {
       });
 
     // Register /stats command for usage statistics
-    createStatsCommand()
+    createStatsCommand(allowedUsers)
       .then((statsCommand) => {
         api.registerCommand(statsCommand);
       })
