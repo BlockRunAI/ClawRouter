@@ -1,11 +1,11 @@
 /**
  * Claw Credit payment backend for ClawRouter.
  *
- * Converts a BlockRun upstream request into a claw.credit /v1/transaction/pay call
- * and returns the merchant_response as a standard fetch Response.
+ * Uses the official @t54-labs/clawcredit-sdk payment path so requests include
+ * SDK-generated metadata and richer audit context.
  */
 
-import { VERSION } from "./version.js";
+import { ClawCredit, withTrace } from "@t54-labs/clawcredit-sdk";
 
 const DEFAULT_SERVICE_URL = "https://api.claw.credit";
 
@@ -14,10 +14,30 @@ export type ClawCreditConfig = {
   apiToken: string;
   chain: string;
   asset: string;
+  agent?: string;
+  agentId?: string;
 };
 
 export type PreAuthParams = {
   estimatedAmount: string;
+};
+
+type SdkClient = {
+  pay: (args: {
+    transaction: {
+      recipient: string;
+      amount: number;
+      chain: string;
+      asset: string;
+      amount_unit?: "human" | "atomic";
+    };
+    request_body: Record<string, unknown>;
+    context?: {
+      reasoning_process?: string;
+      current_task?: string;
+    };
+    idempotencyKey?: string;
+  }) => Promise<{ merchant_response?: unknown }>;
 };
 
 function headersToObject(headersInit?: HeadersInit): Record<string, string> {
@@ -60,8 +80,18 @@ function microsToUsd(estimatedAmount?: string): number {
   return Number((micros / 1_000_000).toFixed(6));
 }
 
+function inferStatusCode(err: unknown): number {
+  const msg = err instanceof Error ? err.message : String(err);
+  const match = msg.match(/ClawCredit API Error:\s*(\d{3})\s*-/i);
+  if (match) return parseInt(match[1], 10);
+  if (/payment required/i.test(msg)) return 402;
+  if (/prequalification_pending/i.test(msg)) return 403;
+  if (/unauthorized/i.test(msg)) return 401;
+  return 502;
+}
+
 /**
- * Create a fetch wrapper that pays through claw.credit instead of local x402 signing.
+ * Create a fetch wrapper that pays through claw.credit SDK instead of local x402 signing.
  */
 export function createClawCreditFetch(config: ClawCreditConfig) {
   const serviceUrl = (config.baseUrl || DEFAULT_SERVICE_URL).replace(/\/+$/, "");
@@ -73,6 +103,13 @@ export function createClawCreditFetch(config: ClawCreditConfig) {
     throw new Error("CLAWCREDIT_API_TOKEN is required for claw.credit payment mode");
   }
 
+  const credit = new ClawCredit({
+    serviceUrl,
+    apiToken,
+    agent: config.agent,
+    agentId: config.agentId,
+  }) as SdkClient;
+
   return async (
     input: RequestInfo | URL,
     init?: RequestInit,
@@ -82,70 +119,51 @@ export function createClawCreditFetch(config: ClawCreditConfig) {
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const method = (init?.method || "POST").toUpperCase();
     const headers = headersToObject(init?.headers);
+    const idempotencyKey = new Headers(init?.headers).get("idempotency-key") || undefined;
     const requestBody = parseJsonBody(init?.body);
     const amountUsd = microsToUsd(preAuth?.estimatedAmount);
 
-    const payload = {
-      transaction: {
-        recipient: upstreamUrl,
-        amount: amountUsd,
-        chain,
-        asset,
-      },
-      request_body: {
-        http: {
-          url: upstreamUrl,
-          method,
-          headers,
-        },
-        body: requestBody,
-      },
-      audit_context: {
-        current_task: "blockrun_inference_via_clawrouter",
-        reasoning_process: "Proxying BlockRun inference payment through claw.credit",
-        timestamp: Date.now(),
-      },
-      sdk_meta: {
-        sdk_name: "@blockrun/clawrouter",
-        sdk_version: VERSION,
-      },
-    };
+    try {
+      const result = await withTrace(async () =>
+        credit.pay({
+          transaction: {
+            recipient: upstreamUrl,
+            amount: amountUsd,
+            chain,
+            asset,
+          },
+          request_body: {
+            http: {
+              url: upstreamUrl,
+              method,
+              headers,
+            },
+            body: requestBody,
+          },
+          context: {
+            current_task: "blockrun_inference_via_clawrouter",
+            reasoning_process: "Proxying BlockRun inference payment through claw.credit SDK",
+          },
+          idempotencyKey,
+        }),
+      );
 
-    const payResponse = await fetch(`${serviceUrl}/v1/transaction/pay`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiToken}`,
-      },
-      body: JSON.stringify(payload),
-      signal: init?.signal,
-    });
+      const merchantResponse =
+        result && typeof result === "object" && "merchant_response" in result
+          ? (result as { merchant_response?: unknown }).merchant_response
+          : result;
 
-    const text = await payResponse.text();
-    const contentType = payResponse.headers.get("content-type") || "application/json";
-
-    if (!payResponse.ok) {
-      return new Response(text, {
-        status: payResponse.status,
-        headers: { "content-type": contentType },
+      return new Response(JSON.stringify(merchantResponse ?? {}), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    } catch (err) {
+      const status = inferStatusCode(err);
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { "content-type": "application/json" },
       });
     }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { raw: text };
-    }
-
-    const merchantResponse =
-      parsed && typeof parsed === "object" && "merchant_response" in parsed
-        ? (parsed as { merchant_response: unknown }).merchant_response
-        : parsed;
-
-    return new Response(JSON.stringify(merchantResponse ?? {}), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
   };
 }

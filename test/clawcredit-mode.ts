@@ -140,6 +140,8 @@ async function run(): Promise<void> {
       const tx = payload.transaction as Record<string, unknown>;
       const reqBody = payload.request_body as Record<string, unknown>;
       const http = reqBody.http as Record<string, unknown>;
+      const audit = payload.audit_context as Record<string, unknown>;
+      const sdkMeta = payload.sdk_meta as Record<string, unknown>;
 
       assert(tx.chain === "BASE", "transaction.chain forwarded");
       assert(tx.asset === BASE_USDC, "transaction.asset forwarded");
@@ -153,6 +155,18 @@ async function run(): Promise<void> {
         http.url === tx.recipient,
         "request_body.http.url matches transaction.recipient",
       );
+      assert(typeof sdkMeta?.sdk_name === "string", "sdk_meta.sdk_name present");
+      assert(
+        sdkMeta?.sdk_name === "@t54-labs/clawcredit-sdk",
+        "sdk_meta.sdk_name uses official clawcredit sdk identity",
+      );
+      assert(typeof sdkMeta?.sdk_version === "string", "sdk_meta.sdk_version present");
+      assert(
+        Array.isArray(audit?.stack_code) && audit.stack_code.length > 0,
+        "audit_context.stack_code captured",
+      );
+      assert(typeof audit?.current_task === "string", "audit_context.current_task present");
+      assert(typeof audit?.reasoning_process === "string", "audit_context.reasoning_process present");
     }
   } finally {
     await proxy.close();

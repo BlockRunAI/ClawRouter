@@ -67,6 +67,7 @@
     "url": "git+https://github.com/BlockRunAI/ClawRouter.git"
   },
   "dependencies": {
+    "@t54-labs/clawcredit-sdk": "^0.2.40",
     "viem": "^2.39.3"
   },
   "peerDependencies": {
