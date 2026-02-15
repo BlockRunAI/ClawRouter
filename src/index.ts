@@ -251,9 +251,9 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     { id: "eco", alias: "eco" },
     { id: "premium", alias: "premium" },
     { id: "free", alias: "free" },
-    { id: "sonnet", alias: "sonnet" },
-    { id: "opus", alias: "opus" },
-    { id: "haiku", alias: "haiku" },
+    { id: "sonnet", alias: "br-sonnet" },
+    { id: "opus", alias: "br-opus" },
+    { id: "haiku", alias: "br-haiku" },
     { id: "gpt5", alias: "gpt5" },
     { id: "mini", alias: "mini" },
     { id: "grok-fast", alias: "grok-fast" },
@@ -284,11 +284,15 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     }
   }
 
-  // Add current aliases
+  // Add current aliases (and update stale aliases)
   for (const m of KEY_MODEL_ALIASES) {
     const fullId = `blockrun/${m.id}`;
-    if (!allowlist[fullId]) {
+    const existing = allowlist[fullId] as Record<string, unknown> | undefined;
+    if (!existing) {
       allowlist[fullId] = { alias: m.alias };
+      needsWrite = true;
+    } else if (existing.alias !== m.alias) {
+      existing.alias = m.alias;
       needsWrite = true;
     }
   }
