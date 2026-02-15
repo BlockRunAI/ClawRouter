@@ -59,14 +59,13 @@ const testCases = [
     tests: [
       {
         name: "Complex code implementation",
-        prompt:
-          (
-            "Design and implement a distributed microservice architecture for a high-frequency trading platform. " +
-            "First define requirements, then produce 1. database schema 2. API specification 3. Kubernetes deployment plan. " +
-            "Must include constraints: latency under 5ms, at least 99.99% availability, should handle failover, and not lose data. " +
-            "Provide output in JSON schema and table format, include references to RFC 7231 and ISO 27001. " +
-            "Analyze algorithmic complexity, optimize sharding strategy, and compare consistency models. "
-          ).repeat(12),
+        prompt: (
+          "Design and implement a distributed microservice architecture for a high-frequency trading platform. " +
+          "First define requirements, then produce 1. database schema 2. API specification 3. Kubernetes deployment plan. " +
+          "Must include constraints: latency under 5ms, at least 99.99% availability, should handle failover, and not lose data. " +
+          "Provide output in JSON schema and table format, include references to RFC 7231 and ISO 27001. " +
+          "Analyze algorithmic complexity, optimize sharding strategy, and compare consistency models. "
+        ).repeat(12),
         systemPrompt: "You are an expert TypeScript developer.",
         maxTokens: 2000,
         expectedTier: "COMPLEX",
