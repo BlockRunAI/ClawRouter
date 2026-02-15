@@ -54,7 +54,12 @@ export const MODEL_ALIASES: Record<string, string> = {
 
 /**
  * Resolve a model alias to its full model ID.
- * Returns the original model if not an alias.
+ * Also strips "blockrun/" prefix for direct model paths.
+ * Examples:
+ *   - "claude" -> "anthropic/claude-sonnet-4" (alias)
+ *   - "blockrun/claude" -> "anthropic/claude-sonnet-4" (alias with prefix)
+ *   - "blockrun/anthropic/claude-sonnet-4" -> "anthropic/claude-sonnet-4" (prefix stripped)
+ *   - "openai/gpt-4o" -> "openai/gpt-4o" (unchanged)
  */
 export function resolveModelAlias(model: string): string {
   const normalized = model.trim().toLowerCase();
@@ -66,6 +71,10 @@ export function resolveModelAlias(model: string): string {
     const withoutPrefix = normalized.slice("blockrun/".length);
     const resolvedWithoutPrefix = MODEL_ALIASES[withoutPrefix];
     if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
+
+    // Even if not an alias, strip the prefix for direct model paths
+    // e.g., "blockrun/anthropic/claude-sonnet-4" -> "anthropic/claude-sonnet-4"
+    return withoutPrefix;
   }
 
   return model;
