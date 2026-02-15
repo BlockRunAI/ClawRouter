@@ -26,6 +26,7 @@ import { finished } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { privateKeyToAccount } from "viem/accounts";
 import { createPaymentFetch, type PreAuthParams } from "./x402.js";
+import { createClawCreditFetch, type ClawCreditConfig } from "./clawcredit.js";
 import {
   route,
   getFallbackChain,
@@ -80,6 +81,7 @@ const HEALTH_CHECK_TIMEOUT_MS = 2_000; // Timeout for checking existing proxy
 const RATE_LIMIT_COOLDOWN_MS = 60_000; // 60 seconds cooldown for rate-limited models
 const PORT_RETRY_ATTEMPTS = 5; // Max attempts to bind port (handles TIME_WAIT)
 const PORT_RETRY_DELAY_MS = 1_000; // Delay between retry attempts
+const DUMMY_WALLET_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /**
  * Transform upstream payment errors into user-friendly messages.
@@ -254,9 +256,11 @@ export function getProxyPort(): number {
 
 /**
  * Check if a proxy is already running on the given port.
- * Returns the wallet address if running, undefined otherwise.
+ * Returns identity and payment mode if running, undefined otherwise.
  */
-async function checkExistingProxy(port: number): Promise<string | undefined> {
+async function checkExistingProxy(
+  port: number,
+): Promise<{ wallet: string; paymentMode: PaymentMode } | undefined> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
@@ -267,9 +271,16 @@ async function checkExistingProxy(port: number): Promise<string | undefined> {
     clearTimeout(timeoutId);
 
     if (response.ok) {
-      const data = (await response.json()) as { status?: string; wallet?: string };
+      const data = (await response.json()) as {
+        status?: string;
+        wallet?: string;
+        paymentMode?: PaymentMode;
+      };
       if (data.status === "ok" && data.wallet) {
-        return data.wallet;
+        return {
+          wallet: data.wallet,
+          paymentMode: data.paymentMode || "wallet",
+        };
       }
     }
     return undefined;
@@ -670,8 +681,15 @@ export type InsufficientFundsInfo = {
   walletAddress: string;
 };
 
+export type PaymentMode = "wallet" | "clawcredit";
+
 export type ProxyOptions = {
-  walletKey: string;
+  /** Local wallet private key for direct x402 signing (required in wallet mode). */
+  walletKey?: string;
+  /** Payment backend. Defaults to "wallet" for backwards compatibility. */
+  paymentMode?: PaymentMode;
+  /** claw.credit payment configuration (required in clawcredit mode). */
+  clawCredit?: ClawCreditConfig;
   apiBase?: string;
   /** Port to listen on (default: 8402) */
   port?: number;
@@ -785,22 +803,49 @@ function estimateAmount(
  */
 export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const apiBase = options.apiBase ?? BLOCKRUN_API;
+  const paymentMode: PaymentMode = options.paymentMode ?? "wallet";
+  const localBalanceEnabled = paymentMode === "wallet";
 
   // Determine port: options.port > env var > default
   const listenPort = options.port ?? getProxyPort();
 
-  // Check if a proxy is already running on this port
-  const existingWallet = await checkExistingProxy(listenPort);
-  if (existingWallet) {
-    // Proxy already running — reuse it instead of failing with EADDRINUSE
+  let walletAddressForMode = "clawcredit";
+  let payFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    preAuth?: PreAuthParams,
+  ) => Promise<Response>;
+  let balanceMonitor: BalanceMonitor;
+
+  if (paymentMode === "wallet") {
+    if (!options.walletKey) {
+      throw new Error("walletKey is required when paymentMode='wallet'");
+    }
     const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-    const balanceMonitor = new BalanceMonitor(account.address);
+    walletAddressForMode = account.address;
+    payFetch = createPaymentFetch(options.walletKey as `0x${string}`).fetch;
+    balanceMonitor = new BalanceMonitor(account.address);
+  } else {
+    if (!options.clawCredit?.apiToken) {
+      throw new Error("clawCredit.apiToken is required when paymentMode='clawcredit'");
+    }
+    payFetch = createClawCreditFetch(options.clawCredit);
+    balanceMonitor = new BalanceMonitor(DUMMY_WALLET_ADDRESS);
+  }
+
+  // Check if a proxy is already running on this port
+  const existingProxy = await checkExistingProxy(listenPort);
+  if (existingProxy) {
+    // Proxy already running — reuse it instead of failing with EADDRINUSE
     const baseUrl = `http://127.0.0.1:${listenPort}`;
 
-    // Verify the existing proxy is using the same wallet (or warn if different)
-    if (existingWallet !== account.address) {
+    // Verify the existing proxy is using the same payment mode/identity.
+    if (
+      existingProxy.wallet !== walletAddressForMode ||
+      existingProxy.paymentMode !== paymentMode
+    ) {
       console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingWallet}, but current config uses ${account.address}. Reusing existing proxy.`,
+        `[ClawRouter] Existing proxy on port ${listenPort} uses mode=${existingProxy.paymentMode} identity=${existingProxy.wallet}, but current config uses mode=${paymentMode} identity=${walletAddressForMode}. Reusing existing proxy.`,
       );
     }
 
@@ -809,20 +854,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     return {
       port: listenPort,
       baseUrl,
-      walletAddress: existingWallet,
+      walletAddress: existingProxy.wallet,
       balanceMonitor,
       close: async () => {
         // No-op: we didn't start this proxy, so we shouldn't close it
       },
     };
   }
-
-  // Create x402 payment-enabled fetch from wallet private key
-  const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const { fetch: payFetch } = createPaymentFetch(options.walletKey as `0x${string}`);
-
-  // Create balance monitor for pre-request checks
-  const balanceMonitor = new BalanceMonitor(account.address);
 
   // Build router options (100% local — no external API calls for routing)
   const routingConfig = mergeRoutingConfig(options.routingConfig);
@@ -879,17 +917,22 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
       const response: Record<string, unknown> = {
         status: "ok",
-        wallet: account.address,
+        wallet: walletAddressForMode,
+        paymentMode,
       };
 
       if (full) {
-        try {
-          const balanceInfo = await balanceMonitor.checkBalance();
-          response.balance = balanceInfo.balanceUSD;
-          response.isLow = balanceInfo.isLow;
-          response.isEmpty = balanceInfo.isEmpty;
-        } catch {
-          response.balanceError = "Could not fetch balance";
+        if (localBalanceEnabled) {
+          try {
+            const balanceInfo = await balanceMonitor.checkBalance();
+            response.balance = balanceInfo.balanceUSD;
+            response.isLow = balanceInfo.isLow;
+            response.isEmpty = balanceInfo.isEmpty;
+          } catch {
+            response.balanceError = "Could not fetch balance";
+          }
+        } else {
+          response.balance = "managed_by_clawcredit";
         }
       }
 
@@ -964,6 +1007,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         balanceMonitor,
         sessionStore,
         responseCache,
+        localBalanceEnabled,
       );
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -997,11 +1041,15 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
         if (err.code === "EADDRINUSE") {
           // Port is in use - check if a proxy is actually running
-          const existingWallet = await checkExistingProxy(listenPort);
-          if (existingWallet) {
+          const existingProxy = await checkExistingProxy(listenPort);
+          if (existingProxy) {
             // Proxy is actually running - this is fine, reuse it
             console.log(`[ClawRouter] Existing proxy detected on port ${listenPort}, reusing`);
-            rejectAttempt({ code: "REUSE_EXISTING", wallet: existingWallet });
+            rejectAttempt({
+              code: "REUSE_EXISTING",
+              wallet: existingProxy.wallet,
+              paymentMode: existingProxy.paymentMode,
+            });
             return;
           }
 
@@ -1040,10 +1088,20 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       await tryListen(attempt);
       break; // Success
     } catch (err: unknown) {
-      const error = err as { code?: string; wallet?: string; attempt?: number };
+      const error = err as {
+        code?: string;
+        wallet?: string;
+        paymentMode?: PaymentMode;
+        attempt?: number;
+      };
 
       if (error.code === "REUSE_EXISTING" && error.wallet) {
         // Proxy is running, reuse it
+        if (error.paymentMode && error.paymentMode !== paymentMode) {
+          console.warn(
+            `[ClawRouter] Existing proxy mode=${error.paymentMode} differs from requested mode=${paymentMode}. Reusing existing proxy.`,
+          );
+        }
         const baseUrl = `http://127.0.0.1:${listenPort}`;
         options.onReady?.(listenPort);
         return {
@@ -1128,7 +1186,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   return {
     port,
     baseUrl,
-    walletAddress: account.address,
+    walletAddress: walletAddressForMode,
     balanceMonitor,
     close: () =>
       new Promise<void>((res, rej) => {
@@ -1291,6 +1349,7 @@ async function proxyRequest(
   balanceMonitor: BalanceMonitor,
   sessionStore: SessionStore,
   responseCache: ResponseCache,
+  localBalanceEnabled: boolean,
 ): Promise<void> {
   const startTime = Date.now();
 
@@ -1573,7 +1632,7 @@ async function proxyRequest(
   let estimatedCostMicros: bigint | undefined;
   const isFreeModel = modelId === FREE_MODEL;
 
-  if (modelId && !options.skipBalanceCheck && !isFreeModel) {
+  if (localBalanceEnabled && modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
@@ -2071,7 +2130,7 @@ async function proxyRequest(
     }
 
     // --- Optimistic balance deduction after successful response ---
-    if (estimatedCostMicros !== undefined) {
+    if (localBalanceEnabled && estimatedCostMicros !== undefined) {
       balanceMonitor.deductEstimated(estimatedCostMicros);
     }
 
@@ -2091,7 +2150,9 @@ async function proxyRequest(
     deduplicator.removeInflight(dedupKey);
 
     // Invalidate balance cache on payment failure (might be out of date)
-    balanceMonitor.invalidate();
+    if (localBalanceEnabled) {
+      balanceMonitor.invalidate();
+    }
 
     // Convert abort error to more descriptive timeout error
     if (err instanceof Error && err.name === "AbortError") {

@@ -292,6 +292,18 @@ For basic usage, no configuration needed. For advanced options:
 | `CLAWROUTER_DISABLED` | `false` | Disable smart routing |
 | `BLOCKRUN_PROXY_PORT` | `8402`  | Proxy port            |
 | `BLOCKRUN_WALLET_KEY` | auto    | Wallet private key    |
+| `BLOCKRUN_PAYMENT_MODE` | `wallet` | Payment backend: `wallet` or `clawcredit` |
+| `CLAWCREDIT_API_TOKEN` | - | Required when `BLOCKRUN_PAYMENT_MODE=clawcredit` |
+| `CLAWCREDIT_BASE_URL` | `https://api.claw.credit` | Claw Credit API base URL |
+| `CLAWCREDIT_PAYMENT_CHAIN` | `BASE` | Chain passed to claw.credit `transaction.chain` |
+| `CLAWCREDIT_PAYMENT_ASSET` | Base USDC | Asset passed to claw.credit `transaction.asset` |
+
+To pay BlockRun inference via claw.credit instead of local wallet signing:
+
+```bash
+export BLOCKRUN_PAYMENT_MODE=clawcredit
+export CLAWCREDIT_API_TOKEN=claw_xxx
+```
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 
