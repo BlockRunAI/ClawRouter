@@ -34,7 +34,14 @@ export const blockrunProvider: ProviderPlugin = {
   label: "BlockRun",
   docsPath: "https://blockrun.ai/docs",
   aliases: ["br"],
-  envVars: ["BLOCKRUN_WALLET_KEY"],
+  envVars: [
+    "BLOCKRUN_WALLET_KEY",
+    "BLOCKRUN_PAYMENT_MODE",
+    "CLAWCREDIT_API_TOKEN",
+    "CLAWCREDIT_BASE_URL",
+    "CLAWCREDIT_PAYMENT_CHAIN",
+    "CLAWCREDIT_PAYMENT_ASSET",
+  ],
 
   // Model definitions — dynamically set to proxy URL
   get models() {

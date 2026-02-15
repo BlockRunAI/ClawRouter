@@ -11,6 +11,14 @@
       "justification": "ClawRouter uses this wallet key to sign USDC payment transactions on Base L2. The key is used LOCALLY for cryptographic signing and is NEVER transmitted over the network. This is required for x402 protocol compliance.",
       "dataFlow": "local-only",
       "networkTransmission": false
+    },
+    {
+      "type": "env-access",
+      "variable": "CLAWCREDIT_API_TOKEN",
+      "purpose": "authenticate claw.credit payment requests",
+      "justification": "When BLOCKRUN_PAYMENT_MODE=clawcredit is enabled, ClawRouter forwards payment authorization requests to claw.credit /v1/transaction/pay and must send this bearer token to authenticate the request.",
+      "dataFlow": "sent-to-claw-credit-api",
+      "networkTransmission": true
     }
   ],
   "securityNotes": [

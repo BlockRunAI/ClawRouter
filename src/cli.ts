@@ -18,6 +18,10 @@ import { resolveOrGenerateWalletKey } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
 import { VERSION } from "./version.js";
 
+const CLAWCREDIT_DEFAULT_BASE_URL = "https://api.claw.credit";
+const CLAWCREDIT_DEFAULT_CHAIN = "BASE";
+const CLAWCREDIT_DEFAULT_ASSET = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
 function printHelp(): void {
   console.log(`
 ClawRouter v${VERSION} - Smart LLM Router
@@ -42,6 +46,11 @@ Examples:
 
 Environment Variables:
   BLOCKRUN_WALLET_KEY     Private key for x402 payments (auto-generated if not set)
+  BLOCKRUN_PAYMENT_MODE   wallet | clawcredit (default: wallet)
+  CLAWCREDIT_API_TOKEN    Required when BLOCKRUN_PAYMENT_MODE=clawcredit
+  CLAWCREDIT_BASE_URL     claw.credit API URL (default: https://api.claw.credit)
+  CLAWCREDIT_PAYMENT_CHAIN Chain for claw.credit transaction (default: BASE)
+  CLAWCREDIT_PAYMENT_ASSET Asset for claw.credit transaction (default: Base USDC)
   BLOCKRUN_PROXY_PORT     Default proxy port (default: 8402)
 
 For more info: https://github.com/BlockRunAI/ClawRouter
@@ -79,20 +88,50 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Resolve wallet key
-  const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
+  const paymentMode = (process.env.BLOCKRUN_PAYMENT_MODE || "wallet").trim().toLowerCase();
+  const useClawCredit = paymentMode === "clawcredit";
 
-  if (source === "generated") {
-    console.log(`[ClawRouter] Generated new wallet: ${address}`);
-  } else if (source === "saved") {
-    console.log(`[ClawRouter] Using saved wallet: ${address}`);
+  let address = "clawcredit";
+  let walletKey: string | undefined;
+  let clawCreditConfig:
+    | { baseUrl: string; apiToken: string; chain: string; asset: string }
+    | undefined;
+
+  if (useClawCredit) {
+    const apiToken = (process.env.CLAWCREDIT_API_TOKEN || "").trim();
+    if (!apiToken) {
+      throw new Error("CLAWCREDIT_API_TOKEN is required when BLOCKRUN_PAYMENT_MODE=clawcredit");
+    }
+
+    clawCreditConfig = {
+      baseUrl: (process.env.CLAWCREDIT_BASE_URL || CLAWCREDIT_DEFAULT_BASE_URL).trim(),
+      apiToken,
+      chain: (process.env.CLAWCREDIT_PAYMENT_CHAIN || CLAWCREDIT_DEFAULT_CHAIN).trim().toUpperCase(),
+      asset: (process.env.CLAWCREDIT_PAYMENT_ASSET || CLAWCREDIT_DEFAULT_ASSET).trim(),
+    };
+    console.log(
+      `[ClawRouter] Using claw.credit mode (${clawCreditConfig.baseUrl}, ${clawCreditConfig.chain})`,
+    );
   } else {
-    console.log(`[ClawRouter] Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
+    // Resolve wallet key
+    const resolved = await resolveOrGenerateWalletKey();
+    walletKey = resolved.key;
+    address = resolved.address;
+
+    if (resolved.source === "generated") {
+      console.log(`[ClawRouter] Generated new wallet: ${resolved.address}`);
+    } else if (resolved.source === "saved") {
+      console.log(`[ClawRouter] Using saved wallet: ${resolved.address}`);
+    } else {
+      console.log(`[ClawRouter] Using wallet from BLOCKRUN_WALLET_KEY: ${resolved.address}`);
+    }
   }
 
   // Start the proxy
   const proxy = await startProxy({
+    paymentMode: useClawCredit ? "clawcredit" : "wallet",
     walletKey,
+    clawCredit: clawCreditConfig,
     port: args.port,
     onReady: (port) => {
       console.log(`[ClawRouter] Proxy listening on http://127.0.0.1:${port}`);
@@ -116,20 +155,24 @@ async function main(): Promise<void> {
     },
   });
 
-  // Check balance
-  const monitor = new BalanceMonitor(address);
-  try {
-    const balance = await monitor.checkBalance();
-    if (balance.isEmpty) {
-      console.log(`[ClawRouter] Wallet balance: $0.00 (using FREE model)`);
-      console.log(`[ClawRouter] Fund wallet for premium models: ${address}`);
-    } else if (balance.isLow) {
-      console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD} (low)`);
-    } else {
-      console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD}`);
+  if (!useClawCredit) {
+    // Check balance
+    const monitor = new BalanceMonitor(address);
+    try {
+      const balance = await monitor.checkBalance();
+      if (balance.isEmpty) {
+        console.log(`[ClawRouter] Wallet balance: $0.00 (using FREE model)`);
+        console.log(`[ClawRouter] Fund wallet for premium models: ${address}`);
+      } else if (balance.isLow) {
+        console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD} (low)`);
+      } else {
+        console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD}`);
+      }
+    } catch {
+      console.log(`[ClawRouter] Wallet: ${address} (balance check pending)`);
     }
-  } catch {
-    console.log(`[ClawRouter] Wallet: ${address} (balance check pending)`);
+  } else {
+    console.log("[ClawRouter] Payments managed by claw.credit");
   }
 
   console.log(`[ClawRouter] Ready - Ctrl+C to stop`);
