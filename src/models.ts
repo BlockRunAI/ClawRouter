@@ -18,13 +18,16 @@ export const MODEL_ALIASES: Record<string, string> = {
   // Claude
   claude: "anthropic/claude-sonnet-4",
   sonnet: "anthropic/claude-sonnet-4",
-  opus: "anthropic/claude-opus-4",
+  opus: "anthropic/claude-opus-4.6", // Updated to latest Opus 4.6
+  "opus-46": "anthropic/claude-opus-4.6",
+  "opus-45": "anthropic/claude-opus-4.5",
   haiku: "anthropic/claude-haiku-4.5",
 
   // OpenAI
   gpt: "openai/gpt-4o",
   gpt4: "openai/gpt-4o",
   gpt5: "openai/gpt-5.2",
+  codex: "openai/gpt-5.2-codex",
   mini: "openai/gpt-4o-mini",
   o3: "openai/o3",
 
@@ -167,6 +170,17 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
   },
 
+  // OpenAI Codex Family
+  {
+    id: "openai/gpt-5.2-codex",
+    name: "GPT-5.2 Codex",
+    inputPrice: 2.5,
+    outputPrice: 12.0,
+    contextWindow: 128000,
+    maxOutput: 32000,
+    agentic: true,
+  },
+
   // OpenAI GPT-4 Family
   {
     id: "openai/gpt-4.1",
@@ -272,6 +286,17 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 32000,
     reasoning: true,
+    agentic: true,
+  },
+  {
+    id: "anthropic/claude-opus-4.6",
+    name: "Claude Opus 4.6",
+    inputPrice: 5.0,
+    outputPrice: 25.0,
+    contextWindow: 200000,
+    maxOutput: 64000,
+    reasoning: true,
+    vision: true,
     agentic: true,
   },
 

@@ -707,12 +707,12 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       fallback: ["moonshot/kimi-k2.5", "google/gemini-2.5-pro", "xai/grok-4-0709"],
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4.5", // $5/$25 - architecture, audits, heavy lifting
-      fallback: ["anthropic/claude-sonnet-4", "google/gemini-3-pro-preview", "moonshot/kimi-k2.5"],
+      primary: "anthropic/claude-opus-4.6", // $5/$25 - latest flagship, extended 64k output
+      fallback: ["anthropic/claude-opus-4.5", "anthropic/claude-sonnet-4", "google/gemini-3-pro-preview", "moonshot/kimi-k2.5"],
     },
     REASONING: {
       primary: "anthropic/claude-sonnet-4", // $3/$15 - best for reasoning/instructions
-      fallback: ["anthropic/claude-opus-4.5", "openai/o3", "xai/grok-4-1-fast-reasoning"],
+      fallback: ["anthropic/claude-opus-4.6", "anthropic/claude-opus-4.5", "openai/o3", "xai/grok-4-1-fast-reasoning"],
     },
   },
 
@@ -733,7 +733,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     COMPLEX: {
       primary: "anthropic/claude-sonnet-4",
       fallback: [
-        "anthropic/claude-opus-4.5", // Latest Opus - best agentic
+        "anthropic/claude-opus-4.6", // Latest Opus - best agentic
         "openai/gpt-5.2",
         "google/gemini-3-pro-preview",
         "xai/grok-4-0709",
@@ -742,7 +742,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     REASONING: {
       primary: "anthropic/claude-sonnet-4", // Strong tool use + reasoning for agentic tasks
       fallback: [
-        "anthropic/claude-opus-4.5",
+        "anthropic/claude-opus-4.6",
         "xai/grok-4-fast-reasoning",
         "moonshot/kimi-k2.5",
         "deepseek/deepseek-reasoner",
