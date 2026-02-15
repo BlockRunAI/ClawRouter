@@ -95,9 +95,9 @@ Use short aliases instead of full model paths:
 
 ```bash
 /model free      # gpt-oss-120b (FREE!)
-/model sonnet    # anthropic/claude-sonnet-4
-/model opus      # anthropic/claude-opus-4
-/model haiku     # anthropic/claude-haiku-4.5
+/model br-sonnet # anthropic/claude-sonnet-4
+/model br-opus   # anthropic/claude-opus-4
+/model br-haiku  # anthropic/claude-haiku-4.5
 /model gpt       # openai/gpt-4o
 /model gpt5      # openai/gpt-5.2
 /model deepseek  # deepseek/deepseek-chat

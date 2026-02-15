@@ -71,7 +71,7 @@ Choose your routing strategy with `/model <profile>`:
 
 **Other shortcuts:**
 
-- **Model aliases:** `/model sonnet`, `/model grok`, `/model gpt5`, `/model o3`
+- **Model aliases:** `/model br-sonnet`, `/model grok`, `/model gpt5`, `/model o3`
 - **Specific models:** `blockrun/openai/gpt-4o` or `blockrun/anthropic/claude-sonnet-4`
 - **Bring your wallet:** `export BLOCKRUN_WALLET_KEY=0x...`
 
@@ -150,7 +150,7 @@ ClawRouter v0.5+ includes intelligent features that work automatically:
 - **Agentic auto-detect** — routes multi-step tasks to Kimi K2.5
 - **Tool detection** — auto-switches when `tools` array present
 - **Context-aware** — filters models that can't handle your context size
-- **Model aliases** — `/model free`, `/model sonnet`, `/model grok`
+- **Model aliases** — `/model free`, `/model br-sonnet`, `/model grok`
 - **Session persistence** — pins model for multi-turn conversations
 - **Free tier fallback** — keeps working when wallet is empty
 - **Auto-update check** — notifies you when a new version is available
@@ -422,7 +422,7 @@ Your wallet key remains at `~/.openclaw/blockrun/wallet.key` — back it up befo
 - [x] Context-aware routing — filter out models that can't handle context size
 - [x] Session persistence — pin model for multi-turn conversations
 - [x] Cost tracking — /stats command with savings dashboard
-- [x] Model aliases — `/model free`, `/model sonnet`, `/model grok`, etc.
+- [x] Model aliases — `/model free`, `/model br-sonnet`, `/model grok`, etc.
 - [x] Free tier — gpt-oss-120b for $0 when wallet is empty
 - [x] Auto-update — startup version check with one-command update
 - [ ] Cascade routing — try cheap model first, escalate on low quality
