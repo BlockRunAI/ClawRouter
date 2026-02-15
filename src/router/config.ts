@@ -696,23 +696,39 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   },
 
   // Premium tier configs - best quality (blockrun/premium)
-  // kimi=coding, sonnet=reasoning/instructions, opus=heavy lifting/architecture/audits
+  // codex=complex coding, kimi=simple coding, sonnet=reasoning/instructions, opus=architecture/PM/audits
   premiumTiers: {
     SIMPLE: {
-      primary: "moonshot/kimi-k2.5", // $0.50/$2.40 - good for coding
+      primary: "moonshot/kimi-k2.5", // $0.50/$2.40 - good for simple coding
       fallback: ["anthropic/claude-haiku-4.5", "google/gemini-2.5-flash", "xai/grok-code-fast-1"],
     },
     MEDIUM: {
       primary: "anthropic/claude-sonnet-4", // $3/$15 - reasoning/instructions
-      fallback: ["moonshot/kimi-k2.5", "google/gemini-2.5-pro", "xai/grok-4-0709"],
+      fallback: [
+        "openai/gpt-5.2-codex",
+        "moonshot/kimi-k2.5",
+        "google/gemini-2.5-pro",
+        "xai/grok-4-0709",
+      ],
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4.6", // $5/$25 - latest flagship, extended 64k output
-      fallback: ["anthropic/claude-opus-4.5", "anthropic/claude-sonnet-4", "google/gemini-3-pro-preview", "moonshot/kimi-k2.5"],
+      primary: "openai/gpt-5.2-codex", // $2.50/$10 - complex coding (78% cost savings vs Opus)
+      fallback: [
+        "anthropic/claude-opus-4.6",
+        "anthropic/claude-opus-4.5",
+        "anthropic/claude-sonnet-4",
+        "google/gemini-3-pro-preview",
+        "moonshot/kimi-k2.5",
+      ],
     },
     REASONING: {
       primary: "anthropic/claude-sonnet-4", // $3/$15 - best for reasoning/instructions
-      fallback: ["anthropic/claude-opus-4.6", "anthropic/claude-opus-4.5", "openai/o3", "xai/grok-4-1-fast-reasoning"],
+      fallback: [
+        "anthropic/claude-opus-4.6",
+        "anthropic/claude-opus-4.5",
+        "openai/o3",
+        "xai/grok-4-1-fast-reasoning",
+      ],
     },
   },
 
