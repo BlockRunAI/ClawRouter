@@ -305,6 +305,13 @@ export BLOCKRUN_PAYMENT_MODE=clawcredit
 export CLAWCREDIT_API_TOKEN=claw_xxx
 ```
 
+OpenClaw automatically loads `~/.openclaw/.env` on startup. If you want a one-command setup (no manual `export`), run:
+
+```bash
+# Installs/enables the plugin (if needed), writes ~/.openclaw/.env, restarts gateway
+bash ~/.openclaw/extensions/clawrouter/scripts/setup-clawcredit.sh
+```
+
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 
 ---
