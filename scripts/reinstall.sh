@@ -131,6 +131,23 @@ if (fs.existsSync(configPath)) {
 echo "→ Installing ClawRouter..."
 openclaw plugins install @blockrun/clawrouter
 
+# 6.1. Verify installation (check dist/ files exist)
+echo "→ Verifying installation..."
+DIST_PATH="$HOME/.openclaw/extensions/clawrouter/dist/index.js"
+if [ ! -f "$DIST_PATH" ]; then
+  echo "  ⚠️  dist/ files missing, clearing npm cache and retrying..."
+  npm cache clean --force 2>/dev/null || true
+  rm -rf ~/.openclaw/extensions/clawrouter
+  openclaw plugins install @blockrun/clawrouter
+
+  if [ ! -f "$DIST_PATH" ]; then
+    echo "  ❌ Installation failed - dist/index.js still missing"
+    echo "  Please report this issue at https://github.com/BlockRunAI/ClawRouter/issues"
+    exit 1
+  fi
+fi
+echo "  ✓ dist/index.js verified"
+
 # 7. Add plugin to allow list (done AFTER install so plugin files exist for validation)
 echo "→ Adding to plugins allow list..."
 node -e "
