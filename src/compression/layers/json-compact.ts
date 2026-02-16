@@ -74,7 +74,13 @@ export function compactMessagesJson(messages: NormalizedMessage[]): JsonCompactR
     }
 
     // Compact tool message content if it looks like JSON
-    if (message.role === "tool" && message.content && looksLikeJson(message.content)) {
+    // Only process string content (skip arrays for multimodal messages)
+    if (
+      message.role === "tool" &&
+      message.content &&
+      typeof message.content === "string" &&
+      looksLikeJson(message.content)
+    ) {
       const originalLength = message.content.length;
       const compacted = compactJson(message.content);
       charsSaved += originalLength - compacted.length;

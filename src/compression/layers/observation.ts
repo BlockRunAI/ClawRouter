@@ -107,7 +107,8 @@ function deduplicateLargeBlocks(messages: NormalizedMessage[]): {
   let charsSaved = 0;
 
   const result = messages.map((msg, idx) => {
-    if (!msg.content || msg.content.length < 500) {
+    // Only process string content (skip arrays for multimodal messages)
+    if (!msg.content || typeof msg.content !== "string" || msg.content.length < 500) {
       return msg;
     }
 
@@ -139,7 +140,8 @@ export function compressObservations(messages: NormalizedMessage[]): Observation
   // First pass: compress individual tool results
   let result = messages.map((msg) => {
     // Only compress tool role messages (these are tool call results)
-    if (msg.role !== "tool" || !msg.content) {
+    // Only process string content (skip arrays for multimodal messages)
+    if (msg.role !== "tool" || !msg.content || typeof msg.content !== "string") {
       return msg;
     }
 

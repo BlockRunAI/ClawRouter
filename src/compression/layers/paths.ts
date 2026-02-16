@@ -26,7 +26,8 @@ function extractPaths(messages: NormalizedMessage[]): string[] {
   const paths: string[] = [];
 
   for (const message of messages) {
-    if (!message.content) continue;
+    // Only process string content (skip arrays for multimodal messages)
+    if (!message.content || typeof message.content !== "string") continue;
     const matches = message.content.match(PATH_REGEX);
     if (matches) {
       paths.push(...matches);
@@ -96,7 +97,8 @@ export function shortenPaths(messages: NormalizedMessage[]): PathShorteningResul
   let charsSaved = 0;
 
   const result = messages.map((message) => {
-    if (!message.content) return message;
+    // Only process string content (skip arrays for multimodal messages)
+    if (!message.content || typeof message.content !== "string") return message;
 
     let content = message.content;
     const originalLength = content.length;

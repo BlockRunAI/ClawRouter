@@ -67,7 +67,8 @@ export function encodeMessages(messages: NormalizedMessage[]): DictionaryResult 
   const allUsedCodes = new Set<string>();
 
   const result = messages.map((message) => {
-    if (!message.content) return message;
+    // Only process string content (skip arrays for multimodal messages)
+    if (!message.content || typeof message.content !== "string") return message;
 
     const { encoded, substitutions, codes, charsSaved } = encodeContent(
       message.content,

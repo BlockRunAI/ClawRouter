@@ -59,7 +59,8 @@ function buildDynamicCodebook(messages: NormalizedMessage[]): Record<string, str
   // Combine all content
   let allContent = "";
   for (const msg of messages) {
-    if (msg.content) {
+    // Only process string content (skip arrays for multimodal messages)
+    if (msg.content && typeof msg.content === "string") {
       allContent += msg.content + "\n";
     }
   }
@@ -131,7 +132,8 @@ export function applyDynamicCodebook(messages: NormalizedMessage[]): DynamicCode
 
   // Apply replacements
   const result = messages.map((msg) => {
-    if (!msg.content) return msg;
+    // Only process string content (skip arrays for multimodal messages)
+    if (!msg.content || typeof msg.content !== "string") return msg;
 
     let content = msg.content;
     for (const phrase of sortedPhrases) {
