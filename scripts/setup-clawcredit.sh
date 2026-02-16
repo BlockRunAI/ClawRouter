@@ -263,7 +263,8 @@ node -e "
   const setLine = (key, value) => {
     const encoded = JSON.stringify(String(value));
     const next = key + '=' + encoded;
-    const re = new RegExp('^' + key.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '='); // key=
+    // Keys here are fixed env var names, so no regex escaping is needed.
+    const re = new RegExp('^' + key + '='); // key=
     const idx = lines.findIndex((l) => re.test(l));
     if (idx >= 0) {
       lines[idx] = next;
