@@ -44,7 +44,7 @@ log_info() {
 test_fresh_install() {
     log_test "1" "Fresh npm global installation"
 
-    npm install -g @blockrunai/clawrouter
+    npm install -g @blockrun/clawrouter
 
     if command -v clawrouter &> /dev/null; then
         log_pass "ClawRouter installed successfully"
@@ -66,7 +66,7 @@ test_fresh_install() {
 test_uninstall() {
     log_test "2" "Uninstall verification"
 
-    npm uninstall -g @blockrunai/clawrouter
+    npm uninstall -g @blockrun/clawrouter
 
     if ! command -v clawrouter &> /dev/null; then
         log_pass "ClawRouter uninstalled successfully"
@@ -80,7 +80,7 @@ test_uninstall() {
 test_reinstall() {
     log_test "3" "Reinstall after uninstall"
 
-    npm install -g @blockrunai/clawrouter
+    npm install -g @blockrun/clawrouter
 
     if command -v clawrouter &> /dev/null; then
         log_pass "ClawRouter reinstalled successfully"
@@ -95,7 +95,7 @@ test_openclaw_install() {
     log_test "4" "OpenClaw plugin installation"
 
     # Check if openclaw.plugin.json exists in the package
-    PLUGIN_FILE="$HOME/.npm-global/lib/node_modules/@blockrunai/clawrouter/openclaw.plugin.json"
+    PLUGIN_FILE="$HOME/.npm-global/lib/node_modules/@blockrun/clawrouter/openclaw.plugin.json"
 
     if [ -f "$PLUGIN_FILE" ]; then
         log_pass "OpenClaw plugin file exists"
@@ -116,10 +116,10 @@ test_openclaw_install() {
 test_openclaw_uninstall() {
     log_test "5" "OpenClaw plugin uninstall verification"
 
-    PLUGIN_FILE="$HOME/.npm-global/lib/node_modules/@blockrunai/clawrouter/openclaw.plugin.json"
+    PLUGIN_FILE="$HOME/.npm-global/lib/node_modules/@blockrun/clawrouter/openclaw.plugin.json"
 
     if [ -f "$PLUGIN_FILE" ]; then
-        npm uninstall -g @blockrunai/clawrouter
+        npm uninstall -g @blockrun/clawrouter
 
         if [ ! -f "$PLUGIN_FILE" ]; then
             log_pass "OpenClaw plugin removed with package"
@@ -129,7 +129,7 @@ test_openclaw_uninstall() {
         fi
 
         # Reinstall for next tests
-        npm install -g @blockrunai/clawrouter
+        npm install -g @blockrun/clawrouter
     else
         log_skip "OpenClaw plugin not available to test uninstall"
     fi
@@ -140,16 +140,16 @@ test_upgrade() {
     log_test "6" "Upgrade from version 0.8.25"
 
     # Uninstall current version
-    npm uninstall -g @blockrunai/clawrouter 2>/dev/null || true
+    npm uninstall -g @blockrun/clawrouter 2>/dev/null || true
 
     # Install old version
-    npm install -g @blockrunai/clawrouter@0.8.25
+    npm install -g @blockrun/clawrouter@0.8.25
 
     OLD_VERSION=$(clawrouter --version 2>/dev/null || echo "")
     log_info "Installed version: $OLD_VERSION"
 
     # Upgrade to latest
-    npm install -g @blockrunai/clawrouter
+    npm install -g @blockrun/clawrouter
 
     NEW_VERSION=$(clawrouter --version 2>/dev/null || echo "")
     log_info "Upgraded version: $NEW_VERSION"
@@ -167,10 +167,10 @@ test_custom_wallet() {
     log_test "7" "Installation with custom wallet key"
 
     # Uninstall
-    npm uninstall -g @blockrunai/clawrouter 2>/dev/null || true
+    npm uninstall -g @blockrun/clawrouter 2>/dev/null || true
 
     # Install and set custom key
-    npm install -g @blockrunai/clawrouter
+    npm install -g @blockrun/clawrouter
 
     CUSTOM_KEY="0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
     export CLAWROUTER_WALLET_PRIVATE_KEY="$CUSTOM_KEY"
@@ -190,7 +190,7 @@ test_custom_wallet() {
 test_package_files() {
     log_test "8" "Package files verification"
 
-    PKG_DIR="$HOME/.npm-global/lib/node_modules/@blockrunai/clawrouter"
+    PKG_DIR="$HOME/.npm-global/lib/node_modules/@blockrun/clawrouter"
 
     REQUIRED_FILES=(
         "dist/index.js"
@@ -217,7 +217,7 @@ test_package_files() {
 test_version_accuracy() {
     log_test "9" "Version command accuracy"
 
-    PKG_DIR="$HOME/.npm-global/lib/node_modules/@blockrunai/clawrouter"
+    PKG_DIR="$HOME/.npm-global/lib/node_modules/@blockrun/clawrouter"
 
     CLI_VERSION=$(clawrouter --version 2>/dev/null || echo "")
     PKG_VERSION=$(jq -r '.version' "$PKG_DIR/package.json" 2>/dev/null || echo "")
@@ -237,9 +237,9 @@ test_version_accuracy() {
 test_full_cleanup() {
     log_test "10" "Full cleanup verification"
 
-    npm uninstall -g @blockrunai/clawrouter
+    npm uninstall -g @blockrun/clawrouter
 
-    PKG_DIR="$HOME/.npm-global/lib/node_modules/@blockrunai/clawrouter"
+    PKG_DIR="$HOME/.npm-global/lib/node_modules/@blockrun/clawrouter"
 
     if [ ! -d "$PKG_DIR" ]; then
         log_pass "Package directory removed"

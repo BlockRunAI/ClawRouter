@@ -294,18 +294,47 @@ test_wallet_generation() {
 test_wallet_persistence() {
     log_test "4.2" "Wallet address persistence across restarts"
 
+    local test_key="0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     local addr1 addr2
 
-    # First start
-    addr1=$(BLOCKRUN_WALLET_KEY="0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" clawrouter --print-address 2>/dev/null || echo "unknown1")
+    get_wallet_from_health() {
+        local key="$1"
+        local pid response wallet
 
-    # Second start with same key
-    addr2=$(BLOCKRUN_WALLET_KEY="0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" clawrouter --print-address 2>/dev/null || echo "unknown2")
+        lsof -ti :$CLAWROUTER_PORT | xargs kill -9 2>/dev/null || true
+        sleep 1
 
-    if [ "$addr1" = "$addr2" ] && [ "$addr1" != "unknown1" ]; then
+        BLOCKRUN_WALLET_KEY="$key" clawrouter >/tmp/clawrouter-wallet-persistence.log 2>&1 &
+        pid=$!
+
+        if ! wait_for_port $CLAWROUTER_PORT 10; then
+            kill $pid 2>/dev/null || true
+            wait $pid 2>/dev/null || true
+            echo ""
+            return 1
+        fi
+
+        response=$(curl -s "http://localhost:$CLAWROUTER_PORT/health" 2>/dev/null || echo "")
+        wallet=$(echo "$response" | jq -r '.wallet // empty' 2>/dev/null || echo "")
+
+        kill $pid 2>/dev/null || true
+        wait $pid 2>/dev/null || true
+        sleep 1
+
+        echo "$wallet"
+    }
+
+    # Start proxy twice with the same key and compare reported wallet addresses.
+    addr1=$(get_wallet_from_health "$test_key" || echo "")
+    addr2=$(get_wallet_from_health "$test_key" || echo "")
+
+    if [ -z "$addr1" ] || [ -z "$addr2" ]; then
+        log_skip "Could not fetch wallet from /health for persistence check"
+    elif [ "$addr1" = "$addr2" ]; then
         log_pass "Same key produces same address"
     else
-        log_skip "Address persistence test requires --print-address flag"
+        log_fail "Same key produced different addresses ($addr1 vs $addr2)"
+        return 1
     fi
 }
 
