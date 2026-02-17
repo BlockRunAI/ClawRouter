@@ -9,6 +9,11 @@
         "type": "string",
         "description": "EVM wallet private key (0x...). Optional — auto-generated if not set."
       },
+      "paymentMode": {
+        "type": "string",
+        "enum": ["wallet", "clawcredit"],
+        "description": "Payment backend. Defaults to wallet; set clawcredit to route payments via claw.credit."
+      },
       "routing": {
         "type": "object",
         "description": "Override default routing configuration"

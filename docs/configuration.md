@@ -22,6 +22,13 @@ Complete reference for ClawRouter configuration options.
 | --------------------- | ------- | ------------------------------------------------------------------------ |
 | `BLOCKRUN_WALLET_KEY` | -       | Ethereum private key (hex, 0x-prefixed). Used if no saved wallet exists. |
 | `BLOCKRUN_PROXY_PORT` | `8402`  | Port for the local x402 proxy server.                                    |
+| `BLOCKRUN_PAYMENT_MODE` | `wallet` | Payment backend: `wallet` (local x402 signing) or `clawcredit` (claw.credit) |
+| `CLAWCREDIT_API_TOKEN` | - | Required when `BLOCKRUN_PAYMENT_MODE=clawcredit` |
+| `CLAWCREDIT_BASE_URL` | `https://api.claw.credit` | claw.credit API base URL |
+| `CLAWCREDIT_PAYMENT_CHAIN` | `BASE` | Chain passed to claw.credit `transaction.chain` |
+| `CLAWCREDIT_PAYMENT_ASSET` | Base USDC | Asset passed to claw.credit `transaction.asset` |
+
+> **Tip:** OpenClaw loads environment variables from `~/.openclaw/.env` on startup. You can put the variables above there (or run `scripts/setup-clawcredit.sh`).
 
 ### BLOCKRUN_WALLET_KEY
 

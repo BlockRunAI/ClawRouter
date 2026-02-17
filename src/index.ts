@@ -62,6 +62,10 @@ import { VERSION } from "./version.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { getStats, formatStatsAscii } from "./stats.js";
 
+const CLAWCREDIT_DEFAULT_BASE_URL = "https://api.claw.credit";
+const CLAWCREDIT_DEFAULT_CHAIN = "BASE";
+const CLAWCREDIT_DEFAULT_ASSET = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
 /**
  * Detect if we're running in shell completion mode.
  * When `openclaw completion --shell zsh` runs, it loads plugins but only needs
@@ -412,46 +416,94 @@ let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
  * treating activate() as an alias (def.register ?? def.activate).
  */
 async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
-  // Resolve wallet key: saved file → env var → auto-generate
-  const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
+  const paymentMode = (process.env.BLOCKRUN_PAYMENT_MODE || "wallet").trim().toLowerCase();
+  const useClawCredit = paymentMode === "clawcredit";
 
-  // Log wallet source (brief - balance check happens after proxy starts)
-  if (source === "generated") {
-    api.logger.info(`Generated new wallet: ${address}`);
-  } else if (source === "saved") {
-    api.logger.info(`Using saved wallet: ${address}`);
-  } else {
-    api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
-  }
-
-  // Resolve routing config overrides from plugin config
+  // Resolve routing overrides from plugin config.
   const routingConfig = api.pluginConfig?.routing as Partial<RoutingConfig> | undefined;
 
-  const proxy = await startProxy({
-    walletKey,
-    routingConfig,
-    onReady: (port) => {
-      api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
-    },
-    onError: (error) => {
-      api.logger.error(`BlockRun proxy error: ${error.message}`);
-    },
-    onRouted: (decision) => {
-      const cost = decision.costEstimate.toFixed(4);
-      const saved = (decision.savings * 100).toFixed(0);
-      api.logger.info(
-        `[${decision.tier}] ${decision.model} $${cost} (saved ${saved}%) | ${decision.reasoning}`,
-      );
-    },
-    onLowBalance: (info) => {
-      api.logger.warn(`[!] Low balance: ${info.balanceUSD}. Fund wallet: ${info.walletAddress}`);
-    },
-    onInsufficientFunds: (info) => {
-      api.logger.error(
-        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund wallet: ${info.walletAddress}`,
-      );
-    },
-  });
+  let address = "clawcredit";
+  let proxy: Awaited<ReturnType<typeof startProxy>>;
+  if (useClawCredit) {
+    const apiToken = (process.env.CLAWCREDIT_API_TOKEN || "").trim();
+    if (!apiToken) {
+      throw new Error("CLAWCREDIT_API_TOKEN is required when BLOCKRUN_PAYMENT_MODE=clawcredit");
+    }
+
+    const baseUrl = (process.env.CLAWCREDIT_BASE_URL || CLAWCREDIT_DEFAULT_BASE_URL).trim();
+    const chain = (process.env.CLAWCREDIT_PAYMENT_CHAIN || CLAWCREDIT_DEFAULT_CHAIN)
+      .trim()
+      .toUpperCase();
+    const asset = (process.env.CLAWCREDIT_PAYMENT_ASSET || CLAWCREDIT_DEFAULT_ASSET).trim();
+
+    api.logger.info(
+      `Using claw.credit payment mode (baseUrl=${baseUrl}, chain=${chain}, asset=${asset})`,
+    );
+
+    proxy = await startProxy({
+      paymentMode: "clawcredit",
+      clawCredit: {
+        baseUrl,
+        apiToken,
+        chain,
+        asset,
+      },
+      routingConfig,
+      onReady: (port) => {
+        api.logger.info(`BlockRun claw.credit proxy listening on port ${port}`);
+      },
+      onError: (error) => {
+        api.logger.error(`BlockRun proxy error: ${error.message}`);
+      },
+      onRouted: (decision) => {
+        const cost = decision.costEstimate.toFixed(4);
+        const saved = (decision.savings * 100).toFixed(0);
+        api.logger.info(
+          `[${decision.tier}] ${decision.model} $${cost} (saved ${saved}%) | ${decision.reasoning}`,
+        );
+      },
+    });
+  } else {
+    // Resolve wallet key: saved file -> env var -> auto-generate.
+    const { key: walletKey, address: walletAddress, source } = await resolveOrGenerateWalletKey();
+    address = walletAddress;
+
+    // Log wallet source (brief - balance check happens after proxy starts)
+    if (source === "generated") {
+      api.logger.info(`Generated new wallet: ${walletAddress}`);
+    } else if (source === "saved") {
+      api.logger.info(`Using saved wallet: ${walletAddress}`);
+    } else {
+      api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${walletAddress}`);
+    }
+
+    proxy = await startProxy({
+      paymentMode: "wallet",
+      walletKey,
+      routingConfig,
+      onReady: (port) => {
+        api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
+      },
+      onError: (error) => {
+        api.logger.error(`BlockRun proxy error: ${error.message}`);
+      },
+      onRouted: (decision) => {
+        const cost = decision.costEstimate.toFixed(4);
+        const saved = (decision.savings * 100).toFixed(0);
+        api.logger.info(
+          `[${decision.tier}] ${decision.model} $${cost} (saved ${saved}%) | ${decision.reasoning}`,
+        );
+      },
+      onLowBalance: (info) => {
+        api.logger.warn(`[!] Low balance: ${info.balanceUSD}. Fund wallet: ${info.walletAddress}`);
+      },
+      onInsufficientFunds: (info) => {
+        api.logger.error(
+          `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund wallet: ${info.walletAddress}`,
+        );
+      },
+    });
+  }
 
   setActiveProxy(proxy);
   activeProxyHandle = proxy;
@@ -459,24 +511,28 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   api.logger.info(`ClawRouter ready — smart routing enabled`);
   api.logger.info(`Pricing: Simple ~$0.001 | Code ~$0.01 | Complex ~$0.05 | Free: $0`);
 
-  // Non-blocking balance check AFTER proxy is ready (won't hang startup)
-  const startupMonitor = new BalanceMonitor(address);
-  startupMonitor
-    .checkBalance()
-    .then((balance) => {
-      if (balance.isEmpty) {
-        api.logger.info(`Wallet: ${address} | Balance: $0.00`);
-        api.logger.info(`Using FREE model. Fund wallet for premium models.`);
-      } else if (balance.isLow) {
-        api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD} (low)`);
-      } else {
-        api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD}`);
-      }
-    })
-    .catch(() => {
-      // Silently continue - balance will be checked per-request anyway
-      api.logger.info(`Wallet: ${address} | Balance: (checking...)`);
-    });
+  if (!useClawCredit) {
+    // Non-blocking balance check AFTER proxy is ready (won't hang startup)
+    const startupMonitor = new BalanceMonitor(address);
+    startupMonitor
+      .checkBalance()
+      .then((balance) => {
+        if (balance.isEmpty) {
+          api.logger.info(`Wallet: ${address} | Balance: $0.00`);
+          api.logger.info(`Using FREE model. Fund wallet for premium models.`);
+        } else if (balance.isLow) {
+          api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD} (low)`);
+        } else {
+          api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD}`);
+        }
+      })
+      .catch(() => {
+        // Silently continue - balance will be checked per-request anyway
+        api.logger.info(`Wallet: ${address} | Balance: (checking...)`);
+      });
+  } else {
+    api.logger.info("Payments managed by claw.credit (local wallet not required)");
+  }
 }
 
 /**
