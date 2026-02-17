@@ -40,6 +40,16 @@ if (c.plugins?.installs?.clawrouter) delete c.plugins.installs.clawrouter;
 if (Array.isArray(c.plugins?.allow)) {
   c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
 }
+// Remove deprecated model aliases from picker
+const deprecated = ['blockrun/mini', 'blockrun/nvidia', 'blockrun/gpt', 'blockrun/o3', 'blockrun/grok'];
+if (c.agents?.defaults?.models) {
+  for (const key of deprecated) {
+    if (c.agents.defaults.models[key]) {
+      delete c.agents.defaults.models[key];
+      console.log('  Removed deprecated alias: ' + key);
+    }
+  }
+}
 fs.writeFileSync(f, JSON.stringify(c, null, 2));
 console.log('  Config cleaned');
 "
