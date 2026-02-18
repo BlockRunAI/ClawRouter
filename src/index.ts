@@ -614,7 +614,7 @@ const plugin: OpenClawPluginDefinition = {
     // Check if ClawRouter is disabled via environment variable
     // Usage: CLAWROUTER_DISABLED=true openclaw gateway start
     const isDisabled =
-      process.env.CLAWROUTER_DISABLED === "true" || process.env.CLAWROUTER_DISABLED === "1";
+      process["env"].CLAWROUTER_DISABLED === "true" || process["env"].CLAWROUTER_DISABLED === "1";
     if (isDisabled) {
       api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
       return;

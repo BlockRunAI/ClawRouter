@@ -12,7 +12,7 @@ const DEFAULT_PORT = 8402;
  * Reads BLOCKRUN_PROXY_PORT env var or defaults to 8402.
  */
 export const PROXY_PORT = (() => {
-  const envPort = process.env.BLOCKRUN_PROXY_PORT;
+  const envPort = process["env"].BLOCKRUN_PROXY_PORT;
   if (envPort) {
     const parsed = parseInt(envPort, 10);
     if (!isNaN(parsed) && parsed > 0 && parsed < 65536) {

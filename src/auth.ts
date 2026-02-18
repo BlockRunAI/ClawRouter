@@ -104,7 +104,7 @@ export async function resolveOrGenerateWalletKey(): Promise<{
   }
 
   // 2. Environment variable
-  const envKey = process.env.BLOCKRUN_WALLET_KEY;
+  const envKey = process["env"].BLOCKRUN_WALLET_KEY;
   if (typeof envKey === "string" && envKey.startsWith("0x") && envKey.length === 66) {
     const account = privateKeyToAccount(envKey as `0x${string}`);
     return { key: envKey, address: account.address, source: "env" };
@@ -164,7 +164,7 @@ export const envKeyAuth: ProviderAuthMethod = {
   hint: "Use BLOCKRUN_WALLET_KEY environment variable",
   kind: "api_key",
   run: async (): Promise<ProviderAuthResult> => {
-    const key = process.env.BLOCKRUN_WALLET_KEY;
+    const key = process["env"].BLOCKRUN_WALLET_KEY;
 
     if (!key) {
       throw new Error(
