@@ -660,7 +660,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
         "xai/grok-4-0709",
         "openai/gpt-5.2", // Newer and cheaper input than gpt-4o
         "openai/gpt-4o",
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4.6",
       ],
     },
     REASONING: {
@@ -706,7 +706,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
         "moonshot/kimi-k2.5",
         "google/gemini-2.5-pro",
         "xai/grok-4-0709",
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4.6",
       ],
     },
     COMPLEX: {
@@ -714,13 +714,13 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       fallback: [
         "openai/gpt-5.2-codex",
         "anthropic/claude-opus-4.5",
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4.6",
         "google/gemini-3-pro-preview",
         "moonshot/kimi-k2.5",
       ],
     },
     REASONING: {
-      primary: "anthropic/claude-sonnet-4", // $3/$15 - best for reasoning/instructions
+      primary: "anthropic/claude-sonnet-4.6", // $3/$15 - best for reasoning/instructions
       fallback: [
         "anthropic/claude-opus-4.6",
         "anthropic/claude-opus-4.5",
@@ -743,10 +743,10 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     },
     MEDIUM: {
       primary: "xai/grok-code-fast-1", // Code specialist for agentic coding
-      fallback: ["moonshot/kimi-k2.5", "anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4"],
+      fallback: ["moonshot/kimi-k2.5", "anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4.6"],
     },
     COMPLEX: {
-      primary: "anthropic/claude-sonnet-4",
+      primary: "anthropic/claude-sonnet-4.6",
       fallback: [
         "anthropic/claude-opus-4.6", // Latest Opus - best agentic
         "openai/gpt-5.2",
@@ -755,7 +755,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       ],
     },
     REASONING: {
-      primary: "anthropic/claude-sonnet-4", // Strong tool use + reasoning for agentic tasks
+      primary: "anthropic/claude-sonnet-4.6", // Strong tool use + reasoning for agentic tasks
       fallback: [
         "anthropic/claude-opus-4.6",
         "xai/grok-4-1-fast-reasoning",

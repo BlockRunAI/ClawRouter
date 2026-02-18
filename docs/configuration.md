@@ -288,7 +288,7 @@ plugins:
             primary: "deepseek/deepseek-chat"
             fallback: ["openai/gpt-4o-mini"]
           COMPLEX:
-            primary: "anthropic/claude-sonnet-4"
+            primary: "anthropic/claude-sonnet-4.6"
             fallback: ["openai/gpt-4o"]
           REASONING:
             primary: "deepseek/deepseek-reasoner"
@@ -321,8 +321,8 @@ plugins:
 | --------- | ---------------------------- | ----------------------------------------------- |
 | SIMPLE    | `google/gemini-2.5-flash`    | `deepseek/deepseek-chat`                        |
 | MEDIUM    | `deepseek/deepseek-chat`     | `openai/gpt-4o-mini`, `google/gemini-2.5-flash` |
-| COMPLEX   | `anthropic/claude-sonnet-4`  | `openai/gpt-4o`, `google/gemini-2.5-pro`        |
-| REASONING | `deepseek/deepseek-reasoner` | `openai/o3-mini`, `anthropic/claude-sonnet-4`   |
+| COMPLEX   | `anthropic/claude-sonnet-4.6`  | `openai/gpt-4o`, `google/gemini-2.5-pro`        |
+| REASONING | `deepseek/deepseek-reasoner` | `openai/o3-mini`, `anthropic/claude-sonnet-4.6`   |
 
 ### Fallback Chain
 
@@ -344,7 +344,7 @@ routing:
     COMPLEX:
       primary: "openai/gpt-4o" # Use GPT-4o instead of Claude
       fallback:
-        - "anthropic/claude-sonnet-4"
+        - "anthropic/claude-sonnet-4.6"
         - "google/gemini-2.5-pro"
 ```
 

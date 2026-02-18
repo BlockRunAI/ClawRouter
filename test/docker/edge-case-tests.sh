@@ -132,7 +132,7 @@ test_model_alias_resolution() {
 
     local aliases=(
         "gpt-4o:openai/gpt-4o"
-        "sonnet:anthropic/claude-sonnet-4"
+        "sonnet:anthropic/claude-sonnet-4.6"
         "deepseek:deepseek/deepseek-chat"
         "gemini:google/gemini-2.5-flash"
         "free:gpt-oss-120b"
@@ -152,10 +152,10 @@ test_blockrun_prefix_stripping() {
 
     # These models should all resolve correctly
     local models=(
-        "blockrun/anthropic/claude-sonnet-4"
+        "blockrun/anthropic/claude-sonnet-4.6"
         "blockrun/openai/gpt-4o"
         "blockrun/deepseek/deepseek-chat"
-        "anthropic/claude-sonnet-4"
+        "anthropic/claude-sonnet-4.6"
         "gpt-4o"
     )
 

@@ -74,7 +74,7 @@ modelPricing.set("openai/gpt-4o-mini", { input: 0.15, output: 0.6, contextWindow
 modelPricing.set("openai/gpt-4o", { input: 2.5, output: 10, contextWindow: 128000 });
 modelPricing.set("google/gemini-2.5-pro", { input: 0.625, output: 2.5, contextWindow: 2000000 });
 modelPricing.set("openai/gpt-5.2", { input: 2.5, output: 10, contextWindow: 200000 });
-modelPricing.set("anthropic/claude-sonnet-4", { input: 3, output: 15, contextWindow: 200000 });
+modelPricing.set("anthropic/claude-sonnet-4.6", { input: 3, output: 15, contextWindow: 200000 });
 
 // Test each prompt
 for (const test of testPrompts) {

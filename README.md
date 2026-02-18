@@ -72,7 +72,7 @@ Choose your routing strategy with `/model <profile>`:
 **Other shortcuts:**
 
 - **Model aliases:** `/model br-sonnet`, `/model grok`, `/model gpt5`, `/model o3`
-- **Specific models:** `blockrun/openai/gpt-4o` or `blockrun/anthropic/claude-sonnet-4`
+- **Specific models:** `blockrun/openai/gpt-4o` or `blockrun/anthropic/claude-sonnet-4.6`
 - **Bring your wallet:** `export BLOCKRUN_WALLET_KEY=0x...`
 
 ---
@@ -186,7 +186,7 @@ Compared to **$25/M** for Claude Opus = **92% savings** on a typical workload.
 | o3-mini               | $1.10     | $4.40      | 128K    |    \*     |
 | **Anthropic**         |           |            |         |           |
 | claude-opus-4.5       | $5.00     | $25.00     | 200K    |    \*     |
-| claude-sonnet-4       | $3.00     | $15.00     | 200K    |    \*     |
+| claude-sonnet-4.6       | $3.00     | $15.00     | 200K    |    \*     |
 | claude-haiku-4.5      | $1.00     | $5.00      | 200K    |           |
 | **Google**            |           |            |         |           |
 | gemini-2.5-pro        | $1.25     | $10.00     | 1M      |    \*     |

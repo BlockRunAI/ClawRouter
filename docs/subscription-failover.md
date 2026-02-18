@@ -88,7 +88,7 @@ Response returned to user
 
 ```bash
 # Option A: Using Claude subscription
-openclaw models set anthropic/claude-sonnet-4-5
+openclaw models set anthropic/claude-sonnet-4.6
 
 # Option B: Using ChatGPT Plus (via OpenAI provider)
 openclaw models set openai/gpt-4o
@@ -116,7 +116,7 @@ openclaw models show
 Expected output:
 
 ```
-Primary: anthropic/claude-sonnet-4-5
+Primary: anthropic/claude-sonnet-4.6
 Fallbacks:
   1. blockrun/auto
 ```
@@ -151,13 +151,13 @@ Edit `~/.openclaw/openclaw.json`:
   "agents": {
     "main": {
       "model": {
-        "primary": "anthropic/claude-opus-4-5",
+        "primary": "anthropic/claude-opus-4.6",
         "fallbacks": ["blockrun/auto"]
       }
     },
     "coding": {
       "model": {
-        "primary": "anthropic/claude-sonnet-4-5",
+        "primary": "anthropic/claude-sonnet-4.6",
         "fallbacks": ["blockrun/google/gemini-2.5-pro", "blockrun/deepseek/deepseek-chat"]
       }
     }
@@ -284,7 +284,7 @@ However, each provider has different ToS. Check yours before proceeding:
 **A:** Yes! Configure multiple providers with failback chains:
 
 ```bash
-openclaw models set anthropic/claude-opus-4-5
+openclaw models set anthropic/claude-opus-4.6
 openclaw models fallbacks add openai/gpt-4o          # ChatGPT Plus
 openclaw models fallbacks add blockrun/auto           # x402 as final fallback
 ```

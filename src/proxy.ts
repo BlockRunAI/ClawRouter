@@ -1366,7 +1366,7 @@ async function proxyRequest(
       const normalizedModel =
         typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
 
-      // Resolve model aliases (e.g., "claude" -> "anthropic/claude-sonnet-4")
+      // Resolve model aliases (e.g., "claude" -> "anthropic/claude-sonnet-4.6")
       const resolvedModel = resolveModelAlias(normalizedModel);
       const wasAlias = resolvedModel !== normalizedModel;
 

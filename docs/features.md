@@ -118,7 +118,7 @@ ClawRouter automatically detects multi-step agentic tasks and routes to models o
 | --------- | ---------------- | ------------------------------ |
 | SIMPLE    | claude-haiku-4.5 | Fast + reliable tool use       |
 | MEDIUM    | kimi-k2.5        | 200+ tool chains, 76% cheaper  |
-| COMPLEX   | claude-sonnet-4  | Best balance for complex tasks |
+| COMPLEX   | claude-sonnet-4.6  | Best balance for complex tasks |
 | REASONING | kimi-k2.5        | Extended reasoning + execution |
 
 ### Force Agentic Mode
@@ -177,7 +177,7 @@ Use short aliases instead of full model paths:
 
 ```bash
 /model free      # gpt-oss-120b (FREE!)
-/model br-sonnet # anthropic/claude-sonnet-4
+/model br-sonnet # anthropic/claude-sonnet-4.6
 /model br-opus   # anthropic/claude-opus-4
 /model br-haiku  # anthropic/claude-haiku-4.5
 /model gpt       # openai/gpt-4o
@@ -216,9 +216,9 @@ You'll never get blocked by an empty wallet — the free tier keeps you running.
 For multi-turn conversations, ClawRouter pins the model to prevent mid-task switching:
 
 ```
-Turn 1: "Build a React component" → claude-sonnet-4
-Turn 2: "Add dark mode support"   → claude-sonnet-4 (pinned)
-Turn 3: "Now add tests"           → claude-sonnet-4 (pinned)
+Turn 1: "Build a React component" → claude-sonnet-4.6
+Turn 2: "Add dark mode support"   → claude-sonnet-4.6 (pinned)
+Turn 3: "Now add tests"           → claude-sonnet-4.6 (pinned)
 ```
 
 Sessions are identified by conversation ID and persist for 1 hour of inactivity.

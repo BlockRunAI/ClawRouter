@@ -38,7 +38,7 @@ Rules handle ~80% of requests in <1ms. Only ambiguous queries hit the LLM classi
 
 ## Available Models
 
-30+ models including: gpt-5.2, gpt-4o, gpt-4o-mini, o3, o4-mini, claude-opus-4.5, claude-sonnet-4, claude-haiku-4.5, gemini-2.5-pro, gemini-2.5-flash, deepseek-chat, deepseek-reasoner, grok-3, grok-3-mini.
+30+ models including: gpt-5.2, gpt-4o, gpt-4o-mini, o3, o4-mini, claude-opus-4.5, claude-sonnet-4.6, claude-haiku-4.5, gemini-2.5-pro, gemini-2.5-flash, deepseek-chat, deepseek-reasoner, grok-3, grok-3-mini.
 
 ## Example Output
 
