@@ -259,9 +259,9 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     { id: "eco", alias: "eco" },
     { id: "premium", alias: "premium" },
     { id: "free", alias: "free" },
-    { id: "sonnet", alias: "br-sonnet" },
-    { id: "opus", alias: "br-opus" },
-    { id: "haiku", alias: "br-haiku" },
+    { id: "sonnet", alias: "sonnet4.6" },
+    { id: "opus", alias: "opus4.6" },
+    { id: "haiku", alias: "haiku" },
     { id: "gpt5", alias: "gpt5" },
     { id: "codex", alias: "codex" },
     { id: "grok-fast", alias: "grok-fast" },
@@ -271,7 +271,6 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     { id: "kimi", alias: "kimi" },
     { id: "minimax", alias: "minimax" },
     { id: "gemini", alias: "gemini" },
-    { id: "flash", alias: "flash" },
   ];
 
   // Deprecated aliases to remove from config (cleaned up from picker)
@@ -281,6 +280,7 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     "blockrun/o3",
     "blockrun/grok",
     "blockrun/mini",
+    "blockrun/flash", // removed from picker - use gemini instead
   ];
 
   if (!defaults.models) {
