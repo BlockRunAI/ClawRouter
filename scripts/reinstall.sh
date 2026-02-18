@@ -162,64 +162,77 @@ echo "  ✓ dist/index.js verified"
 
 # 6.2. Refresh blockrun model catalog from installed package
 echo "→ Refreshing BlockRun models catalog..."
-node --input-type=module -e "
-import os from 'node:os';
-import fs from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+node -e "
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
 
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-// Use installed plugin path directly (works with curl | bash)
-const indexPath = path.join(os.homedir(), '.openclaw', 'extensions', 'clawrouter', 'dist', 'index.js');
-
 if (!fs.existsSync(configPath)) {
   console.log('  No openclaw.json found, skipping');
   process.exit(0);
 }
 
-if (!fs.existsSync(indexPath)) {
-  console.log('  Could not locate dist/index.js, skipping model refresh');
-  process.exit(0);
-}
-
 try {
-  const mod = await import(pathToFileURL(indexPath).href);
-  const openclawModels = Array.isArray(mod.OPENCLAW_MODELS) ? mod.OPENCLAW_MODELS : [];
-  if (openclawModels.length === 0) {
-    console.log('  OPENCLAW_MODELS missing or empty, skipping model refresh');
-    process.exit(0);
-  }
-
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  const blockrun = config.models?.providers?.blockrun;
-  if (!blockrun || typeof blockrun !== 'object') {
-    console.log('  BlockRun provider not found yet, skipping model refresh');
-    process.exit(0);
+  let changed = false;
+
+  // Ensure provider exists
+  if (!config.models) config.models = {};
+  if (!config.models.providers) config.models.providers = {};
+  if (!config.models.providers.blockrun) {
+    config.models.providers.blockrun = { api: 'openai-completions', models: [] };
+    changed = true;
   }
 
-  const currentModels = Array.isArray(blockrun.models) ? blockrun.models : [];
-  const currentIds = new Set(currentModels.map(m => m?.id).filter(Boolean));
-  const expectedIds = openclawModels.map(m => m?.id).filter(Boolean);
-  const needsRefresh = currentModels.length !== openclawModels.length || expectedIds.some(id => !currentIds.has(id));
-
-  let changed = false;
+  const blockrun = config.models.providers.blockrun;
   if (!blockrun.apiKey) {
     blockrun.apiKey = 'x402-proxy-handles-auth';
     changed = true;
   }
-  if (needsRefresh) {
-    blockrun.models = openclawModels;
+  if (!Array.isArray(blockrun.models)) {
+    blockrun.models = [];
     changed = true;
-    console.log('  Refreshed blockrun.models (' + openclawModels.length + ' models)');
-  } else {
-    console.log('  blockrun.models already up to date');
+  }
+
+  // Ensure minimax model exists in provider catalog
+  const hasMiniMaxModel = blockrun.models.some(m => m && m.id === 'minimax/minimax-m2.5');
+  if (!hasMiniMaxModel) {
+    blockrun.models.push({
+      id: 'minimax/minimax-m2.5',
+      name: 'MiniMax M2.5',
+      api: 'openai-completions',
+      reasoning: true,
+      input: ['text'],
+      cost: { input: 0.3, output: 1.2, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 204800,
+      maxTokens: 16384
+    });
+    changed = true;
+    console.log('  Added minimax model to blockrun provider catalog');
+  }
+
+  // Ensure minimax alias is present in model picker allowlist
+  if (!config.agents) config.agents = {};
+  if (!config.agents.defaults) config.agents.defaults = {};
+  if (!config.agents.defaults.models || typeof config.agents.defaults.models !== 'object') {
+    config.agents.defaults.models = {};
+    changed = true;
+  }
+  const allowlist = config.agents.defaults.models;
+  if (!allowlist['blockrun/minimax'] || allowlist['blockrun/minimax'].alias !== 'minimax') {
+    allowlist['blockrun/minimax'] = { alias: 'minimax' };
+    changed = true;
+    console.log('  Added minimax to model picker allowlist');
   }
 
   if (changed) {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } else {
+    console.log('  blockrun minimax config already up to date');
   }
 } catch (err) {
-  console.log('  Could not refresh models catalog:', err.message);
+  console.log('  Could not update minimax config:', err.message);
 }
 "
 
