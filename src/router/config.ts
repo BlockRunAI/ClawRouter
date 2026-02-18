@@ -677,38 +677,23 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     },
   },
 
-  // Eco tier configs - ultra cost-optimized (blockrun/eco)
+  // Eco tier configs - absolute cheapest (blockrun/eco)
   ecoTiers: {
     SIMPLE: {
-      primary: "minimax/minimax-m2.5", // $0.30/$1.20 - cheapest with reasoning
-      fallback: [
-        "moonshot/kimi-k2.5",
-        "nvidia/gpt-oss-120b",
-        "deepseek/deepseek-chat",
-        "google/gemini-2.5-flash",
-      ],
+      primary: "nvidia/gpt-oss-120b", // FREE! $0.00/$0.00
+      fallback: ["google/gemini-2.5-flash", "deepseek/deepseek-chat", "minimax/minimax-m2.5"],
     },
     MEDIUM: {
-      primary: "deepseek/deepseek-chat", // $0.14/$0.28
-      fallback: [
-        "minimax/minimax-m2.5", // $0.30/$1.20 - cheap with reasoning
-        "xai/grok-code-fast-1",
-        "google/gemini-2.5-flash",
-        "moonshot/kimi-k2.5",
-      ],
+      primary: "google/gemini-2.5-flash", // $0.15/$0.60 - cheapest capable
+      fallback: ["deepseek/deepseek-chat", "nvidia/gpt-oss-120b", "minimax/minimax-m2.5"],
     },
     COMPLEX: {
-      primary: "xai/grok-4-0709", // $0.20/$1.50
-      fallback: [
-        "minimax/minimax-m2.5", // $0.30/$1.20 - cheap with reasoning
-        "deepseek/deepseek-chat",
-        "google/gemini-2.5-flash",
-        "openai/gpt-4o-mini",
-      ],
+      primary: "google/gemini-2.5-flash", // $0.15/$0.60 - 1M context handles complexity
+      fallback: ["deepseek/deepseek-chat", "xai/grok-4-0709", "minimax/minimax-m2.5"],
     },
     REASONING: {
-      primary: "minimax/minimax-m2.5", // $0.30/$1.20 - cheapest reasoning model
-      fallback: ["deepseek/deepseek-reasoner", "xai/grok-4-1-fast-reasoning"],
+      primary: "xai/grok-4-1-fast-reasoning", // $0.20/$0.50 - was MORE expensive than AUTO!
+      fallback: ["deepseek/deepseek-reasoner", "minimax/minimax-m2.5"],
     },
   },
 

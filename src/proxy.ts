@@ -857,7 +857,9 @@ type ModelListEntry = {
  * Build `/v1/models` response entries from the full OpenClaw model registry.
  * This includes alias IDs (e.g., `flash`, `kimi`) so `/model <alias>` works reliably.
  */
-export function buildProxyModelList(createdAt: number = Math.floor(Date.now() / 1000)): ModelListEntry[] {
+export function buildProxyModelList(
+  createdAt: number = Math.floor(Date.now() / 1000),
+): ModelListEntry[] {
   const seen = new Set<string>();
   return OPENCLAW_MODELS.filter((model) => {
     if (seen.has(model.id)) return false;
@@ -1537,11 +1539,14 @@ async function proxyRequest(
         `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}${routingProfile ? `, profile: ${routingProfile}` : ""}`,
       );
 
-      // If alias was resolved, update the model in the request
-      if (wasAlias && !isRoutingProfile) {
-        parsed.model = resolvedModel;
+      // For explicit model requests, always canonicalize the model ID before upstream calls.
+      // This ensures case/whitespace variants (e.g. "DEEPSEEK/..." or "  model  ") route correctly.
+      if (!isRoutingProfile) {
+        if (parsed.model !== resolvedModel) {
+          parsed.model = resolvedModel;
+          bodyModified = true;
+        }
         modelId = resolvedModel;
-        bodyModified = true;
       }
 
       // Handle routing profiles (free/eco/auto/premium)
@@ -2246,9 +2251,11 @@ async function proxyRequest(
           body: responseBody,
           status: upstream.status,
           headers: responseHeaders,
-          model: modelId,
+          model: actualModelUsed,
         });
-        console.log(`[ClawRouter] Cached response for ${modelId} (${responseBody.length} bytes)`);
+        console.log(
+          `[ClawRouter] Cached response for ${actualModelUsed} (${responseBody.length} bytes)`,
+        );
       }
 
       // Extract content from non-streaming response for session journal
