@@ -47,7 +47,7 @@ async function waitForProxyHealth(port: number, timeoutMs = 3000): Promise<boole
   return false;
 }
 import { OPENCLAW_MODELS } from "./models.js";
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
+import { openSync, readSync, closeSync, fstatSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { VERSION } from "./version.js";
@@ -79,7 +79,11 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   }
 
   try {
-    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const fd1 = openSync(configPath, "r");
+    const buf1 = Buffer.alloc(fstatSync(fd1).size);
+    readSync(fd1, buf1);
+    closeSync(fd1);
+    const config = JSON.parse(buf1.toString("utf-8"));
 
     // Track if we need to write
     let needsWrite = false;
@@ -220,7 +224,11 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
       };
       if (existsSync(authPath)) {
         try {
-          const existing = JSON.parse(readFileSync(authPath, "utf-8"));
+          const fd2 = openSync(authPath, "r");
+          const buf2 = Buffer.alloc(fstatSync(fd2).size);
+          readSync(fd2, buf2);
+          closeSync(fd2);
+          const existing = JSON.parse(buf2.toString("utf-8"));
           // Check if valid OpenClaw format (has version and profiles)
           if (existing.version && existing.profiles) {
             store = existing;
@@ -385,7 +393,11 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
       let address: string | undefined;
       try {
         if (existsSync(WALLET_FILE)) {
-          walletKey = readFileSync(WALLET_FILE, "utf-8").trim();
+          const fd3 = openSync(WALLET_FILE, "r");
+          const buf3 = Buffer.alloc(fstatSync(fd3).size);
+          readSync(fd3, buf3);
+          closeSync(fd3);
+          walletKey = buf3.toString("utf-8").trim();
           if (walletKey.startsWith("0x") && walletKey.length === 66) {
             const account = privateKeyToAccount(walletKey as `0x${string}`);
             address = account.address;

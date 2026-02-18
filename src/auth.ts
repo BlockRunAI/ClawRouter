@@ -23,7 +23,7 @@
  * @openclaw-security env-access=BLOCKRUN_WALLET_KEY purpose=x402-payment-signing
  */
 
-import { writeFile, readFile, mkdir } from "node:fs/promises";
+import { writeFile, open, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -40,7 +40,12 @@ export { WALLET_FILE };
  */
 async function loadSavedWallet(): Promise<string | undefined> {
   try {
-    const key = (await readFile(WALLET_FILE, "utf-8")).trim();
+    const fh = await open(WALLET_FILE, "r");
+    const { size } = await fh.stat();
+    const buf = Buffer.alloc(size);
+    await fh.read(buf, 0, size, 0);
+    await fh.close();
+    const key = buf.toString("utf-8").trim();
     if (key.startsWith("0x") && key.length === 66) return key;
   } catch {
     // File doesn't exist yet
