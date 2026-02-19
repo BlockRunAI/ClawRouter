@@ -5,7 +5,7 @@
  * before being forwarded to upstream APIs (especially Anthropic which
  * requires pattern ^[a-zA-Z0-9_-]+$).
  *
- * Run: npx tsx test/e2e-tool-id-sanitization.ts
+ * Run: tsx test/e2e-tool-id-sanitization.ts
  */
 
 import { startProxy } from "../dist/index.js";

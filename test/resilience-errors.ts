@@ -9,7 +9,7 @@
  * - Memory pressure (concurrent large requests)
  *
  * Usage:
- *   BLOCKRUN_WALLET_KEY=0x... npx tsx test/resilience-errors.ts
+ *   BLOCKRUN_WALLET_KEY=0x... tsx test/resilience-errors.ts
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";

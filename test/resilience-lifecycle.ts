@@ -7,7 +7,7 @@
  * - Repeated restart cycles
  *
  * Usage:
- *   BLOCKRUN_WALLET_KEY=0x... npx tsx test/resilience-lifecycle.ts
+ *   BLOCKRUN_WALLET_KEY=0x... tsx test/resilience-lifecycle.ts
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";

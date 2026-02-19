@@ -663,18 +663,6 @@ const plugin: OpenClawPluginDefinition = {
       models: OPENCLAW_MODELS,
     };
 
-    // Set blockrun/auto as default ONLY if no model is set (first install)
-    // Do NOT override user's model selection on subsequent loads
-    if (!api.config.agents) api.config.agents = {};
-    const agents = api.config.agents as Record<string, unknown>;
-    if (!agents.defaults) agents.defaults = {};
-    const defaults = agents.defaults as Record<string, unknown>;
-    if (!defaults.model) defaults.model = {};
-    const model = defaults.model as Record<string, unknown>;
-    if (!model.primary) {
-      model.primary = "blockrun/auto";
-    }
-
     api.logger.info("BlockRun provider registered (30+ models via x402)");
 
     // Register /wallet command for wallet management
