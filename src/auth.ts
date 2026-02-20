@@ -23,7 +23,8 @@
  * @openclaw-security env-access=BLOCKRUN_WALLET_KEY purpose=x402-payment-signing
  */
 
-import { writeFile, readFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
+import { readTextFile } from "./fs-read.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -40,7 +41,7 @@ export { WALLET_FILE };
  */
 async function loadSavedWallet(): Promise<string | undefined> {
   try {
-    const key = (await readFile(WALLET_FILE, "utf-8")).trim();
+    const key = (await readTextFile(WALLET_FILE)).trim();
     if (key.startsWith("0x") && key.length === 66) {
       console.log(`[ClawRouter] ✓ Loaded existing wallet from ${WALLET_FILE}`);
       return key;
@@ -73,7 +74,7 @@ async function generateAndSaveWallet(): Promise<{ key: string; address: string }
 
   // CRITICAL: Verify the file was actually written
   try {
-    const verification = (await readFile(WALLET_FILE, "utf-8")).trim();
+    const verification = (await readTextFile(WALLET_FILE)).trim();
     if (verification !== key) {
       throw new Error("Wallet file verification failed - content mismatch");
     }

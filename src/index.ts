@@ -48,7 +48,6 @@ async function waitForProxyHealth(port: number, timeoutMs = 3000): Promise<boole
 }
 import { OPENCLAW_MODELS } from "./models.js";
 import {
-  readFileSync,
   writeFileSync,
   existsSync,
   readdirSync,
@@ -56,6 +55,7 @@ import {
   copyFileSync,
   renameSync,
 } from "node:fs";
+import { readTextFileSync } from "./fs-read.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { VERSION } from "./version.js";
@@ -125,7 +125,7 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   // only our models+agents sections.
   if (existsSync(configPath)) {
     try {
-      const content = readFileSync(configPath, "utf-8").trim();
+      const content = readTextFileSync(configPath).trim();
       if (content) {
         config = JSON.parse(content);
       } else {
@@ -379,7 +379,7 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
       };
       if (existsSync(authPath)) {
         try {
-          const existing = JSON.parse(readFileSync(authPath, "utf-8"));
+          const existing = JSON.parse(readTextFileSync(authPath));
           // Check if valid OpenClaw format (has version and profiles)
           if (existing.version && existing.profiles) {
             store = existing;
@@ -544,7 +544,7 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
       let address: string | undefined;
       try {
         if (existsSync(WALLET_FILE)) {
-          walletKey = readFileSync(WALLET_FILE, "utf-8").trim();
+          walletKey = readTextFileSync(WALLET_FILE).trim();
           if (walletKey.startsWith("0x") && walletKey.length === 66) {
             const account = privateKeyToAccount(walletKey as `0x${string}`);
             address = account.address;

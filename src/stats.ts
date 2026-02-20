@@ -5,7 +5,8 @@
  * Supports filtering by date range and provides multiple aggregation views.
  */
 
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
+import { readTextFile } from "./fs-read.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { UsageEntry } from "./logger.js";
@@ -45,7 +46,7 @@ export type AggregatedStats = {
  */
 async function parseLogFile(filePath: string): Promise<UsageEntry[]> {
   try {
-    const content = await readFile(filePath, "utf-8");
+    const content = await readTextFile(filePath);
     const lines = content.trim().split("\n").filter(Boolean);
     return lines.map((line) => {
       const entry = JSON.parse(line) as Partial<UsageEntry>;
