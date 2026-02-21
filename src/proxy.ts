@@ -290,6 +290,10 @@ const PROVIDER_ERROR_PATTERNS = [
   /billing/i,
   /insufficient.*balance/i,
   /credits/i,
+  /payment required/i,
+  /x402[_-]?payment[_-]?failed/i,
+  /merchant_status\"?\s*:\s*402/i,
+  /endpoint requires x402 payment/i,
   /quota.*exceeded/i,
   /rate.*limit/i,
   /model.*unavailable/i,
@@ -1607,7 +1611,7 @@ async function proxyRequest(
           );
           const existingSession = sessionId ? sessionStore.getSession(sessionId) : undefined;
 
-          if (existingSession) {
+          if (existingSession && existingSession.routingProfile === routingProfile) {
             // Use the session's pinned model instead of re-routing
             console.log(
               `[ClawRouter] Session ${sessionId?.slice(0, 8)}... using pinned model: ${existingSession.model}`,
@@ -1617,6 +1621,13 @@ async function proxyRequest(
             bodyModified = true;
             sessionStore.touchSession(sessionId!);
           } else {
+            if (existingSession && sessionId) {
+              console.log(
+                `[ClawRouter] Session ${sessionId.slice(0, 8)}... profile changed (${existingSession.routingProfile ?? "unknown"} -> ${routingProfile}), re-routing`,
+              );
+              sessionStore.clearSession(sessionId);
+            }
+
             // No session or expired - route normally
             // Extract prompt from messages
             type ChatMessage = { role: string; content: string };
@@ -1659,7 +1670,12 @@ async function proxyRequest(
 
             // Pin this model to the session for future requests
             if (sessionId) {
-              sessionStore.setSession(sessionId, routingDecision.model, routingDecision.tier);
+              sessionStore.setSession(
+                sessionId,
+                routingDecision.model,
+                routingDecision.tier,
+                routingProfile ?? undefined,
+              );
               console.log(
                 `[ClawRouter] Session ${sessionId.slice(0, 8)}... pinned to model: ${routingDecision.model}`,
               );
