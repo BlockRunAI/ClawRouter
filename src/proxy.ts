@@ -814,6 +814,18 @@ export type ProxyOptions = {
   /** Port to listen on (default: 8402) */
   port?: number;
   routingConfig?: Partial<RoutingConfig>;
+  /**
+   * Custom payment-enabled fetch function. When provided, replaces the built-in
+   * x402 payment handler. Use this to integrate alternative payment systems
+   * (e.g., spend limits, budget enforcement, or custom payment flows).
+   *
+   * If not provided, uses built-in createPaymentFetch with walletKey.
+   */
+  paymentFetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    preAuth?: PreAuthParams,
+  ) => Promise<Response>;
   /** Request timeout in ms (default: 180000 = 3 minutes). Covers on-chain tx + LLM response. */
   requestTimeoutMs?: number;
   /** Skip balance checks (for testing only). Default: false */
@@ -982,9 +994,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     };
   }
 
-  // Create x402 payment-enabled fetch from wallet private key
+  // Create x402 payment-enabled fetch from wallet private key (or use custom paymentFetch)
   const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const { fetch: payFetch } = createPaymentFetch(options.walletKey as `0x${string}`);
+  const payFetch =
+    options.paymentFetch ?? createPaymentFetch(options.walletKey as `0x${string}`).fetch;
 
   // Create balance monitor for pre-request checks
   const balanceMonitor = new BalanceMonitor(account.address);
