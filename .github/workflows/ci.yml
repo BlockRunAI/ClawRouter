@@ -34,3 +34,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Integration tests (lifecycle)
+        run: npx vitest run --config vitest.integration.config.ts test/integration/lifecycle.test.ts

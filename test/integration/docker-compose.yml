@@ -1,0 +1,9 @@
+services:
+  integration:
+    build:
+      context: ../..
+      dockerfile: test/integration/Dockerfile
+    environment:
+      - BLOCKRUN_WALLET_KEY=${BLOCKRUN_WALLET_KEY:-}
+      - BLOCKRUN_PROXY_PORT=8402
+    network_mode: host
