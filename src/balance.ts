@@ -149,12 +149,13 @@ export class BalanceMonitor {
   }
 
   /**
-   * Format USDC amount (in micros) as "$X.XX".
+   * Format USDC amount (in micros) as "$X.XXXX".
+   * Uses 4 decimal places for consistency with stats display.
    */
   formatUSDC(amountMicros: bigint): string {
     // USDC has 6 decimals
     const dollars = Number(amountMicros) / 1_000_000;
-    return `$${dollars.toFixed(2)}`;
+    return `$${dollars.toFixed(4)}`;
   }
 
   /**
