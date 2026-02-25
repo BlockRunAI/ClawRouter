@@ -9,6 +9,7 @@
 export type SessionEntry = {
   model: string;
   tier: string;
+  routingProfile?: "free" | "eco" | "auto" | "premium";
   createdAt: number;
   lastUsedAt: number;
   requestCount: number;
@@ -72,7 +73,12 @@ export class SessionStore {
   /**
    * Pin a model to a session.
    */
-  setSession(sessionId: string, model: string, tier: string): void {
+  setSession(
+    sessionId: string,
+    model: string,
+    tier: string,
+    routingProfile?: "free" | "eco" | "auto" | "premium",
+  ): void {
     if (!this.config.enabled || !sessionId) {
       return;
     }
@@ -88,10 +94,12 @@ export class SessionStore {
         existing.model = model;
         existing.tier = tier;
       }
+      existing.routingProfile = routingProfile;
     } else {
       this.sessions.set(sessionId, {
         model,
         tier,
+        routingProfile,
         createdAt: now,
         lastUsedAt: now,
         requestCount: 1,
