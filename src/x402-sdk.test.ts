@@ -73,7 +73,7 @@ describe("x402 SDK integration", () => {
       const mockFetch = vi.fn().mockResolvedValue(mockResponse);
 
       const client = createTestEvmClient();
-      const payFetch = wrapFetchWithPayment(mockFetch as typeof fetch, client);
+      const payFetch = wrapFetchWithPayment(mockFetch as unknown as typeof fetch, client);
 
       const res = await payFetch("https://example.com/api");
       expect(res.status).toBe(200);
@@ -99,7 +99,7 @@ describe("x402 SDK integration", () => {
       const mockFetch = vi.fn().mockResolvedValue(mockResponse);
 
       const client = createTestEvmClient();
-      const payFetch = wrapFetchWithPayment(mockFetch as typeof fetch, client);
+      const payFetch = wrapFetchWithPayment(mockFetch as unknown as typeof fetch, client);
 
       const res = await payFetch("https://example.com/stream");
       expect(res.status).toBe(200);
@@ -144,7 +144,7 @@ describe("x402 SDK integration", () => {
         );
 
       const client = createTestEvmClient();
-      const payFetch = wrapFetchWithPayment(mockFetch as typeof fetch, client);
+      const payFetch = wrapFetchWithPayment(mockFetch as unknown as typeof fetch, client);
 
       // This will get the 402, attempt to sign payment, and retry.
       // The signing may fail (no real on-chain state) but the flow
@@ -171,7 +171,7 @@ describe("x402 SDK integration", () => {
       );
 
       const client = createTestEvmClient();
-      const payFetch = wrapFetchWithPayment(mockFetch as typeof fetch, client);
+      const payFetch = wrapFetchWithPayment(mockFetch as unknown as typeof fetch, client);
 
       await payFetch("https://example.com/api", {
         method: "POST",

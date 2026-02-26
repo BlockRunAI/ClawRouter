@@ -119,6 +119,18 @@ async function generateAndSaveWallet(): Promise<{
   mnemonic: string;
   solanaPrivateKeyBytes: Uint8Array;
 }> {
+  // Safety: if a mnemonic file already exists, a Solana wallet was derived from it.
+  // Generating a new wallet would overwrite the mnemonic and lose Solana funds.
+  const existingMnemonic = await loadMnemonic();
+  if (existingMnemonic) {
+    throw new Error(
+      `Mnemonic file exists at ${MNEMONIC_FILE} but wallet.key is missing. ` +
+      `This means a Solana wallet was derived from this mnemonic. ` +
+      `Refusing to generate a new wallet to protect Solana funds. ` +
+      `Restore your EVM key with: export BLOCKRUN_WALLET_KEY=<your_key>`,
+    );
+  }
+
   const mnemonic = generateWalletMnemonic();
   const derived = deriveAllKeys(mnemonic);
 
