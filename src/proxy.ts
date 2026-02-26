@@ -15,8 +15,6 @@
  *     before the x402 flow, preventing OpenClaw's 10-15s timeout from firing.
  *   - Response dedup: hashes request bodies and caches responses for 30s,
  *     preventing double-charging when OpenClaw retries after timeout.
- *   - Payment cache: after first 402, pre-signs subsequent requests to skip
- *     the 402 round trip (~200ms savings per request).
  *   - Smart routing: when model is "blockrun/auto", classify query and pick cheapest model.
  *   - Usage logging: log every request as JSON line to ~/.openclaw/blockrun/logs/
  */
@@ -2496,7 +2494,7 @@ async function proxyRequest(
       maxTokens,
       routingProfile ?? undefined,
     );
-    // Apply 20% buffer to match x402 pre-auth
+    // Apply 20% buffer for cost estimation accuracy
     const costWithBuffer = accurateCosts.costEstimate * 1.2;
     const baselineWithBuffer = accurateCosts.baselineCost * 1.2;
     const entry: UsageEntry = {

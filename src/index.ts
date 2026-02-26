@@ -28,7 +28,6 @@ import { startProxy, getProxyPort } from "./proxy.js";
 import { resolveOrGenerateWalletKey, setupSolana, WALLET_FILE, MNEMONIC_FILE } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
-import { SolanaBalanceMonitor } from "./solana-balance.js";
 
 /**
  * Wait for proxy health check to pass (quick check, not RPC).
@@ -643,6 +642,7 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
 
             let solBalanceText = "Balance: (checking...)";
             try {
+              const { SolanaBalanceMonitor } = await import("./solana-balance.js");
               const solMonitor = new SolanaBalanceMonitor(solAddr);
               const solBalance = await solMonitor.checkBalance();
               solBalanceText = `Balance: ${solBalance.balanceUSD}`;
