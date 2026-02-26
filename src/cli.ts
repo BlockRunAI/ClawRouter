@@ -179,20 +179,19 @@ async function main(): Promise<void> {
   }
 
   // Resolve wallet key
-  const { key: walletKey, address, source, solanaPrivateKeyBytes } = await resolveOrGenerateWalletKey();
+  const wallet = await resolveOrGenerateWalletKey();
 
-  if (source === "generated") {
-    console.log(`[ClawRouter] Generated new wallet: ${address}`);
-  } else if (source === "saved") {
-    console.log(`[ClawRouter] Using saved wallet: ${address}`);
+  if (wallet.source === "generated") {
+    console.log(`[ClawRouter] Generated new wallet: ${wallet.address}`);
+  } else if (wallet.source === "saved") {
+    console.log(`[ClawRouter] Using saved wallet: ${wallet.address}`);
   } else {
-    console.log(`[ClawRouter] Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
+    console.log(`[ClawRouter] Using wallet from BLOCKRUN_WALLET_KEY: ${wallet.address}`);
   }
 
   // Start the proxy
   const proxy = await startProxy({
-    walletKey,
-    solanaPrivateKeyBytes,
+    wallet,
     port: args.port,
     onReady: (port) => {
       console.log(`[ClawRouter] Proxy listening on http://127.0.0.1:${port}`);
@@ -218,19 +217,19 @@ async function main(): Promise<void> {
   });
 
   // Check balance
-  const monitor = new BalanceMonitor(address);
+  const monitor = new BalanceMonitor(wallet.address);
   try {
     const balance = await monitor.checkBalance();
     if (balance.isEmpty) {
       console.log(`[ClawRouter] Wallet balance: $0.00 (using FREE model)`);
-      console.log(`[ClawRouter] Fund wallet for premium models: ${address}`);
+      console.log(`[ClawRouter] Fund wallet for premium models: ${wallet.address}`);
     } else if (balance.isLow) {
       console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD} (low)`);
     } else {
       console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD}`);
     }
   } catch {
-    console.log(`[ClawRouter] Wallet: ${address} (balance check pending)`);
+    console.log(`[ClawRouter] Wallet: ${wallet.address} (balance check pending)`);
   }
 
   console.log(`[ClawRouter] Ready - Ctrl+C to stop`);

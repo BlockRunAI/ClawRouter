@@ -428,28 +428,27 @@ let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
  */
 async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   // Resolve wallet key: saved file → env var → auto-generate
-  const { key: walletKey, address, source, solanaPrivateKeyBytes } = await resolveOrGenerateWalletKey();
+  const wallet = await resolveOrGenerateWalletKey();
 
   // Log wallet source
-  if (source === "generated") {
+  if (wallet.source === "generated") {
     api.logger.warn(`════════════════════════════════════════════════`);
     api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
-    api.logger.warn(`  Address : ${address}`);
+    api.logger.warn(`  Address : ${wallet.address}`);
     api.logger.warn(`  Run /wallet export to get your private key`);
     api.logger.warn(`  Losing this key = losing your USDC funds`);
     api.logger.warn(`════════════════════════════════════════════════`);
-  } else if (source === "saved") {
-    api.logger.info(`Using saved wallet: ${address}`);
+  } else if (wallet.source === "saved") {
+    api.logger.info(`Using saved wallet: ${wallet.address}`);
   } else {
-    api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
+    api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${wallet.address}`);
   }
 
   // Resolve routing config overrides from plugin config
   const routingConfig = api.pluginConfig?.routing as Partial<RoutingConfig> | undefined;
 
   const proxy = await startProxy({
-    walletKey,
-    solanaPrivateKeyBytes,
+    wallet,
     routingConfig,
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
@@ -481,22 +480,22 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   api.logger.info(`Pricing: Simple ~$0.001 | Code ~$0.01 | Complex ~$0.05 | Free: $0`);
 
   // Non-blocking balance check AFTER proxy is ready (won't hang startup)
-  const startupMonitor = new BalanceMonitor(address);
+  const startupMonitor = new BalanceMonitor(wallet.address);
   startupMonitor
     .checkBalance()
     .then((balance) => {
       if (balance.isEmpty) {
-        api.logger.info(`Wallet: ${address} | Balance: $0.00`);
+        api.logger.info(`Wallet: ${wallet.address} | Balance: $0.00`);
         api.logger.info(`Using FREE model. Fund wallet for premium models.`);
       } else if (balance.isLow) {
-        api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD} (low)`);
+        api.logger.info(`Wallet: ${wallet.address} | Balance: ${balance.balanceUSD} (low)`);
       } else {
-        api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD}`);
+        api.logger.info(`Wallet: ${wallet.address} | Balance: ${balance.balanceUSD}`);
       }
     })
     .catch(() => {
       // Silently continue - balance will be checked per-request anyway
-      api.logger.info(`Wallet: ${address} | Balance: (checking...)`);
+      api.logger.info(`Wallet: ${wallet.address} | Balance: (checking...)`);
     });
 }
 
@@ -883,7 +882,8 @@ export default plugin;
 
 // Re-export for programmatic use
 export { startProxy, getProxyPort } from "./proxy.js";
-export type { ProxyOptions, ProxyHandle, LowBalanceInfo, InsufficientFundsInfo } from "./proxy.js";
+export type { ProxyOptions, ProxyHandle, WalletConfig, LowBalanceInfo, InsufficientFundsInfo } from "./proxy.js";
+export type { WalletResolution } from "./auth.js";
 export { blockrunProvider } from "./provider.js";
 export {
   OPENCLAW_MODELS,

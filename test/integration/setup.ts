@@ -27,7 +27,7 @@ export async function startTestProxy(): Promise<ProxyHandle> {
   const wallet = await resolveOrGenerateWalletKey();
 
   proxyHandle = await startProxy({
-    walletKey: wallet.key,
+    wallet,
     port: TEST_PORT,
     skipBalanceCheck: true,
   });

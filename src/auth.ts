@@ -187,13 +187,15 @@ async function generateAndSaveWallet(): Promise<{
  * Also loads mnemonic if available for Solana key derivation.
  * Called by index.ts before the auth wizard runs.
  */
-export async function resolveOrGenerateWalletKey(): Promise<{
+export type WalletResolution = {
   key: string;
   address: string;
   source: "saved" | "env" | "generated";
   mnemonic?: string;
   solanaPrivateKeyBytes?: Uint8Array;
-}> {
+};
+
+export async function resolveOrGenerateWalletKey(): Promise<WalletResolution> {
   // 1. Previously saved wallet
   const saved = await loadSavedWallet();
   if (saved) {
