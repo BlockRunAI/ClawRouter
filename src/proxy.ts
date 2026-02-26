@@ -819,8 +819,6 @@ export type ProxyOptions = {
   walletKey: string;
   /** Optional 32-byte Solana private key for Solana x402 payments. */
   solanaPrivateKeyBytes?: Uint8Array;
-  /** Optional Solana RPC URL (default: mainnet-beta). */
-  solanaRpcUrl?: string;
   apiBase?: string;
   /** Port to listen on (default: 8402) */
   port?: number;
@@ -1088,16 +1086,16 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   registerExactEvmScheme(x402, { signer: evmSigner });
 
   // Register Solana scheme if key is available
+  // Uses registerExactSvmScheme helper which registers:
+  //   - solana:* wildcard (catches any CAIP-2 Solana network)
+  //   - V1 compat names: "solana", "solana-devnet", "solana-testnet"
   let solanaAddress: string | undefined;
   if (options.solanaPrivateKeyBytes) {
-    const { ExactSvmScheme } = await import("@x402/svm/exact/client");
+    const { registerExactSvmScheme } = await import("@x402/svm/exact/client");
     const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
     const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes(options.solanaPrivateKeyBytes);
     solanaAddress = solanaSigner.address;
-    x402.register(
-      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-      new ExactSvmScheme(solanaSigner, { rpcUrl: options.solanaRpcUrl }),
-    );
+    registerExactSvmScheme(x402, { signer: solanaSigner });
     console.log(`[ClawRouter] Solana x402 scheme registered: ${solanaAddress}`);
   }
 

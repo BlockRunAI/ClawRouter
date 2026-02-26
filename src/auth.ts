@@ -27,7 +27,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { readTextFile } from "./fs-read.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount } from "viem/accounts";
 import type { ProviderAuthMethod, ProviderAuthContext, ProviderAuthResult } from "./types.js";
 import {
   generateWalletMnemonic,
