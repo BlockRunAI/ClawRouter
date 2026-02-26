@@ -18,7 +18,7 @@ console.log("=== ClawRouter Auto Model Diagnostic Test ===\n");
 // Start proxy
 console.log("Starting proxy...");
 const proxy = await startProxy({
-  walletKey: WALLET_KEY,
+  wallet: WALLET_KEY,
   port: 8405,
   onReady: (port) => console.log(`✓ Proxy ready on port ${port}`),
   onError: (err) => console.error(`✗ Proxy error: ${err.message}`),
