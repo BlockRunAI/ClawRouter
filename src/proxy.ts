@@ -62,6 +62,7 @@ import { PROXY_PORT } from "./config.js";
 import { SessionJournal } from "./journal.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
+const BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
 // Routing profile models - virtual models that trigger intelligent routing
 const AUTO_MODEL = "blockrun/auto";
 
@@ -1054,7 +1055,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const solanaPrivateKeyBytes =
     typeof options.wallet === "string" ? undefined : options.wallet.solanaPrivateKeyBytes;
 
-  const apiBase = options.apiBase ?? BLOCKRUN_API;
+  // Use Solana API when Solana keys are available, EVM API otherwise
+  const apiBase = options.apiBase ?? (solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
 
   // Determine port: options.port > env var > default
   const listenPort = options.port ?? getProxyPort();
