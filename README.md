@@ -24,6 +24,7 @@ One wallet, 41+ models, zero API keys.
 [![USDC Hackathon Winner](https://img.shields.io/badge/🏆_USDC_Hackathon-Agentic_Commerce_Winner-gold?style=flat-square)](https://x.com/USDC/status/2021625822294216977)
 [![x402 Protocol](https://img.shields.io/badge/x402-Micropayments-purple?style=flat-square)](https://x402.org)
 [![Base Network](https://img.shields.io/badge/Base-USDC-0052FF?style=flat-square&logo=coinbase&logoColor=white)](https://base.org)
+[![Solana](https://img.shields.io/badge/Solana-USDC-9945FF?style=flat-square&logo=solana&logoColor=white)](https://solana.com)
 [![OpenClaw Plugin](https://img.shields.io/badge/OpenClaw-Plugin-orange?style=flat-square)](https://openclaw.ai)
 [![Telegram](https://img.shields.io/badge/Telegram-Community-26A5E4?style=flat-square&logo=telegram)](https://t.me/blockrunAI)
 
@@ -55,7 +56,7 @@ One wallet, 41+ models, zero API keys.
 curl -fsSL https://blockrun.ai/ClawRouter-update | bash
 openclaw gateway restart
 
-# 2. Fund your wallet with USDC on Base (address printed on install)
+# 2. Fund your wallet with USDC on Base or Solana (address printed on install)
 # $5 is enough for thousands of requests
 ```
 
@@ -176,18 +177,22 @@ No account. No API key. **Payment IS authentication** via [x402](https://x402.or
 Request → 402 (price: $0.003) → wallet signs USDC → retry → response
 ```
 
-USDC stays in your wallet until spent — non-custodial. Price is visible in the 402 header before signing.
+USDC stays in your wallet until spent - non-custodial. Price is visible in the 402 header before signing.
+
+**Dual-chain support:** Pay with USDC on **Base (EVM)** or **Solana**. Both wallets are derived from a single BIP-39 mnemonic on first run. Existing EVM-only users can enable Solana with `/wallet setup-solana`.
 
 ```bash
-/wallet     # Check balance and address
-/stats      # View usage and savings
+/wallet              # Check balance and address (both chains)
+/wallet export       # Export keys and mnemonic for backup
+/wallet setup-solana # Enable Solana payments (existing users)
+/stats               # View usage and savings
 ```
 
 **Fund your wallet:**
 
-- **Coinbase:** Buy USDC, send to Base
-- **Bridge:** Move USDC from any chain to Base
-- **CEX:** Withdraw USDC to Base network
+- **Base (EVM):** Send USDC on Base to your EVM address
+- **Solana:** Send USDC on Solana to your Solana address
+- **Coinbase/CEX:** Withdraw USDC to either network
 
 ---
 
@@ -195,11 +200,12 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 
 For basic usage, no configuration needed. For advanced options:
 
-| Variable              | Default        | Description             |
-| --------------------- | -------------- | ----------------------- |
-| `BLOCKRUN_WALLET_KEY` | auto-generated | Your wallet private key |
-| `BLOCKRUN_PROXY_PORT` | `8402`         | Local proxy port        |
-| `CLAWROUTER_DISABLED` | `false`        | Disable smart routing   |
+| Variable                    | Default                              | Description               |
+| --------------------------- | ------------------------------------ | ------------------------- |
+| `BLOCKRUN_WALLET_KEY`       | auto-generated                       | Your wallet private key   |
+| `BLOCKRUN_PROXY_PORT`       | `8402`                               | Local proxy port          |
+| `CLAWROUTER_DISABLED`       | `false`                              | Disable smart routing     |
+| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com`| Solana RPC endpoint       |
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 

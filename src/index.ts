@@ -567,26 +567,65 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
       }
 
       if (subcommand === "export") {
-        // Export private key for backup
-        return {
-          text: [
-            "🔐 **ClawRouter Wallet Export**",
-            "",
-            "⚠️ **SECURITY WARNING**: Your private key controls your wallet funds.",
-            "Never share this key. Anyone with this key can spend your USDC.",
-            "",
-            `**Address:** \`${address}\``,
-            "",
-            `**Private Key:**`,
-            `\`${walletKey}\``,
-            "",
-            "**To restore on a new machine:**",
-            "1. Set the environment variable before running OpenClaw:",
-            `   \`export BLOCKRUN_WALLET_KEY=${walletKey}\``,
-            "2. Or save to file:",
-            `   \`mkdir -p ~/.openclaw/blockrun && echo "${walletKey}" > ~/.openclaw/blockrun/wallet.key && chmod 600 ~/.openclaw/blockrun/wallet.key\``,
-          ].join("\n"),
-        };
+        // Export private key + mnemonic for backup
+        const lines = [
+          "**ClawRouter Wallet Export**",
+          "",
+          "**SECURITY WARNING**: Your private key and mnemonic control your wallet funds.",
+          "Never share these. Anyone with them can spend your USDC.",
+          "",
+          "**EVM (Base):**",
+          `  Address: \`${address}\``,
+          `  Private Key: \`${walletKey}\``,
+        ];
+
+        // Include mnemonic if it exists (Solana wallet derived from it)
+        let hasMnemonic = false;
+        try {
+          if (existsSync(MNEMONIC_FILE)) {
+            const mnemonic = readTextFileSync(MNEMONIC_FILE).trim();
+            if (mnemonic) {
+              hasMnemonic = true;
+              // Derive Solana address for display
+              const { deriveSolanaKeyBytes } = await import("./wallet.js");
+              const solKeyBytes = deriveSolanaKeyBytes(mnemonic);
+              const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+              const signer = await createKeyPairSignerFromPrivateKeyBytes(solKeyBytes);
+
+              lines.push(
+                "",
+                "**Solana:**",
+                `  Address: \`${signer.address}\``,
+                `  (Derived from mnemonic below)`,
+                "",
+                "**Mnemonic (24 words):**",
+                `\`${mnemonic}\``,
+                "",
+                "CRITICAL: Back up this mnemonic. It is the ONLY way to recover your Solana wallet.",
+              );
+            }
+          }
+        } catch {
+          // No mnemonic - EVM-only wallet
+        }
+
+        lines.push(
+          "",
+          "**To restore on a new machine:**",
+          "1. Set the environment variable before running OpenClaw:",
+          `   \`export BLOCKRUN_WALLET_KEY=${walletKey}\``,
+          "2. Or save to file:",
+          `   \`mkdir -p ~/.openclaw/blockrun && echo "${walletKey}" > ~/.openclaw/blockrun/wallet.key && chmod 600 ~/.openclaw/blockrun/wallet.key\``,
+        );
+
+        if (hasMnemonic) {
+          lines.push(
+            "3. Restore the mnemonic for Solana:",
+            `   \`echo "<your mnemonic>" > ~/.openclaw/blockrun/mnemonic && chmod 600 ~/.openclaw/blockrun/mnemonic\``,
+          );
+        }
+
+        return { text: lines.join("\n") };
       }
 
       if (subcommand === "setup-solana") {

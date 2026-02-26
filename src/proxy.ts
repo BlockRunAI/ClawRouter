@@ -1108,6 +1108,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[ClawRouter] Solana x402 scheme registered: ${solanaAddress}`);
   }
 
+  // Log which chain is used for each payment
+  x402.onAfterPaymentCreation(async (context) => {
+    const network = context.selectedRequirements.network;
+    const chain = network.startsWith("eip155") ? "Base (EVM)" : network.startsWith("solana") ? "Solana" : network;
+    console.log(`[ClawRouter] Payment signed on ${chain} (${network})`);
+  });
+
   const payFetch = wrapFetchWithPayment(fetch, x402);
 
   // Create balance monitor for pre-request checks
