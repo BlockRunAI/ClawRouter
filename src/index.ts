@@ -25,7 +25,9 @@ import type {
 } from "./types.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
 import { startProxy, getProxyPort } from "./proxy.js";
-import { resolveOrGenerateWalletKey, WALLET_FILE } from "./auth.js";
+import { resolveOrGenerateWalletKey, WALLET_FILE, resolveCdpEnvCredentials } from "./auth.js";
+import { createCdpWalletSigner } from "./wallet-cdp.js";
+import type { WalletSigner } from "./wallet-signer.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
 
@@ -428,21 +430,50 @@ let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
  * treating activate() as an alias (def.register ?? def.activate).
  */
 async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
-  // Resolve wallet key: saved file → env var → auto-generate
-  const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
+  let walletKey: string;
+  let walletSigner: WalletSigner | undefined;
+  let address: string;
 
-  // Log wallet source
-  if (source === "generated") {
-    api.logger.warn(`════════════════════════════════════════════════`);
-    api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
-    api.logger.warn(`  Address : ${address}`);
-    api.logger.warn(`  Run /wallet export to get your private key`);
-    api.logger.warn(`  Losing this key = losing your USDC funds`);
-    api.logger.warn(`════════════════════════════════════════════════`);
-  } else if (source === "saved") {
-    api.logger.info(`Using saved wallet: ${address}`);
+  // Check for CDP credentials first (takes precedence over raw key)
+  const cdpCreds = resolveCdpEnvCredentials();
+  if (cdpCreds) {
+    api.logger.info(`CDP credentials detected — initializing MPC wallet`);
+    try {
+      const cdpSigner = await createCdpWalletSigner({
+        apiKeyName: cdpCreds.apiKeyName,
+        privateKey: cdpCreds.privateKey,
+        walletId: cdpCreds.walletId,
+      });
+      walletSigner = cdpSigner;
+      address = cdpSigner.address;
+      walletKey = "cdp"; // Placeholder — not used when walletSigner is set
+      api.logger.info(`Using CDP MPC wallet: ${address} (ID: ${cdpSigner.walletId})`);
+    } catch (err) {
+      api.logger.warn(`CDP wallet init failed: ${err instanceof Error ? err.message : String(err)}`);
+      api.logger.warn(`Falling back to raw private key wallet`);
+      const resolved = await resolveOrGenerateWalletKey();
+      walletKey = resolved.key;
+      address = resolved.address;
+    }
   } else {
-    api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
+    // Resolve wallet key: saved file → env var → auto-generate
+    const resolved = await resolveOrGenerateWalletKey();
+    walletKey = resolved.key;
+    address = resolved.address;
+    const source = resolved.source;
+
+    if (source === "generated") {
+      api.logger.warn(`════════════════════════════════════════════════`);
+      api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
+      api.logger.warn(`  Address : ${address}`);
+      api.logger.warn(`  Run /wallet export to get your private key`);
+      api.logger.warn(`  Losing this key = losing your USDC funds`);
+      api.logger.warn(`════════════════════════════════════════════════`);
+    } else if (source === "saved") {
+      api.logger.info(`Using saved wallet: ${address}`);
+    } else {
+      api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
+    }
   }
 
   // Resolve routing config overrides from plugin config
@@ -450,6 +481,7 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 
   const proxy = await startProxy({
     walletKey,
+    walletSigner,
     routingConfig,
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);

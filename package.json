@@ -68,6 +68,7 @@
     "url": "git+https://github.com/BlockRunAI/ClawRouter.git"
   },
   "dependencies": {
+    "@coinbase/coinbase-sdk": "^0.25.0",
     "viem": "^2.39.3"
   },
   "peerDependencies": {

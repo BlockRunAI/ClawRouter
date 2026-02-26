@@ -222,3 +222,92 @@ export const envKeyAuth: ProviderAuthMethod = {
     };
   },
 };
+
+// ── CDP (Coinbase Developer Platform) Auth ────────────────────────────────────
+
+export { resolveCdpEnvCredentials } from "./wallet-cdp.js";
+
+/**
+ * Auth method: configure CDP wallet via interactive wizard.
+ * Users enter their CDP API key name + private key.
+ * A new MPC wallet is created and persisted to ~/.openclaw/blockrun/cdp/wallet.json
+ */
+export const cdpWalletAuth: ProviderAuthMethod = {
+  id: "cdp-wallet",
+  label: "Coinbase CDP Wallet (MPC — recommended)",
+  hint: "Create or load a Coinbase Developer Platform MPC wallet. No seed phrase needed.",
+  kind: "api_key",
+  run: async (ctx: ProviderAuthContext): Promise<ProviderAuthResult> => {
+    const apiKeyName = await ctx.prompter.text({
+      message: "Enter your CDP API key name (from portal.cdp.coinbase.com)",
+      validate: (v: string) => (!v?.trim() ? "API key name is required" : undefined),
+    });
+
+    if (!apiKeyName || typeof apiKeyName !== "string") throw new Error("CDP API key name required");
+
+    const cdpPrivateKey = await ctx.prompter.text({
+      message: "Enter your CDP API private key",
+      validate: (v: string) => (!v?.trim() ? "Private key is required" : undefined),
+    });
+
+    if (!cdpPrivateKey || typeof cdpPrivateKey !== "string")
+      throw new Error("CDP private key required");
+
+    // Store credentials — wallet is created lazily on first use
+    return {
+      profiles: [
+        {
+          profileId: "cdp",
+          credential: {
+            apiKey: apiKeyName.trim(),
+            type: "cdp",
+            cdpPrivateKey: cdpPrivateKey.trim(),
+          },
+        },
+      ],
+      notes: [
+        "CDP MPC wallet credentials stored. A wallet will be created on first use.",
+        "Your wallet address and ID are saved to ~/.openclaw/blockrun/cdp/wallet.json",
+        "Fund your wallet with USDC on Base to start making payments.",
+        "No private key exposure — Coinbase MPC keeps your keys distributed.",
+      ],
+    };
+  },
+};
+
+/**
+ * Auth method: configure CDP from environment variables.
+ * Set BLOCKRUN_CDP_API_KEY_NAME, BLOCKRUN_CDP_PRIVATE_KEY (and optionally BLOCKRUN_CDP_WALLET_ID).
+ */
+export const cdpEnvAuth: ProviderAuthMethod = {
+  id: "cdp-env",
+  label: "CDP via Environment Variables",
+  hint: "Use BLOCKRUN_CDP_API_KEY_NAME + BLOCKRUN_CDP_PRIVATE_KEY env vars",
+  kind: "api_key",
+  run: async (): Promise<ProviderAuthResult> => {
+    const apiKeyName = process.env.BLOCKRUN_CDP_API_KEY_NAME;
+    const cdpPrivateKey = process.env.BLOCKRUN_CDP_PRIVATE_KEY;
+
+    if (!apiKeyName || !cdpPrivateKey) {
+      throw new Error(
+        "BLOCKRUN_CDP_API_KEY_NAME and BLOCKRUN_CDP_PRIVATE_KEY must both be set. " +
+          "Get your CDP API key at https://portal.cdp.coinbase.com",
+      );
+    }
+
+    return {
+      profiles: [
+        {
+          profileId: "cdp",
+          credential: {
+            apiKey: apiKeyName.trim(),
+            type: "cdp",
+            cdpPrivateKey: cdpPrivateKey.trim(),
+            cdpWalletId: process.env.BLOCKRUN_CDP_WALLET_ID,
+          },
+        },
+      ],
+      notes: ["Using CDP credentials from environment variables."],
+    };
+  },
+};

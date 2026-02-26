@@ -11,8 +11,9 @@
  *   - Falls back to normal 402 flow if pre-signed payment is rejected.
  */
 
-import { signTypedData, privateKeyToAccount } from "viem/accounts";
 import { PaymentCache } from "./payment-cache.js";
+import type { WalletSigner } from "./wallet-signer.js";
+import { createPrivateKeyWalletSigner } from "./wallet-pk.js";
 
 const BASE_CHAIN_ID = 8453;
 const BASE_SEPOLIA_CHAIN_ID = 84532;
@@ -125,8 +126,7 @@ function setPaymentHeaders(headers: Headers, payload: string): void {
 }
 
 async function createPaymentPayload(
-  privateKey: `0x${string}`,
-  fromAddress: string,
+  signer: WalletSigner,
   option: PaymentOption,
   amount: string,
   requestUrl: string,
@@ -147,8 +147,7 @@ async function createPaymentPayload(
   const validBefore = now + maxTimeoutSeconds;
   const nonce = createNonce();
 
-  const signature = await signTypedData({
-    privateKey,
+  const signature = await signer.signTypedData({
     domain: {
       name: option.extra?.name || DEFAULT_TOKEN_NAME,
       version: option.extra?.version || DEFAULT_TOKEN_VERSION,
@@ -158,7 +157,7 @@ async function createPaymentPayload(
     types: TRANSFER_TYPES,
     primaryType: "TransferWithAuthorization",
     message: {
-      from: fromAddress as `0x${string}`,
+      from: signer.address as `0x${string}`,
       to: recipient,
       value: BigInt(amount),
       validAfter: BigInt(validAfter),
@@ -186,7 +185,7 @@ async function createPaymentPayload(
     payload: {
       signature,
       authorization: {
-        from: fromAddress,
+        from: signer.address,
         to: recipient,
         value: amount,
         validAfter: validAfter.toString(),
@@ -218,13 +217,21 @@ export type PaymentFetchResult = {
 /**
  * Create a fetch wrapper that handles x402 payment automatically.
  *
+ * Accepts either:
+ *   - A raw 0x private key string (existing behavior — backward compatible)
+ *   - A WalletSigner instance (CDP MPC wallet or any custom signer)
+ *
  * Supports pre-auth: if cached payment params + estimated amount are available,
  * pre-signs and attaches payment to the first request, skipping the 402 round trip.
  * Falls back to normal 402 flow if pre-signed payment is rejected.
  */
-export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResult {
-  const account = privateKeyToAccount(privateKey);
-  const walletAddress = account.address;
+export function createPaymentFetch(signerOrKey: WalletSigner | `0x${string}`): PaymentFetchResult {
+  // Accept raw private key for backward compat — wrap in PrivateKeyWalletSigner
+  const signer: WalletSigner =
+    typeof signerOrKey === "string"
+      ? createPrivateKeyWalletSigner(signerOrKey)
+      : signerOrKey;
+
   const paymentCache = new PaymentCache();
 
   const payFetch = async (
@@ -239,8 +246,7 @@ export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResul
     const cached = paymentCache.get(endpointPath);
     if (cached && preAuth?.estimatedAmount) {
       const paymentPayload = await createPaymentPayload(
-        privateKey,
-        walletAddress,
+        signer,
         {
           scheme: cached.scheme,
           network: cached.network,
@@ -336,8 +342,7 @@ export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResul
 
     // Create signed payment
     const paymentPayload = await createPaymentPayload(
-      privateKey,
-      walletAddress,
+        signer,
       option,
       amount,
       url,
