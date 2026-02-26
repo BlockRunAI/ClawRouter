@@ -179,7 +179,7 @@ async function main(): Promise<void> {
   }
 
   // Resolve wallet key
-  const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
+  const { key: walletKey, address, source, solanaPrivateKeyBytes } = await resolveOrGenerateWalletKey();
 
   if (source === "generated") {
     console.log(`[ClawRouter] Generated new wallet: ${address}`);
@@ -192,6 +192,7 @@ async function main(): Promise<void> {
   // Start the proxy
   const proxy = await startProxy({
     walletKey,
+    solanaPrivateKeyBytes,
     port: args.port,
     onReady: (port) => {
       console.log(`[ClawRouter] Proxy listening on http://127.0.0.1:${port}`);
