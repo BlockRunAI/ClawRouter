@@ -81,7 +81,7 @@ async function setupTestEnvironment(): Promise<TestContext> {
   const mockPort = (mockServer.address() as { port: number }).port;
 
   const proxy = await startProxy({
-    walletKey: TEST_WALLET,
+    wallet: TEST_WALLET,
     apiBase: `http://127.0.0.1:${mockPort}`,
     skipBalanceCheck: true,
   });

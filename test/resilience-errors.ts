@@ -86,7 +86,7 @@ async function setupTestEnvironment(): Promise<TestContext> {
 
   // Start proxy pointing to mock server
   const proxy = await startProxy({
-    walletKey: TEST_WALLET,
+    wallet: TEST_WALLET,
     apiBase: `http://127.0.0.1:${mockPort}`,
     skipBalanceCheck: true,
   });
@@ -161,7 +161,7 @@ async function testEconnreset(ctx: TestContext): Promise<void> {
 
   // Create proxy pointing to reset server
   const resetProxy = await startProxy({
-    walletKey: TEST_WALLET,
+    wallet: TEST_WALLET,
     apiBase: `http://127.0.0.1:${resetPort}`,
     skipBalanceCheck: true,
   });
@@ -214,7 +214,7 @@ async function testClientTimeout(ctx: TestContext): Promise<void> {
   const slowPort = (slowServer.address() as { port: number }).port;
 
   const slowProxy = await startProxy({
-    walletKey: TEST_WALLET,
+    wallet: TEST_WALLET,
     apiBase: `http://127.0.0.1:${slowPort}`,
     skipBalanceCheck: true,
     requestTimeoutMs: 1000, // 1s timeout

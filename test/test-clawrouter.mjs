@@ -571,7 +571,7 @@ await testAsync("Proxy starts on specified port", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   let readyPort = null;
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: (p) => {
       readyPort = p;
@@ -585,7 +585,7 @@ await testAsync("Proxy starts on specified port", async () => {
 await testAsync("Proxy health endpoint works", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: () => {},
     onError: () => {},
@@ -603,7 +603,7 @@ await testAsync("Proxy health endpoint works", async () => {
 await testAsync("Proxy close frees port", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: () => {},
     onError: () => {},
@@ -612,7 +612,7 @@ await testAsync("Proxy close frees port", async () => {
 
   // Should be able to start another proxy on same port
   const proxy2 = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: () => {},
     onError: () => {},
@@ -623,7 +623,7 @@ await testAsync("Proxy close frees port", async () => {
 await testAsync("Proxy returns 404 for unknown routes", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: () => {},
     onError: () => {},
@@ -638,7 +638,7 @@ await testAsync("Proxy returns 404 for unknown routes", async () => {
 await testAsync("Proxy health returns wallet address", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: () => {},
     onError: () => {},
@@ -655,7 +655,7 @@ await testAsync("Proxy health returns wallet address", async () => {
 await testAsync("Proxy handles concurrent health checks", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     onReady: () => {},
     onError: () => {},
@@ -677,7 +677,7 @@ await testAsync("Proxy handles concurrent health checks", async () => {
 await testAsync("Proxy models endpoint returns model list", async () => {
   const port = 18402 + Math.floor(Math.random() * 1000);
   const proxy = await startProxy({
-    walletKey: TEST_WALLET_KEY,
+    wallet: TEST_WALLET_KEY,
     port,
     skipBalanceCheck: true, // Skip balance check for testing
     onReady: () => {},

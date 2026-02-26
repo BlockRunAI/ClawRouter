@@ -110,7 +110,7 @@ async function runTests() {
 
   // Start ClawRouter proxy pointing to mock API
   const proxy = await startProxy({
-    walletKey: testWalletKey,
+    wallet: testWalletKey,
     apiBase: `http://127.0.0.1:${mockApi.port}`,
     port: 0,
     skipBalanceCheck: true, // Skip balance check for testing

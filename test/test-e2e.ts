@@ -101,7 +101,7 @@ async function main() {
   // Start proxy
   console.log("Starting proxy...");
   const proxy = await startProxy({
-    walletKey: WALLET_KEY,
+    wallet: WALLET_KEY,
     port: 0,
     onReady: (port) => console.log(`Proxy ready on port ${port}`),
     onError: (err) => console.error(`Proxy error: ${err.message}`),

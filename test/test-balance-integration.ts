@@ -56,7 +56,7 @@ async function main() {
   // Start proxy with empty wallet
   console.log("Starting proxy with empty wallet...");
   const proxy = await startProxy({
-    walletKey: emptyWalletKey,
+    wallet: emptyWalletKey,
     onReady: (port) => console.log(`Proxy ready on port ${port}`),
     onError: (err) => console.log(`[onError] ${err.message}`),
     onLowBalance: (info) => {

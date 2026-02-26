@@ -128,7 +128,7 @@ async function runTests() {
   let proxy;
   try {
     proxy = await startProxy({
-      walletKey: TEST_WALLET_KEY,
+      wallet: TEST_WALLET_KEY,
       apiBase: `http://127.0.0.1:${mockPort}`,
       port: 0,
       onReady: (port) => console.log(`✓ ClawRouter proxy started on port ${port}`),
