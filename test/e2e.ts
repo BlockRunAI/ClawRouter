@@ -426,7 +426,7 @@ if (!walletKey) {
 } else {
   try {
     const proxy = await startProxy({
-      walletKey,
+      wallet: walletKey,
       port: 0,
       onReady: (port) => console.log(`  Proxy started on port ${port}`),
       onError: (err) => console.error(`  Proxy error: ${err.message}`),

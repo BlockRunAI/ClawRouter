@@ -89,7 +89,7 @@ console.log("\n═══ Part 2: Proxy Reuse ═══\n");
     // Start first proxy
     console.log("\n  Starting first proxy...");
     const proxy1 = await startProxy({
-      walletKey,
+      wallet: walletKey,
       port: testPort,
       onReady: (port) => console.log(`  First proxy ready on port ${port}`),
     });
@@ -108,7 +108,7 @@ console.log("\n═══ Part 2: Proxy Reuse ═══\n");
     // Start second proxy on same port — should reuse
     console.log("\n  Starting second proxy (should reuse)...");
     const proxy2 = await startProxy({
-      walletKey,
+      wallet: walletKey,
       port: testPort,
       onReady: (port) => console.log(`  Second proxy ready on port ${port}`),
     });
