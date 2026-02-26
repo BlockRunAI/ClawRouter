@@ -8,10 +8,15 @@
 import { homedir, platform, arch, freemem, totalmem } from "node:os";
 import { join } from "node:path";
 import { stat, readdir } from "node:fs/promises";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
+import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { toClientEvmSigner } from "@x402/evm";
 import { resolveOrGenerateWalletKey, WALLET_FILE } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
 import { getStats } from "./stats.js";
-import { createPaymentFetch } from "./x402.js";
 import { getProxyPort } from "./proxy.js";
 import { VERSION } from "./version.js";
 
@@ -314,7 +319,12 @@ async function analyzeWithAI(
 
   try {
     const { key } = await resolveOrGenerateWalletKey();
-    const { fetch: paymentFetch } = createPaymentFetch(key as `0x${string}`);
+    const account = privateKeyToAccount(key as `0x${string}`);
+    const publicClient = createPublicClient({ chain: base, transport: http() });
+    const evmSigner = toClientEvmSigner(account, publicClient);
+    const x402 = new x402Client();
+    registerExactEvmScheme(x402, { signer: evmSigner });
+    const paymentFetch = wrapFetchWithPayment(fetch, x402);
 
     const response = await paymentFetch(
       "https://blockrun.ai/api/v1/chat/completions",
@@ -345,7 +355,6 @@ Analyze the diagnostics and:
           max_tokens: 1000,
         }),
       },
-      undefined,
     );
 
     if (!response.ok) {

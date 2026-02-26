@@ -25,9 +25,10 @@ import type {
 } from "./types.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
 import { startProxy, getProxyPort } from "./proxy.js";
-import { resolveOrGenerateWalletKey, WALLET_FILE } from "./auth.js";
+import { resolveOrGenerateWalletKey, setupSolana, WALLET_FILE, MNEMONIC_FILE } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
+import { SolanaBalanceMonitor } from "./solana-balance.js";
 
 /**
  * Wait for proxy health check to pass (quick check, not RPC).
@@ -428,7 +429,7 @@ let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
  */
 async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   // Resolve wallet key: saved file → env var → auto-generate
-  const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
+  const { key: walletKey, address, source, solanaPrivateKeyBytes } = await resolveOrGenerateWalletKey();
 
   // Log wallet source
   if (source === "generated") {
@@ -449,6 +450,7 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 
   const proxy = await startProxy({
     walletKey,
+    solanaPrivateKeyBytes,
     routingConfig,
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
@@ -589,30 +591,95 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
         };
       }
 
+      if (subcommand === "setup-solana") {
+        // Set up Solana wallet for existing EVM-only users
+        try {
+          const { solanaPrivateKeyBytes } = await setupSolana();
+          // Derive Solana address for display
+          const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+          const signer = await createKeyPairSignerFromPrivateKeyBytes(solanaPrivateKeyBytes);
+          return {
+            text: [
+              "**Solana Wallet Set Up**",
+              "",
+              `**Solana Address:** \`${signer.address}\``,
+              `**Mnemonic File:** \`${MNEMONIC_FILE}\``,
+              "",
+              "Your existing EVM wallet is unchanged.",
+              "Restart the gateway to enable Solana payments.",
+              "",
+              `**Fund with USDC on Solana:** https://solscan.io/account/${signer.address}`,
+            ].join("\n"),
+          };
+        } catch (err) {
+          return {
+            text: `Failed to set up Solana: ${err instanceof Error ? err.message : String(err)}`,
+            isError: true,
+          };
+        }
+      }
+
       // Default: show wallet status
-      let balanceText = "Balance: (checking...)";
+      let evmBalanceText = "Balance: (checking...)";
       try {
         const monitor = new BalanceMonitor(address);
         const balance = await monitor.checkBalance();
-        balanceText = `Balance: ${balance.balanceUSD}`;
+        evmBalanceText = `Balance: ${balance.balanceUSD}`;
       } catch {
-        balanceText = "Balance: (could not check)";
+        evmBalanceText = "Balance: (could not check)";
+      }
+
+      // Check for Solana wallet
+      let solanaSection = "";
+      try {
+        if (existsSync(MNEMONIC_FILE)) {
+          const { deriveSolanaKeyBytes } = await import("./wallet.js");
+          const mnemonic = readTextFileSync(MNEMONIC_FILE).trim();
+          if (mnemonic) {
+            const solKeyBytes = deriveSolanaKeyBytes(mnemonic);
+            const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+            const signer = await createKeyPairSignerFromPrivateKeyBytes(solKeyBytes);
+            const solAddr = signer.address;
+
+            let solBalanceText = "Balance: (checking...)";
+            try {
+              const solMonitor = new SolanaBalanceMonitor(solAddr);
+              const solBalance = await solMonitor.checkBalance();
+              solBalanceText = `Balance: ${solBalance.balanceUSD}`;
+            } catch {
+              solBalanceText = "Balance: (could not check)";
+            }
+
+            solanaSection = [
+              "",
+              "**Solana:**",
+              `  Address: \`${solAddr}\``,
+              `  ${solBalanceText}`,
+              `  Fund: https://solscan.io/account/${solAddr}`,
+            ].join("\n");
+          }
+        }
+      } catch {
+        // No Solana wallet - that's fine
       }
 
       return {
         text: [
-          "🦞 **ClawRouter Wallet**",
+          "**ClawRouter Wallet**",
           "",
-          `**Address:** \`${address}\``,
-          `**${balanceText}**`,
+          "**Base (EVM):**",
+          `  Address: \`${address}\``,
+          `  ${evmBalanceText}`,
+          `  Fund: https://basescan.org/address/${address}`,
+          solanaSection,
+          "",
           `**Key File:** \`${WALLET_FILE}\``,
           "",
           "**Commands:**",
           "• `/wallet` - Show this status",
           "• `/wallet export` - Export private key for backup",
-          "",
-          `**Fund with USDC on Base:** https://basescan.org/address/${address}`,
-        ].join("\n"),
+          !solanaSection ? "• `/wallet setup-solana` - Enable Solana payments" : "",
+        ].filter(Boolean).join("\n"),
       };
     },
   };
@@ -840,12 +907,34 @@ export { logUsage } from "./logger.js";
 export type { UsageEntry } from "./logger.js";
 export { RequestDeduplicator } from "./dedup.js";
 export type { CachedResponse } from "./dedup.js";
-export { PaymentCache } from "./payment-cache.js";
-export type { CachedPaymentParams } from "./payment-cache.js";
-export { createPaymentFetch } from "./x402.js";
-export type { PreAuthParams, PaymentFetchResult } from "./x402.js";
 export { BalanceMonitor, BALANCE_THRESHOLDS } from "./balance.js";
 export type { BalanceInfo, SufficiencyResult } from "./balance.js";
+export { SolanaBalanceMonitor } from "./solana-balance.js";
+export type { SolanaBalanceInfo } from "./solana-balance.js";
+export {
+  SpendControl,
+  FileSpendControlStorage,
+  InMemorySpendControlStorage,
+  formatDuration,
+} from "./spend-control.js";
+export type {
+  SpendWindow,
+  SpendLimits,
+  SpendRecord,
+  SpendingStatus,
+  CheckResult,
+  SpendControlStorage,
+  SpendControlOptions,
+} from "./spend-control.js";
+export {
+  generateWalletMnemonic,
+  isValidMnemonic,
+  deriveEvmKey,
+  deriveSolanaKeyBytes,
+  deriveAllKeys,
+} from "./wallet.js";
+export type { DerivedKeys } from "./wallet.js";
+export { setupSolana } from "./auth.js";
 export {
   InsufficientFundsError,
   EmptyWalletError,

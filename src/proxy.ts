@@ -24,8 +24,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { finished } from "node:stream";
 import type { AddressInfo } from "node:net";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { createPaymentFetch, type PreAuthParams } from "./x402.js";
+import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { toClientEvmSigner } from "@x402/evm";
 import {
   route,
   getFallbackChain,
@@ -813,6 +817,10 @@ export type InsufficientFundsInfo = {
 
 export type ProxyOptions = {
   walletKey: string;
+  /** Optional 32-byte Solana private key for Solana x402 payments. */
+  solanaPrivateKeyBytes?: Uint8Array;
+  /** Optional Solana RPC URL (default: mainnet-beta). */
+  solanaRpcUrl?: string;
   apiBase?: string;
   /** Port to listen on (default: 8402) */
   port?: number;
@@ -859,6 +867,7 @@ export type ProxyHandle = {
   port: number;
   baseUrl: string;
   walletAddress: string;
+  solanaAddress?: string;
   balanceMonitor: BalanceMonitor;
   close: () => Promise<void>;
 };
@@ -957,7 +966,6 @@ async function proxyPartnerRequest(
   payFetch: (
     input: RequestInfo | URL,
     init?: RequestInit,
-    preAuth?: PreAuthParams,
   ) => Promise<Response>,
 ): Promise<void> {
   const startTime = Date.now();
@@ -1072,9 +1080,28 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     };
   }
 
-  // Create x402 payment-enabled fetch from wallet private key
+  // Create x402 payment client with EVM scheme (always available)
   const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const { fetch: payFetch } = createPaymentFetch(options.walletKey as `0x${string}`);
+  const evmPublicClient = createPublicClient({ chain: base, transport: http() });
+  const evmSigner = toClientEvmSigner(account, evmPublicClient);
+  const x402 = new x402Client();
+  registerExactEvmScheme(x402, { signer: evmSigner });
+
+  // Register Solana scheme if key is available
+  let solanaAddress: string | undefined;
+  if (options.solanaPrivateKeyBytes) {
+    const { ExactSvmScheme } = await import("@x402/svm/exact/client");
+    const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+    const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes(options.solanaPrivateKeyBytes);
+    solanaAddress = solanaSigner.address;
+    x402.register(
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      new ExactSvmScheme(solanaSigner, { rpcUrl: options.solanaRpcUrl }),
+    );
+    console.log(`[ClawRouter] Solana x402 scheme registered: ${solanaAddress}`);
+  }
+
+  const payFetch = wrapFetchWithPayment(fetch, x402);
 
   // Create balance monitor for pre-request checks
   const balanceMonitor = new BalanceMonitor(account.address);
@@ -1402,6 +1429,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     port,
     baseUrl,
     walletAddress: account.address,
+    solanaAddress,
     balanceMonitor,
     close: () =>
       new Promise<void>((res, rej) => {
@@ -1450,7 +1478,6 @@ async function tryModelRequest(
   payFetch: (
     input: RequestInfo | URL,
     init?: RequestInit,
-    preAuth?: PreAuthParams,
   ) => Promise<Response>,
   balanceMonitor: BalanceMonitor,
   signal: AbortSignal,
@@ -1498,10 +1525,6 @@ async function tryModelRequest(
     // If body isn't valid JSON, use as-is
   }
 
-  // Estimate cost for pre-auth
-  const estimated = estimateAmount(modelId, requestBody.length, maxTokens);
-  const preAuth: PreAuthParams | undefined = estimated ? { estimatedAmount: estimated } : undefined;
-
   try {
     const response = await payFetch(
       upstreamUrl,
@@ -1511,7 +1534,6 @@ async function tryModelRequest(
         body: requestBody.length > 0 ? new Uint8Array(requestBody) : undefined,
         signal,
       },
-      preAuth,
     );
 
     // Check for provider errors
@@ -1565,9 +1587,8 @@ async function tryModelRequest(
  * Optimizations applied in order:
  *   1. Dedup check — if same request body seen within 30s, replay cached response
  *   2. Streaming heartbeat — for stream:true, send 200 + heartbeats immediately
- *   3. Payment pre-auth — estimate USDC amount and pre-sign to skip 402 round trip
- *   4. Smart routing — when model is "blockrun/auto", pick cheapest capable model
- *   5. Fallback chain — on provider errors, try next model in tier's fallback list
+ *   3. Smart routing — when model is "blockrun/auto", pick cheapest capable model
+ *   4. Fallback chain — on provider errors, try next model in tier's fallback list
  */
 async function proxyRequest(
   req: IncomingMessage,
@@ -1576,7 +1597,6 @@ async function proxyRequest(
   payFetch: (
     input: RequestInfo | URL,
     init?: RequestInit,
-    preAuth?: PreAuthParams,
   ) => Promise<Response>,
   options: ProxyOptions,
   routerOpts: RouterOptions,
