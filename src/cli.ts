@@ -16,6 +16,7 @@
 import { startProxy, getProxyPort } from "./proxy.js";
 import { resolveOrGenerateWalletKey } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
+import { generateReport } from "./report.js";
 import { VERSION } from "./version.js";
 import { runDoctor } from "./doctor.js";
 import { PARTNER_SERVICES } from "./partners/index.js";
@@ -28,6 +29,8 @@ Usage:
   clawrouter [options]
   clawrouter doctor [opus] [question]
   clawrouter partners [test]
+  clawrouter report [daily|weekly|monthly] [--json]
+  clawrouter report [daily
 
 Options:
   --version, -v     Show version number
@@ -70,6 +73,9 @@ function parseArgs(args: string[]): {
   doctor: boolean;
   partners: boolean;
   partnersTest: boolean;
+  report: boolean;
+  reportPeriod: "daily" | "weekly" | "monthly";
+  reportJson: boolean;
   port?: number;
 } {
   const result = {
@@ -78,6 +84,9 @@ function parseArgs(args: string[]): {
     doctor: false,
     partners: false,
     partnersTest: false,
+    report: false,
+    reportPeriod: "daily" as "daily" | "weekly" | "monthly",
+    reportJson: false,
     port: undefined as number | undefined,
   };
 
@@ -94,6 +103,20 @@ function parseArgs(args: string[]): {
       // Check for "test" subcommand
       if (args[i + 1] === "test") {
         result.partnersTest = true;
+        i++;
+      }
+    } else if (arg === "report") {
+      result.report = true;
+      const next = args[i + 1];
+      if (next && ["daily", "weekly", "monthly"].includes(next)) {
+        result.reportPeriod = next as any;
+        i++;
+        if (args[i + 1] === "--json") {
+          result.reportJson = true;
+          i++;
+        }
+      } else if (next === "--json") {
+        result.reportJson = true;
         i++;
       }
     } else if (arg === "--port" && args[i + 1]) {
@@ -175,6 +198,12 @@ async function main(): Promise<void> {
       console.log();
     }
 
+    process.exit(0);
+  }
+
+  if (args.report) {
+    const report = await generateReport(args.reportPeriod, args.reportJson);
+    console.log(report);
     process.exit(0);
   }
 
