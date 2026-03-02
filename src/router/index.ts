@@ -43,7 +43,7 @@ export function route(
   // --- Select tier configs based on routing profile ---
   const { routingProfile } = options;
   let tierConfigs: Record<Tier, { primary: string; fallback: string[] }>;
-  let profileSuffix = "";
+  let profileSuffix: string;
 
   if (routingProfile === "eco" && config.ecoTiers) {
     // Eco profile: ultra cost-optimized models

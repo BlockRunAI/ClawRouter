@@ -73,6 +73,7 @@ async function loadSavedWallet(): Promise<string | undefined> {
         `Cannot read wallet file at ${WALLET_FILE}: ${err instanceof Error ? err.message : String(err)}. ` +
           `Refusing to auto-generate new wallet to protect existing funds. ` +
           `Fix file permissions or set BLOCKRUN_WALLET_KEY environment variable.`,
+        { cause: err },
       );
     }
   }
@@ -103,6 +104,7 @@ async function generateAndSaveWallet(): Promise<{ key: string; address: string }
   } catch (err) {
     throw new Error(
       `Failed to verify wallet file after creation: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     );
   }
 
