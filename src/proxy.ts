@@ -26,6 +26,7 @@ import { finished } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { privateKeyToAccount } from "viem/accounts";
 import { createPaymentFetch, type PreAuthParams } from "./x402.js";
+import { createPrivateKeyWalletSigner } from "./wallet-pk.js";
 import {
   route,
   getFallbackChain,
@@ -825,6 +826,8 @@ export type InsufficientFundsInfo = {
 
 export type ProxyOptions = {
   walletKey: string;
+  /** Optional: CDP MPC wallet signer. If provided, takes precedence over walletKey. */
+  walletSigner?: import("./wallet-signer.js").WalletSigner;
   apiBase?: string;
   /** Port to listen on (default: 8402) */
   port?: number;
@@ -1097,14 +1100,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const existingWallet = await checkExistingProxy(listenPort);
   if (existingWallet) {
     // Proxy already running — reuse it instead of failing with EADDRINUSE
-    const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-    const balanceMonitor = new BalanceMonitor(account.address);
+    const resolvedSigner1 = options.walletSigner ?? createPrivateKeyWalletSigner(options.walletKey as `0x${string}`);
+    const balanceMonitor = new BalanceMonitor(resolvedSigner1.address);
     const baseUrl = `http://127.0.0.1:${listenPort}`;
 
     // Verify the existing proxy is using the same wallet (or warn if different)
-    if (existingWallet !== account.address) {
+    if (existingWallet !== resolvedSigner1.address) {
       console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingWallet}, but current config uses ${account.address}. Reusing existing proxy.`,
+        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingWallet}, but current config uses ${resolvedSigner1.address}. Reusing existing proxy.`,
       );
     }
 
@@ -1122,8 +1125,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   }
 
   // Create x402 payment-enabled fetch from wallet private key
-  const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const { fetch: payFetch } = createPaymentFetch(options.walletKey as `0x${string}`);
+  const resolvedSigner = options.walletSigner ?? createPrivateKeyWalletSigner(options.walletKey as `0x${string}`);
+  const account = { address: resolvedSigner.address };
+  const { fetch: payFetch } = createPaymentFetch(resolvedSigner);
 
   // Create balance monitor for pre-request checks
   const balanceMonitor = new BalanceMonitor(account.address);
