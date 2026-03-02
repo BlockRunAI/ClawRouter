@@ -152,7 +152,7 @@ async function collectNetworkInfo(): Promise<NetworkInfo> {
     blockrunLatency = Date.now() - start;
     blockrunReachable = response.ok || response.status === 402;
   } catch {
-    blockrunReachable = false;
+    // blockrunReachable already false
   }
 
   // Check local proxy
@@ -164,7 +164,7 @@ async function collectNetworkInfo(): Promise<NetworkInfo> {
     });
     proxyRunning = response.ok;
   } catch {
-    proxyRunning = false;
+    // proxyRunning already false
   }
 
   return {

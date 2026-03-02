@@ -3051,7 +3051,7 @@ async function proxyRequest(
 
     // Convert abort error to more descriptive timeout error
     if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Request timed out after ${timeoutMs}ms`);
+      throw new Error(`Request timed out after ${timeoutMs}ms`, { cause: err });
     }
 
     throw err;
