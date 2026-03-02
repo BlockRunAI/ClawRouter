@@ -79,8 +79,8 @@
     }
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "eslint": "^9.39.2",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.2",
     "openclaw": "latest",
     "prettier": "^3.8.1",
     "tsup": "^8.0.0",
