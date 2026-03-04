@@ -18,6 +18,7 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
   appendTransactionMessageInstructions,
   signTransactionMessageWithSigners,
+  addSignersToTransactionMessage,
   getSignatureFromTransaction,
   sendAndConfirmTransactionFactory,
   getProgramDerivedAddress,
@@ -245,7 +246,13 @@ export async function sweepSolanaWallet(
       (msg) => appendTransactionMessageInstructions([createAtaIx, ...transferIxs], msg),
     );
 
-    const signedTx = await signTransactionMessageWithSigners(txMessage);
+    // Attach both signers so signTransactionMessageWithSigners can find them
+    const txMessageWithSigners = addSignersToTransactionMessage(
+      [newSigner, oldSigner],
+      txMessage,
+    );
+
+    const signedTx = await signTransactionMessageWithSigners(txMessageWithSigners);
     const txSignature = getSignatureFromTransaction(signedTx);
 
     // Send transaction and poll for confirmation
