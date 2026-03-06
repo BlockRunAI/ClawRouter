@@ -2,7 +2,7 @@
  * Integration test setup — programmatically starts ClawRouter proxy.
  *
  * Shared across all integration test files via beforeAll/afterAll.
- * Starts the proxy on port 8402, waits for /health to return 200,
+ * Starts the proxy on an ephemeral localhost port, waits for /health to return 200,
  * and caches the handle so multiple test files share one instance.
  */
 
@@ -10,14 +10,14 @@ import { startProxy } from "../../src/proxy.js";
 import { resolveOrGenerateWalletKey } from "../../src/auth.js";
 import type { ProxyHandle } from "../../src/proxy.js";
 
-const TEST_PORT = 8402;
+const TEST_PORT = 0;
 const HEALTH_POLL_INTERVAL_MS = 200;
 const HEALTH_TIMEOUT_MS = 5_000;
 
 let proxyHandle: ProxyHandle | undefined;
 
 /**
- * Start the test proxy on port 8402.
+ * Start the test proxy on an ephemeral localhost port.
  * Polls /health until it returns 200 (up to 5s), then returns the handle.
  * Reuses an existing handle if already started.
  */
@@ -57,7 +57,7 @@ export async function stopTestProxy(): Promise<void> {
 }
 
 /**
- * Get the base URL of the running test proxy (e.g. http://127.0.0.1:8402).
+ * Get the base URL of the running test proxy.
  * Throws if the proxy has not been started.
  */
 export function getTestProxyUrl(): string {
