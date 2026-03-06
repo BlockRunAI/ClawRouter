@@ -166,11 +166,30 @@ function transformPaymentError(errorBody: string): string {
             },
           });
         }
+
+        // Handle transaction simulation failures (Solana on-chain validation)
+        if (innerJson.invalidReason === "transaction_simulation_failed") {
+          console.error(
+            `[ClawRouter] Solana transaction simulation failed: ${innerJson.invalidMessage || "unknown"}`,
+          );
+          return JSON.stringify({
+            error: {
+              message: "Solana payment simulation failed. Retrying with a different model.",
+              type: "transaction_simulation_failed",
+              help: "This is usually temporary. If it persists, check your Solana USDC balance or try: /model free",
+            },
+          });
+        }
       }
     }
 
     // Handle settlement failures (gas estimation, on-chain errors)
-    if (parsed.error === "Settlement failed" || parsed.details?.includes("Settlement failed")) {
+    if (
+      parsed.error === "Settlement failed" ||
+      parsed.error === "Payment settlement failed" ||
+      parsed.details?.includes("Settlement failed") ||
+      parsed.details?.includes("transaction_simulation_failed")
+    ) {
       const details = parsed.details || "";
       const gasError = details.includes("unable to estimate gas");
 
@@ -2789,10 +2808,10 @@ async function proxyRequest(
           markRateLimited(tryModel);
         }
 
-        // Payment error (insufficient funds) — skip remaining paid models,
-        // jump straight to free model. No point trying other paid models
-        // with the same empty wallet.
-        const isPaymentErr = /payment.*verification.*failed|insufficient.*funds/i.test(
+        // Payment error (insufficient funds, simulation failure) — skip remaining
+        // paid models, jump straight to free model. No point trying other paid
+        // models with the same wallet state.
+        const isPaymentErr = /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
           result.errorBody || "",
         );
         if (isPaymentErr && tryModel !== FREE_MODEL) {

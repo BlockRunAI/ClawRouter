@@ -70,7 +70,7 @@
   "dependencies": {
     "@scure/bip32": "^1.6.0",
     "@scure/bip39": "^1.5.0",
-    "@solana/kit": "^6.0.0",
+    "@solana/kit": "^5.0.0",
     "@x402/evm": "^2.4.0",
     "@x402/fetch": "^2.4.0",
     "@x402/svm": "^2.4.0",
