@@ -14,14 +14,14 @@ function scoreKeywordMatch(text, keywords, name, signalLabel, thresholds, scores
     return {
       name,
       score: scores.high,
-      signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})`,
+      signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})`
     };
   }
   if (matches.length >= thresholds.low) {
     return {
       name,
       score: scores.low,
-      signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})`,
+      signal: `${signalLabel} (${matches.slice(0, 3).join(", ")})`
     };
   }
   return { name, score: scores.none, signal: null };
@@ -57,32 +57,32 @@ function scoreAgenticTask(text, keywords) {
       dimensionScore: {
         name: "agenticTask",
         score: 1,
-        signal: `agentic (${signals.join(", ")})`,
+        signal: `agentic (${signals.join(", ")})`
       },
-      agenticScore: 1,
+      agenticScore: 1
     };
   } else if (matchCount >= 3) {
     return {
       dimensionScore: {
         name: "agenticTask",
         score: 0.6,
-        signal: `agentic (${signals.join(", ")})`,
+        signal: `agentic (${signals.join(", ")})`
       },
-      agenticScore: 0.6,
+      agenticScore: 0.6
     };
   } else if (matchCount >= 1) {
     return {
       dimensionScore: {
         name: "agenticTask",
         score: 0.2,
-        signal: `agentic-light (${signals.join(", ")})`,
+        signal: `agentic-light (${signals.join(", ")})`
       },
-      agenticScore: 0.2,
+      agenticScore: 0.2
     };
   }
   return {
     dimensionScore: { name: "agenticTask", score: 0, signal: null },
-    agenticScore: 0,
+    agenticScore: 0
   };
 }
 function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
@@ -96,7 +96,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "codePresence",
       "code",
       { low: 1, high: 2 },
-      { none: 0, low: 0.5, high: 1 },
+      { none: 0, low: 0.5, high: 1 }
     ),
     scoreKeywordMatch(
       userText,
@@ -104,7 +104,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "reasoningMarkers",
       "reasoning",
       { low: 1, high: 2 },
-      { none: 0, low: 0.7, high: 1 },
+      { none: 0, low: 0.7, high: 1 }
     ),
     scoreKeywordMatch(
       userText,
@@ -112,7 +112,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "technicalTerms",
       "technical",
       { low: 2, high: 4 },
-      { none: 0, low: 0.5, high: 1 },
+      { none: 0, low: 0.5, high: 1 }
     ),
     scoreKeywordMatch(
       userText,
@@ -120,7 +120,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "creativeMarkers",
       "creative",
       { low: 1, high: 2 },
-      { none: 0, low: 0.5, high: 0.7 },
+      { none: 0, low: 0.5, high: 0.7 }
     ),
     scoreKeywordMatch(
       userText,
@@ -128,7 +128,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "simpleIndicators",
       "simple",
       { low: 1, high: 2 },
-      { none: 0, low: -1, high: -1 },
+      { none: 0, low: -1, high: -1 }
     ),
     scoreMultiStep(userText),
     scoreQuestionComplexity(prompt),
@@ -139,7 +139,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "imperativeVerbs",
       "imperative",
       { low: 1, high: 2 },
-      { none: 0, low: 0.3, high: 0.5 },
+      { none: 0, low: 0.3, high: 0.5 }
     ),
     scoreKeywordMatch(
       userText,
@@ -147,7 +147,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "constraintCount",
       "constraints",
       { low: 1, high: 3 },
-      { none: 0, low: 0.3, high: 0.7 },
+      { none: 0, low: 0.3, high: 0.7 }
     ),
     scoreKeywordMatch(
       userText,
@@ -155,7 +155,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "outputFormat",
       "format",
       { low: 1, high: 2 },
-      { none: 0, low: 0.4, high: 0.7 },
+      { none: 0, low: 0.4, high: 0.7 }
     ),
     scoreKeywordMatch(
       userText,
@@ -163,7 +163,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "referenceComplexity",
       "references",
       { low: 1, high: 2 },
-      { none: 0, low: 0.3, high: 0.5 },
+      { none: 0, low: 0.3, high: 0.5 }
     ),
     scoreKeywordMatch(
       userText,
@@ -171,7 +171,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "negationComplexity",
       "negation",
       { low: 2, high: 3 },
-      { none: 0, low: 0.3, high: 0.5 },
+      { none: 0, low: 0.3, high: 0.5 }
     ),
     scoreKeywordMatch(
       userText,
@@ -179,8 +179,8 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       "domainSpecificity",
       "domain-specific",
       { low: 1, high: 2 },
-      { none: 0, low: 0.5, high: 0.8 },
-    ),
+      { none: 0, low: 0.5, high: 0.8 }
+    )
   ];
   const agenticResult = scoreAgenticTask(userText, config2.agenticTaskKeywords);
   dimensions.push(agenticResult.dimensionScore);
@@ -192,14 +192,14 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
     const w = weights[d.name] ?? 0;
     weightedScore += d.score * w;
   }
-  const reasoningMatches = config2.reasoningKeywords.filter((kw) =>
-    userText.includes(kw.toLowerCase()),
+  const reasoningMatches = config2.reasoningKeywords.filter(
+    (kw) => userText.includes(kw.toLowerCase())
   );
   if (reasoningMatches.length >= 2) {
     const confidence2 = calibrateConfidence(
       Math.max(weightedScore, 0.3),
       // ensure positive for confidence calc
-      config2.confidenceSteepness,
+      config2.confidenceSteepness
     );
     return {
       score: weightedScore,
@@ -207,7 +207,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
       confidence: Math.max(confidence2, 0.85),
       signals,
       agenticScore,
-      dimensions,
+      dimensions
     };
   }
   const { simpleMedium, mediumComplex, complexReasoning } = config2.tierBoundaries;
@@ -223,7 +223,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config2) {
     tier = "COMPLEX";
     distanceFromBoundary = Math.min(
       weightedScore - mediumComplex,
-      complexReasoning - weightedScore,
+      complexReasoning - weightedScore
     );
   } else {
     tier = "REASONING";
@@ -243,38 +243,22 @@ function calibrateConfidence(distance, steepness) {
 var BASELINE_MODEL_ID = "anthropic/claude-opus-4.6";
 var BASELINE_INPUT_PRICE = 5;
 var BASELINE_OUTPUT_PRICE = 25;
-function selectModel(
-  tier,
-  confidence,
-  method,
-  reasoning,
-  tierConfigs,
-  modelPricing2,
-  estimatedInputTokens,
-  maxOutputTokens,
-  routingProfile,
-  agenticScore,
-) {
+function selectModel(tier, confidence, method, reasoning, tierConfigs, modelPricing2, estimatedInputTokens, maxOutputTokens, routingProfile, agenticScore) {
   const tierConfig = tierConfigs[tier];
   const model = tierConfig.primary;
   const pricing = modelPricing2.get(model);
   const inputPrice = pricing?.inputPrice ?? 0;
   const outputPrice = pricing?.outputPrice ?? 0;
-  const inputCost = (estimatedInputTokens / 1e6) * inputPrice;
-  const outputCost = (maxOutputTokens / 1e6) * outputPrice;
+  const inputCost = estimatedInputTokens / 1e6 * inputPrice;
+  const outputCost = maxOutputTokens / 1e6 * outputPrice;
   const costEstimate = inputCost + outputCost;
   const opusPricing = modelPricing2.get(BASELINE_MODEL_ID);
   const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE;
   const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE;
-  const baselineInput = (estimatedInputTokens / 1e6) * opusInputPrice;
-  const baselineOutput = (maxOutputTokens / 1e6) * opusOutputPrice;
+  const baselineInput = estimatedInputTokens / 1e6 * opusInputPrice;
+  const baselineOutput = maxOutputTokens / 1e6 * opusOutputPrice;
   const baselineCost = baselineInput + baselineOutput;
-  const savings =
-    routingProfile === "premium"
-      ? 0
-      : baselineCost > 0
-        ? Math.max(0, (baselineCost - costEstimate) / baselineCost)
-        : 0;
+  const savings = routingProfile === "premium" ? 0 : baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
   return {
     model,
     tier,
@@ -284,38 +268,27 @@ function selectModel(
     costEstimate,
     baselineCost,
     savings,
-    ...(agenticScore !== void 0 && { agenticScore }),
+    ...agenticScore !== void 0 && { agenticScore }
   };
 }
 function getFallbackChain(tier, tierConfigs) {
   const config2 = tierConfigs[tier];
   return [config2.primary, ...config2.fallback];
 }
-function calculateModelCost(
-  model,
-  modelPricing2,
-  estimatedInputTokens,
-  maxOutputTokens,
-  routingProfile,
-) {
+function calculateModelCost(model, modelPricing2, estimatedInputTokens, maxOutputTokens, routingProfile) {
   const pricing = modelPricing2.get(model);
   const inputPrice = pricing?.inputPrice ?? 0;
   const outputPrice = pricing?.outputPrice ?? 0;
-  const inputCost = (estimatedInputTokens / 1e6) * inputPrice;
-  const outputCost = (maxOutputTokens / 1e6) * outputPrice;
+  const inputCost = estimatedInputTokens / 1e6 * inputPrice;
+  const outputCost = maxOutputTokens / 1e6 * outputPrice;
   const costEstimate = inputCost + outputCost;
   const opusPricing = modelPricing2.get(BASELINE_MODEL_ID);
   const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE;
   const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE;
-  const baselineInput = (estimatedInputTokens / 1e6) * opusInputPrice;
-  const baselineOutput = (maxOutputTokens / 1e6) * opusOutputPrice;
+  const baselineInput = estimatedInputTokens / 1e6 * opusInputPrice;
+  const baselineOutput = maxOutputTokens / 1e6 * opusOutputPrice;
   const baselineCost = baselineInput + baselineOutput;
-  const savings =
-    routingProfile === "premium"
-      ? 0
-      : baselineCost > 0
-        ? Math.max(0, (baselineCost - costEstimate) / baselineCost)
-        : 0;
+  const savings = routingProfile === "premium" ? 0 : baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
   return { costEstimate, baselineCost, savings };
 }
 function filterByToolCalling(models, hasTools, supportsToolCalling2) {
@@ -351,7 +324,7 @@ var DEFAULT_ROUTING_CONFIG = {
     llmMaxTokens: 10,
     llmTemperature: 0,
     promptTruncationChars: 500,
-    cacheTtlMs: 36e5,
+    cacheTtlMs: 36e5
     // 1 hour
   },
   scoring: {
@@ -454,7 +427,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0627\u0646\u062A\u0638\u0627\u0631",
       "\u062B\u0627\u0628\u062A",
       "\u0645\u062A\u063A\u064A\u0631",
-      "\u0625\u0631\u062C\u0627\u0639",
+      "\u0625\u0631\u062C\u0627\u0639"
     ],
     reasoningKeywords: [
       // English
@@ -544,7 +517,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0631\u0633\u0645\u064A\u0627\u064B",
       "\u0631\u064A\u0627\u0636\u064A",
       "\u0628\u0631\u0647\u0627\u0646",
-      "\u0645\u0646\u0637\u0642\u064A\u0627\u064B",
+      "\u0645\u0646\u0637\u0642\u064A\u0627\u064B"
     ],
     simpleKeywords: [
       // English
@@ -635,7 +608,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0646\u0639\u0645 \u0623\u0648 \u0644\u0627",
       "\u0639\u0627\u0635\u0645\u0629",
       "\u0645\u0646 \u0647\u0648",
-      "\u0645\u062A\u0649",
+      "\u0645\u062A\u0649"
     ],
     technicalKeywords: [
       // English
@@ -712,7 +685,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0645\u0648\u0632\u0639",
       "\u062E\u062F\u0645\u0629 \u0645\u0635\u063A\u0631\u0629",
       "\u0642\u0627\u0639\u062F\u0629 \u0628\u064A\u0627\u0646\u0627\u062A",
-      "\u0628\u0646\u064A\u0629 \u062A\u062D\u062A\u064A\u0629",
+      "\u0628\u0646\u064A\u0629 \u062A\u062D\u062A\u064A\u0629"
     ],
     creativeKeywords: [
       // English
@@ -788,7 +761,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0639\u0635\u0641 \u0630\u0647\u0646\u064A",
       "\u0625\u0628\u062F\u0627\u0639\u064A",
       "\u062A\u062E\u064A\u0644",
-      "\u0627\u0643\u062A\u0628",
+      "\u0627\u0643\u062A\u0628"
     ],
     // New dimension keyword lists (multilingual)
     imperativeVerbs: [
@@ -884,7 +857,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u062A\u0637\u0648\u064A\u0631",
       "\u062A\u0648\u0644\u064A\u062F",
       "\u0646\u0634\u0631",
-      "\u0625\u0639\u062F\u0627\u062F",
+      "\u0625\u0639\u062F\u0627\u062F"
     ],
     constraintIndicators: [
       // English
@@ -964,7 +937,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0623\u0642\u0635\u0649",
       "\u0623\u062F\u0646\u0649",
       "\u062D\u062F",
-      "\u0645\u064A\u0632\u0627\u0646\u064A\u0629",
+      "\u0645\u064A\u0632\u0627\u0646\u064A\u0629"
     ],
     outputFormatKeywords: [
       // English
@@ -1008,7 +981,7 @@ var DEFAULT_ROUTING_CONFIG = {
       // Arabic
       "\u062C\u062F\u0648\u0644",
       "\u062A\u0646\u0633\u064A\u0642",
-      "\u0645\u0646\u0638\u0645",
+      "\u0645\u0646\u0638\u0645"
     ],
     referenceKeywords: [
       // English
@@ -1085,7 +1058,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0627\u0644\u062A\u0627\u0644\u064A",
       "\u0627\u0644\u0648\u062B\u0627\u0626\u0642",
       "\u0627\u0644\u0643\u0648\u062F",
-      "\u0645\u0631\u0641\u0642",
+      "\u0645\u0631\u0641\u0642"
     ],
     negationKeywords: [
       // English
@@ -1154,7 +1127,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0623\u0628\u062F\u0627\u064B",
       "\u0628\u062F\u0648\u0646",
       "\u0628\u0627\u0633\u062A\u062B\u0646\u0627\u0621",
-      "\u0627\u0633\u062A\u0628\u0639\u0627\u062F",
+      "\u0627\u0633\u062A\u0628\u0639\u0627\u062F"
     ],
     domainSpecificKeywords: [
       // English
@@ -1227,7 +1200,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0636\u0648\u0626\u064A\u0627\u062A",
       "\u062C\u064A\u0646\u0648\u0645\u064A\u0627\u062A",
       "\u0637\u0648\u0628\u0648\u0644\u0648\u062C\u064A",
-      "\u062A\u0645\u0627\u062B\u0644\u064A",
+      "\u062A\u0645\u0627\u062B\u0644\u064A"
     ],
     // Agentic task keywords - file ops, execution, multi-step, iterative work
     // Pruned: removed overly common words like "then", "first", "run", "test", "build"
@@ -1334,7 +1307,7 @@ var DEFAULT_ROUTING_CONFIG = {
       "\u0627\u0644\u062E\u0637\u0648\u0629 2",
       "\u0625\u0635\u0644\u0627\u062D",
       "\u062A\u0635\u062D\u064A\u062D",
-      "\u062A\u062D\u0642\u0642",
+      "\u062A\u062D\u0642\u0642"
     ],
     // Dimension weights (sum to 1.0)
     dimensionWeights: {
@@ -1353,7 +1326,7 @@ var DEFAULT_ROUTING_CONFIG = {
       referenceComplexity: 0.02,
       negationComplexity: 0.01,
       domainSpecificity: 0.02,
-      agenticTask: 0.04,
+      agenticTask: 0.04
       // Reduced - agentic signals influence tier selection, not dominate it
     },
     // Tier boundaries on weighted score axis
@@ -1361,13 +1334,13 @@ var DEFAULT_ROUTING_CONFIG = {
       simpleMedium: 0,
       mediumComplex: 0.3,
       // Raised from 0.18 - prevent simple tasks from reaching expensive COMPLEX tier
-      complexReasoning: 0.5,
+      complexReasoning: 0.5
       // Raised from 0.4 - reserve for true reasoning tasks
     },
     // Sigmoid steepness for confidence calibration
     confidenceSteepness: 12,
     // Below this confidence → ambiguous (null tier)
-    confidenceThreshold: 0.7,
+    confidenceThreshold: 0.7
   },
   // Auto (balanced) tier configs - current default smart routing
   tiers: {
@@ -1379,8 +1352,8 @@ var DEFAULT_ROUTING_CONFIG = {
         // 1M context, ultra cheap ($0.10/$0.40)
         "nvidia/gpt-oss-120b",
         // FREE fallback
-        "deepseek/deepseek-chat",
-      ],
+        "deepseek/deepseek-chat"
+      ]
     },
     MEDIUM: {
       primary: "moonshot/kimi-k2.5",
@@ -1389,9 +1362,9 @@ var DEFAULT_ROUTING_CONFIG = {
         "deepseek/deepseek-chat",
         "google/gemini-2.5-flash-lite",
         // 1M context, ultra cheap ($0.10/$0.40)
-        "xai/grok-4-1-fast-non-reasoning",
+        "xai/grok-4-1-fast-non-reasoning"
         // Upgraded Grok 4.1
-      ],
+      ]
     },
     COMPLEX: {
       primary: "google/gemini-3.1-pro",
@@ -1404,11 +1377,11 @@ var DEFAULT_ROUTING_CONFIG = {
         "google/gemini-2.5-pro",
         "deepseek/deepseek-chat",
         "xai/grok-4-0709",
-        "openai/gpt-5.2",
-        // Newer and cheaper input than gpt-4o
+        "openai/gpt-5.4",
+        // Newest flagship, same price as 4o
         "openai/gpt-4o",
-        "anthropic/claude-sonnet-4.6",
-      ],
+        "anthropic/claude-sonnet-4.6"
+      ]
     },
     REASONING: {
       primary: "xai/grok-4-1-fast-reasoning",
@@ -1418,32 +1391,32 @@ var DEFAULT_ROUTING_CONFIG = {
         // Cheap reasoning model
         "openai/o4-mini",
         // Newer and cheaper than o3 ($1.10 vs $2.00)
-        "openai/o3",
-      ],
-    },
+        "openai/o3"
+      ]
+    }
   },
   // Eco tier configs - absolute cheapest (blockrun/eco)
   ecoTiers: {
     SIMPLE: {
       primary: "nvidia/gpt-oss-120b",
       // FREE! $0.00/$0.00
-      fallback: ["google/gemini-2.5-flash-lite", "deepseek/deepseek-chat"],
+      fallback: ["google/gemini-2.5-flash-lite", "deepseek/deepseek-chat"]
     },
     MEDIUM: {
       primary: "google/gemini-2.5-flash-lite",
       // $0.10/$0.40 - cheapest capable with 1M context
-      fallback: ["deepseek/deepseek-chat", "nvidia/gpt-oss-120b"],
+      fallback: ["deepseek/deepseek-chat", "nvidia/gpt-oss-120b"]
     },
     COMPLEX: {
       primary: "google/gemini-2.5-flash-lite",
       // $0.10/$0.40 - 1M context handles complexity
-      fallback: ["google/gemini-2.5-flash", "deepseek/deepseek-chat", "xai/grok-4-0709"],
+      fallback: ["google/gemini-2.5-flash", "deepseek/deepseek-chat", "xai/grok-4-0709"]
     },
     REASONING: {
       primary: "xai/grok-4-1-fast-reasoning",
       // $0.20/$0.50
-      fallback: ["deepseek/deepseek-reasoner"],
-    },
+      fallback: ["deepseek/deepseek-reasoner"]
+    }
   },
   // Premium tier configs - best quality (blockrun/premium)
   // codex=complex coding, kimi=simple coding, sonnet=reasoning/instructions, opus=architecture/PM/audits
@@ -1454,8 +1427,8 @@ var DEFAULT_ROUTING_CONFIG = {
       fallback: [
         "anthropic/claude-haiku-4.5",
         "google/gemini-2.5-flash-lite",
-        "deepseek/deepseek-chat",
-      ],
+        "deepseek/deepseek-chat"
+      ]
     },
     MEDIUM: {
       primary: "openai/gpt-5.2-codex",
@@ -1464,21 +1437,23 @@ var DEFAULT_ROUTING_CONFIG = {
         "moonshot/kimi-k2.5",
         "google/gemini-2.5-pro",
         "xai/grok-4-0709",
-        "anthropic/claude-sonnet-4.6",
-      ],
+        "anthropic/claude-sonnet-4.6"
+      ]
     },
     COMPLEX: {
       primary: "anthropic/claude-opus-4.6",
       // Best quality for complex tasks
       fallback: [
+        "openai/gpt-5.4",
+        // Newest flagship
         "openai/gpt-5.2-codex",
         "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4.6",
         "google/gemini-3.1-pro",
         // Newest Gemini
         "google/gemini-3-pro-preview",
-        "moonshot/kimi-k2.5",
-      ],
+        "moonshot/kimi-k2.5"
+      ]
     },
     REASONING: {
       primary: "anthropic/claude-sonnet-4.6",
@@ -1489,9 +1464,9 @@ var DEFAULT_ROUTING_CONFIG = {
         "openai/o4-mini",
         // Newer and cheaper than o3 ($1.10 vs $2.00)
         "openai/o3",
-        "xai/grok-4-1-fast-reasoning",
-      ],
-    },
+        "xai/grok-4-1-fast-reasoning"
+      ]
+    }
   },
   // Agentic tier configs - models that excel at multi-step autonomous tasks
   agenticTiers: {
@@ -1501,8 +1476,8 @@ var DEFAULT_ROUTING_CONFIG = {
       fallback: [
         "anthropic/claude-haiku-4.5",
         "xai/grok-4-1-fast-non-reasoning",
-        "openai/gpt-4o-mini",
-      ],
+        "openai/gpt-4o-mini"
+      ]
     },
     MEDIUM: {
       primary: "moonshot/kimi-k2.5",
@@ -1510,20 +1485,21 @@ var DEFAULT_ROUTING_CONFIG = {
       fallback: [
         "anthropic/claude-haiku-4.5",
         "deepseek/deepseek-chat",
-        "xai/grok-4-1-fast-non-reasoning",
-      ],
+        "xai/grok-4-1-fast-non-reasoning"
+      ]
     },
     COMPLEX: {
       primary: "anthropic/claude-sonnet-4.6",
       fallback: [
         "anthropic/claude-opus-4.6",
         // Latest Opus - best agentic
-        "openai/gpt-5.2",
+        "openai/gpt-5.4",
+        // Newest flagship
         "google/gemini-3.1-pro",
         // Newest Gemini
         "google/gemini-3-pro-preview",
-        "xai/grok-4-0709",
-      ],
+        "xai/grok-4-0709"
+      ]
     },
     REASONING: {
       primary: "anthropic/claude-sonnet-4.6",
@@ -1531,16 +1507,16 @@ var DEFAULT_ROUTING_CONFIG = {
       fallback: [
         "anthropic/claude-opus-4.6",
         "xai/grok-4-1-fast-reasoning",
-        "deepseek/deepseek-reasoner",
-      ],
-    },
+        "deepseek/deepseek-reasoner"
+      ]
+    }
   },
   overrides: {
     maxTokensForceComplex: 1e5,
     structuredOutputMinTier: "MEDIUM",
     ambiguousDefaultTier: "MEDIUM",
-    agenticMode: false,
-  },
+    agenticMode: false
+  }
 };
 
 // src/router/index.ts
@@ -1562,9 +1538,10 @@ function route(prompt, systemPrompt, maxOutputTokens, options) {
     const agenticScore = ruleResult.agenticScore ?? 0;
     const isAutoAgentic = agenticScore >= 0.5;
     const isExplicitAgentic = config2.overrides.agenticMode ?? false;
-    const useAgenticTiers = (isAutoAgentic || isExplicitAgentic) && config2.agenticTiers != null;
+    const hasToolsInRequest = options.hasTools ?? false;
+    const useAgenticTiers = (hasToolsInRequest || isAutoAgentic || isExplicitAgentic) && config2.agenticTiers != null;
     tierConfigs = useAgenticTiers ? config2.agenticTiers : config2.tiers;
-    profileSuffix = useAgenticTiers ? " | agentic" : "";
+    profileSuffix = useAgenticTiers ? ` | agentic${hasToolsInRequest ? " (tools)" : ""}` : "";
   }
   const agenticScoreValue = ruleResult.agenticScore;
   if (estimatedTokens > config2.overrides.maxTokensForceComplex) {
@@ -1578,7 +1555,7 @@ function route(prompt, systemPrompt, maxOutputTokens, options) {
       estimatedTokens,
       maxOutputTokens,
       routingProfile,
-      agenticScoreValue,
+      agenticScoreValue
     );
   }
   const hasStructuredOutput = systemPrompt ? /json|structured|schema/i.test(systemPrompt) : false;
@@ -1613,7 +1590,7 @@ function route(prompt, systemPrompt, maxOutputTokens, options) {
     estimatedTokens,
     maxOutputTokens,
     routingProfile,
-    agenticScoreValue,
+    agenticScoreValue
   );
 }
 
@@ -1646,7 +1623,9 @@ var MODEL_ALIASES = {
   // OpenAI
   gpt: "openai/gpt-4o",
   gpt4: "openai/gpt-4o",
-  gpt5: "openai/gpt-5.2",
+  gpt5: "openai/gpt-5.4",
+  "gpt-5.4": "openai/gpt-5.4",
+  "gpt-5.4-pro": "openai/gpt-5.4-pro",
   codex: "openai/gpt-5.2-codex",
   mini: "openai/gpt-4o-mini",
   o1: "openai/o1",
@@ -1674,7 +1653,7 @@ var MODEL_ALIASES = {
   minimax: "minimax/minimax-m2.5",
   // Routing profile aliases (common variations)
   "auto-router": "auto",
-  router: "auto",
+  router: "auto"
   // Note: auto, free, eco, premium are virtual routing profiles registered in BLOCKRUN_MODELS
   // They don't need aliases since they're already top-level model IDs
 };
@@ -1688,6 +1667,13 @@ function resolveModelAlias(model) {
     if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
     return withoutPrefix;
   }
+  if (normalized.startsWith("openai/")) {
+    const withoutPrefix = normalized.slice("openai/".length);
+    const resolvedWithoutPrefix = MODEL_ALIASES[withoutPrefix];
+    if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
+    const isVirtualProfile = BLOCKRUN_MODELS.some((m) => m.id === withoutPrefix);
+    if (isVirtualProfile) return withoutPrefix;
+  }
   return model;
 }
 var BLOCKRUN_MODELS = [
@@ -1699,7 +1685,7 @@ var BLOCKRUN_MODELS = [
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 105e4,
-    maxOutput: 128e3,
+    maxOutput: 128e3
   },
   {
     id: "free",
@@ -1707,7 +1693,7 @@ var BLOCKRUN_MODELS = [
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 128e3,
-    maxOutput: 4096,
+    maxOutput: 4096
   },
   {
     id: "eco",
@@ -1715,7 +1701,7 @@ var BLOCKRUN_MODELS = [
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 105e4,
-    maxOutput: 128e3,
+    maxOutput: 128e3
   },
   {
     id: "premium",
@@ -1723,7 +1709,7 @@ var BLOCKRUN_MODELS = [
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 2e6,
-    maxOutput: 2e5,
+    maxOutput: 2e5
   },
   // OpenAI GPT-5 Family
   {
@@ -1737,7 +1723,7 @@ var BLOCKRUN_MODELS = [
     reasoning: true,
     vision: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-5-mini",
@@ -1747,7 +1733,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 2,
     contextWindow: 2e5,
     maxOutput: 65536,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-5-nano",
@@ -1757,7 +1743,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.4,
     contextWindow: 128e3,
     maxOutput: 32768,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-5.2-pro",
@@ -1768,7 +1754,32 @@ var BLOCKRUN_MODELS = [
     contextWindow: 4e5,
     maxOutput: 128e3,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
+  },
+  // GPT-5.4 — newest flagship, same input price as 4o but much more capable
+  {
+    id: "openai/gpt-5.4",
+    name: "GPT-5.4",
+    version: "5.4",
+    inputPrice: 2.5,
+    outputPrice: 15,
+    contextWindow: 4e5,
+    maxOutput: 128e3,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true
+  },
+  {
+    id: "openai/gpt-5.4-pro",
+    name: "GPT-5.4 Pro",
+    version: "5.4",
+    inputPrice: 30,
+    outputPrice: 180,
+    contextWindow: 4e5,
+    maxOutput: 128e3,
+    reasoning: true,
+    toolCalling: true
   },
   // OpenAI Codex Family
   {
@@ -1780,7 +1791,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 128e3,
     maxOutput: 32e3,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // OpenAI GPT-4 Family
   {
@@ -1792,7 +1803,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 128e3,
     maxOutput: 16384,
     vision: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-4.1-mini",
@@ -1802,7 +1813,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 1.6,
     contextWindow: 128e3,
     maxOutput: 16384,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-4.1-nano",
@@ -1812,7 +1823,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.4,
     contextWindow: 128e3,
     maxOutput: 16384,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-4o",
@@ -1824,7 +1835,7 @@ var BLOCKRUN_MODELS = [
     maxOutput: 16384,
     vision: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/gpt-4o-mini",
@@ -1834,7 +1845,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.6,
     contextWindow: 128e3,
     maxOutput: 16384,
-    toolCalling: true,
+    toolCalling: true
   },
   // OpenAI O-series (Reasoning)
   {
@@ -1846,7 +1857,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 2e5,
     maxOutput: 1e5,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/o1-mini",
@@ -1857,7 +1868,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 128e3,
     maxOutput: 65536,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/o3",
@@ -1868,7 +1879,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 2e5,
     maxOutput: 1e5,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/o3-mini",
@@ -1879,7 +1890,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 128e3,
     maxOutput: 65536,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "openai/o4-mini",
@@ -1890,7 +1901,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 128e3,
     maxOutput: 65536,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // Anthropic - all Claude models excel at agentic workflows
   // Use newest versions (4.6) with full provider prefix
@@ -1904,7 +1915,7 @@ var BLOCKRUN_MODELS = [
     maxOutput: 8192,
     vision: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "anthropic/claude-sonnet-4.6",
@@ -1917,7 +1928,7 @@ var BLOCKRUN_MODELS = [
     reasoning: true,
     vision: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "anthropic/claude-opus-4.6",
@@ -1930,7 +1941,7 @@ var BLOCKRUN_MODELS = [
     reasoning: true,
     vision: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // Google
   {
@@ -1943,7 +1954,7 @@ var BLOCKRUN_MODELS = [
     maxOutput: 65536,
     reasoning: true,
     vision: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "google/gemini-3-pro-preview",
@@ -1955,7 +1966,7 @@ var BLOCKRUN_MODELS = [
     maxOutput: 65536,
     reasoning: true,
     vision: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "google/gemini-3-flash-preview",
@@ -1965,8 +1976,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 3,
     contextWindow: 1e6,
     maxOutput: 65536,
-    vision: true,
-    toolCalling: true,
+    vision: true
   },
   {
     id: "google/gemini-2.5-pro",
@@ -1978,7 +1988,7 @@ var BLOCKRUN_MODELS = [
     maxOutput: 65536,
     reasoning: true,
     vision: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "google/gemini-2.5-flash",
@@ -1989,7 +1999,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 1e6,
     maxOutput: 65536,
     vision: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "google/gemini-2.5-flash-lite",
@@ -1999,7 +2009,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.4,
     contextWindow: 1e6,
     maxOutput: 65536,
-    toolCalling: true,
+    toolCalling: true
   },
   // DeepSeek
   {
@@ -2010,7 +2020,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.42,
     contextWindow: 128e3,
     maxOutput: 8192,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "deepseek/deepseek-reasoner",
@@ -2021,7 +2031,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 128e3,
     maxOutput: 8192,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // Moonshot / Kimi - optimized for agentic workflows
   {
@@ -2035,7 +2045,7 @@ var BLOCKRUN_MODELS = [
     reasoning: true,
     vision: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // xAI / Grok
   {
@@ -2047,7 +2057,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // grok-3-fast removed - too expensive ($5/$25), use grok-4-fast instead
   {
@@ -2058,7 +2068,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.5,
     contextWindow: 131072,
     maxOutput: 16384,
-    toolCalling: true,
+    toolCalling: true
   },
   // xAI Grok 4 Family - Ultra-cheap fast models
   {
@@ -2070,7 +2080,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "xai/grok-4-fast-non-reasoning",
@@ -2080,7 +2090,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.5,
     contextWindow: 131072,
     maxOutput: 16384,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "xai/grok-4-1-fast-reasoning",
@@ -2091,7 +2101,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "xai/grok-4-1-fast-non-reasoning",
@@ -2101,7 +2111,7 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.5,
     contextWindow: 131072,
     maxOutput: 16384,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "xai/grok-code-fast-1",
@@ -2110,7 +2120,7 @@ var BLOCKRUN_MODELS = [
     inputPrice: 0.2,
     outputPrice: 1.5,
     contextWindow: 131072,
-    maxOutput: 16384,
+    maxOutput: 16384
     // toolCalling intentionally omitted: outputs tool calls as plain text JSON,
     // not OpenAI-compatible structured function calls. Will be skipped when
     // request has tools to prevent the "talking to itself" bug.
@@ -2124,7 +2134,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
-    toolCalling: true,
+    toolCalling: true
   },
   {
     id: "xai/grok-2-vision",
@@ -2135,7 +2145,7 @@ var BLOCKRUN_MODELS = [
     contextWindow: 131072,
     maxOutput: 16384,
     vision: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // MiniMax
   {
@@ -2148,7 +2158,7 @@ var BLOCKRUN_MODELS = [
     maxOutput: 16384,
     reasoning: true,
     agentic: true,
-    toolCalling: true,
+    toolCalling: true
   },
   // NVIDIA - Free/cheap models
   {
@@ -2158,7 +2168,7 @@ var BLOCKRUN_MODELS = [
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 128e3,
-    maxOutput: 16384,
+    maxOutput: 16384
     // toolCalling intentionally omitted: free model, structured function
     // calling support unverified. Excluded from tool-heavy routing paths.
   },
@@ -2170,8 +2180,8 @@ var BLOCKRUN_MODELS = [
     outputPrice: 2.5,
     contextWindow: 262144,
     maxOutput: 16384,
-    toolCalling: true,
-  },
+    toolCalling: true
+  }
 ];
 function toOpenClawModel(m) {
   return {
@@ -2184,20 +2194,21 @@ function toOpenClawModel(m) {
       input: m.inputPrice,
       output: m.outputPrice,
       cacheRead: 0,
-      cacheWrite: 0,
+      cacheWrite: 0
     },
     contextWindow: m.contextWindow,
-    maxTokens: m.maxOutput,
+    maxTokens: m.maxOutput
   };
 }
-var ALIAS_MODELS = Object.entries(MODEL_ALIASES)
-  .map(([alias, targetId]) => {
-    const target = BLOCKRUN_MODELS.find((m) => m.id === targetId);
-    if (!target) return null;
-    return toOpenClawModel({ ...target, id: alias, name: `${alias} \u2192 ${target.name}` });
-  })
-  .filter((m) => m !== null);
-var OPENCLAW_MODELS = [...BLOCKRUN_MODELS.map(toOpenClawModel), ...ALIAS_MODELS];
+var ALIAS_MODELS = Object.entries(MODEL_ALIASES).map(([alias, targetId]) => {
+  const target = BLOCKRUN_MODELS.find((m) => m.id === targetId);
+  if (!target) return null;
+  return toOpenClawModel({ ...target, id: alias, name: `${alias} \u2192 ${target.name}` });
+}).filter((m) => m !== null);
+var OPENCLAW_MODELS = [
+  ...BLOCKRUN_MODELS.map(toOpenClawModel),
+  ...ALIAS_MODELS
+];
 function supportsToolCalling(modelId) {
   const normalized = modelId.replace("blockrun/", "");
   const model = BLOCKRUN_MODELS.find((m) => m.id === normalized);
@@ -2222,6 +2233,9 @@ function isReasoningModel(modelId) {
 // src/proxy.ts
 import { createServer } from "http";
 import { finished } from "stream";
+import { homedir as homedir4 } from "os";
+import { join as join5 } from "path";
+import { mkdir as mkdir3, writeFile as writeFile2, readFile, stat as fsStat } from "fs/promises";
 import { createPublicClient as createPublicClient2, http as http2 } from "viem";
 import { base as base2 } from "viem/chains";
 import { privateKeyToAccount as privateKeyToAccount3 } from "viem/accounts";
@@ -2264,14 +2278,21 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
       const getHeader = (name) => response.headers.get(name);
       let body;
       try {
-        const responseText = await response.text();
+        const responseText = await Promise.race([
+          response.text(),
+          new Promise(
+            (_, reject) => setTimeout(() => reject(new Error("Body read timeout")), 3e4)
+          )
+        ]);
         if (responseText) body = JSON.parse(responseText);
-      } catch {}
+      } catch {
+      }
       paymentRequired = httpClient.getPaymentRequiredResponse(getHeader, body);
       cache.set(urlPath, { paymentRequired, cachedAt: Date.now() });
     } catch (error) {
       throw new Error(
         `Failed to parse payment requirements: ${error instanceof Error ? error.message : "Unknown error"}`,
+        { cause: error }
       );
     }
     const payload = await client.createPaymentPayload(paymentRequired);
@@ -2304,11 +2325,12 @@ async function logUsage(entry) {
     const date = entry.timestamp.slice(0, 10);
     const file = join(LOG_DIR, `usage-${date}.jsonl`);
     await appendFile(file, JSON.stringify(entry) + "\n");
-  } catch {}
+  } catch {
+  }
 }
 
 // src/stats.ts
-import { readdir } from "fs/promises";
+import { readdir, unlink } from "fs/promises";
 
 // src/fs-read.ts
 import { open } from "fs/promises";
@@ -2316,9 +2338,15 @@ import { openSync, readSync, closeSync, fstatSync } from "fs";
 async function readTextFile(filePath) {
   const fh = await open(filePath, "r");
   try {
-    const buf = Buffer.alloc((await fh.stat()).size);
-    await fh.read(buf, 0, buf.length, 0);
-    return buf.toString("utf-8");
+    const size = (await fh.stat()).size;
+    const buf = Buffer.alloc(size);
+    let offset = 0;
+    while (offset < size) {
+      const { bytesRead } = await fh.read(buf, offset, size - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return buf.subarray(0, offset).toString("utf-8");
   } finally {
     await fh.close();
   }
@@ -2345,18 +2373,23 @@ async function parseLogFile(filePath) {
   try {
     const content = await readTextFile(filePath);
     const lines = content.trim().split("\n").filter(Boolean);
-    return lines.map((line) => {
-      const entry = JSON.parse(line);
-      return {
-        timestamp: entry.timestamp || /* @__PURE__ */ new Date().toISOString(),
-        model: entry.model || "unknown",
-        tier: entry.tier || "UNKNOWN",
-        cost: entry.cost || 0,
-        baselineCost: entry.baselineCost || entry.cost || 0,
-        savings: entry.savings || 0,
-        latencyMs: entry.latencyMs || 0,
-      };
-    });
+    const entries = [];
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        entries.push({
+          timestamp: entry.timestamp || (/* @__PURE__ */ new Date()).toISOString(),
+          model: entry.model || "unknown",
+          tier: entry.tier || "UNKNOWN",
+          cost: entry.cost || 0,
+          baselineCost: entry.baselineCost || entry.cost || 0,
+          savings: entry.savings || 0,
+          latencyMs: entry.latencyMs || 0
+        });
+      } catch {
+      }
+    }
+    return entries;
   } catch {
     return [];
   }
@@ -2364,10 +2397,7 @@ async function parseLogFile(filePath) {
 async function getLogFiles() {
   try {
     const files = await readdir(LOG_DIR2);
-    return files
-      .filter((f) => f.startsWith("usage-") && f.endsWith(".jsonl"))
-      .sort()
-      .reverse();
+    return files.filter((f) => f.startsWith("usage-") && f.endsWith(".jsonl")).sort().reverse();
   } catch {
     return [];
   }
@@ -2395,7 +2425,7 @@ function aggregateDay(date, entries) {
     totalSavings: totalBaselineCost - totalCost,
     avgLatencyMs: entries.length > 0 ? totalLatency / entries.length : 0,
     byTier,
-    byModel,
+    byModel
   };
 }
 async function getStats(days = 7) {
@@ -2434,18 +2464,18 @@ async function getStats(days = 7) {
   for (const [tier, stats] of Object.entries(allByTier)) {
     byTierWithPercentage[tier] = {
       ...stats,
-      percentage: totalRequests > 0 ? (stats.count / totalRequests) * 100 : 0,
+      percentage: totalRequests > 0 ? stats.count / totalRequests * 100 : 0
     };
   }
   const byModelWithPercentage = {};
   for (const [model, stats] of Object.entries(allByModel)) {
     byModelWithPercentage[model] = {
       ...stats,
-      percentage: totalRequests > 0 ? (stats.count / totalRequests) * 100 : 0,
+      percentage: totalRequests > 0 ? stats.count / totalRequests * 100 : 0
     };
   }
   const totalSavings = totalBaselineCost - totalCost;
-  const savingsPercentage = totalBaselineCost > 0 ? (totalSavings / totalBaselineCost) * 100 : 0;
+  const savingsPercentage = totalBaselineCost > 0 ? totalSavings / totalBaselineCost * 100 : 0;
   let entriesWithBaseline = 0;
   for (const day of dailyBreakdown) {
     if (day.totalBaselineCost !== day.totalCost) {
@@ -2465,9 +2495,19 @@ async function getStats(days = 7) {
     byModel: byModelWithPercentage,
     dailyBreakdown: dailyBreakdown.reverse(),
     // Oldest first for charts
-    entriesWithBaseline,
+    entriesWithBaseline
     // How many entries have valid baseline tracking
   };
+}
+async function clearStats() {
+  try {
+    const files = await readdir(LOG_DIR2);
+    const logFiles = files.filter((f) => f.startsWith("usage-") && f.endsWith(".jsonl"));
+    await Promise.all(logFiles.map((f) => unlink(join3(LOG_DIR2, f))));
+    return { deletedFiles: logFiles.length };
+  } catch {
+    return { deletedFiles: 0 };
+  }
 }
 
 // src/dedup.ts
@@ -2520,7 +2560,8 @@ var RequestDeduplicator = class {
       const stripped = stripTimestamps(parsed);
       const canonical = canonicalize(stripped);
       content = Buffer.from(JSON.stringify(canonical));
-    } catch {}
+    } catch {
+    }
     return createHash("sha256").update(content).digest("hex").slice(0, 16);
   }
   /** Check if a response is cached for this key. */
@@ -2544,7 +2585,7 @@ var RequestDeduplicator = class {
   /** Mark a request as in-flight. */
   markInflight(key) {
     this.inflight.set(key, {
-      resolvers: [],
+      resolvers: []
     });
   }
   /** Complete an in-flight request — cache result and notify waiters. */
@@ -2568,15 +2609,15 @@ var RequestDeduplicator = class {
     if (entry) {
       const errorBody = Buffer.from(
         JSON.stringify({
-          error: { message: "Original request failed, please retry", type: "dedup_origin_failed" },
-        }),
+          error: { message: "Original request failed, please retry", type: "dedup_origin_failed" }
+        })
       );
       for (const resolve of entry.resolvers) {
         resolve({
           status: 503,
           headers: { "content-type": "application/json" },
           body: errorBody,
-          completedAt: Date.now(),
+          completedAt: Date.now()
         });
       }
       this.inflight.delete(key);
@@ -2600,7 +2641,7 @@ var DEFAULT_CONFIG = {
   defaultTTL: 600,
   maxItemSize: 1048576,
   // 1MB
-  enabled: true,
+  enabled: true
 };
 function canonicalize2(obj) {
   if (obj === null || typeof obj !== "object") {
@@ -2646,10 +2687,12 @@ var ResponseCache = class {
   stats = {
     hits: 0,
     misses: 0,
-    evictions: 0,
+    evictions: 0
   };
   constructor(config2 = {}) {
-    const filtered = Object.fromEntries(Object.entries(config2).filter(([, v]) => v !== void 0));
+    const filtered = Object.fromEntries(
+      Object.entries(config2).filter(([, v]) => v !== void 0)
+    );
     this.config = { ...DEFAULT_CONFIG, ...filtered };
   }
   /**
@@ -2682,7 +2725,8 @@ var ResponseCache = class {
       if (parsed.cache === false || parsed.no_cache === true) {
         return false;
       }
-    } catch {}
+    } catch {
+    }
     return true;
   }
   /**
@@ -2723,7 +2767,7 @@ var ResponseCache = class {
     const entry = {
       ...response,
       cachedAt: now,
-      expiresAt,
+      expiresAt
     };
     this.cache.set(key, entry);
     this.expirationHeap.push({ expiresAt, key });
@@ -2762,14 +2806,14 @@ var ResponseCache = class {
    */
   getStats() {
     const total = this.stats.hits + this.stats.misses;
-    const hitRate = total > 0 ? ((this.stats.hits / total) * 100).toFixed(1) + "%" : "0%";
+    const hitRate = total > 0 ? (this.stats.hits / total * 100).toFixed(1) + "%" : "0%";
     return {
       size: this.cache.size,
       maxSize: this.config.maxSize,
       hits: this.stats.hits,
       misses: this.stats.misses,
       evictions: this.stats.evictions,
-      hitRate,
+      hitRate
     };
   }
   /**
@@ -2809,7 +2853,7 @@ var BALANCE_THRESHOLDS = {
   /** Low balance warning threshold: $1.00 */
   LOW_BALANCE_MICROS: 1000000n,
   /** Effectively zero threshold: $0.0001 (covers dust/rounding) */
-  ZERO_THRESHOLD: 100n,
+  ZERO_THRESHOLD: 100n
 };
 var BalanceMonitor = class {
   client;
@@ -2823,9 +2867,9 @@ var BalanceMonitor = class {
     this.client = createPublicClient({
       chain: base,
       transport: http(void 0, {
-        timeout: 1e4,
+        timeout: 1e4
         // 10 second timeout to prevent hanging on slow RPC
-      }),
+      })
     });
   }
   /**
@@ -2834,12 +2878,14 @@ var BalanceMonitor = class {
    */
   async checkBalance() {
     const now = Date.now();
-    if (this.cachedBalance !== null && now - this.cachedAt < CACHE_TTL_MS) {
+    if (this.cachedBalance !== null && this.cachedBalance > 0n && now - this.cachedAt < CACHE_TTL_MS) {
       return this.buildInfo(this.cachedBalance);
     }
     const balance = await this.fetchBalance();
-    this.cachedBalance = balance;
-    this.cachedAt = now;
+    if (balance > 0n) {
+      this.cachedBalance = balance;
+      this.cachedAt = now;
+    }
     return this.buildInfo(balance);
   }
   /**
@@ -2856,7 +2902,7 @@ var BalanceMonitor = class {
     return {
       sufficient: false,
       info,
-      shortfall: this.formatUSDC(shortfall),
+      shortfall: this.formatUSDC(shortfall)
     };
   }
   /**
@@ -2905,7 +2951,7 @@ var BalanceMonitor = class {
         address: USDC_BASE,
         abi: erc20Abi,
         functionName: "balanceOf",
-        args: [this.walletAddress],
+        args: [this.walletAddress]
       });
       return balance;
     } catch (error) {
@@ -2919,7 +2965,7 @@ var BalanceMonitor = class {
       balanceUSD: this.formatUSDC(balance),
       isLow: balance < BALANCE_THRESHOLDS.LOW_BALANCE_MICROS,
       isEmpty: balance < BALANCE_THRESHOLDS.ZERO_THRESHOLD,
-      walletAddress: this.walletAddress,
+      walletAddress: this.walletAddress
     };
   }
 };
@@ -2942,12 +2988,14 @@ var SolanaBalanceMonitor = class {
   }
   async checkBalance() {
     const now = Date.now();
-    if (this.cachedBalance !== null && now - this.cachedAt < CACHE_TTL_MS2) {
+    if (this.cachedBalance !== null && this.cachedBalance > 0n && now - this.cachedAt < CACHE_TTL_MS2) {
       return this.buildInfo(this.cachedBalance);
     }
     const balance = await this.fetchBalance();
-    this.cachedBalance = balance;
-    this.cachedAt = now;
+    if (balance > 0n) {
+      this.cachedBalance = balance;
+      this.cachedAt = now;
+    }
     return this.buildInfo(balance);
   }
   deductEstimated(amountMicros) {
@@ -2975,7 +3023,7 @@ var SolanaBalanceMonitor = class {
     return {
       sufficient: false,
       info,
-      shortfall: this.formatUSDC(shortfall),
+      shortfall: this.formatUSDC(shortfall)
     };
   }
   /**
@@ -2991,12 +3039,18 @@ var SolanaBalanceMonitor = class {
   async fetchBalance() {
     const owner = solAddress(this.walletAddress);
     const mint = solAddress(SOLANA_USDC_MINT);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await this.fetchBalanceOnce(owner, mint);
+      if (result > 0n || attempt === 1) return result;
+      await new Promise((r) => setTimeout(r, 1e3));
+    }
+    return 0n;
+  }
+  async fetchBalanceOnce(owner, mint) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), BALANCE_TIMEOUT_MS);
     try {
-      const response = await this.rpc
-        .getTokenAccountsByOwner(owner, { mint }, { encoding: "jsonParsed" })
-        .send({ abortSignal: controller.signal });
+      const response = await this.rpc.getTokenAccountsByOwner(owner, { mint }, { encoding: "jsonParsed" }).send({ abortSignal: controller.signal });
       if (response.value.length === 0) return 0n;
       let total = 0n;
       for (const account of response.value) {
@@ -3007,6 +3061,7 @@ var SolanaBalanceMonitor = class {
     } catch (err) {
       throw new Error(
         `Failed to fetch Solana USDC balance: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
       );
     } finally {
       clearTimeout(timer);
@@ -3019,7 +3074,7 @@ var SolanaBalanceMonitor = class {
       balanceUSD: `$${dollars.toFixed(2)}`,
       isLow: balance < 1000000n,
       isEmpty: balance < 100n,
-      walletAddress: this.walletAddress,
+      walletAddress: this.walletAddress
     };
   }
 };
@@ -3035,6 +3090,7 @@ import { HDKey } from "@scure/bip32";
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english";
 import { privateKeyToAccount } from "viem/accounts";
+var SOLANA_HARDENED_INDICES = [44 + 2147483648, 501 + 2147483648, 0 + 2147483648, 0 + 2147483648];
 
 // src/auth.ts
 var WALLET_DIR = join4(homedir3(), ".openclaw", "blockrun");
@@ -3073,15 +3129,15 @@ var DEFAULT_COMPRESSION_CONFIG = {
     // Safe: just removes JSON whitespace
     observation: false,
     // DISABLED: may lose important context
-    dynamicCodebook: false,
+    dynamicCodebook: false
     // DISABLED: requires model to understand codes
   },
   dictionary: {
     maxEntries: 50,
     minPhraseLength: 15,
-    includeCodebookHeader: false,
+    includeCodebookHeader: false
     // No codebook header needed
-  },
+  }
 };
 
 // src/compression/layers/deduplication.ts
@@ -3099,9 +3155,9 @@ function hashMessage(message) {
       JSON.stringify(
         message.tool_calls.map((tc) => ({
           name: tc.function.name,
-          args: tc.function.arguments,
-        })),
-      ),
+          args: tc.function.arguments
+        }))
+      )
     );
   }
   const content = parts.join("|");
@@ -3131,8 +3187,8 @@ function deduplicateMessages(messages) {
       continue;
     }
     if (message.role === "assistant" && message.tool_calls) {
-      const hasReferencedToolCall = message.tool_calls.some((tc) =>
-        referencedToolCallIds.has(tc.id),
+      const hasReferencedToolCall = message.tool_calls.some(
+        (tc) => referencedToolCallIds.has(tc.id)
       );
       if (hasReferencedToolCall) {
         result.push(message);
@@ -3150,22 +3206,14 @@ function deduplicateMessages(messages) {
   return {
     messages: result,
     duplicatesRemoved,
-    originalCount: messages.length,
+    originalCount: messages.length
   };
 }
 
 // src/compression/layers/whitespace.ts
 function normalizeWhitespace(content) {
   if (!content || typeof content !== "string") return content;
-  return content
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]+$/gm, "")
-    .replace(/([^\n]) {2,}/g, "$1 ")
-    .replace(/^[ ]{8,}/gm, (match) => "  ".repeat(Math.ceil(match.length / 4)))
-    .replace(/\t/g, "  ")
-    .trim();
+  return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]+$/gm, "").replace(/([^\n]) {2,}/g, "$1 ").replace(/^[ ]{8,}/gm, (match) => "  ".repeat(Math.ceil(match.length / 4))).replace(/\t/g, "  ").trim();
 }
 function normalizeMessagesWhitespace(messages) {
   let charsSaved = 0;
@@ -3176,12 +3224,12 @@ function normalizeMessagesWhitespace(messages) {
     charsSaved += originalLength - normalizedContent.length;
     return {
       ...message,
-      content: normalizedContent,
+      content: normalizedContent
     };
   });
   return {
     messages: result,
-    charsSaved,
+    charsSaved
   };
 }
 
@@ -3247,7 +3295,7 @@ var STATIC_CODEBOOK = {
   $M02: "openai/",
   $M03: "anthropic/",
   $M04: "google/",
-  $M05: "xai/",
+  $M05: "xai/"
 };
 function getInverseCodebook() {
   const inverse = {};
@@ -3262,15 +3310,11 @@ function generateCodebookHeader(usedCodes, pathMap = {}) {
   }
   const parts = [];
   if (usedCodes.size > 0) {
-    const codeEntries = Array.from(usedCodes)
-      .map((code) => `${code}=${STATIC_CODEBOOK[code]}`)
-      .join(", ");
+    const codeEntries = Array.from(usedCodes).map((code) => `${code}=${STATIC_CODEBOOK[code]}`).join(", ");
     parts.push(`[Dict: ${codeEntries}]`);
   }
   if (Object.keys(pathMap).length > 0) {
-    const pathEntries = Object.entries(pathMap)
-      .map(([code, path]) => `${code}=${path}`)
-      .join(", ");
+    const pathEntries = Object.entries(pathMap).map(([code, path]) => `${code}=${path}`).join(", ");
     parts.push(`[Paths: ${pathEntries}]`);
   }
   return parts.join("\n");
@@ -3311,21 +3355,21 @@ function encodeMessages(messages) {
     if (!message.content || typeof message.content !== "string") return message;
     const { encoded, substitutions, codes, charsSaved } = encodeContent(
       message.content,
-      inverseCodebook,
+      inverseCodebook
     );
     totalSubstitutions += substitutions;
     totalCharsSaved += charsSaved;
     codes.forEach((code) => allUsedCodes.add(code));
     return {
       ...message,
-      content: encoded,
+      content: encoded
     };
   });
   return {
     messages: result,
     substitutionCount: totalSubstitutions,
     usedCodes: allUsedCodes,
-    charsSaved: totalCharsSaved,
+    charsSaved: totalCharsSaved
   };
 }
 
@@ -3351,11 +3395,7 @@ function findFrequentPrefixes(paths) {
       prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
     }
   }
-  return Array.from(prefixCounts.entries())
-    .filter(([, count]) => count >= 3)
-    .sort((a, b) => b[0].length - a[0].length)
-    .slice(0, 5)
-    .map(([prefix]) => prefix);
+  return Array.from(prefixCounts.entries()).filter(([, count]) => count >= 3).sort((a, b) => b[0].length - a[0].length).slice(0, 5).map(([prefix]) => prefix);
 }
 function shortenPaths(messages) {
   const allPaths = extractPaths(messages);
@@ -3363,7 +3403,7 @@ function shortenPaths(messages) {
     return {
       messages,
       pathMap: {},
-      charsSaved: 0,
+      charsSaved: 0
     };
   }
   const prefixes = findFrequentPrefixes(allPaths);
@@ -3371,7 +3411,7 @@ function shortenPaths(messages) {
     return {
       messages,
       pathMap: {},
-      charsSaved: 0,
+      charsSaved: 0
     };
   }
   const pathMap = {};
@@ -3389,13 +3429,13 @@ function shortenPaths(messages) {
     charsSaved += originalLength - content.length;
     return {
       ...message,
-      content,
+      content
     };
   });
   return {
     messages: result,
     pathMap,
-    charsSaved,
+    charsSaved
   };
 }
 
@@ -3410,18 +3450,15 @@ function compactJson(jsonString) {
 }
 function looksLikeJson(str) {
   const trimmed = str.trim();
-  return (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  );
+  return trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]");
 }
 function compactToolCalls(toolCalls) {
   return toolCalls.map((tc) => ({
     ...tc,
     function: {
       ...tc.function,
-      arguments: compactJson(tc.function.arguments),
-    },
+      arguments: compactJson(tc.function.arguments)
+    }
   }));
 }
 function compactMessagesJson(messages) {
@@ -3434,12 +3471,7 @@ function compactMessagesJson(messages) {
       const newLength = JSON.stringify(newMessage.tool_calls).length;
       charsSaved += originalLength - newLength;
     }
-    if (
-      message.role === "tool" &&
-      message.content &&
-      typeof message.content === "string" &&
-      looksLikeJson(message.content)
-    ) {
+    if (message.role === "tool" && message.content && typeof message.content === "string" && looksLikeJson(message.content)) {
       const originalLength = message.content.length;
       const compacted = compactJson(message.content);
       charsSaved += originalLength - compacted.length;
@@ -3449,7 +3481,7 @@ function compactMessagesJson(messages) {
   });
   return {
     messages: result,
-    charsSaved,
+    charsSaved
   };
 }
 
@@ -3460,16 +3492,12 @@ function compressToolResult(content) {
   if (!content || content.length <= TOOL_RESULT_THRESHOLD) {
     return content;
   }
-  const lines = content
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
   const errorLines = lines.filter(
-    (l) => /error|exception|failed|denied|refused|timeout|invalid/i.test(l) && l.length < 200,
+    (l) => /error|exception|failed|denied|refused|timeout|invalid/i.test(l) && l.length < 200
   );
   const statusLines = lines.filter(
-    (l) =>
-      /success|complete|created|updated|found|result|status|total|count/i.test(l) && l.length < 150,
+    (l) => /success|complete|created|updated|found|result|status|total|count/i.test(l) && l.length < 150
   );
   const jsonMatches = [];
   const jsonPattern = /"(id|name|status|error|message|count|total|url|path)":\s*"?([^",}\n]+)"?/gi;
@@ -3550,7 +3578,7 @@ function compressObservations(messages) {
   return {
     messages: result,
     charsSaved,
-    observationsCompressed,
+    observationsCompressed
   };
 }
 
@@ -3616,7 +3644,7 @@ function applyDynamicCodebook(messages) {
       messages,
       charsSaved: 0,
       dynamicCodes: {},
-      substitutions: 0,
+      substitutions: 0
     };
   }
   const phraseToCode = {};
@@ -3645,18 +3673,15 @@ function applyDynamicCodebook(messages) {
     messages: result,
     charsSaved,
     dynamicCodes: codebook,
-    substitutions,
+    substitutions
   };
 }
 function generateDynamicCodebookHeader(codebook) {
   if (Object.keys(codebook).length === 0) return "";
-  const entries = Object.entries(codebook)
-    .slice(0, 20)
-    .map(([code, phrase]) => {
-      const displayPhrase = phrase.length > 40 ? phrase.slice(0, 37) + "..." : phrase;
-      return `${code}=${displayPhrase}`;
-    })
-    .join(", ");
+  const entries = Object.entries(codebook).slice(0, 20).map(([code, phrase]) => {
+    const displayPhrase = phrase.length > 40 ? phrase.slice(0, 37) + "..." : phrase;
+    return `${code}=${displayPhrase}`;
+  }).join(", ");
   return `[DynDict: ${entries}]`;
 }
 
@@ -3692,7 +3717,7 @@ function prependCodebookHeader(messages, usedCodes, pathMap) {
           ...msg,
           content: `${header}
 
-${msg.content}`,
+${msg.content}`
         };
       }
     }
@@ -3705,12 +3730,12 @@ async function compressContext(messages, config2 = {}) {
     ...config2,
     layers: {
       ...DEFAULT_COMPRESSION_CONFIG.layers,
-      ...config2.layers,
+      ...config2.layers
     },
     dictionary: {
       ...DEFAULT_COMPRESSION_CONFIG.dictionary,
-      ...config2.dictionary,
-    },
+      ...config2.dictionary
+    }
   };
   if (!fullConfig.enabled) {
     const originalChars2 = calculateTotalChars(messages);
@@ -3729,11 +3754,11 @@ async function compressContext(messages, config2 = {}) {
         observationsCompressed: 0,
         observationCharsSaved: 0,
         dynamicSubstitutions: 0,
-        dynamicCharsSaved: 0,
+        dynamicCharsSaved: 0
       },
       codebook: {},
       pathMap: {},
-      dynamicCodes: {},
+      dynamicCodes: {}
     };
   }
   const originalMessages = fullConfig.preserveRaw ? cloneMessages(messages) : messages;
@@ -3747,7 +3772,7 @@ async function compressContext(messages, config2 = {}) {
     observationsCompressed: 0,
     observationCharsSaved: 0,
     dynamicSubstitutions: 0,
-    dynamicCharsSaved: 0,
+    dynamicCharsSaved: 0
   };
   let result = cloneMessages(messages);
   let usedCodes = /* @__PURE__ */ new Set();
@@ -3793,10 +3818,7 @@ async function compressContext(messages, config2 = {}) {
     stats.dynamicCharsSaved = dynResult.charsSaved;
     dynamicCodes = dynResult.dynamicCodes;
   }
-  if (
-    fullConfig.dictionary.includeCodebookHeader &&
-    (usedCodes.size > 0 || Object.keys(pathMap).length > 0 || Object.keys(dynamicCodes).length > 0)
-  ) {
+  if (fullConfig.dictionary.includeCodebookHeader && (usedCodes.size > 0 || Object.keys(pathMap).length > 0 || Object.keys(dynamicCodes).length > 0)) {
     result = prependCodebookHeader(result, usedCodes, pathMap);
     if (Object.keys(dynamicCodes).length > 0) {
       const dynHeader = generateDynamicCodebookHeader(dynamicCodes);
@@ -3806,7 +3828,7 @@ async function compressContext(messages, config2 = {}) {
           result[systemIndex] = {
             ...result[systemIndex],
             content: `${dynHeader}
-${result[systemIndex].content}`,
+${result[systemIndex].content}`
           };
         }
       }
@@ -3827,7 +3849,7 @@ ${result[systemIndex].content}`,
     stats,
     codebook: usedCodebook,
     pathMap,
-    dynamicCodes,
+    dynamicCodes
   };
 }
 function shouldCompress(messages) {
@@ -3841,7 +3863,7 @@ var DEFAULT_SESSION_CONFIG = {
   enabled: true,
   timeoutMs: 30 * 60 * 1e3,
   // 30 minutes
-  headerName: "x-session-id",
+  headerName: "x-session-id"
 };
 var SessionStore = class {
   sessions = /* @__PURE__ */ new Map();
@@ -3896,7 +3918,7 @@ var SessionStore = class {
         requestCount: 1,
         recentHashes: [],
         strikes: 0,
-        escalated: false,
+        escalated: false
       });
     }
   }
@@ -3933,7 +3955,7 @@ var SessionStore = class {
     const sessions = Array.from(this.sessions.entries()).map(([id, entry]) => ({
       id: id.slice(0, 8) + "...",
       model: entry.model,
-      age: Math.round((now - entry.createdAt) / 1e3),
+      age: Math.round((now - entry.createdAt) / 1e3)
     }));
     return { count: this.sessions.size, sessions };
   }
@@ -4008,22 +4030,17 @@ function getSessionId(headers, headerName = DEFAULT_SESSION_CONFIG.headerName) {
 function deriveSessionId(messages) {
   const firstUser = messages.find((m) => m.role === "user");
   if (!firstUser) return void 0;
-  const content =
-    typeof firstUser.content === "string" ? firstUser.content : JSON.stringify(firstUser.content);
+  const content = typeof firstUser.content === "string" ? firstUser.content : JSON.stringify(firstUser.content);
   return createHash3("sha256").update(content).digest("hex").slice(0, 8);
 }
 function hashRequestContent(lastUserContent, toolCallNames) {
   const normalized = lastUserContent.replace(/\s+/g, " ").trim().slice(0, 500);
   const toolSuffix = toolCallNames?.length ? `|tools:${toolCallNames.sort().join(",")}` : "";
-  return createHash3("sha256")
-    .update(normalized + toolSuffix)
-    .digest("hex")
-    .slice(0, 12);
+  return createHash3("sha256").update(normalized + toolSuffix).digest("hex").slice(0, 12);
 }
 
 // src/updater.ts
 var NPM_REGISTRY = "https://registry.npmjs.org/@blockrun/clawrouter/latest";
-var UPDATE_URL = "https://blockrun.ai/ClawRouter-update";
 var CHECK_TIMEOUT_MS = 5e3;
 function compareSemver(a, b) {
   const pa = a.split(".").map(Number);
@@ -4040,7 +4057,7 @@ async function checkForUpdates() {
     const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
     const res = await fetch(NPM_REGISTRY, {
       signal: controller.signal,
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json" }
     });
     clearTimeout(timeout);
     if (!res.ok) return;
@@ -4049,13 +4066,12 @@ async function checkForUpdates() {
     if (!latest) return;
     if (compareSemver(latest, VERSION) > 0) {
       console.log("");
-      console.log(
-        `\x1B[33m\u2B06\uFE0F  ClawRouter ${latest} available (you have ${VERSION})\x1B[0m`,
-      );
-      console.log(`   Run: \x1B[36mcurl -fsSL ${UPDATE_URL} | bash\x1B[0m`);
+      console.log(`\x1B[33m\u2B06\uFE0F  ClawRouter ${latest} available (you have ${VERSION})\x1B[0m`);
+      console.log(`   Run: \x1B[36mnpx @blockrun/clawrouter@latest\x1B[0m`);
       console.log("");
     }
-  } catch {}
+  } catch {
+  }
 }
 
 // src/config.ts
@@ -4076,7 +4092,7 @@ var DEFAULT_CONFIG2 = {
   maxEntries: 100,
   maxAgeMs: 24 * 60 * 60 * 1e3,
   // 24 hours
-  maxEventsPerResponse: 5,
+  maxEventsPerResponse: 5
 };
 var SessionJournal = class {
   journals = /* @__PURE__ */ new Map();
@@ -4106,7 +4122,7 @@ var SessionJournal = class {
       // Success patterns
       /Successfully ([^.!?\n]{10,150})/gi,
       // Tool usage patterns (when agent uses tools)
-      /I (?:also |then |have |)?(?:ran|executed|called|invoked) ([^.!?\n]{10,100})/gi,
+      /I (?:also |then |have |)?(?:ran|executed|called|invoked) ([^.!?\n]{10,100})/gi
     ];
     for (const pattern of patterns) {
       pattern.lastIndex = 0;
@@ -4144,7 +4160,7 @@ var SessionJournal = class {
       journal.push({
         timestamp: now,
         action,
-        model,
+        model
       });
     }
     const cutoff = now - this.config.maxAgeMs;
@@ -4182,7 +4198,7 @@ var SessionJournal = class {
       "your progress",
       "accomplished",
       "achievements",
-      "completed tasks",
+      "completed tasks"
     ];
     return triggers.some((t) => lower.includes(t));
   }
@@ -4199,7 +4215,7 @@ var SessionJournal = class {
       const time = new Date(e.timestamp).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        hour12: true,
+        hour12: true
       });
       return `- ${time}: ${e.action}`;
     });
@@ -4234,7 +4250,7 @@ ${lines.join("\n")}`;
     }
     return {
       sessions: this.journals.size,
-      totalEntries,
+      totalEntries
     };
   }
 };
@@ -4242,6 +4258,7 @@ ${lines.join("\n")}`;
 // src/proxy.ts
 var BLOCKRUN_API = "https://blockrun.ai/api";
 var BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
+var IMAGE_DIR = join5(homedir4(), ".openclaw", "blockrun", "images");
 var AUTO_MODEL = "blockrun/auto";
 var ROUTING_PROFILES = /* @__PURE__ */ new Set([
   "blockrun/free",
@@ -4251,7 +4268,7 @@ var ROUTING_PROFILES = /* @__PURE__ */ new Set([
   "blockrun/auto",
   "auto",
   "blockrun/premium",
-  "premium",
+  "premium"
 ]);
 var FREE_MODEL = "nvidia/gpt-oss-120b";
 var MAX_MESSAGES = 200;
@@ -4263,6 +4280,31 @@ var HEALTH_CHECK_TIMEOUT_MS = 2e3;
 var RATE_LIMIT_COOLDOWN_MS = 6e4;
 var PORT_RETRY_ATTEMPTS = 5;
 var PORT_RETRY_DELAY_MS = 1e3;
+var MODEL_BODY_READ_TIMEOUT_MS = 3e5;
+var ERROR_BODY_READ_TIMEOUT_MS = 3e4;
+async function readBodyWithTimeout(body, timeoutMs = MODEL_BODY_READ_TIMEOUT_MS) {
+  if (!body) return [];
+  const reader = body.getReader();
+  const chunks = [];
+  let timer;
+  try {
+    while (true) {
+      const result = await Promise.race([
+        reader.read(),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Body read timeout")), timeoutMs);
+        })
+      ]);
+      clearTimeout(timer);
+      if (result.done) break;
+      chunks.push(result.value);
+    }
+  } finally {
+    clearTimeout(timer);
+    reader.releaseLock();
+  }
+  return chunks;
+}
 function transformPaymentError(errorBody) {
   try {
     const parsed = JSON.parse(errorBody);
@@ -4272,7 +4314,7 @@ function transformPaymentError(errorBody) {
         const innerJson = JSON.parse(match[1]);
         if (innerJson.invalidReason === "insufficient_funds" && innerJson.invalidMessage) {
           const balanceMatch = innerJson.invalidMessage.match(
-            /insufficient balance:\s*(\d+)\s*<\s*(\d+)/i,
+            /insufficient balance:\s*(\d+)\s*<\s*(\d+)/i
           );
           if (balanceMatch) {
             const currentMicros = parseInt(balanceMatch[1], 10);
@@ -4280,8 +4322,7 @@ function transformPaymentError(errorBody) {
             const currentUSD = (currentMicros / 1e6).toFixed(6);
             const requiredUSD = (requiredMicros / 1e6).toFixed(6);
             const wallet = innerJson.payer || "unknown";
-            const shortWallet =
-              wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
+            const shortWallet = wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
             return JSON.stringify({
               error: {
                 message: `Insufficient USDC balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
@@ -4289,8 +4330,8 @@ function transformPaymentError(errorBody) {
                 wallet,
                 current_balance_usd: currentUSD,
                 required_usd: requiredUSD,
-                help: `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`,
-              },
+                help: `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`
+              }
             });
           }
         }
@@ -4299,26 +4340,37 @@ function transformPaymentError(errorBody) {
             error: {
               message: "Payment signature invalid. This may be a temporary issue.",
               type: "invalid_payload",
-              help: "Try again. If this persists, reinstall ClawRouter: curl -fsSL https://blockrun.ai/ClawRouter-update | bash",
-            },
+              help: "Try again. If this persists, reinstall ClawRouter: curl -fsSL https://blockrun.ai/ClawRouter-update | bash"
+            }
+          });
+        }
+        if (innerJson.invalidReason === "transaction_simulation_failed") {
+          console.error(
+            `[ClawRouter] Solana transaction simulation failed: ${innerJson.invalidMessage || "unknown"}`
+          );
+          return JSON.stringify({
+            error: {
+              message: "Solana payment simulation failed. Retrying with a different model.",
+              type: "transaction_simulation_failed",
+              help: "This is usually temporary. If it persists, check your Solana USDC balance or try: /model free"
+            }
           });
         }
       }
     }
-    if (parsed.error === "Settlement failed" || parsed.details?.includes("Settlement failed")) {
+    if (parsed.error === "Settlement failed" || parsed.error === "Payment settlement failed" || parsed.details?.includes("Settlement failed") || parsed.details?.includes("transaction_simulation_failed")) {
       const details = parsed.details || "";
       const gasError = details.includes("unable to estimate gas");
       return JSON.stringify({
         error: {
-          message: gasError
-            ? "Payment failed: network congestion or gas issue. Try again."
-            : "Payment settlement failed. Try again in a moment.",
+          message: gasError ? "Payment failed: network congestion or gas issue. Try again." : "Payment settlement failed. Try again in a moment.",
           type: "settlement_failed",
-          help: "This is usually temporary. If it persists, try: /model free",
-        },
+          help: "This is usually temporary. If it persists, try: /model free"
+        }
       });
     }
-  } catch {}
+  } catch {
+  }
   return errorBody;
 }
 var rateLimitedModels = /* @__PURE__ */ new Map();
@@ -4349,16 +4401,12 @@ function prioritizeNonRateLimited(models) {
   return [...available, ...rateLimited];
 }
 function canWrite(res) {
-  return (
-    !res.writableEnded &&
-    !res.destroyed &&
-    res.socket !== null &&
-    !res.socket.destroyed &&
-    res.socket.writable
-  );
+  return !res.writableEnded && !res.destroyed && res.socket !== null && !res.socket.destroyed && res.socket.writable;
 }
 function safeWrite(res, data) {
   if (!canWrite(res)) {
+    const bytes = typeof data === "string" ? Buffer.byteLength(data) : data.length;
+    console.warn(`[ClawRouter] safeWrite: socket not writable, dropping ${bytes} bytes`);
     return false;
   }
   return res.write(data);
@@ -4372,7 +4420,7 @@ async function checkExistingProxy(port) {
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
   try {
     const response = await fetch(`http://127.0.0.1:${port}/health`, {
-      signal: controller.signal,
+      signal: controller.signal
     });
     clearTimeout(timeoutId);
     if (response.ok) {
@@ -4406,17 +4454,17 @@ var PROVIDER_ERROR_PATTERNS = [
   /payload too large/i,
   /payment.*verification.*failed/i,
   /model.*not.*allowed/i,
-  /unknown.*model/i,
+  /unknown.*model/i
 ];
 var DEGRADED_RESPONSE_PATTERNS = [
   /the ai service is temporarily overloaded/i,
   /service is temporarily overloaded/i,
-  /please try again in a moment/i,
+  /please try again in a moment/i
 ];
 var DEGRADED_LOOP_PATTERNS = [
   /the boxed is the response\./i,
   /the response is the text\./i,
-  /the final answer is the boxed\./i,
+  /the final answer is the boxed\./i
 ];
 function extractAssistantContent(payload) {
   if (!payload || typeof payload !== "object") return void 0;
@@ -4433,14 +4481,11 @@ function extractAssistantContent(payload) {
 }
 function hasKnownLoopSignature(text) {
   const matchCount = DEGRADED_LOOP_PATTERNS.reduce(
-    (count, pattern) => (pattern.test(text) ? count + 1 : count),
-    0,
+    (count, pattern) => pattern.test(text) ? count + 1 : count,
+    0
   );
   if (matchCount >= 2) return true;
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 8) return false;
   const counts = /* @__PURE__ */ new Map();
   for (const line of lines) {
@@ -4470,10 +4515,8 @@ function detectDegradedSuccessResponse(body) {
       errorText = [
         typeof errObj.message === "string" ? errObj.message : "",
         typeof errObj.type === "string" ? errObj.type : "",
-        typeof errObj.code === "string" ? errObj.code : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
+        typeof errObj.code === "string" ? errObj.code : ""
+      ].filter(Boolean).join(" ");
     }
     if (errorText && PROVIDER_ERROR_PATTERNS.some((pattern) => pattern.test(errorText))) {
       return `degraded response: ${errorText.slice(0, 120)}`;
@@ -4486,7 +4529,8 @@ function detectDegradedSuccessResponse(body) {
     if (hasKnownLoopSignature(assistantContent)) {
       return "degraded response: repetitive assistant loop";
     }
-  } catch {}
+  } catch {
+  }
   return void 0;
 }
 var FALLBACK_STATUS_CODES = [
@@ -4508,7 +4552,7 @@ var FALLBACK_STATUS_CODES = [
   // Bad gateway
   503,
   // Service unavailable
-  504,
+  504
   // Gateway timeout
 ];
 function isProviderError(status, body) {
@@ -4524,7 +4568,7 @@ var VALID_ROLES = /* @__PURE__ */ new Set(["system", "user", "assistant", "tool"
 var ROLE_MAPPINGS = {
   developer: "system",
   // OpenAI's newer API uses "developer" for system messages
-  model: "assistant",
+  model: "assistant"
   // Some APIs use "model" instead of "assistant"
 };
 var VALID_TOOL_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -4574,11 +4618,7 @@ function sanitizeToolIds(messages) {
             newBlock = { ...newBlock, id: sanitized2 };
           }
         }
-        if (
-          block.type === "tool_result" &&
-          block.tool_use_id &&
-          typeof block.tool_use_id === "string"
-        ) {
+        if (block.type === "tool_result" && block.tool_use_id && typeof block.tool_use_id === "string") {
           const sanitized2 = sanitizeToolId(block.tool_use_id);
           if (sanitized2 !== block.tool_use_id) {
             blockChanged = true;
@@ -4634,7 +4674,7 @@ function normalizeMessagesForGoogle(messages) {
     const normalized = [...messages];
     normalized.splice(firstNonSystemIdx, 0, {
       role: "user",
-      content: "(continuing conversation)",
+      content: "(continuing conversation)"
     });
     return normalized;
   }
@@ -4650,10 +4690,8 @@ function normalizeMessagesForThinking(messages) {
     if (msg.role !== "assistant" || msg.reasoning_content !== void 0) {
       return msg;
     }
-    const hasOpenAIToolCalls =
-      msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0;
-    const hasAnthropicToolUse =
-      Array.isArray(msg.content) && msg.content.some((block) => block?.type === "tool_use");
+    const hasOpenAIToolCalls = msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0;
+    const hasAnthropicToolUse = Array.isArray(msg.content) && msg.content.some((block) => block?.type === "tool_use");
     if (hasOpenAIToolCalls || hasAnthropicToolUse) {
       hasChanges = true;
       return { ...msg, reasoning_content: "" };
@@ -4668,7 +4706,7 @@ function truncateMessages(messages) {
       messages,
       wasTruncated: false,
       originalCount: messages?.length ?? 0,
-      truncatedCount: messages?.length ?? 0,
+      truncatedCount: messages?.length ?? 0
     };
   }
   const systemMsgs = messages.filter((m) => m.role === "system");
@@ -4677,20 +4715,19 @@ function truncateMessages(messages) {
   const truncatedConversation = conversationMsgs.slice(-maxConversation);
   const result = [...systemMsgs, ...truncatedConversation];
   console.log(
-    `[ClawRouter] Truncated messages: ${messages.length} \u2192 ${result.length} (kept ${systemMsgs.length} system + ${truncatedConversation.length} recent)`,
+    `[ClawRouter] Truncated messages: ${messages.length} \u2192 ${result.length} (kept ${systemMsgs.length} system + ${truncatedConversation.length} recent)`
   );
   return {
     messages: result,
     wasTruncated: true,
     originalCount: messages.length,
-    truncatedCount: result.length,
+    truncatedCount: result.length
   };
 }
 var KIMI_BLOCK_RE = /<[｜|][^<>]*begin[^<>]*[｜|]>[\s\S]*?<[｜|][^<>]*end[^<>]*[｜|]>/gi;
 var KIMI_TOKEN_RE = /<[｜|][^<>]*[｜|]>/g;
 var THINKING_TAG_RE = /<\s*\/?\s*(?:think(?:ing)?|thought|antthinking)\b[^>]*>/gi;
-var THINKING_BLOCK_RE =
-  /<\s*(?:think(?:ing)?|thought|antthinking)\b[^>]*>[\s\S]*?<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\s*>/gi;
+var THINKING_BLOCK_RE = /<\s*(?:think(?:ing)?|thought|antthinking)\b[^>]*>[\s\S]*?<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\s*>/gi;
 function stripThinkingTokens(content) {
   if (!content) return content;
   let cleaned = content.replace(KIMI_BLOCK_RE, "");
@@ -4717,7 +4754,7 @@ function buildProxyModelList(createdAt = Math.floor(Date.now() / 1e3)) {
     id: model.id,
     object: "model",
     created: createdAt,
-    owned_by: model.id.includes("/") ? (model.id.split("/")[0] ?? "blockrun") : "blockrun",
+    owned_by: model.id.includes("/") ? model.id.split("/")[0] ?? "blockrun" : "blockrun"
   }));
 }
 function mergeRoutingConfig(overrides) {
@@ -4728,7 +4765,7 @@ function mergeRoutingConfig(overrides) {
     classifier: { ...DEFAULT_ROUTING_CONFIG.classifier, ...overrides.classifier },
     scoring: { ...DEFAULT_ROUTING_CONFIG.scoring, ...overrides.scoring },
     tiers: { ...DEFAULT_ROUTING_CONFIG.tiers, ...overrides.tiers },
-    overrides: { ...DEFAULT_ROUTING_CONFIG.overrides, ...overrides.overrides },
+    overrides: { ...DEFAULT_ROUTING_CONFIG.overrides, ...overrides.overrides }
   };
 }
 function estimateAmount(modelId, bodyLength, maxTokens) {
@@ -4736,9 +4773,7 @@ function estimateAmount(modelId, bodyLength, maxTokens) {
   if (!model) return void 0;
   const estimatedInputTokens = Math.ceil(bodyLength / 4);
   const estimatedOutputTokens = maxTokens || model.maxOutput || 4096;
-  const costUsd =
-    (estimatedInputTokens / 1e6) * model.inputPrice +
-    (estimatedOutputTokens / 1e6) * model.outputPrice;
+  const costUsd = estimatedInputTokens / 1e6 * model.inputPrice + estimatedOutputTokens / 1e6 * model.outputPrice;
   const amountMicros = Math.max(1e3, Math.ceil(costUsd * 1.2 * 1e6));
   return amountMicros.toString();
 }
@@ -4752,12 +4787,7 @@ async function proxyPartnerRequest(req, res, apiBase, payFetch) {
   const body = Buffer.concat(bodyChunks);
   const headers = {};
   for (const [key, value] of Object.entries(req.headers)) {
-    if (
-      key === "host" ||
-      key === "connection" ||
-      key === "transfer-encoding" ||
-      key === "content-length"
-    )
+    if (key === "host" || key === "connection" || key === "transfer-encoding" || key === "content-length")
       continue;
     if (typeof value === "string") headers[key] = value;
   }
@@ -4767,7 +4797,7 @@ async function proxyPartnerRequest(req, res, apiBase, payFetch) {
   const upstream = await payFetch(upstreamUrl, {
     method: req.method ?? "POST",
     headers,
-    body: body.length > 0 ? new Uint8Array(body) : void 0,
+    body: body.length > 0 ? new Uint8Array(body) : void 0
   });
   const responseHeaders = {};
   upstream.headers.forEach((value, key) => {
@@ -4776,22 +4806,16 @@ async function proxyPartnerRequest(req, res, apiBase, payFetch) {
   });
   res.writeHead(upstream.status, responseHeaders);
   if (upstream.body) {
-    const reader = upstream.body.getReader();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        safeWrite(res, Buffer.from(value));
-      }
-    } finally {
-      reader.releaseLock();
+    const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
+    for (const chunk of chunks) {
+      safeWrite(res, Buffer.from(chunk));
     }
   }
   res.end();
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] Partner response: ${upstream.status} (${latencyMs}ms)`);
   logUsage({
-    timestamp: /* @__PURE__ */ new Date().toISOString(),
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     model: "partner",
     tier: "PARTNER",
     cost: 0,
@@ -4799,44 +4823,52 @@ async function proxyPartnerRequest(req, res, apiBase, payFetch) {
     baselineCost: 0,
     savings: 0,
     latencyMs,
-    partnerId:
-      (req.url?.split("?")[0] ?? "").replace(/^\/v1\//, "").replace(/\//g, "_") || "unknown",
-    service: "partner",
-  }).catch(() => {});
+    partnerId: (req.url?.split("?")[0] ?? "").replace(/^\/v1\//, "").replace(/\//g, "_") || "unknown",
+    service: "partner"
+  }).catch(() => {
+  });
 }
 async function uploadDataUriToHost(dataUri) {
   const match = dataUri.match(/^data:(image\/\w+);base64,(.+)$/);
   if (!match) throw new Error("Invalid data URI format");
   const [, mimeType, b64Data] = match;
-  const ext = mimeType === "image/jpeg" ? "jpg" : (mimeType.split("/")[1] ?? "png");
+  const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
   const buffer = Buffer.from(b64Data, "base64");
   const blob = new Blob([buffer], { type: mimeType });
   const form = new FormData();
   form.append("reqtype", "fileupload");
   form.append("fileToUpload", blob, `image.${ext}`);
-  const resp = await fetch("https://catbox.moe/user/api.php", {
-    method: "POST",
-    body: form,
-  });
-  if (!resp.ok) throw new Error(`catbox.moe upload failed: HTTP ${resp.status}`);
-  const result = await resp.text();
-  if (result.startsWith("https://")) {
-    return result.trim();
+  const uploadController = new AbortController();
+  const uploadTimeout = setTimeout(() => uploadController.abort(), 3e4);
+  try {
+    const resp = await fetch("https://catbox.moe/user/api.php", {
+      method: "POST",
+      body: form,
+      signal: uploadController.signal
+    });
+    if (!resp.ok) throw new Error(`catbox.moe upload failed: HTTP ${resp.status}`);
+    const result = await resp.text();
+    if (result.startsWith("https://")) {
+      return result.trim();
+    }
+    throw new Error(`catbox.moe upload failed: ${result}`);
+  } finally {
+    clearTimeout(uploadTimeout);
   }
-  throw new Error(`catbox.moe upload failed: ${result}`);
 }
 async function startProxy(options) {
   const walletKey2 = typeof options.wallet === "string" ? options.wallet : options.wallet.key;
-  const solanaPrivateKeyBytes =
-    typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
-  const paymentChain = options.paymentChain ?? (await resolvePaymentChain());
-  const apiBase =
-    options.apiBase ??
-    (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  const solanaPrivateKeyBytes = typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
+  const paymentChain = options.paymentChain ?? await resolvePaymentChain();
+  const apiBase = options.apiBase ?? (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
   if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
     console.warn(
-      `[ClawRouter] Payment chain is Solana but no Solana keys provided. Using Base (EVM).`,
+      `[ClawRouter] \u26A0 Payment chain is Solana but no mnemonic found \u2014 falling back to Base (EVM).`
     );
+    console.warn(
+      `[ClawRouter]   To fix: run "npx @blockrun/clawrouter wallet recover" if your mnemonic exists,`
+    );
+    console.warn(`[ClawRouter]   or run "npx @blockrun/clawrouter chain base" to switch to EVM.`);
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
   }
@@ -4847,21 +4879,21 @@ async function startProxy(options) {
     const baseUrl2 = `http://127.0.0.1:${listenPort}`;
     if (existingProxy.wallet !== account2.address) {
       console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`,
+        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`
       );
     }
     if (existingProxy.paymentChain) {
       if (existingProxy.paymentChain !== paymentChain) {
         throw new Error(
-          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`,
+          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`
         );
       }
     } else if (paymentChain !== "base") {
       console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`,
+        `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`
       );
       throw new Error(
-        `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`,
+        `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`
       );
     }
     let reuseSolanaAddress;
@@ -4870,10 +4902,7 @@ async function startProxy(options) {
       const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes(solanaPrivateKeyBytes);
       reuseSolanaAddress = solanaSigner.address;
     }
-    const balanceMonitor2 =
-      paymentChain === "solana" && reuseSolanaAddress
-        ? new SolanaBalanceMonitor(reuseSolanaAddress)
-        : new BalanceMonitor(account2.address);
+    const balanceMonitor2 = paymentChain === "solana" && reuseSolanaAddress ? new SolanaBalanceMonitor(reuseSolanaAddress) : new BalanceMonitor(account2.address);
     options.onReady?.(listenPort);
     return {
       port: listenPort,
@@ -4881,7 +4910,8 @@ async function startProxy(options) {
       walletAddress: existingProxy.wallet,
       solanaAddress: reuseSolanaAddress,
       balanceMonitor: balanceMonitor2,
-      close: async () => {},
+      close: async () => {
+      }
     };
   }
   const account = privateKeyToAccount3(walletKey2);
@@ -4900,25 +4930,18 @@ async function startProxy(options) {
   }
   x402.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
-    const chain = network.startsWith("eip155")
-      ? "Base (EVM)"
-      : network.startsWith("solana")
-        ? "Solana"
-        : network;
+    const chain = network.startsWith("eip155") ? "Base (EVM)" : network.startsWith("solana") ? "Solana" : network;
     console.log(`[ClawRouter] Payment signed on ${chain} (${network})`);
   });
   const payFetch = createPayFetchWithPreAuth(fetch, x402, void 0, {
-    skipPreAuth: paymentChain === "solana",
+    skipPreAuth: paymentChain === "solana"
   });
-  const balanceMonitor =
-    paymentChain === "solana" && solanaAddress
-      ? new SolanaBalanceMonitor(solanaAddress)
-      : new BalanceMonitor(account.address);
+  const balanceMonitor = paymentChain === "solana" && solanaAddress ? new SolanaBalanceMonitor(solanaAddress) : new BalanceMonitor(account.address);
   const routingConfig = mergeRoutingConfig(options.routingConfig);
   const modelPricing2 = buildModelPricing();
   const routerOpts2 = {
     config: routingConfig,
-    modelPricing: modelPricing2,
+    modelPricing: modelPricing2
   };
   const deduplicator = new RequestDeduplicator();
   const responseCache = new ResponseCache(options.cacheConfig);
@@ -4948,7 +4971,7 @@ async function startProxy(options) {
       const response = {
         status: "ok",
         wallet: account.address,
-        paymentChain,
+        paymentChain
       };
       if (solanaAddress) {
         response.solana = solanaAddress;
@@ -4971,9 +4994,24 @@ async function startProxy(options) {
       const stats = responseCache.getStats();
       res.writeHead(200, {
         "Content-Type": "application/json",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache"
       });
       res.end(JSON.stringify(stats, null, 2));
+      return;
+    }
+    if (req.url === "/stats" && req.method === "DELETE") {
+      try {
+        const result = await clearStats();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ cleared: true, deletedFiles: result.deletedFiles }));
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: `Failed to clear stats: ${err instanceof Error ? err.message : String(err)}`
+          })
+        );
+      }
       return;
     }
     if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
@@ -4983,15 +5021,15 @@ async function startProxy(options) {
         const stats = await getStats(Math.min(days, 30));
         res.writeHead(200, {
           "Content-Type": "application/json",
-          "Cache-Control": "no-cache",
+          "Cache-Control": "no-cache"
         });
         res.end(JSON.stringify(stats, null, 2));
       } catch (err) {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
-            error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`,
-          }),
+            error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`
+          })
         );
       }
       return;
@@ -5000,6 +5038,81 @@ async function startProxy(options) {
       const models = buildProxyModelList();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ object: "list", data: models }));
+      return;
+    }
+    if (req.url?.startsWith("/images/") && req.method === "GET") {
+      const filename = req.url.slice("/images/".length).split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "");
+      if (!filename) {
+        res.writeHead(400);
+        res.end("Bad request");
+        return;
+      }
+      const filePath = join5(IMAGE_DIR, filename);
+      try {
+        const s = await fsStat(filePath);
+        if (!s.isFile()) throw new Error("not a file");
+        const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
+        const mime = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
+        const data = await readFile(filePath);
+        res.writeHead(200, { "Content-Type": mime[ext] ?? "application/octet-stream", "Content-Length": data.length });
+        res.end(data);
+      } catch {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Image not found" }));
+      }
+      return;
+    }
+    if (req.url === "/v1/images/generations" && req.method === "POST") {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const reqBody = Buffer.concat(chunks);
+      try {
+        const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+          body: reqBody
+        });
+        const text = await upstream.text();
+        if (!upstream.ok) {
+          res.writeHead(upstream.status, { "Content-Type": "application/json" });
+          res.end(text);
+          return;
+        }
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(text);
+          return;
+        }
+        if (result.data?.length) {
+          await mkdir3(IMAGE_DIR, { recursive: true });
+          const port2 = server.address()?.port ?? 8402;
+          for (const img of result.data) {
+            const m = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
+            if (m) {
+              const [, mimeType, b64] = m;
+              const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
+              const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+              await writeFile2(join5(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+              img.url = `http://localhost:${port2}/images/${filename}`;
+              console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
+            }
+          }
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[ClawRouter] Image generation error: ${msg}`);
+        if (!res.headersSent) {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Image generation failed", details: msg }));
+        }
+      }
       return;
     }
     if (req.url?.match(/^\/v1\/(?:x|partner)\//)) {
@@ -5012,8 +5125,8 @@ async function startProxy(options) {
           res.writeHead(502, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
-              error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" },
-            }),
+              error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" }
+            })
           );
         }
       }
@@ -5036,7 +5149,7 @@ async function startProxy(options) {
         balanceMonitor,
         sessionStore,
         responseCache,
-        sessionJournal,
+        sessionJournal
       );
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -5045,14 +5158,14 @@ async function startProxy(options) {
         res.writeHead(502, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
-            error: { message: `Proxy error: ${error.message}`, type: "proxy_error" },
-          }),
+            error: { message: `Proxy error: ${error.message}`, type: "proxy_error" }
+          })
         );
       } else if (!res.writableEnded) {
         res.write(
           `data: ${JSON.stringify({ error: { message: error.message, type: "proxy_error" } })}
 
-`,
+`
         );
         res.write("data: [DONE]\n\n");
         res.end();
@@ -5070,19 +5183,19 @@ async function startProxy(options) {
             rejectAttempt({
               code: "REUSE_EXISTING",
               wallet: existingProxy2.wallet,
-              existingChain: existingProxy2.paymentChain,
+              existingChain: existingProxy2.paymentChain
             });
             return;
           }
           if (attempt < PORT_RETRY_ATTEMPTS) {
             console.log(
-              `[ClawRouter] Port ${listenPort} in TIME_WAIT, retrying in ${PORT_RETRY_DELAY_MS}ms (attempt ${attempt}/${PORT_RETRY_ATTEMPTS})`,
+              `[ClawRouter] Port ${listenPort} in TIME_WAIT, retrying in ${PORT_RETRY_DELAY_MS}ms (attempt ${attempt}/${PORT_RETRY_ATTEMPTS})`
             );
             rejectAttempt({ code: "RETRY", attempt });
             return;
           }
           console.error(
-            `[ClawRouter] Port ${listenPort} still in use after ${PORT_RETRY_ATTEMPTS} attempts`,
+            `[ClawRouter] Port ${listenPort} still in use after ${PORT_RETRY_ATTEMPTS} attempts`
           );
           rejectAttempt(err);
           return;
@@ -5107,6 +5220,7 @@ async function startProxy(options) {
         if (error.existingChain && error.existingChain !== paymentChain) {
           throw new Error(
             `Existing proxy on port ${listenPort} is using ${error.existingChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`,
+            { cause: err }
           );
         }
         const baseUrl2 = `http://127.0.0.1:${listenPort}`;
@@ -5116,7 +5230,8 @@ async function startProxy(options) {
           baseUrl: baseUrl2,
           walletAddress: error.wallet,
           balanceMonitor,
-          close: async () => {},
+          close: async () => {
+          }
         };
       }
       if (error.code === "RETRY") {
@@ -5152,7 +5267,8 @@ async function startProxy(options) {
       console.error(`[ClawRouter] Socket timeout, destroying connection`);
       socket.destroy();
     });
-    socket.on("end", () => {});
+    socket.on("end", () => {
+    });
     socket.on("error", (err) => {
       console.error(`[ClawRouter] Socket error: ${err.message}`);
     });
@@ -5166,38 +5282,27 @@ async function startProxy(options) {
     walletAddress: account.address,
     solanaAddress,
     balanceMonitor,
-    close: () =>
-      new Promise((res, rej) => {
-        const timeout = setTimeout(() => {
-          rej(new Error("[ClawRouter] Close timeout after 4s"));
-        }, 4e3);
-        sessionStore.close();
-        for (const socket of connections) {
-          socket.destroy();
+    close: () => new Promise((res, rej) => {
+      const timeout = setTimeout(() => {
+        rej(new Error("[ClawRouter] Close timeout after 4s"));
+      }, 4e3);
+      sessionStore.close();
+      for (const socket of connections) {
+        socket.destroy();
+      }
+      connections.clear();
+      server.close((err) => {
+        clearTimeout(timeout);
+        if (err) {
+          rej(err);
+        } else {
+          res();
         }
-        connections.clear();
-        server.close((err) => {
-          clearTimeout(timeout);
-          if (err) {
-            rej(err);
-          } else {
-            res();
-          }
-        });
-      }),
+      });
+    })
   };
 }
-async function tryModelRequest(
-  upstreamUrl,
-  method,
-  headers,
-  body,
-  modelId,
-  maxTokens,
-  payFetch,
-  balanceMonitor,
-  signal,
-) {
+async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxTokens, payFetch, balanceMonitor, signal) {
   let requestBody = body;
   try {
     const parsed = JSON.parse(body.toString());
@@ -5215,47 +5320,50 @@ async function tryModelRequest(
     if (isGoogleModel(modelId) && Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessagesForGoogle(parsed.messages);
     }
-    const hasThinkingEnabled = !!(
-      parsed.thinking ||
-      parsed.extended_thinking ||
-      isReasoningModel(modelId)
-    );
+    const hasThinkingEnabled = !!(parsed.thinking || parsed.extended_thinking || isReasoningModel(modelId));
     if (hasThinkingEnabled && Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessagesForThinking(parsed.messages);
     }
     requestBody = Buffer.from(JSON.stringify(parsed));
-  } catch {}
+  } catch {
+  }
   try {
     const response = await payFetch(upstreamUrl, {
       method,
       headers,
       body: requestBody.length > 0 ? new Uint8Array(requestBody) : void 0,
-      signal,
+      signal
     });
     if (response.status !== 200) {
-      const errorBody = await response.text();
+      const errorBodyChunks = await readBodyWithTimeout(response.body, ERROR_BODY_READ_TIMEOUT_MS);
+      const errorBody = Buffer.concat(errorBodyChunks).toString();
       const isProviderErr = isProviderError(response.status, errorBody);
       return {
         success: false,
         errorBody,
         errorStatus: response.status,
-        isProviderError: isProviderErr,
+        isProviderError: isProviderErr
       };
     }
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("json") || contentType.includes("text")) {
       try {
-        const responseBody = await response.clone().text();
+        const clonedChunks = await readBodyWithTimeout(
+          response.clone().body,
+          ERROR_BODY_READ_TIMEOUT_MS
+        );
+        const responseBody = Buffer.concat(clonedChunks).toString();
         const degradedReason = detectDegradedSuccessResponse(responseBody);
         if (degradedReason) {
           return {
             success: false,
             errorBody: degradedReason,
             errorStatus: 503,
-            isProviderError: true,
+            isProviderError: true
           };
         }
-      } catch {}
+      } catch {
+      }
     }
     return { success: true, response };
   } catch (err) {
@@ -5264,24 +5372,12 @@ async function tryModelRequest(
       success: false,
       errorBody: errorMsg,
       errorStatus: 500,
-      isProviderError: true,
+      isProviderError: true
       // Network errors are retryable
     };
   }
 }
-async function proxyRequest(
-  req,
-  res,
-  apiBase,
-  payFetch,
-  options,
-  routerOpts2,
-  deduplicator,
-  balanceMonitor,
-  sessionStore,
-  responseCache,
-  sessionJournal,
-) {
+async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts2, deduplicator, balanceMonitor, sessionStore, responseCache, sessionJournal) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
   const bodyChunks = [];
@@ -5313,15 +5409,7 @@ async function proxyRequest(
       const parsedMessages = Array.isArray(parsed.messages) ? parsed.messages : [];
       const lastUserMsg = [...parsedMessages].reverse().find((m) => m.role === "user");
       const rawLastContent = lastUserMsg?.content;
-      const lastContent =
-        typeof rawLastContent === "string"
-          ? rawLastContent
-          : Array.isArray(rawLastContent)
-            ? rawLastContent
-                .filter((b) => b.type === "text")
-                .map((b) => b.text ?? "")
-                .join(" ")
-            : "";
+      const lastContent = typeof rawLastContent === "string" ? rawLastContent : Array.isArray(rawLastContent) ? rawLastContent.filter((b) => b.type === "text").map((b) => b.text ?? "").join(" ") : "";
       if (sessionId && parsedMessages.length > 0) {
         const messages = parsedMessages;
         if (sessionJournal.needsContext(lastContent)) {
@@ -5331,7 +5419,7 @@ async function proxyRequest(
             if (sysIdx >= 0 && typeof messages[sysIdx].content === "string") {
               messages[sysIdx] = {
                 ...messages[sysIdx],
-                content: journalText + "\n\n" + messages[sysIdx].content,
+                content: journalText + "\n\n" + messages[sysIdx].content
               };
             } else {
               messages.unshift({ role: "system", content: journalText });
@@ -5339,7 +5427,7 @@ async function proxyRequest(
             parsed.messages = messages;
             bodyModified = true;
             console.log(
-              `[ClawRouter] Injected session journal (${journalText.length} chars) for session ${sessionId.slice(0, 8)}...`,
+              `[ClawRouter] Injected session journal (${journalText.length} chars) for session ${sessionId.slice(0, 8)}...`
             );
           }
         }
@@ -5351,38 +5439,28 @@ async function proxyRequest(
         const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : void 0;
         const fullText = `${systemPrompt ?? ""} ${debugPrompt}`;
         const estimatedTokens = Math.ceil(fullText.length / 4);
-        const normalizedModel2 =
-          typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
+        const normalizedModel2 = typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
         const profileName = normalizedModel2.replace("blockrun/", "");
-        const debugProfile = ["free", "eco", "auto", "premium"].includes(profileName)
-          ? profileName
-          : "auto";
+        const debugProfile = ["free", "eco", "auto", "premium"].includes(profileName) ? profileName : "auto";
         const scoring = classifyByRules(
           debugPrompt,
           systemPrompt,
           estimatedTokens,
-          DEFAULT_ROUTING_CONFIG.scoring,
+          DEFAULT_ROUTING_CONFIG.scoring
         );
         const debugRouting = route(debugPrompt, systemPrompt, maxTokens, {
           ...routerOpts2,
-          routingProfile: debugProfile,
+          routingProfile: debugProfile
         });
-        const dimLines = (scoring.dimensions ?? [])
-          .map((d) => {
-            const nameStr = (d.name + ":").padEnd(24);
-            const scoreStr = d.score.toFixed(2).padStart(6);
-            const sigStr = d.signal ? `  [${d.signal}]` : "";
-            return `  ${nameStr}${scoreStr}${sigStr}`;
-          })
-          .join("\n");
+        const dimLines = (scoring.dimensions ?? []).map((d) => {
+          const nameStr = (d.name + ":").padEnd(24);
+          const scoreStr = d.score.toFixed(2).padStart(6);
+          const sigStr = d.signal ? `  [${d.signal}]` : "";
+          return `  ${nameStr}${scoreStr}${sigStr}`;
+        }).join("\n");
         const sess = sessionId ? sessionStore.getSession(sessionId) : void 0;
-        const sessLine = sess
-          ? `Session: ${sessionId.slice(0, 8)}... \u2192 pinned: ${sess.model} (${sess.requestCount} requests)`
-          : sessionId
-            ? `Session: ${sessionId.slice(0, 8)}... \u2192 no pinned model`
-            : "Session: none";
-        const { simpleMedium, mediumComplex, complexReasoning } =
-          DEFAULT_ROUTING_CONFIG.scoring.tierBoundaries;
+        const sessLine = sess ? `Session: ${sessionId.slice(0, 8)}... \u2192 pinned: ${sess.model} (${sess.requestCount} requests)` : sessionId ? `Session: ${sessionId.slice(0, 8)}... \u2192 no pinned model` : "Session: none";
+        const { simpleMedium, mediumComplex, complexReasoning } = DEFAULT_ROUTING_CONFIG.scoring.tierBoundaries;
         const debugText = [
           "ClawRouter Debug",
           "",
@@ -5395,7 +5473,7 @@ async function proxyRequest(
           "",
           `Tier Boundaries: SIMPLE <${simpleMedium.toFixed(2)} | MEDIUM <${mediumComplex.toFixed(2)} | COMPLEX <${complexReasoning.toFixed(2)} | REASONING >=${complexReasoning.toFixed(2)}`,
           "",
-          sessLine,
+          sessLine
         ].join("\n");
         const completionId = `chatcmpl-debug-${Date.now()}`;
         const timestamp = Math.floor(Date.now() / 1e3);
@@ -5408,16 +5486,16 @@ async function proxyRequest(
             {
               index: 0,
               message: { role: "assistant", content: debugText },
-              finish_reason: "stop",
-            },
+              finish_reason: "stop"
+            }
           ],
-          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
         };
         if (isStreaming) {
           res.writeHead(200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
-            Connection: "keep-alive",
+            Connection: "keep-alive"
           });
           const sseChunk = {
             id: completionId,
@@ -5428,16 +5506,16 @@ async function proxyRequest(
               {
                 index: 0,
                 delta: { role: "assistant", content: debugText },
-                finish_reason: null,
-              },
-            ],
+                finish_reason: null
+              }
+            ]
           };
           const sseDone = {
             id: completionId,
             object: "chat.completion.chunk",
             created: timestamp,
             model: "clawrouter/debug",
-            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }]
           };
           res.write(`data: ${JSON.stringify(sseChunk)}
 
@@ -5451,9 +5529,7 @@ async function proxyRequest(
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(syntheticResponse));
         }
-        console.log(
-          `[ClawRouter] /debug command \u2192 ${debugRouting.tier} | ${debugRouting.model}`,
-        );
+        console.log(`[ClawRouter] /debug command \u2192 ${debugRouting.tier} | ${debugRouting.model}`);
         return;
       }
       if (lastContent.startsWith("/imagegen")) {
@@ -5475,7 +5551,7 @@ async function proxyRequest(
             banana: "google/nano-banana",
             "nano-banana": "google/nano-banana",
             "banana-pro": "google/nano-banana-pro",
-            "nano-banana-pro": "google/nano-banana-pro",
+            "nano-banana-pro": "google/nano-banana-pro"
           };
           imageModel = IMAGE_MODEL_ALIASES[raw] ?? raw;
           imagePrompt = imagePrompt.replace(/--model\s+\S+/, "").trim();
@@ -5503,7 +5579,7 @@ async function proxyRequest(
             "Examples:",
             "  /imagegen a cat wearing sunglasses",
             "  /imagegen --model dall-e-3 a futuristic city at sunset",
-            "  /imagegen --model banana-pro --size 2048x2048 mountain landscape",
+            "  /imagegen --model banana-pro --size 2048x2048 mountain landscape"
           ].join("\n");
           const completionId = `chatcmpl-image-${Date.now()}`;
           const timestamp = Math.floor(Date.now() / 1e3);
@@ -5511,17 +5587,17 @@ async function proxyRequest(
             res.writeHead(200, {
               "Content-Type": "text/event-stream",
               "Cache-Control": "no-cache",
-              Connection: "keep-alive",
+              Connection: "keep-alive"
             });
             res.write(
               `data: ${JSON.stringify({ id: completionId, object: "chat.completion.chunk", created: timestamp, model: "clawrouter/image", choices: [{ index: 0, delta: { role: "assistant", content: errorText }, finish_reason: null }] })}
 
-`,
+`
             );
             res.write(
               `data: ${JSON.stringify({ id: completionId, object: "chat.completion.chunk", created: timestamp, model: "clawrouter/image", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}
 
-`,
+`
             );
             res.write("data: [DONE]\n\n");
             res.end();
@@ -5537,18 +5613,18 @@ async function proxyRequest(
                   {
                     index: 0,
                     message: { role: "assistant", content: errorText },
-                    finish_reason: "stop",
-                  },
+                    finish_reason: "stop"
+                  }
                 ],
-                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-              }),
+                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+              })
             );
           }
           console.log(`[ClawRouter] /imagegen command \u2192 showing usage help`);
           return;
         }
         console.log(
-          `[ClawRouter] /imagegen command \u2192 ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`,
+          `[ClawRouter] /imagegen command \u2192 ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`
         );
         try {
           const imageUpstreamUrl = `${apiBase}/v1/images/generations`;
@@ -5556,20 +5632,17 @@ async function proxyRequest(
             model: imageModel,
             prompt: imagePrompt,
             size: imageSize,
-            n: 1,
+            n: 1
           });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: imageBody,
+            body: imageBody
           });
           const imageResult = await imageResponse.json();
           let responseText;
           if (!imageResponse.ok || imageResult.error) {
-            const errMsg =
-              typeof imageResult.error === "string"
-                ? imageResult.error
-                : (imageResult.error?.message ?? `HTTP ${imageResponse.status}`);
+            const errMsg = typeof imageResult.error === "string" ? imageResult.error : imageResult.error?.message ?? `HTTP ${imageResponse.status}`;
             responseText = `Image generation failed: ${errMsg}`;
             console.log(`[ClawRouter] /imagegen error: ${errMsg}`);
           } else {
@@ -5586,10 +5659,10 @@ async function proxyRequest(
                       lines.push(hostedUrl);
                     } catch (uploadErr) {
                       console.error(
-                        `[ClawRouter] /imagegen: failed to upload data URI: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`,
+                        `[ClawRouter] /imagegen: failed to upload data URI: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`
                       );
                       lines.push(
-                        "Image generated but upload failed. Try again or use --model dall-e-3.",
+                        "Image generated but upload failed. Try again or use --model dall-e-3."
                       );
                     }
                   } else {
@@ -5609,17 +5682,17 @@ async function proxyRequest(
             res.writeHead(200, {
               "Content-Type": "text/event-stream",
               "Cache-Control": "no-cache",
-              Connection: "keep-alive",
+              Connection: "keep-alive"
             });
             res.write(
               `data: ${JSON.stringify({ id: completionId, object: "chat.completion.chunk", created: timestamp, model: "clawrouter/image", choices: [{ index: 0, delta: { role: "assistant", content: responseText }, finish_reason: null }] })}
 
-`,
+`
             );
             res.write(
               `data: ${JSON.stringify({ id: completionId, object: "chat.completion.chunk", created: timestamp, model: "clawrouter/image", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}
 
-`,
+`
             );
             res.write("data: [DONE]\n\n");
             res.end();
@@ -5635,11 +5708,11 @@ async function proxyRequest(
                   {
                     index: 0,
                     message: { role: "assistant", content: responseText },
-                    finish_reason: "stop",
-                  },
+                    finish_reason: "stop"
+                  }
                 ],
-                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-              }),
+                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+              })
             );
           }
         } catch (err) {
@@ -5649,8 +5722,8 @@ async function proxyRequest(
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
-                error: { message: `Image generation failed: ${errMsg}`, type: "image_error" },
-              }),
+                error: { message: `Image generation failed: ${errMsg}`, type: "image_error" }
+              })
             );
           }
         }
@@ -5660,17 +5733,16 @@ async function proxyRequest(
         parsed.stream = false;
         bodyModified = true;
       }
-      const normalizedModel =
-        typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
+      const normalizedModel = typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
       const resolvedModel = resolveModelAlias(normalizedModel);
       const wasAlias = resolvedModel !== normalizedModel;
-      const isRoutingProfile = ROUTING_PROFILES.has(normalizedModel);
+      const isRoutingProfile = ROUTING_PROFILES.has(normalizedModel) || ROUTING_PROFILES.has(resolvedModel);
       if (isRoutingProfile) {
-        const profileName = normalizedModel.replace("blockrun/", "");
+        const profileName = resolvedModel.replace("blockrun/", "");
         routingProfile = profileName;
       }
       console.log(
-        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}${routingProfile ? `, profile: ${routingProfile}` : ""}`,
+        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}${routingProfile ? `, profile: ${routingProfile}` : ""}`
       );
       if (!isRoutingProfile) {
         if (parsed.model !== resolvedModel) {
@@ -5687,36 +5759,26 @@ async function proxyRequest(
           modelId = freeModel;
           bodyModified = true;
           await logUsage({
-            timestamp: /* @__PURE__ */ new Date().toISOString(),
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             model: freeModel,
             tier: "SIMPLE",
             cost: 0,
             baselineCost: 0,
             savings: 1,
             // 100% savings
-            latencyMs: 0,
+            latencyMs: 0
           });
         } else {
           effectiveSessionId = getSessionId(req.headers) ?? deriveSessionId(parsedMessages);
-          const existingSession = effectiveSessionId
-            ? sessionStore.getSession(effectiveSessionId)
-            : void 0;
+          const existingSession = effectiveSessionId ? sessionStore.getSession(effectiveSessionId) : void 0;
           const rawPrompt = lastUserMsg?.content;
-          const prompt =
-            typeof rawPrompt === "string"
-              ? rawPrompt
-              : Array.isArray(rawPrompt)
-                ? rawPrompt
-                    .filter((b) => b.type === "text")
-                    .map((b) => b.text ?? "")
-                    .join(" ")
-                : "";
+          const prompt = typeof rawPrompt === "string" ? rawPrompt : Array.isArray(rawPrompt) ? rawPrompt.filter((b) => b.type === "text").map((b) => b.text ?? "").join(" ") : "";
           const systemMsg = parsedMessages.find((m) => m.role === "system");
           const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : void 0;
           const tools = parsed.tools;
           hasTools = Array.isArray(tools) && tools.length > 0;
           if (hasTools && tools) {
-            console.log(`[ClawRouter] Tools detected (${tools.length}), agentic mode via keywords`);
+            console.log(`[ClawRouter] Tools detected (${tools.length}), forcing agentic tiers`);
           }
           hasVision = parsedMessages.some((m) => {
             if (Array.isArray(m.content)) {
@@ -5730,19 +5792,20 @@ async function proxyRequest(
           routingDecision = route(prompt, systemPrompt, maxTokens, {
             ...routerOpts2,
             routingProfile: routingProfile ?? void 0,
+            hasTools
           });
           if (existingSession) {
             const tierRank = {
               SIMPLE: 0,
               MEDIUM: 1,
               COMPLEX: 2,
-              REASONING: 3,
+              REASONING: 3
             };
             const existingRank = tierRank[existingSession.tier] ?? 0;
             const newRank = tierRank[routingDecision.tier] ?? 0;
             if (newRank > existingRank) {
               console.log(
-                `[ClawRouter] Session ${effectiveSessionId?.slice(0, 8)}... upgrading: ${existingSession.tier} \u2192 ${routingDecision.tier} (${routingDecision.model})`,
+                `[ClawRouter] Session ${effectiveSessionId?.slice(0, 8)}... upgrading: ${existingSession.tier} \u2192 ${routingDecision.tier} (${routingDecision.model})`
               );
               parsed.model = routingDecision.model;
               modelId = routingDecision.model;
@@ -5751,12 +5814,12 @@ async function proxyRequest(
                 sessionStore.setSession(
                   effectiveSessionId,
                   routingDecision.model,
-                  routingDecision.tier,
+                  routingDecision.tier
                 );
               }
             } else {
               console.log(
-                `[ClawRouter] Session ${effectiveSessionId?.slice(0, 8)}... keeping pinned model: ${existingSession.model} (${existingSession.tier} >= ${routingDecision.tier})`,
+                `[ClawRouter] Session ${effectiveSessionId?.slice(0, 8)}... keeping pinned model: ${existingSession.model} (${existingSession.tier} >= ${routingDecision.tier})`
               );
               parsed.model = existingSession.model;
               modelId = existingSession.model;
@@ -5765,24 +5828,17 @@ async function proxyRequest(
               routingDecision = {
                 ...routingDecision,
                 model: existingSession.model,
-                tier: existingSession.tier,
+                tier: existingSession.tier
               };
             }
-            const lastAssistantMsg = [...parsedMessages]
-              .reverse()
-              .find((m) => m.role === "assistant");
+            const lastAssistantMsg = [...parsedMessages].reverse().find((m) => m.role === "assistant");
             const assistantToolCalls = lastAssistantMsg?.tool_calls;
-            const toolCallNames = Array.isArray(assistantToolCalls)
-              ? assistantToolCalls.map((tc) => tc.function?.name).filter((n) => Boolean(n))
-              : void 0;
+            const toolCallNames = Array.isArray(assistantToolCalls) ? assistantToolCalls.map((tc) => tc.function?.name).filter((n) => Boolean(n)) : void 0;
             const contentHash = hashRequestContent(prompt, toolCallNames);
             const shouldEscalate = sessionStore.recordRequestHash(effectiveSessionId, contentHash);
             if (shouldEscalate) {
               const activeTierConfigs = (() => {
-                if (
-                  routingDecision.reasoning?.includes("agentic") &&
-                  routerOpts2.config.agenticTiers
-                ) {
+                if (routingDecision.reasoning?.includes("agentic") && routerOpts2.config.agenticTiers) {
                   return routerOpts2.config.agenticTiers;
                 }
                 if (routingProfile === "eco" && routerOpts2.config.ecoTiers) {
@@ -5795,18 +5851,18 @@ async function proxyRequest(
               })();
               const escalation = sessionStore.escalateSession(
                 effectiveSessionId,
-                activeTierConfigs,
+                activeTierConfigs
               );
               if (escalation) {
                 console.log(
-                  `[ClawRouter] \u26A1 3-strike escalation: ${existingSession.model} \u2192 ${escalation.model} (${existingSession.tier} \u2192 ${escalation.tier})`,
+                  `[ClawRouter] \u26A1 3-strike escalation: ${existingSession.model} \u2192 ${escalation.model} (${existingSession.tier} \u2192 ${escalation.tier})`
                 );
                 parsed.model = escalation.model;
                 modelId = escalation.model;
                 routingDecision = {
                   ...routingDecision,
                   model: escalation.model,
-                  tier: escalation.tier,
+                  tier: escalation.tier
                 };
               }
             }
@@ -5818,10 +5874,10 @@ async function proxyRequest(
               sessionStore.setSession(
                 effectiveSessionId,
                 routingDecision.model,
-                routingDecision.tier,
+                routingDecision.tier
               );
               console.log(
-                `[ClawRouter] Session ${effectiveSessionId.slice(0, 8)}... pinned to model: ${routingDecision.model}`,
+                `[ClawRouter] Session ${effectiveSessionId.slice(0, 8)}... pinned to model: ${routingDecision.model}`
               );
             }
           }
@@ -5844,7 +5900,7 @@ async function proxyRequest(
   if (autoCompress && requestSizeKB > compressionThreshold) {
     try {
       console.log(
-        `[ClawRouter] Request size ${requestSizeKB}KB exceeds threshold ${compressionThreshold}KB, applying compression...`,
+        `[ClawRouter] Request size ${requestSizeKB}KB exceeds threshold ${compressionThreshold}KB, applying compression...`
       );
       const parsed = JSON.parse(body.toString());
       if (parsed.messages && parsed.messages.length > 0 && shouldCompress(parsed.messages)) {
@@ -5865,26 +5921,26 @@ async function proxyRequest(
             // Safe: just removes JSON whitespace
             observation: false,
             // Disabled: may lose important context
-            dynamicCodebook: false,
+            dynamicCodebook: false
             // Disabled: requires model to understand codes
           },
           dictionary: {
             maxEntries: 50,
             minPhraseLength: 15,
-            includeCodebookHeader: false,
-          },
+            includeCodebookHeader: false
+          }
         });
         const compressedSizeKB = Math.ceil(compressionResult.compressedChars / 1024);
-        const savings = (((requestSizeKB - compressedSizeKB) / requestSizeKB) * 100).toFixed(1);
+        const savings = ((requestSizeKB - compressedSizeKB) / requestSizeKB * 100).toFixed(1);
         console.log(
-          `[ClawRouter] Compressed ${requestSizeKB}KB \u2192 ${compressedSizeKB}KB (${savings}% reduction)`,
+          `[ClawRouter] Compressed ${requestSizeKB}KB \u2192 ${compressedSizeKB}KB (${savings}% reduction)`
         );
         parsed.messages = compressionResult.messages;
         body = Buffer.from(JSON.stringify(parsed));
       }
     } catch (err) {
       console.warn(
-        `[ClawRouter] Compression failed: ${err instanceof Error ? err.message : String(err)}`,
+        `[ClawRouter] Compression failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
@@ -5924,33 +5980,30 @@ async function proxyRequest(
     const estimated = estimateAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
-      const bufferedCostMicros =
-        (estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
+      const bufferedCostMicros = estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
       const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
       if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
         const originalModel = modelId;
         console.log(
-          `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} (${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL} (requested: ${originalModel})`,
+          `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} (${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL} (requested: ${originalModel})`
         );
         modelId = FREE_MODEL;
         const parsed = JSON.parse(body.toString());
         parsed.model = FREE_MODEL;
         body = Buffer.from(JSON.stringify(parsed));
-        balanceFallbackNotice = sufficiency.info.isEmpty
-          ? `> **\u26A0\uFE0F Wallet empty** \u2014 using free model. Fund your wallet to use ${originalModel}.
+        balanceFallbackNotice = sufficiency.info.isEmpty ? `> **\u26A0\uFE0F Wallet empty** \u2014 using free model. Fund your wallet to use ${originalModel}.
 
-`
-          : `> **\u26A0\uFE0F Insufficient balance** (${sufficiency.info.balanceUSD}) \u2014 using free model instead of ${originalModel}.
+` : `> **\u26A0\uFE0F Insufficient balance** (${sufficiency.info.balanceUSD}) \u2014 using free model instead of ${originalModel}.
 
 `;
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          walletAddress: sufficiency.info.walletAddress,
+          walletAddress: sufficiency.info.walletAddress
         });
       } else if (sufficiency.info.isLow) {
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          walletAddress: sufficiency.info.walletAddress,
+          walletAddress: sufficiency.info.walletAddress
         });
       }
     }
@@ -5963,7 +6016,7 @@ async function proxyRequest(
       "cache-control": "no-cache",
       connection: "keep-alive",
       "x-context-used-kb": String(originalContextSizeKB),
-      "x-context-limit-kb": String(CONTEXT_LIMIT_KB),
+      "x-context-limit-kb": String(CONTEXT_LIMIT_KB)
     });
     headersSentEarly = true;
     safeWrite(res, ": heartbeat\n\n");
@@ -5978,12 +6031,7 @@ async function proxyRequest(
   }
   const headers = {};
   for (const [key, value] of Object.entries(req.headers)) {
-    if (
-      key === "host" ||
-      key === "connection" ||
-      key === "transfer-encoding" ||
-      key === "content-length"
-    )
+    if (key === "host" || key === "connection" || key === "transfer-encoding" || key === "content-length")
       continue;
     if (typeof value === "string") {
       headers[key] = value;
@@ -6028,26 +6076,41 @@ async function proxyRequest(
         routingDecision.tier,
         tierConfigs,
         estimatedTotalTokens,
-        getModelContextWindow,
+        getModelContextWindow
       );
       const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
       if (contextExcluded.length > 0) {
         console.log(
-          `[ClawRouter] Context filter (~${estimatedTotalTokens} tokens): excluded ${contextExcluded.join(", ")}`,
+          `[ClawRouter] Context filter (~${estimatedTotalTokens} tokens): excluded ${contextExcluded.join(", ")}`
         );
       }
-      const toolFiltered = filterByToolCalling(contextFiltered, hasTools, supportsToolCalling);
+      let toolFiltered = filterByToolCalling(contextFiltered, hasTools, supportsToolCalling);
       const toolExcluded = contextFiltered.filter((m) => !toolFiltered.includes(m));
       if (toolExcluded.length > 0) {
         console.log(
-          `[ClawRouter] Tool-calling filter: excluded ${toolExcluded.join(", ")} (no structured function call support)`,
+          `[ClawRouter] Tool-calling filter: excluded ${toolExcluded.join(", ")} (no structured function call support)`
         );
+      }
+      const TOOL_NONCOMPLIANT_MODELS = [
+        "google/gemini-2.5-flash-lite",
+        "google/gemini-3-pro-preview",
+        "google/gemini-3.1-pro"
+      ];
+      if (hasTools && toolFiltered.length > 1) {
+        const compliant = toolFiltered.filter((m) => !TOOL_NONCOMPLIANT_MODELS.includes(m));
+        if (compliant.length > 0 && compliant.length < toolFiltered.length) {
+          const dropped = toolFiltered.filter((m) => TOOL_NONCOMPLIANT_MODELS.includes(m));
+          console.log(
+            `[ClawRouter] Tool-compliance filter: excluded ${dropped.join(", ")} (unreliable tool schema handling)`
+          );
+          toolFiltered = compliant;
+        }
       }
       const visionFiltered = filterByVision(toolFiltered, hasVision, supportsVision);
       const visionExcluded = toolFiltered.filter((m) => !visionFiltered.includes(m));
       if (visionExcluded.length > 0) {
         console.log(
-          `[ClawRouter] Vision filter: excluded ${visionExcluded.join(", ")} (no vision support)`,
+          `[ClawRouter] Vision filter: excluded ${visionExcluded.join(", ")} (no vision support)`
         );
       }
       modelsToTry = visionFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
@@ -6074,7 +6137,7 @@ async function proxyRequest(
         maxTokens,
         payFetch,
         balanceMonitor,
-        controller.signal,
+        controller.signal
       );
       if (result.success && result.response) {
         upstream = result.response;
@@ -6084,14 +6147,28 @@ async function proxyRequest(
       }
       lastError = {
         body: result.errorBody || "Unknown error",
-        status: result.errorStatus || 500,
+        status: result.errorStatus || 500
       };
       if (result.isProviderError && !isLastAttempt) {
         if (result.errorStatus === 429) {
           markRateLimited(tryModel);
+          try {
+            const parsed = JSON.parse(result.errorBody || "{}");
+            if (parsed.update_available) {
+              console.log("");
+              console.log(
+                `\x1B[33m\u2B06\uFE0F  ClawRouter ${parsed.update_available} available (you have ${VERSION})\x1B[0m`
+              );
+              console.log(
+                `   Run: \x1B[36mcurl -fsSL ${parsed.update_url || "https://blockrun.ai/ClawRouter-update"} | bash\x1B[0m`
+              );
+              console.log("");
+            }
+          } catch {
+          }
         }
-        const isPaymentErr = /payment.*verification.*failed|insufficient.*funds/i.test(
-          result.errorBody || "",
+        const isPaymentErr = /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
+          result.errorBody || ""
         );
         if (isPaymentErr && tryModel !== FREE_MODEL) {
           const freeIdx = modelsToTry.indexOf(FREE_MODEL);
@@ -6102,13 +6179,13 @@ async function proxyRequest(
           }
         }
         console.log(
-          `[ClawRouter] Provider error from ${tryModel}, trying fallback: ${result.errorBody?.slice(0, 100)}`,
+          `[ClawRouter] Provider error from ${tryModel}, trying fallback: ${result.errorBody?.slice(0, 100)}`
         );
         continue;
       }
       if (!result.isProviderError) {
         console.log(
-          `[ClawRouter] Non-provider error from ${tryModel}, not retrying: ${result.errorBody?.slice(0, 100)}`,
+          `[ClawRouter] Non-provider error from ${tryModel}, not retrying: ${result.errorBody?.slice(0, 100)}`
         );
       }
       break;
@@ -6131,7 +6208,7 @@ async function proxyRequest(
         routerOpts2.modelPricing,
         estimatedInputTokens,
         maxTokens,
-        routingProfile ?? void 0,
+        routingProfile ?? void 0
       );
       routingDecision = {
         ...routingDecision,
@@ -6139,13 +6216,13 @@ async function proxyRequest(
         reasoning: `${routingDecision.reasoning} | fallback to ${actualModelUsed}`,
         costEstimate: newCosts.costEstimate,
         baselineCost: newCosts.baselineCost,
-        savings: newCosts.savings,
+        savings: newCosts.savings
       };
       options.onRouted?.(routingDecision);
       if (effectiveSessionId) {
         sessionStore.setSession(effectiveSessionId, actualModelUsed, routingDecision.tier);
         console.log(
-          `[ClawRouter] Session ${effectiveSessionId.slice(0, 8)}... updated pin to fallback: ${actualModelUsed}`,
+          `[ClawRouter] Session ${effectiveSessionId.slice(0, 8)}... updated pin to fallback: ${actualModelUsed}`
         );
       }
     }
@@ -6160,7 +6237,7 @@ async function proxyRequest(
           errPayload = JSON.stringify(parsed);
         } catch {
           errPayload = JSON.stringify({
-            error: { message: rawErrBody, type: "provider_error", status: errStatus },
+            error: { message: rawErrBody, type: "provider_error", status: errStatus }
           });
         }
         const errEvent = `data: ${errPayload}
@@ -6174,20 +6251,20 @@ async function proxyRequest(
           status: 200,
           headers: { "content-type": "text/event-stream" },
           body: errBuf,
-          completedAt: Date.now(),
+          completedAt: Date.now()
         });
       } else {
         res.writeHead(errStatus, {
           "Content-Type": "application/json",
           "x-context-used-kb": String(originalContextSizeKB),
-          "x-context-limit-kb": String(CONTEXT_LIMIT_KB),
+          "x-context-limit-kb": String(CONTEXT_LIMIT_KB)
         });
         res.end(transformedErr);
         deduplicator.complete(dedupKey, {
           status: errStatus,
           headers: { "content-type": "application/json" },
           body: Buffer.from(transformedErr),
-          completedAt: Date.now(),
+          completedAt: Date.now()
         });
       }
       return;
@@ -6195,17 +6272,7 @@ async function proxyRequest(
     const responseChunks = [];
     if (headersSentEarly) {
       if (upstream.body) {
-        const reader = upstream.body.getReader();
-        const chunks = [];
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-          }
-        } finally {
-          reader.releaseLock();
-        }
+        const chunks = await readBodyWithTimeout(upstream.body);
         const jsonBody = Buffer.concat(chunks);
         const jsonStr = jsonBody.toString();
         try {
@@ -6219,7 +6286,7 @@ async function proxyRequest(
             object: "chat.completion.chunk",
             created: rsp.created ?? Math.floor(Date.now() / 1e3),
             model: rsp.model ?? "unknown",
-            system_fingerprint: null,
+            system_fingerprint: null
           };
           if (rsp.choices && Array.isArray(rsp.choices)) {
             for (const choice of rsp.choices) {
@@ -6232,7 +6299,7 @@ async function proxyRequest(
               }
               const roleChunk = {
                 ...baseChunk,
-                choices: [{ index, delta: { role }, logprobs: null, finish_reason: null }],
+                choices: [{ index, delta: { role }, logprobs: null, finish_reason: null }]
               };
               const roleData = `data: ${JSON.stringify(roleChunk)}
 
@@ -6247,9 +6314,9 @@ async function proxyRequest(
                       index,
                       delta: { content: balanceFallbackNotice },
                       logprobs: null,
-                      finish_reason: null,
-                    },
-                  ],
+                      finish_reason: null
+                    }
+                  ]
                 };
                 const noticeData = `data: ${JSON.stringify(noticeChunk)}
 
@@ -6261,7 +6328,7 @@ async function proxyRequest(
               if (content) {
                 const contentChunk = {
                   ...baseChunk,
-                  choices: [{ index, delta: { content }, logprobs: null, finish_reason: null }],
+                  choices: [{ index, delta: { content }, logprobs: null, finish_reason: null }]
                 };
                 const contentData = `data: ${JSON.stringify(contentChunk)}
 
@@ -6278,9 +6345,9 @@ async function proxyRequest(
                       index,
                       delta: { tool_calls: toolCalls },
                       logprobs: null,
-                      finish_reason: null,
-                    },
-                  ],
+                      finish_reason: null
+                    }
+                  ]
                 };
                 const toolCallData = `data: ${JSON.stringify(toolCallChunk)}
 
@@ -6295,12 +6362,9 @@ async function proxyRequest(
                     index,
                     delta: {},
                     logprobs: null,
-                    finish_reason:
-                      toolCalls && toolCalls.length > 0
-                        ? "tool_calls"
-                        : (choice.finish_reason ?? "stop"),
-                  },
-                ],
+                    finish_reason: toolCalls && toolCalls.length > 0 ? "tool_calls" : choice.finish_reason ?? "stop"
+                  }
+                ]
               };
               const finishData = `data: ${JSON.stringify(finishChunk)}
 
@@ -6324,7 +6388,7 @@ async function proxyRequest(
         status: 200,
         headers: { "content-type": "text/event-stream" },
         body: Buffer.concat(responseChunks),
-        completedAt: Date.now(),
+        completedAt: Date.now()
       });
     } else {
       const responseHeaders = {};
@@ -6347,15 +6411,9 @@ async function proxyRequest(
       }
       const bodyParts = [];
       if (upstream.body) {
-        const reader = upstream.body.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            bodyParts.push(Buffer.from(value));
-          }
-        } finally {
-          reader.releaseLock();
+        const chunks = await readBodyWithTimeout(upstream.body);
+        for (const chunk of chunks) {
+          bodyParts.push(Buffer.from(chunk));
         }
       }
       let responseBody = Buffer.concat(bodyParts);
@@ -6363,11 +6421,11 @@ async function proxyRequest(
         try {
           const parsed = JSON.parse(responseBody.toString());
           if (parsed.choices?.[0]?.message?.content !== void 0) {
-            parsed.choices[0].message.content =
-              balanceFallbackNotice + parsed.choices[0].message.content;
+            parsed.choices[0].message.content = balanceFallbackNotice + parsed.choices[0].message.content;
             responseBody = Buffer.from(JSON.stringify(parsed));
           }
-        } catch {}
+        } catch {
+        }
         balanceFallbackNotice = void 0;
       }
       responseHeaders["content-length"] = String(responseBody.length);
@@ -6379,17 +6437,17 @@ async function proxyRequest(
         status: upstream.status,
         headers: responseHeaders,
         body: responseBody,
-        completedAt: Date.now(),
+        completedAt: Date.now()
       });
       if (upstream.status === 200 && responseCache.shouldCache(body)) {
         responseCache.set(cacheKey, {
           body: responseBody,
           status: upstream.status,
           headers: responseHeaders,
-          model: actualModelUsed,
+          model: actualModelUsed
         });
         console.log(
-          `[ClawRouter] Cached response for ${actualModelUsed} (${responseBody.length} bytes)`,
+          `[ClawRouter] Cached response for ${actualModelUsed} (${responseBody.length} bytes)`
         );
       }
       try {
@@ -6401,14 +6459,15 @@ async function proxyRequest(
           if (typeof rspJson.usage.prompt_tokens === "number")
             responseInputTokens = rspJson.usage.prompt_tokens;
         }
-      } catch {}
+      } catch {
+      }
     }
     if (sessionId && accumulatedContent) {
       const events = sessionJournal.extractEvents(accumulatedContent);
       if (events.length > 0) {
         sessionJournal.record(sessionId, events, actualModelUsed);
         console.log(
-          `[ClawRouter] Recorded ${events.length} events to session journal for session ${sessionId.slice(0, 8)}...`,
+          `[ClawRouter] Recorded ${events.length} events to session journal for session ${sessionId.slice(0, 8)}...`
         );
       }
     }
@@ -6437,21 +6496,22 @@ async function proxyRequest(
       routerOpts2.modelPricing,
       estimatedInputTokens,
       maxTokens,
-      routingProfile ?? void 0,
+      routingProfile ?? void 0
     );
     const costWithBuffer = accurateCosts.costEstimate * 1.2;
     const baselineWithBuffer = accurateCosts.baselineCost * 1.2;
     const entry = {
-      timestamp: /* @__PURE__ */ new Date().toISOString(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       model: logModel,
       tier: routingDecision?.tier ?? "DIRECT",
       cost: costWithBuffer,
       baselineCost: baselineWithBuffer,
       savings: accurateCosts.savings,
       latencyMs: Date.now() - startTime,
-      ...(responseInputTokens !== void 0 && { inputTokens: responseInputTokens }),
+      ...responseInputTokens !== void 0 && { inputTokens: responseInputTokens }
     };
-    logUsage(entry).catch(() => {});
+    logUsage(entry).catch(() => {
+    });
   }
 }
 
@@ -6482,24 +6542,24 @@ var config = DEFAULT_ROUTING_CONFIG;
   const r1 = classifyByRules("What is the capital of France?", void 0, 8, config.scoring);
   assert(
     r1.tier === "SIMPLE",
-    `"What is the capital of France?" \u2192 ${r1.tier} (score=${r1.score.toFixed(3)})`,
+    `"What is the capital of France?" \u2192 ${r1.tier} (score=${r1.score.toFixed(3)})`
   );
   const r2 = classifyByRules("Hello", void 0, 2, config.scoring);
   assert(r2.tier === "SIMPLE", `"Hello" \u2192 ${r2.tier} (score=${r2.score.toFixed(3)})`);
   const r3 = classifyByRules("Define photosynthesis", void 0, 4, config.scoring);
   assert(
     r3.tier === "SIMPLE" || r3.tier === "MEDIUM" || r3.tier === null,
-    `"Define photosynthesis" \u2192 ${r3.tier} (score=${r3.score.toFixed(3)})`,
+    `"Define photosynthesis" \u2192 ${r3.tier} (score=${r3.score.toFixed(3)})`
   );
   const r4 = classifyByRules("Translate hello to Spanish", void 0, 6, config.scoring);
   assert(
     r4.tier === "SIMPLE",
-    `"Translate hello to Spanish" \u2192 ${r4.tier} (score=${r4.score.toFixed(3)})`,
+    `"Translate hello to Spanish" \u2192 ${r4.tier} (score=${r4.score.toFixed(3)})`
   );
   const r5 = classifyByRules("Yes or no: is the sky blue?", void 0, 8, config.scoring);
   assert(
     r5.tier === "SIMPLE",
-    `"Yes or no: is the sky blue?" \u2192 ${r5.tier} (score=${r5.score.toFixed(3)})`,
+    `"Yes or no: is the sky blue?" \u2192 ${r5.tier} (score=${r5.score.toFixed(3)})`
   );
 }
 {
@@ -6508,52 +6568,51 @@ var config = DEFAULT_ROUTING_CONFIG;
   const r1 = classifyByRules("What is 2+2?", systemPrompt, 10, config.scoring);
   assert(
     r1.tier === "SIMPLE",
-    `"2+2" with reasoning system prompt \u2192 ${r1.tier} (should be SIMPLE)`,
+    `"2+2" with reasoning system prompt \u2192 ${r1.tier} (should be SIMPLE)`
   );
   const r2 = classifyByRules("Hello", systemPrompt, 5, config.scoring);
   assert(
     r2.tier === "SIMPLE",
-    `"Hello" with reasoning system prompt \u2192 ${r2.tier} (should be SIMPLE)`,
+    `"Hello" with reasoning system prompt \u2192 ${r2.tier} (should be SIMPLE)`
   );
   const r3 = classifyByRules("What is the capital of France?", systemPrompt, 12, config.scoring);
   assert(
     r3.tier === "SIMPLE",
-    `"Capital of France" with reasoning system prompt \u2192 ${r3.tier} (should be SIMPLE)`,
+    `"Capital of France" with reasoning system prompt \u2192 ${r3.tier} (should be SIMPLE)`
   );
   const r4 = classifyByRules(
     "Prove step by step that sqrt(2) is irrational",
     systemPrompt,
     50,
-    config.scoring,
+    config.scoring
   );
   assert(
     r4.tier === "REASONING",
-    `User asks for step-by-step proof \u2192 ${r4.tier} (should be REASONING)`,
+    `User asks for step-by-step proof \u2192 ${r4.tier} (should be REASONING)`
   );
 }
 {
   console.log("\nCoding assistant system prompt (should NOT force agentic mode):");
-  const codingSystemPrompt =
-    "You are a coding assistant. You can edit files, fix bugs, check code quality, verify tests, deploy applications, and install dependencies. Make sure to follow best practices and confirm changes before applying them.";
+  const codingSystemPrompt = "You are a coding assistant. You can edit files, fix bugs, check code quality, verify tests, deploy applications, and install dependencies. Make sure to follow best practices and confirm changes before applying them.";
   const r1 = classifyByRules("What does this function do?", codingSystemPrompt, 20, config.scoring);
   assert(
     r1.agenticScore < 0.5,
-    `Simple question with coding system prompt \u2192 agenticScore=${r1.agenticScore} (should be <0.5, not forced agentic)`,
+    `Simple question with coding system prompt \u2192 agenticScore=${r1.agenticScore} (should be <0.5, not forced agentic)`
   );
   const r2 = classifyByRules("What is React?", codingSystemPrompt, 15, config.scoring);
   assert(
     r2.agenticScore < 0.5,
-    `"What is React?" with coding system prompt \u2192 agenticScore=${r2.agenticScore} (should be <0.5)`,
+    `"What is React?" with coding system prompt \u2192 agenticScore=${r2.agenticScore} (should be <0.5)`
   );
   const r3 = classifyByRules(
     "Fix the bug in auth.ts, deploy to staging, and make sure it works",
     codingSystemPrompt,
     30,
-    config.scoring,
+    config.scoring
   );
   assert(
     r3.agenticScore >= 0.5,
-    `User asks for multi-step agentic task \u2192 agenticScore=${r3.agenticScore} (should be >=0.5)`,
+    `User asks for multi-step agentic task \u2192 agenticScore=${r3.agenticScore} (should be >=0.5)`
   );
 }
 {
@@ -6562,19 +6621,19 @@ var config = DEFAULT_ROUTING_CONFIG;
     "Summarize the key differences between REST and GraphQL APIs",
     void 0,
     30,
-    config.scoring,
+    config.scoring
   );
   console.log(
-    `  \u2192 "Summarize REST vs GraphQL" \u2192 tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)}) [${r1.signals.join(", ")}]`,
+    `  \u2192 "Summarize REST vs GraphQL" \u2192 tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)}) [${r1.signals.join(", ")}]`
   );
   const r2 = classifyByRules(
     "Write a Python function to sort a list using merge sort",
     void 0,
     40,
-    config.scoring,
+    config.scoring
   );
   console.log(
-    `  \u2192 "Write merge sort" \u2192 tier=${r2.tier ?? "AMBIGUOUS"} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)}) [${r2.signals.join(", ")}]`,
+    `  \u2192 "Write merge sort" \u2192 tier=${r2.tier ?? "AMBIGUOUS"} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)}) [${r2.signals.join(", ")}]`
   );
 }
 {
@@ -6583,21 +6642,21 @@ var config = DEFAULT_ROUTING_CONFIG;
     "Build a React component with TypeScript that implements a drag-and-drop kanban board with async data loading, error handling, and unit tests",
     void 0,
     200,
-    config.scoring,
+    config.scoring
   );
   assert(
     r1.tier === null || r1.tier === "MEDIUM" || r1.tier === "COMPLEX" || r1.tier === "REASONING",
-    `Kanban board \u2192 ${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`,
+    `Kanban board \u2192 ${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`
   );
   const r2 = classifyByRules(
     "Design a distributed microservice architecture for a real-time trading platform. Include the database schema, API endpoints, message queue topology, and kubernetes deployment manifests.",
     void 0,
     250,
-    config.scoring,
+    config.scoring
   );
   assert(
     r2.tier === null || r2.tier === "MEDIUM" || r2.tier === "COMPLEX" || r2.tier === "REASONING",
-    `Distributed trading platform \u2192 ${r2.tier ?? "AMBIGUOUS"} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)})`,
+    `Distributed trading platform \u2192 ${r2.tier ?? "AMBIGUOUS"} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)})`
   );
 }
 {
@@ -6606,31 +6665,31 @@ var config = DEFAULT_ROUTING_CONFIG;
     "Prove that the square root of 2 is irrational using proof by contradiction. Show each step formally.",
     void 0,
     60,
-    config.scoring,
+    config.scoring
   );
   assert(
     r1.tier === "REASONING",
-    `"Prove sqrt(2) irrational" \u2192 ${r1.tier} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`,
+    `"Prove sqrt(2) irrational" \u2192 ${r1.tier} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`
   );
   const r2 = classifyByRules(
     "Derive the time complexity of the following algorithm step by step, then prove it is optimal using a lower bound argument.",
     void 0,
     80,
-    config.scoring,
+    config.scoring
   );
   assert(
     r2.tier === "REASONING",
-    `"Derive time complexity + prove optimal" \u2192 ${r2.tier} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)})`,
+    `"Derive time complexity + prove optimal" \u2192 ${r2.tier} (score=${r2.score.toFixed(3)}, conf=${r2.confidence.toFixed(3)})`
   );
   const r3 = classifyByRules(
     "Using chain of thought, solve this mathematical proof: for all n >= 1, prove that 1 + 2 + ... + n = n(n+1)/2",
     void 0,
     70,
-    config.scoring,
+    config.scoring
   );
   assert(
     r3.tier === "REASONING",
-    `"Chain of thought proof" \u2192 ${r3.tier} (score=${r3.score.toFixed(3)}, conf=${r3.confidence.toFixed(3)})`,
+    `"Chain of thought proof" \u2192 ${r3.tier} (score=${r3.score.toFixed(3)}, conf=${r3.confidence.toFixed(3)})`
   );
 }
 {
@@ -6639,81 +6698,71 @@ var config = DEFAULT_ROUTING_CONFIG;
     "\u8BF7\u8BC1\u660E\u6839\u53F72\u662F\u65E0\u7406\u6570\uFF0C\u9010\u6B65\u63A8\u5BFC",
     void 0,
     20,
-    config.scoring,
+    config.scoring
   );
   assert(
     zhReasoning.tier === "REASONING",
-    `Chinese "\u8BC1\u660E...\u9010\u6B65" \u2192 ${zhReasoning.tier} (should be REASONING)`,
+    `Chinese "\u8BC1\u660E...\u9010\u6B65" \u2192 ${zhReasoning.tier} (should be REASONING)`
   );
-  const zhSimple = classifyByRules(
-    "\u4F60\u597D\uFF0C\u4EC0\u4E48\u662F\u4EBA\u5DE5\u667A\u80FD\uFF1F",
-    void 0,
-    15,
-    config.scoring,
-  );
+  const zhSimple = classifyByRules("\u4F60\u597D\uFF0C\u4EC0\u4E48\u662F\u4EBA\u5DE5\u667A\u80FD\uFF1F", void 0, 15, config.scoring);
   assert(
     zhSimple.tier === "SIMPLE",
-    `Chinese "\u4F60\u597D...\u4EC0\u4E48\u662F" \u2192 ${zhSimple.tier} (should be SIMPLE)`,
+    `Chinese "\u4F60\u597D...\u4EC0\u4E48\u662F" \u2192 ${zhSimple.tier} (should be SIMPLE)`
   );
-  const jaSimple = classifyByRules(
-    "\u3053\u3093\u306B\u3061\u306F\u3001\u6771\u4EAC\u3068\u306F\u4F55\u3067\u3059\u304B",
-    void 0,
-    15,
-    config.scoring,
-  );
+  const jaSimple = classifyByRules("\u3053\u3093\u306B\u3061\u306F\u3001\u6771\u4EAC\u3068\u306F\u4F55\u3067\u3059\u304B", void 0, 15, config.scoring);
   assert(
     jaSimple.tier === "SIMPLE",
-    `Japanese "\u3053\u3093\u306B\u3061\u306F...\u3068\u306F" \u2192 ${jaSimple.tier} (should be SIMPLE)`,
+    `Japanese "\u3053\u3093\u306B\u3061\u306F...\u3068\u306F" \u2192 ${jaSimple.tier} (should be SIMPLE)`
   );
   const ruTech = classifyByRules(
     "\u041E\u043F\u0442\u0438\u043C\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0430\u043B\u0433\u043E\u0440\u0438\u0442\u043C \u0441\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u043A\u0438 \u0434\u043B\u044F \u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0451\u043D\u043D\u043E\u0439 \u0441\u0438\u0441\u0442\u0435\u043C\u044B",
     void 0,
     20,
-    config.scoring,
+    config.scoring
   );
   assert(
     ruTech.tier !== "SIMPLE",
-    `Russian "\u0430\u043B\u0433\u043E\u0440\u0438\u0442\u043C...\u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0451\u043D\u043D\u043E\u0439" \u2192 ${ruTech.tier} (should NOT be SIMPLE)`,
+    `Russian "\u0430\u043B\u0433\u043E\u0440\u0438\u0442\u043C...\u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0451\u043D\u043D\u043E\u0439" \u2192 ${ruTech.tier} (should NOT be SIMPLE)`
   );
   const ruSimple = classifyByRules(
     "\u041F\u0440\u0438\u0432\u0435\u0442, \u0447\u0442\u043E \u0442\u0430\u043A\u043E\u0435 \u043C\u0430\u0448\u0438\u043D\u043D\u043E\u0435 \u043E\u0431\u0443\u0447\u0435\u043D\u0438\u0435?",
     void 0,
     15,
-    config.scoring,
+    config.scoring
   );
   assert(
     ruSimple.tier === "SIMPLE",
-    `Russian "\u043F\u0440\u0438\u0432\u0435\u0442...\u0447\u0442\u043E \u0442\u0430\u043A\u043E\u0435" \u2192 ${ruSimple.tier} (should be SIMPLE)`,
+    `Russian "\u043F\u0440\u0438\u0432\u0435\u0442...\u0447\u0442\u043E \u0442\u0430\u043A\u043E\u0435" \u2192 ${ruSimple.tier} (should be SIMPLE)`
   );
   const deReasoning = classifyByRules(
     "Beweisen Sie, dass die Quadratwurzel von 2 irrational ist, Schritt f\xFCr Schritt",
     void 0,
     25,
-    config.scoring,
+    config.scoring
   );
   assert(
     deReasoning.tier === "REASONING",
-    `German "beweisen...schritt f\xFCr schritt" \u2192 ${deReasoning.tier} (should be REASONING)`,
+    `German "beweisen...schritt f\xFCr schritt" \u2192 ${deReasoning.tier} (should be REASONING)`
   );
   const deSimple = classifyByRules(
     "Hallo, was ist maschinelles Lernen?",
     void 0,
     10,
-    config.scoring,
+    config.scoring
   );
   assert(
     deSimple.tier === "SIMPLE",
-    `German "hallo...was ist" \u2192 ${deSimple.tier} (should be SIMPLE)`,
+    `German "hallo...was ist" \u2192 ${deSimple.tier} (should be SIMPLE)`
   );
   const deTech = classifyByRules(
     "Optimieren Sie den Sortieralgorithmus f\xFCr eine verteilte Architektur",
     void 0,
     20,
-    config.scoring,
+    config.scoring
   );
   assert(
     deTech.tier !== "SIMPLE",
-    `German "algorithmus...verteilt" \u2192 ${deTech.tier} (should NOT be SIMPLE)`,
+    `German "algorithmus...verteilt" \u2192 ${deTech.tier} (should NOT be SIMPLE)`
   );
 }
 {
@@ -6813,49 +6862,49 @@ Rules:
   const ocr1 = classifyByRules("What time is it?", openClawSystemPrompt, 6200, config.scoring);
   assert(
     ocr1.score < 0.2,
-    `"What time is it?" + OpenClaw prompt \u2192 score=${ocr1.score.toFixed(3)} (should be <0.2, was ~0.47 before fix)`,
+    `"What time is it?" + OpenClaw prompt \u2192 score=${ocr1.score.toFixed(3)} (should be <0.2, was ~0.47 before fix)`
   );
   const ocr2 = classifyByRules("What's the weather?", openClawSystemPrompt, 6200, config.scoring);
   assert(
     ocr2.score < 0.2,
-    `"What's the weather?" + OpenClaw prompt \u2192 score=${ocr2.score.toFixed(3)} (should be <0.2, was ~0.47 before fix)`,
+    `"What's the weather?" + OpenClaw prompt \u2192 score=${ocr2.score.toFixed(3)} (should be <0.2, was ~0.47 before fix)`
   );
   const ocr3 = classifyByRules(
     "Build a React component with TypeScript that implements a sortable data table with pagination, filtering, and async data loading from a REST API",
     openClawSystemPrompt,
     6250,
-    config.scoring,
+    config.scoring
   );
   assert(
     ocr3.score > ocr1.score,
-    `Complex task score (${ocr3.score.toFixed(3)}) > simple task score (${ocr1.score.toFixed(3)}) \u2014 scores should differentiate`,
+    `Complex task score (${ocr3.score.toFixed(3)}) > simple task score (${ocr1.score.toFixed(3)}) \u2014 scores should differentiate`
   );
   const ocr4 = classifyByRules(
     "Prove that sqrt(2) is irrational using proof by contradiction, step by step",
     openClawSystemPrompt,
     6220,
-    config.scoring,
+    config.scoring
   );
   assert(
     ocr4.tier === "REASONING",
-    `Reasoning task + OpenClaw prompt \u2192 ${ocr4.tier} score=${ocr4.score.toFixed(3)} (should be REASONING)`,
+    `Reasoning task + OpenClaw prompt \u2192 ${ocr4.tier} score=${ocr4.score.toFixed(3)} (should be REASONING)`
   );
   const scores = [ocr1.score, ocr2.score, ocr3.score, ocr4.score];
   const uniqueScores = new Set(scores.map((s) => s.toFixed(2)));
   assert(
     uniqueScores.size >= 3,
-    `${uniqueScores.size} unique scores out of 4 queries (scores: ${scores.map((s) => s.toFixed(3)).join(", ")}) \u2014 should differentiate, not all ~0.47`,
+    `${uniqueScores.size} unique scores out of 4 queries (scores: ${scores.map((s) => s.toFixed(3)).join(", ")}) \u2014 should differentiate, not all ~0.47`
   );
   assert(
     ocr1.agenticScore === 0,
-    `"What time is it?" agenticScore=${ocr1.agenticScore} (should be 0, not triggered by system prompt tools)`,
+    `"What time is it?" agenticScore=${ocr1.agenticScore} (should be 0, not triggered by system prompt tools)`
   );
 }
 {
   console.log("\nOverride: large context:");
   const r1 = classifyByRules("What is 2+2?", void 0, 15e4, config.scoring);
   console.log(
-    `  \u2192 150K tokens "What is 2+2?" \u2192 tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`,
+    `  \u2192 150K tokens "What is 2+2?" \u2192 tier=${r1.tier ?? "AMBIGUOUS"} (score=${r1.score.toFixed(3)}, conf=${r1.confidence.toFixed(3)})`
   );
 }
 console.log("\n\u2550\u2550\u2550 Part 2: Full Router (rules-only path) \u2550\u2550\u2550\n");
@@ -6865,7 +6914,7 @@ var routerOpts = {
   config: DEFAULT_ROUTING_CONFIG,
   modelPricing,
   payFetch: mockPayFetch,
-  apiBase: "http://localhost:0",
+  apiBase: "http://localhost:0"
 };
 async function testRoute(prompt, label, expectedTier) {
   const decision = await route(prompt, void 0, 4096, routerOpts);
@@ -6873,11 +6922,11 @@ async function testRoute(prompt, label, expectedTier) {
   if (expectedTier) {
     assert(
       decision.tier === expectedTier,
-      `${label} \u2192 ${decision.model} (${decision.tier}, ${decision.method}) saved=${savingsPct}%`,
+      `${label} \u2192 ${decision.model} (${decision.tier}, ${decision.method}) saved=${savingsPct}%`
     );
   } else {
     console.log(
-      `  \u2192 ${label} \u2192 ${decision.model} (${decision.tier}, ${decision.method}) saved=${savingsPct}%`,
+      `  \u2192 ${label} \u2192 ${decision.model} (${decision.tier}, ${decision.method}) saved=${savingsPct}%`
     );
   }
   return decision;
@@ -6887,14 +6936,14 @@ await testRoute("Hello, how are you?", "Greeting", "SIMPLE");
 await testRoute(
   "Prove that sqrt(2) is irrational step by step using proof by contradiction",
   "Math proof",
-  "REASONING",
+  "REASONING"
 );
 {
   const longPrompt = "x".repeat(5e5);
   const decision = await route(longPrompt, void 0, 4096, routerOpts);
   assert(
     decision.tier === "COMPLEX",
-    `125K token input \u2192 ${decision.tier} (forced COMPLEX override)`,
+    `125K token input \u2192 ${decision.tier} (forced COMPLEX override)`
   );
 }
 {
@@ -6902,11 +6951,11 @@ await testRoute(
     "What is 2+2?",
     "Respond in JSON format with the answer",
     4096,
-    routerOpts,
+    routerOpts
   );
   assert(
     decision.tier === "MEDIUM" || decision.tier === "SIMPLE",
-    `Structured output "What is 2+2?" \u2192 ${decision.tier} (min MEDIUM applied: ${decision.tier !== "SIMPLE"})`,
+    `Structured output "What is 2+2?" \u2192 ${decision.tier} (min MEDIUM applied: ${decision.tier !== "SIMPLE"})`
   );
 }
 {
@@ -6917,7 +6966,7 @@ await testRoute(
   assert(d.savings >= 0 && d.savings <= 1, `Savings in range [0,1]: ${d.savings.toFixed(4)}`);
   assert(
     d.costEstimate <= d.baselineCost,
-    `Cost ($${d.costEstimate.toFixed(6)}) <= Baseline ($${d.baselineCost.toFixed(6)})`,
+    `Cost ($${d.costEstimate.toFixed(6)}) <= Baseline ($${d.baselineCost.toFixed(6)})`
   );
 }
 console.log("\n\u2550\u2550\u2550 Part 3: Proxy Startup \u2550\u2550\u2550\n");
@@ -6934,13 +6983,13 @@ if (!walletKey) {
       onRouted: (d) => {
         const pct = (d.savings * 100).toFixed(1);
         console.log(`  [routed] ${d.model} (${d.tier}) saved=${pct}%`);
-      },
+      }
     });
     const health = await fetch(`${proxy.baseUrl}/health`);
     const healthData = await health.json();
     assert(
       healthData.status === "ok",
-      `Health check: ${healthData.status}, wallet: ${healthData.wallet}`,
+      `Health check: ${healthData.status}, wallet: ${healthData.wallet}`
     );
     console.log("\n  Sending test request (blockrun/auto)...");
     try {
@@ -6950,8 +6999,8 @@ if (!walletKey) {
         body: JSON.stringify({
           model: "blockrun/auto",
           messages: [{ role: "user", content: "What is 2+2?" }],
-          max_tokens: 50,
-        }),
+          max_tokens: 50
+        })
       });
       if (chatRes.ok) {
         const chatData = await chatRes.json();
@@ -6975,12 +7024,8 @@ if (!walletKey) {
     failed++;
   }
 }
-console.log(
-  "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
-);
+console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
 console.log(`  ${passed} passed, ${failed} failed`);
-console.log(
-  "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n",
-);
+console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n");
 process.exit(failed > 0 ? 1 : 0);
 //# sourceMappingURL=e2e.js.map

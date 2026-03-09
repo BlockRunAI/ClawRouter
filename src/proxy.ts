@@ -151,6 +151,10 @@ function transformPaymentError(errorBody: string): string {
     const parsed = JSON.parse(errorBody) as {
       error?: string;
       details?: string;
+      // blockrun-sol (Solana) format uses code+debug instead of details
+      code?: string;
+      debug?: string;
+      payer?: string;
     };
 
     // Check if this is a payment verification error
@@ -217,6 +221,66 @@ function transformPaymentError(errorBody: string): string {
           });
         }
       }
+    }
+
+    // Handle blockrun-sol (Solana) format: code=PAYMENT_INVALID + debug=invalidReason string
+    if (parsed.error === "Payment verification failed" && parsed.code === "PAYMENT_INVALID" && parsed.debug) {
+      const debugLower = parsed.debug.toLowerCase();
+      const wallet = parsed.payer || "unknown";
+      const shortWallet = wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
+
+      if (debugLower.includes("insufficient")) {
+        return JSON.stringify({
+          error: {
+            message: "Insufficient Solana USDC balance.",
+            type: "insufficient_funds",
+            wallet,
+            help: `Fund wallet ${shortWallet} with USDC on Solana, or switch to Base: /wallet base`,
+          },
+        });
+      }
+
+      if (debugLower.includes("transaction_simulation_failed") || debugLower.includes("simulation")) {
+        console.error(`[ClawRouter] Solana transaction simulation failed: ${parsed.debug}`);
+        return JSON.stringify({
+          error: {
+            message: "Solana payment simulation failed. Retrying with a different model.",
+            type: "transaction_simulation_failed",
+            help: "This is usually temporary. If it persists, try: /model free",
+          },
+        });
+      }
+
+      if (debugLower.includes("invalid signature") || debugLower.includes("invalid_signature")) {
+        return JSON.stringify({
+          error: {
+            message: "Solana payment signature invalid.",
+            type: "invalid_payload",
+            help: "Try again. If this persists, reinstall ClawRouter: curl -fsSL https://blockrun.ai/ClawRouter-update | bash",
+          },
+        });
+      }
+
+      if (debugLower.includes("expired")) {
+        return JSON.stringify({
+          error: {
+            message: "Solana payment expired. Retrying.",
+            type: "expired",
+            help: "This is usually temporary.",
+          },
+        });
+      }
+
+      // Unknown Solana verification error — surface the debug reason
+      console.error(`[ClawRouter] Solana payment verification failed: ${parsed.debug} payer=${wallet}`);
+      return JSON.stringify({
+        error: {
+          message: `Solana payment verification failed: ${parsed.debug}`,
+          type: "payment_invalid",
+          wallet,
+          help: "Try again or switch to Base: /wallet base",
+        },
+      });
     }
 
     // Handle settlement failures (gas estimation, on-chain errors)
