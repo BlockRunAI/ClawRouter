@@ -91,5 +91,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "optionalDependencies": {
+    "dhali-js": "^3.0.4"
   }
 }

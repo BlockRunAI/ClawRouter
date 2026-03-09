@@ -11,6 +11,7 @@
  *   - Falls back to normal 402 flow if pre-signed payment is rejected.
  */
 
+import { createDhaliPayment } from "./dhali.js";
 import { signTypedData, privateKeyToAccount } from "viem/accounts";
 import { PaymentCache } from "./payment-cache.js";
 
@@ -40,7 +41,7 @@ function createNonce(): `0x${string}` {
     .join("")}` as `0x${string}`;
 }
 
-interface PaymentOption {
+export interface PaymentOption {
   scheme: string;
   network: string;
   amount?: string;
@@ -51,7 +52,7 @@ interface PaymentOption {
   extra?: { name?: string; version?: string };
 }
 
-interface PaymentRequired {
+export interface PaymentRequired {
   accepts: PaymentOption[];
   resource?: { url?: string; description?: string };
 }
@@ -124,14 +125,20 @@ function setPaymentHeaders(headers: Headers, payload: string): void {
   headers.set("x-payment", payload);
 }
 
+async function getAccount(privateKey: string): Promise<{ address: `0x${string}`; privateKey: `0x${string}` }> {
+  const priv = (privateKey.toLowerCase().startsWith("0x") ? privateKey : `0x${privateKey}`) as `0x${string}`;
+  const account = privateKeyToAccount(priv);
+  return { address: account.address, privateKey: priv };
+}
+
 async function createPaymentPayload(
-  privateKey: `0x${string}`,
-  fromAddress: string,
+  privateKey: string,
   option: PaymentOption,
   amount: string,
   requestUrl: string,
   resource: PaymentRequired["resource"],
 ): Promise<string> {
+  const { address: fromAddress, privateKey: evmPrivateKey } = await getAccount(privateKey);
   const network = normalizeNetwork(option.network);
   const chainId = resolveChainId(network);
   const recipient = requireHexAddress(option.payTo, "payTo");
@@ -148,7 +155,7 @@ async function createPaymentPayload(
   const nonce = createNonce();
 
   const signature = await signTypedData({
-    privateKey,
+    privateKey: evmPrivateKey,
     domain: {
       name: option.extra?.name || DEFAULT_TOKEN_NAME,
       version: option.extra?.version || DEFAULT_TOKEN_VERSION,
@@ -200,6 +207,8 @@ async function createPaymentPayload(
   return encodeBase64Json(paymentData);
 }
 
+
+
 /** Pre-auth parameters for skipping the 402 round trip. */
 export type PreAuthParams = {
   estimatedAmount: string; // USDC amount in smallest unit (6 decimals)
@@ -222,9 +231,7 @@ export type PaymentFetchResult = {
  * pre-signs and attaches payment to the first request, skipping the 402 round trip.
  * Falls back to normal 402 flow if pre-signed payment is rejected.
  */
-export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResult {
-  const account = privateKeyToAccount(privateKey);
-  const walletAddress = account.address;
+export function createPaymentFetch(privateKey: string): PaymentFetchResult {
   const paymentCache = new PaymentCache();
 
   const payFetch = async (
@@ -238,24 +245,41 @@ export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResul
     // --- Pre-auth path: skip 402 round trip ---
     const cached = paymentCache.get(endpointPath);
     if (cached && preAuth?.estimatedAmount) {
-      const paymentPayload = await createPaymentPayload(
-        privateKey,
-        walletAddress,
-        {
-          scheme: cached.scheme,
-          network: cached.network,
-          asset: cached.asset,
-          payTo: cached.payTo,
-          maxTimeoutSeconds: cached.maxTimeoutSeconds,
-          extra: cached.extra,
-        },
-        preAuth.estimatedAmount,
-        url,
-        {
-          url: cached.resourceUrl,
-          description: cached.resourceDescription,
-        },
-      );
+      const amount = preAuth.estimatedAmount;
+      let paymentPayload: string;
+
+      if (cached.scheme === "dhali") {
+        paymentPayload = await createDhaliPayment(
+          privateKey as `0x${string}`,
+          amount,
+          {
+            scheme: cached.scheme,
+            network: cached.network,
+            asset: cached.asset,
+            payTo: cached.payTo,
+            maxTimeoutSeconds: cached.maxTimeoutSeconds,
+            extra: cached.extra,
+          }
+        );
+      } else {
+        paymentPayload = await createPaymentPayload(
+          privateKey,
+          {
+            scheme: cached.scheme,
+            network: cached.network,
+            asset: cached.asset,
+            payTo: cached.payTo,
+            maxTimeoutSeconds: cached.maxTimeoutSeconds,
+            extra: cached.extra,
+          },
+          amount,
+          url,
+          {
+            url: cached.resourceUrl,
+            description: cached.resourceDescription,
+          },
+        );
+      }
 
       const preAuthHeaders = new Headers(init?.headers);
       setPaymentHeaders(preAuthHeaders, paymentPayload);
@@ -334,10 +358,28 @@ export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResul
       resourceDescription: paymentRequired.resource?.description,
     });
 
+    // --- Dhali Scheme Support ---
+    if (option.scheme === "dhali") {
+      const dhaliPaymentPayload = await createDhaliPayment(
+        privateKey,
+        amount,
+        option,
+        paymentHeader
+      );
+
+      const dhaliRetryHeaders = new Headers(init?.headers);
+      setPaymentHeaders(dhaliRetryHeaders, dhaliPaymentPayload);
+
+      return fetch(input, {
+        ...init,
+        headers: dhaliRetryHeaders,
+      });
+    }
+
+    // --- Standard x402 Scheme (default) ---
     // Create signed payment
     const paymentPayload = await createPaymentPayload(
       privateKey,
-      walletAddress,
       option,
       amount,
       url,
