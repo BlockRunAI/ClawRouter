@@ -1,52 +1,37 @@
-/**
- * Usage Logger
- *
- * Logs every LLM request as a JSON line to a daily log file.
- * Files: ~/.openclaw/blockrun/logs/usage-YYYY-MM-DD.jsonl
- *
- * MVP: append-only JSON lines. No rotation, no cleanup.
- * Logging never breaks the request flow — all errors are swallowed.
- */
+import * as fs from 'fs';
+import * as path from 'path';
+import { loadConfig } from './config';
 
-import { appendFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { homedir } from "node:os";
-
-export type UsageEntry = {
+interface LogEntry {
   timestamp: string;
-  model: string;
+  session_id: string;
   tier: string;
-  cost: number;
-  baselineCost: number;
-  savings: number; // 0-1 percentage
-  latencyMs: number;
-  /** Input (prompt) tokens reported by the provider */
-  inputTokens?: number;
-  /** Partner service ID (e.g., "x_users_lookup") — only set for partner API calls */
-  partnerId?: string;
-  /** Partner service name (e.g., "AttentionVC") — only set for partner API calls */
-  service?: string;
-};
-
-const LOG_DIR = join(homedir(), ".openclaw", "blockrun", "logs");
-let dirReady = false;
-
-async function ensureDir(): Promise<void> {
-  if (dirReady) return;
-  await mkdir(LOG_DIR, { recursive: true });
-  dirReady = true;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+  cost_estimate: number;
+  compressed_savings: number;
 }
 
-/**
- * Log a usage entry as a JSON line.
- */
-export async function logUsage(entry: UsageEntry): Promise<void> {
-  try {
-    await ensureDir();
-    const date = entry.timestamp.slice(0, 10); // YYYY-MM-DD
-    const file = join(LOG_DIR, `usage-${date}.jsonl`);
-    await appendFile(file, JSON.stringify(entry) + "\n");
-  } catch {
-    // Never break the request flow
+export class Logger {
+  private logDir: string;
+  
+  constructor() {
+    const config = loadConfig();
+    this.logDir = config.logging.dir;
+    if (!fs.existsSync(this.logDir)) {
+      fs.mkdirSync(this.logDir, { recursive: true });
+    }
+  }
+  
+  log(entry: LogEntry): void {
+    const config = loadConfig();
+    if (!config.logging.enabled) return;
+    
+    const date = new Date().toISOString().split('T')[0];
+    const logFile = path.join(this.logDir, `${date}.jsonl`);
+    const line = JSON.stringify(entry) + '\n';
+    fs.appendFileSync(logFile, line);
   }
 }

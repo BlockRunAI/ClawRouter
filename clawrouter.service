@@ -1,0 +1,14 @@
+[Unit]
+Description=ClawRouter - OpenAI-compatible LLM routing proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ClawRouter
+ExecStart=%h/.nvm/versions/node/v22.22.0/bin/node %h/ClawRouter/dist/index.js
+EnvironmentFile=%h/.claw-proxy-env
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

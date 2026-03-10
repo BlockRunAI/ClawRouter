@@ -1,0 +1,79 @@
+# Environment variable overrides:
+# OPENROUTER_API_KEY - OpenRouter API key (required)
+# CLAW_PROXY_PORT - Server port (default: 8402)
+# CLAW_PROXY_HOST - Server host (default: 0.0.0.0)
+# OLLAMA_BASE_URL - Ollama base URL (default: http://localhost:11434/v1)
+# OLLAMA_ENABLED - Enable Ollama upstream (default: true)
+# CLAW_PROXY_AUTO_SIMPLE - Auto profile simple tier model
+# CLAW_PROXY_AUTO_MEDIUM - Auto profile medium tier model
+# CLAW_PROXY_AUTO_COMPLEX - Auto profile complex tier model
+# CLAW_PROXY_AUTO_REASONING - Auto profile reasoning tier model
+# CLAW_PROXY_ECO_SIMPLE - Eco profile simple tier model
+# CLAW_PROXY_ECO_MEDIUM - Eco profile medium tier model
+# CLAW_PROXY_ECO_COMPLEX - Eco profile complex tier model
+# CLAW_PROXY_ECO_REASONING - Eco profile reasoning tier model
+# CLAW_PROXY_PREMIUM_SIMPLE - Premium profile simple tier model
+# CLAW_PROXY_PREMIUM_MEDIUM - Premium profile medium tier model
+# CLAW_PROXY_PREMIUM_COMPLEX - Premium profile complex tier model
+# CLAW_PROXY_PREMIUM_REASONING - Premium profile reasoning tier model
+# CLAW_PROXY_SESSION_TTL - Session TTL in minutes (default: 120)
+# CLAW_PROXY_NEVER_DOWNGRADE - Never downgrade tier (default: true)
+# CLAW_PROXY_THREE_STRIKE_ESCALATION - Enable three-strike escalation (default: true)
+# CLAW_PROXY_CACHE_ENABLED - Enable caching (default: true)
+# CLAW_PROXY_CACHE_MAX_ENTRIES - Max cache entries (default: 200)
+# CLAW_PROXY_CACHE_TTL - Cache TTL in seconds (default: 600)
+# CLAW_PROXY_COMPRESSION_ENABLED - Enable compression (default: true)
+# CLAW_PROXY_LOG_DIR - Log directory (default: ~/.claw-proxy/logs)
+# CLAW_PROXY_LOG_ENABLED - Enable logging (default: true)
+
+port: 8402
+host: 0.0.0.0
+
+upstream:
+  openrouter:
+    baseUrl: https://openrouter.ai/api/v1
+    apiKey: ${OPENROUTER_API_KEY}
+  ollama:
+    baseUrl: http://localhost:11434/v1
+    enabled: true
+
+routing:
+  defaultTier: MEDIUM
+  confidenceThreshold: 0.3
+  profiles:
+    auto:
+      SIMPLE: google/gemini-flash-1.5
+      MEDIUM: anthropic/claude-3-5-haiku-20241022
+      COMPLEX: anthropic/claude-3-5-sonnet-20241022
+      REASONING: anthropic/claude-3-opus-20240229
+    eco:
+      SIMPLE: amazon/nova-lite-v1
+      MEDIUM: google/gemini-flash-1.5
+      COMPLEX: anthropic/claude-3-5-haiku-20241022
+      REASONING: anthropic/claude-3-5-sonnet-20241022
+    premium:
+      SIMPLE: anthropic/claude-3-5-haiku-20241022
+      MEDIUM: anthropic/claude-3-5-sonnet-20241022
+      COMPLEX: anthropic/claude-3-opus-20240229
+      REASONING: anthropic/claude-3-opus-20240229
+
+compression:
+  enabled: true
+  layers:
+    - dedup
+    - whitespace
+    - json-compact
+
+session:
+  ttlMinutes: 120
+  neverDowngrade: true
+  threeStrikeEscalation: true
+
+cache:
+  enabled: true
+  maxEntries: 200
+  ttlSeconds: 600
+
+logging:
+  dir: ~/.claw-proxy/logs
+  enabled: true

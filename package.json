@@ -1,103 +1,31 @@
 {
-  "name": "@blockrun/clawrouter",
-  "version": "0.12.30",
-  "description": "Smart LLM router — save 92% on inference costs. 41+ models, one wallet, x402 micropayments.",
-  "type": "module",
+  "name": "clawrouter",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible LLM routing proxy — scores request complexity and routes to optimal model",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "clawrouter": "./dist/cli.js"
-  },
-  "openclaw": {
-    "extensions": [
-      "./dist/index.js"
-    ]
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist",
-    "scripts",
-    "skills",
-    "openclaw.plugin.json"
-  ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test:resilience:errors": "tsx test/resilience-errors.ts",
-    "test:resilience:stability": "DURATION_MINUTES=5 tsx test/resilience-stability.ts",
-    "test:resilience:stability:full": "DURATION_MINUTES=240 tsx test/resilience-stability.ts",
-    "test:resilience:lifecycle": "tsx test/resilience-lifecycle.ts",
-    "test:resilience:quick": "npm run test:resilience:errors && npm run test:resilience:lifecycle",
-    "test:resilience:full": "npm run test:resilience:errors && npm run test:resilience:lifecycle && npm run test:resilience:stability:full",
-    "test:e2e:tool-ids": "npm run build && tsx test/e2e-tool-id-sanitization.ts",
-    "test:docker:install": "bash test/run-docker-test.sh",
-    "test:docker:edge-cases": "bash test/docker/run-edge-cases.sh",
-    "test:docker:integration": "docker compose -f test/integration/docker-compose.yml up --build --abort-on-container-exit --exit-code-from integration"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "shadow": "node dist/shadow/runner.js",
+    "dev": "tsc --watch"
   },
   "keywords": [
     "llm",
     "router",
-    "smart-routing",
-    "ai",
-    "openclaw",
-    "blockrun",
-    "x402",
-    "usdc",
-    "cost-optimization",
+    "proxy",
     "openai",
-    "anthropic",
-    "gemini",
-    "deepseek",
-    "usdc-hackathon-winner",
-    "agentic-commerce"
+    "openrouter"
   ],
-  "author": "BlockRun <hello@blockrun.ai>",
+  "author": "pu3p",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/BlockRunAI/ClawRouter.git"
-  },
   "dependencies": {
-    "@scure/bip32": "^1.6.0",
-    "@scure/bip39": "^1.5.0",
-    "@solana/kit": "^5.0.0",
-    "@x402/evm": "^2.4.0",
-    "@x402/fetch": "^2.4.0",
-    "@x402/svm": "^2.4.0",
-    "ethers": "^6.16.0",
-    "viem": "^2.39.3"
-  },
-  "peerDependencies": {
-    "openclaw": ">=2025.1.0"
-  },
-  "peerDependenciesMeta": {
-    "openclaw": {
-      "optional": true
-    }
+    "better-sqlite3": "^12.6.2",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.0.2",
-    "openclaw": "latest",
-    "prettier": "^3.8.1",
-    "tsup": "^8.0.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.54.0",
-    "vitest": "^4.0.18"
-  },
-  "engines": {
-    "node": ">=20"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.4.0",
+    "typescript": "^5.9.3"
   }
 }

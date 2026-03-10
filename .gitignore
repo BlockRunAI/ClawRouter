@@ -1,6 +1,10 @@
 node_modules/
 dist/
-*.tsbuildinfo
+.env
+*.db
+logs/
 .DS_Store
-.playwright-mcp/
-docs/
+.vscode/
+.idea/
+.kiro/
+logs-sync/
