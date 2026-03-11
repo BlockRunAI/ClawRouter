@@ -1576,19 +1576,37 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           res.end(text);
           return;
         }
-        // Save any data URIs to ~/.openclaw/blockrun/images/ and replace with localhost URLs
+        // Save images to ~/.openclaw/blockrun/images/ and replace with localhost URLs
+        // Handles both base64 data URIs (Google) and HTTP URLs (DALL-E 3)
         if (result.data?.length) {
           await mkdir(IMAGE_DIR, { recursive: true });
           const port = (server.address() as AddressInfo | null)?.port ?? 8402;
           for (const img of result.data) {
-            const m = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
-            if (m) {
-              const [, mimeType, b64] = m;
+            const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
+            if (dataUriMatch) {
+              const [, mimeType, b64] = dataUriMatch;
               const ext = mimeType === "image/jpeg" ? "jpg" : (mimeType!.split("/")[1] ?? "png");
               const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
               await writeFile(join(IMAGE_DIR, filename), Buffer.from(b64!, "base64"));
               img.url = `http://localhost:${port}/images/${filename}`;
               console.log(`[ClawRouter] Image saved → ${img.url}`);
+            } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
+              try {
+                const imgResp = await fetch(img.url);
+                if (imgResp.ok) {
+                  const contentType = imgResp.headers.get("content-type") ?? "image/png";
+                  const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg"
+                    : contentType.includes("webp") ? "webp"
+                    : "png";
+                  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                  const buf = Buffer.from(await imgResp.arrayBuffer());
+                  await writeFile(join(IMAGE_DIR, filename), buf);
+                  img.url = `http://localhost:${port}/images/${filename}`;
+                  console.log(`[ClawRouter] Image downloaded & saved → ${img.url}`);
+                }
+              } catch (downloadErr) {
+                console.warn(`[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`);
+              }
             }
           }
         }
