@@ -69,7 +69,7 @@
     "url": "git+https://github.com/BlockRunAI/ClawRouter.git"
   },
   "dependencies": {
-    "@scure/bip32": "^1.6.0",
+    "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^1.5.0",
     "@solana/kit": "^5.0.0",
     "@x402/evm": "^2.7.0",
