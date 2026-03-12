@@ -44,7 +44,7 @@ Configuration loader with environment variable override support.
 **Configuration Sections:**
 - Server (port, host)
 - Upstreams (OpenRouter, Ollama)
-- Routing (profiles, tiers, thresholds)
+- Routing (domain profiles, tiers, thresholds)
 - Session (TTL, escalation)
 - Cache (size, TTL)
 - Compression (layers)
@@ -60,7 +60,7 @@ Main request handler that orchestrates the routing pipeline.
 3. Load session state
 4. Apply compression to messages
 5. Score request complexity
-6. Select model based on tier and profile
+6. Select model based on tier and domain
 7. Check cache
 8. Forward to upstream
 9. Update session
@@ -99,7 +99,7 @@ Main request handler that orchestrates the routing pipeline.
 
 ### router/selector.ts
 
-Model selection based on tier and profile.
+Model selection based on tier and domain.
 
 **Tiers:**
 - `SIMPLE` (0.0-0.3) - Fast, cheap models
@@ -107,10 +107,13 @@ Model selection based on tier and profile.
 - `COMPLEX` (0.6-0.8) - Advanced models
 - `REASONING` (0.8+) - Top-tier models
 
-**Profiles:**
-- `auto` - Balanced cost/performance
-- `eco` - Minimize cost
-- `premium` - Maximize quality
+**Domains:**
+- `stem` - Science, technology, engineering, math
+- `humanities` - History, philosophy, literature, arts
+- `social_sciences` - Psychology, economics, political science
+- `other` - General knowledge, uncategorized
+
+The scorer detects the domain and tier for each request. The selector looks up the model from the matching domain profile in `config.yaml`.
 
 ### router/config.ts
 

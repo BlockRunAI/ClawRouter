@@ -50,7 +50,7 @@ npm start
 
 ### 4. Use it
 
-Point any OpenAI-compatible client at `http://localhost:8402`. Set the model to `auto`, `eco`, or `premium` to enable routing:
+Point any OpenAI-compatible client at `http://localhost:8402`. Set the model to `auto` to enable intelligent routing:
 
 ```bash
 curl http://localhost:8402/v1/chat/completions \
@@ -61,7 +61,7 @@ curl http://localhost:8402/v1/chat/completions \
   }'
 ```
 
-Simple questions route to cheap models. Complex ones route to powerful models. You save money.
+The scorer classifies each request by knowledge domain (`stem`, `humanities`, `social_sciences`, `other`) and difficulty tier (`SIMPLE`, `MEDIUM`, `COMPLEX`, `REASONING`), then routes to the best model for that combination. Simple questions go to cheap models, complex ones to powerful models. You save money.
 
 ## Using a Different Embedding Model
 
@@ -104,17 +104,34 @@ See `proxy/.env.example` for the full list.
 
 ### Model Routing
 
-Edit `proxy/config.yaml` to configure which models handle each tier:
+Edit `proxy/config.yaml` to configure which models handle each domain × difficulty tier:
 
 ```yaml
 routing:
   profiles:
-    auto:
-      SIMPLE: google/gemini-flash-1.5          # cheap, fast
-      MEDIUM: anthropic/claude-3-5-haiku-20241022
-      COMPLEX: anthropic/claude-3-5-sonnet-20241022
-      REASONING: anthropic/claude-3-opus-20240229  # expensive, powerful
+    stem:
+      SIMPLE: google/gemini-3.1-flash-lite-preview
+      MEDIUM: anthropic/claude-haiku-4.5
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-opus-4.6
+    humanities:
+      SIMPLE: amazon/nova-2-lite-v1
+      MEDIUM: google/gemini-3.1-flash-lite-preview
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-sonnet-4.6
+    social_sciences:
+      SIMPLE: amazon/nova-2-lite-v1
+      MEDIUM: google/gemini-3.1-flash-lite-preview
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-opus-4.6
+    other:
+      SIMPLE: google/gemini-3.1-flash-lite-preview
+      MEDIUM: anthropic/claude-haiku-4.5
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-opus-4.6
 ```
+
+The scorer detects the knowledge domain and difficulty tier for each request, and the proxy picks the model from the matching domain profile. This lets you assign cheaper models to domains where they perform well (e.g. humanities) while reserving expensive models for domains that need them (e.g. STEM reasoning).
 
 ## How the Scorer Works
 

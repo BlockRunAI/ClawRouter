@@ -40,7 +40,7 @@ curl http://localhost:8402/v1/chat/completions \
 
 **Parameters:**
 
-- `model` (string, required) - Routing profile: `auto`, `eco`, `premium`, or specific model name
+- `model` (string, required) - `auto` for intelligent domain+difficulty routing, or a specific model name for direct passthrough
 - `messages` (array, required) - Array of message objects with `role` and `content`
 - `temperature` (number, optional) - Sampling temperature (0.0-2.0)
 - `max_tokens` (number, optional) - Maximum tokens to generate
@@ -70,8 +70,8 @@ curl http://localhost:8402/v1/chat/completions \
   },
   "routing": {
     "tier": "COMPLEX",
-    "score": 0.72,
-    "profile": "auto"
+    "domain": "stem",
+    "score": 0.72
   }
 }
 ```
@@ -231,19 +231,15 @@ Sessions persist conversation context and tier escalation:
 3. Sessions never downgrade when `neverDowngrade` is enabled
 4. Sessions expire after configured TTL (default: 120 minutes)
 
-## Routing Profiles
+## Routing
 
-Specify routing profile via `model` parameter:
+Set `"model": "auto"` to enable intelligent routing. The scorer classifies each request by knowledge domain (`stem`, `humanities`, `social_sciences`, `other`) and difficulty tier (`SIMPLE`, `MEDIUM`, `COMPLEX`, `REASONING`), then the proxy selects the best model from the matching domain profile in `config.yaml`.
 
-- `auto` - Balanced (default)
-- `eco` - Cost-optimized
-- `premium` - Performance-focused
-
-Or specify exact model:
+Or specify an exact model to bypass routing:
 
 ```json
 {
-  "model": "anthropic/claude-3-opus-20240229",
+  "model": "anthropic/claude-sonnet-4.6",
   "messages": [...]
 }
 ```
