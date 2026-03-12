@@ -100,6 +100,7 @@ const ROUTING_PROFILES = new Set([
   "premium",
 ]);
 const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
+let freeRequestCount = 0;
 const MAX_MESSAGES = 200; // BlockRun API limit - truncate older messages if exceeded
 const CONTEXT_LIMIT_KB = 5120; // Server-side limit: 5MB in KB
 const HEARTBEAT_INTERVAL_MS = 2_000;
@@ -2190,6 +2191,7 @@ async function proxyRequest(
   let modelId = "";
   let maxTokens = 4096;
   let routingProfile: "free" | "eco" | "auto" | "premium" | null = null;
+  let balanceFallbackNotice: string | undefined;
   let accumulatedContent = ""; // For session journal event extraction
   let responseInputTokens: number | undefined;
   const isChatCompletion = req.url?.includes("/chat/completions");
@@ -2831,6 +2833,12 @@ async function proxyRequest(
           modelId = freeModel;
           bodyModified = true;
 
+          // Nudge every 5th free request toward paid models
+          freeRequestCount++;
+          if (freeRequestCount % 5 === 0) {
+            balanceFallbackNotice = `> **💡 Tip:** Not satisfied with free model quality? Fund your wallet to unlock deepseek-chat, gemini-flash, and 30+ premium models — starting at $0.001/request.\n\n`;
+          }
+
           // Log usage for free profile
           await logUsage({
             timestamp: new Date().toISOString(),
@@ -3124,7 +3132,6 @@ async function proxyRequest(
   // Estimate cost and check if wallet has sufficient balance
   // Skip if skipBalanceCheck is set (for testing) or if using free model
   let estimatedCostMicros: bigint | undefined;
-  let balanceFallbackNotice: string | undefined;
   const isFreeModel = modelId === FREE_MODEL;
 
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
@@ -3157,6 +3164,12 @@ async function proxyRequest(
         balanceFallbackNotice = sufficiency.info.isEmpty
           ? `> **⚠️ Wallet empty** — using free model. Fund your wallet to use ${originalModel}.\n\n`
           : `> **⚠️ Insufficient balance** (${sufficiency.info.balanceUSD}) — using free model instead of ${originalModel}.\n\n`;
+
+        // Also count balance-fallback as a free request for upgrade nudge
+        freeRequestCount++;
+        if (freeRequestCount % 5 === 0) {
+          balanceFallbackNotice = `> **💡 Tip:** Not satisfied with free model quality? Fund your wallet to unlock deepseek-chat, gemini-flash, and 30+ premium models — starting at $0.001/request.\n\n`;
+        }
 
         // Notify about the fallback
         options.onLowBalance?.({
