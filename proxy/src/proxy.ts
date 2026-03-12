@@ -69,7 +69,7 @@ export class ProxyHandler {
       
       for (const tryModel of modelsToTry) {
         try {
-          const result = await this.executeRequest(tryModel, requestBody, stream, res, startTime, sessionResult.sessionId, tier);
+          const result = await this.executeRequest(tryModel, requestBody, stream, res, startTime, sessionResult.sessionId, tier, domain);
           return;
         } catch (err) {
           lastError = err as Error;
@@ -80,7 +80,7 @@ export class ProxyHandler {
       throw lastError || new Error('All models failed');
     } else {
       // Direct model passthrough
-      await this.executeRequest(selectedModel, requestBody, stream, res, startTime, 'direct', 'MEDIUM');
+      await this.executeRequest(selectedModel, requestBody, stream, res, startTime, 'direct', 'MEDIUM', 'unknown');
     }
   }
   
@@ -91,7 +91,8 @@ export class ProxyHandler {
     res: ServerResponse,
     startTime: number,
     sessionId: string,
-    tier: Tier
+    tier: Tier,
+    domain: string
   ): Promise<void> {
     // Check response cache
     const cached = this.cache.getCachedResponse(model, requestBody.messages);
@@ -123,6 +124,7 @@ export class ProxyHandler {
           timestamp: new Date().toISOString(),
           session_id: sessionId,
           tier,
+          domain,
           model,
           input_tokens: this.estimateTokens(compressed),
           output_tokens: 0,
@@ -150,6 +152,7 @@ export class ProxyHandler {
         timestamp: new Date().toISOString(),
         session_id: sessionId,
         tier,
+        domain,
         model,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
@@ -203,10 +206,11 @@ export class ProxyHandler {
   }
   
   async handleStats(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url || '/', `http://${req.headers.host}`);
+    const days = parseInt(url.searchParams.get('days') || '7', 10);
+    const stats = this.logger.getStats(days);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      message: 'Stats endpoint - implementation requires log parsing'
-    }));
+    res.end(JSON.stringify(stats, null, 2));
   }
   
   async handlePassthrough(req: IncomingMessage, res: ServerResponse, endpoint: string): Promise<void> {
