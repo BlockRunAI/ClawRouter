@@ -46,9 +46,20 @@ export interface Config {
 
 let config: Config | null = null;
 
+function loadDotEnv(): void {
+  const envPath = path.join(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+      const m = line.match(/^([^#=]+)=(.*)$/);
+      if (m && !process.env[m[1].trim()]) process.env[m[1].trim()] = m[2].trim();
+    }
+  }
+}
+
 export function loadConfig(): Config {
   if (config) return config;
   
+  loadDotEnv();
   const configPath = path.join(process.cwd(), 'config.yaml');
   const raw = fs.readFileSync(configPath, 'utf8');
   const parsed = yaml.load(raw) as Config;

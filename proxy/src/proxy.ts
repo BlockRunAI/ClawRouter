@@ -44,8 +44,7 @@ export class ProxyHandler {
     let tier: Tier = 'MEDIUM';
     
     if (model === 'auto' || model === 'eco' || model === 'premium') {
-      const profile = model;
-      const scoringResult = this.scorer.score(messages);
+      const scoringResult = await this.scorer.scoreAsync(messages);
       const config = loadConfig();
       
       if (scoringResult.confidence < config.routing.confidenceThreshold) {
@@ -53,6 +52,9 @@ export class ProxyHandler {
       } else {
         tier = scoringResult.tier;
       }
+      
+      const domain = scoringResult.domain || 'other';
+      const profile = config.routing.profiles[domain] ? domain : 'other';
       
       const sessionId = req.headers['x-session-id'] as string | undefined;
       const sessionResult = this.sessions.getOrCreate(sessionId, messages, tier);

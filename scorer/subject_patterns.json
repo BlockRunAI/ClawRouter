@@ -1,0 +1,1279 @@
+{
+  "elementary_mathematics": {
+    "tier": "SIMPLE",
+    "signals": [
+      "solve for",
+      "simplest form",
+      "round to the nearest",
+      "what was the total cost",
+      "write.*as a fraction",
+      "mixed number",
+      "solve the equation",
+      "cents per pound",
+      "ice cream",
+      "which expression",
+      "scored",
+      "how many points",
+      "how many pieces",
+      "how much will it cost",
+      "ticket prices",
+      "teaspoons",
+      "tablespoons",
+      "packs of gum",
+      "multiple of",
+      "which method",
+      "greatest common divisor",
+      "square of",
+      "simplifies to",
+      "rule for the",
+      "situation can be solved",
+      "days in a week",
+      "volunteering",
+      "librarian",
+      "estimate the product",
+      "purchased their lunch",
+      "50% of a number",
+      "votes in favor",
+      "value of |",
+      "what is x if",
+      "grams of magnesium",
+      "3 over 2",
+      "coins are thoroughly",
+      "expression 64",
+      "drove 1,027"
+    ],
+    "min_signals": 1
+  },
+  "high_school_history": {
+    "tier": "MEDIUM",
+    "signals": [
+      "this question refers to the following information"
+    ],
+    "min_signals": 1
+  },
+  "professional_law": {
+    "tier": "REASONING",
+    "signals": [
+      "court",
+      "defendant",
+      "plaintiff",
+      "statute",
+      "attorney",
+      "jurisdiction",
+      "verdict",
+      "prosecution",
+      "testimony",
+      "warrant",
+      "indictment",
+      "felony",
+      "misdemeanor",
+      "contract",
+      "breach",
+      "damages",
+      "liable",
+      "negligence",
+      "motion to",
+      "objection",
+      "sustained",
+      "overruled",
+      "convey",
+      "easement",
+      "tenant",
+      "landlord",
+      "executor",
+      "probate",
+      "bequest",
+      "tort",
+      "injunction",
+      "subpoena",
+      "arraignment",
+      "guilty",
+      "acquitted",
+      "sentenced",
+      "mortgage",
+      "deed",
+      "lien",
+      "foreclosure",
+      "trespass",
+      "burglary",
+      "robbery",
+      "assault",
+      "malpractice",
+      "fiduciary",
+      "escrow",
+      "entered into",
+      "agreed to",
+      "pursuant to"
+    ],
+    "min_signals": 2
+  },
+  "professional_law_strong": {
+    "tier": "REASONING",
+    "signals": [
+      "defendant",
+      "attorney",
+      "testimony",
+      "felony",
+      "negligence",
+      "tenant",
+      "prosecution",
+      "plaintiff",
+      "convicted",
+      "charged with",
+      "motion to",
+      "admissible",
+      "assault",
+      "devised",
+      "trespass",
+      "acquitted",
+      "negligent",
+      "seaworthy",
+      "stole",
+      "stolen",
+      "standing to sue",
+      "donated blood",
+      "diamond necklace",
+      "sue the federal",
+      "hereby enroll",
+      "exercise facility"
+    ],
+    "min_signals": 1
+  },
+  "professional_psychology": {
+    "tier": "REASONING",
+    "signals": [
+      "psychologist",
+      "therapist",
+      "counselor",
+      "ethical",
+      "licensure",
+      "confidentiality",
+      "informed consent",
+      "DSM",
+      "assessment",
+      "intervention",
+      "client",
+      "insurance",
+      "therapy fee",
+      "kappa",
+      "test theory",
+      "norm-referenced",
+      "personality inventory",
+      "response bias",
+      "APA",
+      "clinical psychologist"
+    ],
+    "min_signals": 2
+  },
+  "professional_psychology_strong": {
+    "tier": "REASONING",
+    "signals": [
+      "pro bono",
+      "dual relationship",
+      "ethical guidelines",
+      "supervisee",
+      "dissertation",
+      "ethics code",
+      "sexual misconduct",
+      "sexual intimac",
+      "sliding scale",
+      "jigsaw method",
+      "autokinetic",
+      "sensate focus",
+      "conduct disorder",
+      "narcissistic personality",
+      "ego autonomous",
+      "transtheoretical",
+      "levels of processing",
+      "paired comparison",
+      "racial identity",
+      "multivariate analysis",
+      "approach-avoidance",
+      "criterion-referenced",
+      "post-hoc test",
+      "selective serotonin",
+      "antipsychotic",
+      "presbyopia",
+      "healthy paranoia",
+      "frontal cortex",
+      "hawthorne",
+      "organizational psychologist",
+      "selection battery",
+      "selection test",
+      "validity coefficient",
+      "cortical functioning",
+      "maternal employment",
+      "vygotsky",
+      "curvilinear",
+      "affirmative action",
+      "crowding",
+      "grouping children",
+      "dsm-5",
+      "kappa statistic",
+      "test theory",
+      "cohen\u2019s d",
+      "cohen's d"
+    ],
+    "min_signals": 1
+  },
+  "professional_medicine": {
+    "tier": "REASONING",
+    "signals": [
+      "patient",
+      "diagnosis",
+      "clinical",
+      "treatment",
+      "symptom",
+      "physician",
+      "hospital",
+      "mg",
+      "blood pressure"
+    ],
+    "min_signals": 3
+  },
+  "professional_medicine_strong": {
+    "tier": "REASONING",
+    "signals": [
+      "physical examination",
+      "emergency department",
+      "vital signs",
+      "most appropriate next",
+      "likely diagnosis",
+      "mm hg",
+      "pharmacotherapy",
+      "diabetes mellitus",
+      "prenatal",
+      "paresthesia",
+      "anterolateral",
+      "hypertension",
+      "nares",
+      "bloody nose"
+    ],
+    "min_signals": 1
+  },
+  "professional_accounting": {
+    "tier": "REASONING",
+    "signals": [
+      "tax",
+      "deduction",
+      "depreciation",
+      "audit",
+      "gaap",
+      "financial statement",
+      "balance sheet",
+      "revenue recognition",
+      "accounts receivable",
+      "accounts payable",
+      "amortization",
+      "taxable",
+      "gross income",
+      "net income",
+      "cash flow",
+      "inventory",
+      "goodwill",
+      "internal controls",
+      "revenue cycle",
+      "issuer",
+      "board of directors",
+      "net cash",
+      "basis"
+    ],
+    "min_signals": 2
+  },
+  "professional_accounting_strong": {
+    "tier": "REASONING",
+    "signals": [
+      "coso",
+      "auditor",
+      "sale-leaseback",
+      "postretirement",
+      "not-for-profit",
+      "activity-based costing",
+      "misappropriation",
+      "material misstatement",
+      "defined benefit",
+      "convertible bond",
+      "overfunded",
+      "nongovernmental",
+      "equity method",
+      "accrual",
+      "conversion ratio",
+      "par value",
+      "financial statements",
+      "income statement",
+      "classified statement",
+      "divorce settlement",
+      "risk-averse",
+      "face value",
+      "cost of debt",
+      "uncollectible",
+      "ordinary income",
+      "levied",
+      "coupon",
+      "property tax",
+      "routine on-going",
+      "k_e ="
+    ],
+    "min_signals": 1
+  },
+  "high_school_psychology": {
+    "tier": "MEDIUM",
+    "signals": [
+      "psychologist",
+      "psychoanalytic",
+      "psychotic",
+      "psychoactive",
+      "schizophrenia",
+      "dissociative",
+      "mnemonic",
+      "teratogen",
+      "newborn reflex",
+      "autonomic nervous",
+      "endocrine gland",
+      "peek-a-boo",
+      "object permanence",
+      "humanistic perspective",
+      "ap psychology",
+      "secondary drives",
+      "reinforcement",
+      "classical conditioning",
+      "operant conditioning",
+      "sleep deprivation",
+      "rem sleep",
+      "neurotransmitter",
+      "nature vs. nurture",
+      "major depression",
+      "stimulus",
+      "sperling",
+      "opponent process",
+      "species-specific",
+      "parenting",
+      "psychology",
+      "therapist",
+      "therapy",
+      "behavior and mental",
+      "abusive"
+    ],
+    "min_signals": 2
+  },
+  "high_school_psychology_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "capital punishment",
+      "person diagnosed",
+      "ratio schedules",
+      "schedules of",
+      "psychological disorders",
+      "representativeness heuristic",
+      "availability heuristic",
+      "serial position",
+      "dissociative disorder",
+      "behavior modification",
+      "psychology exam",
+      "research participant",
+      "sensory memory",
+      "method of loci",
+      "babinski",
+      "moro",
+      "cross-sectional studies",
+      "cerebral cortex",
+      "amygdala",
+      "hippocampus",
+      "latent learning",
+      "opponent process",
+      "psychoanalytic perspective",
+      "naturalistic observation",
+      "quasi-experimental",
+      "norepinephrine",
+      "piaget",
+      "sensory adaptation",
+      "absolute threshold",
+      "fetal alcohol",
+      "b. f. skinner",
+      "daydreams",
+      "fixed-action patterns",
+      "prefrontal lobotomy",
+      "id, ego",
+      "parasympathetic",
+      "electroencephalograph",
+      "meta-analysis",
+      "hindsight bias",
+      "self-fulfilling prophecy",
+      "just-world",
+      "semantic memory",
+      "observable events",
+      "pineal",
+      "dream symbols",
+      "mean, mode, and median",
+      "right hemisphere"
+    ],
+    "min_signals": 1
+  },
+  "high_school_government": {
+    "tier": "MEDIUM",
+    "signals": [
+      "congressional committee",
+      "interest groups",
+      "entitlement program",
+      "federal election",
+      "legislative oversight",
+      "federal budget",
+      "federal court",
+      "supreme court",
+      "unfunded mandate",
+      "first amendment",
+      "house of representatives",
+      "senate",
+      "political action committee",
+      "pac donation",
+      "secretary of state",
+      "federalism",
+      "separation of church",
+      "majority party"
+    ],
+    "min_signals": 2
+  },
+  "high_school_government_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "the secretary of",
+      "entitlement programs",
+      "constitutional amendment.",
+      "national government",
+      "most such programs"
+    ],
+    "min_signals": 1
+  },
+  "high_school_macroeconomics": {
+    "tier": "MEDIUM",
+    "signals": [
+      "money supply",
+      "aggregate demand",
+      "aggregate supply",
+      "fiscal policy",
+      "spending multiplier",
+      "equilibrium price level",
+      "full employment",
+      "gross domestic product",
+      "gdp",
+      "stagflation",
+      "circular flow",
+      "marginal propensity to consume",
+      "current account",
+      "reserve requirement",
+      "open market operation",
+      "real interest rate",
+      "expansionary",
+      "contractionary"
+    ],
+    "min_signals": 2
+  },
+  "high_school_macroeconomics_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "the equilibrium price",
+      "equilibrium quantity",
+      "real gdp",
+      "full employment.",
+      "the price level",
+      "equilibrium price level",
+      "aggregate supply",
+      "below full",
+      "quantity of output",
+      "money multiplier",
+      "circular-flow diagram",
+      "law of demand"
+    ],
+    "min_signals": 1
+  },
+  "high_school_microeconomics": {
+    "tier": "MEDIUM",
+    "signals": [
+      "demand curve",
+      "supply curve",
+      "marginal cost",
+      "perfectly competitive",
+      "monopolistically competitive",
+      "monopoly",
+      "economies of scale",
+      "production possibility frontier",
+      "ppf",
+      "shut down price",
+      "negative externality",
+      "minimum wage",
+      "utility-maximizing"
+    ],
+    "min_signals": 2
+  },
+  "high_school_microeconomics_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "average total",
+      "average variable",
+      "a firm's",
+      "product market",
+      "a monopolistically",
+      "cost equals"
+    ],
+    "min_signals": 1
+  },
+  "high_school_biology": {
+    "tier": "MEDIUM",
+    "signals": [
+      "darwin",
+      "natural selection",
+      "elodea",
+      "small intestine",
+      "photosynthesis",
+      "mitosis",
+      "meiosis",
+      "dna replication",
+      "allele",
+      "phenotype",
+      "genotype",
+      "ecosystem",
+      "food chain",
+      "cell membrane",
+      "ribosome",
+      "earthworm",
+      "spiracle",
+      "alveoli",
+      "hemophilia",
+      "extraembryonic",
+      "predator",
+      "aquatic plant",
+      "chloroplast",
+      "xylem"
+    ],
+    "min_signals": 2
+  },
+  "high_school_biology_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "dna content",
+      "metaphase i",
+      "these organisms",
+      "secretion will",
+      "two nucleotides",
+      "descent with modification",
+      "hardy-weinberg equilibrium",
+      "while prokaryotes",
+      "glucose levels will",
+      "gene alleles",
+      "there are differences in",
+      "among the species.",
+      "the cell in metaphase",
+      "will stop and",
+      "hydrogen bonding",
+      "skeletal structures",
+      "forelimbs",
+      "reptile eggs"
+    ],
+    "min_signals": 1
+  },
+  "high_school_chemistry": {
+    "tier": "MEDIUM",
+    "signals": [
+      "lewis structure",
+      "ground state",
+      "bond strength",
+      "electron configuration",
+      "homogeneous",
+      "heterogeneous",
+      "molar mass",
+      "oxidation",
+      "reduction",
+      "periodic table",
+      "valence",
+      "molarity",
+      "titration",
+      "equilibrium constant"
+    ],
+    "min_signals": 2
+  },
+  "high_school_chemistry_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "is transferred from",
+      "hno2 >",
+      "h2co3 >",
+      "> h3po4",
+      "the catalyst",
+      "> h2s"
+    ],
+    "min_signals": 1
+  },
+  "high_school_mathematics_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "(x, y)",
+      "the domain of",
+      "have an inverse",
+      "express your answer",
+      "the graph of",
+      "find the sum",
+      "domain of $f$",
+      "all real",
+      "where $a$"
+    ],
+    "min_signals": 1
+  },
+  "high_school_geography": {
+    "tier": "MEDIUM",
+    "signals": [
+      "federal state",
+      "city planners",
+      "land use",
+      "world population",
+      "central place theory",
+      "rural",
+      "migration",
+      "demographic transition",
+      "population density",
+      "cultural landscape",
+      "spatial",
+      "stateless nation",
+      "continentality",
+      "universalizing religion",
+      "land survey",
+      "immigrant learning"
+    ],
+    "min_signals": 2
+  },
+  "high_school_computer_science_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "block-based programming",
+      "string s",
+      "logic gate",
+      "a computer system",
+      "machine language,"
+    ],
+    "min_signals": 1
+  },
+  "high_school_physics": {
+    "tier": "MEDIUM",
+    "signals": [
+      "toy car",
+      "light bulb",
+      "balloon",
+      "buoyant force",
+      "propel",
+      "collision",
+      "newton's",
+      "acceleration",
+      "velocity",
+      "kinetic energy",
+      "potential energy",
+      "circuit",
+      "voltage",
+      "resistance"
+    ],
+    "min_signals": 3
+  },
+  "high_school_physics_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "the swimmer's",
+      "swimmer's arms",
+      "the cart",
+      "average kinetic",
+      "the molecules of"
+    ],
+    "min_signals": 1
+  },
+  "high_school_statistics": {
+    "tier": "MEDIUM",
+    "signals": [
+      "standard deviation",
+      "binomial",
+      "sample survey",
+      "continuous data",
+      "confidence interval",
+      "null hypothesis",
+      "p-value",
+      "regression",
+      "correlation",
+      "normal distribution",
+      "random sample",
+      "histogram"
+    ],
+    "min_signals": 2
+  },
+  "high_school_statistics_strong": {
+    "tier": "MEDIUM",
+    "signals": [
+      "standard deviation of",
+      "percent confidence",
+      "above the mean",
+      "a binomial"
+    ],
+    "min_signals": 1
+  },
+  "sociology": {
+    "tier": "COMPLEX",
+    "signals": [
+      "functionalist",
+      "social stratum",
+      "foucault",
+      "weber",
+      "parsons",
+      "biopolitics",
+      "anti-psychiatrist",
+      "social constructivism",
+      "domestic violence",
+      "social science",
+      "national curriculum",
+      "disciplinary power",
+      "differential association",
+      "sick role",
+      "sexual revolution"
+    ],
+    "min_signals": 1
+  },
+  "security_studies": {
+    "tier": "COMPLEX",
+    "signals": [
+      "chemical weapons",
+      "human insecurity",
+      "postcolonialism",
+      "security studies",
+      "historical materialism",
+      "greedy state",
+      "security seeker",
+      "international society",
+      "nuclear weapon",
+      "arms control"
+    ],
+    "min_signals": 1
+  },
+  "prehistory": {
+    "tier": "COMPLEX",
+    "signals": [
+      "mogollon",
+      "inca",
+      "mesopotamia",
+      "rockshelter",
+      "quarry site",
+      "neolithic",
+      "paleolithic",
+      "bronze age",
+      "iron age",
+      "archaeological",
+      "artifact",
+      "excavation",
+      "hunter-gatherer",
+      "domestication"
+    ],
+    "min_signals": 1
+  },
+  "prehistory_strong": {
+    "tier": "COMPLEX",
+    "signals": [
+      "homo erectus",
+      "homo ergaster",
+      "homo antecessor",
+      "million years",
+      "skeletal remains",
+      "first americans,",
+      "those who lived",
+      "homo habilis",
+      "australopithecus",
+      "neandertal",
+      "neanderthal",
+      "denisovan",
+      "bering strait",
+      "cranial capacit",
+      "maize-based",
+      "aztec",
+      "tenochtitl",
+      "foraging subsistence",
+      "stone tool",
+      "archaic period",
+      "mound 72"
+    ],
+    "min_signals": 1
+  },
+  "world_religions": {
+    "tier": "COMPLEX",
+    "signals": [
+      "shari'ah",
+      "guru",
+      "darbar sahib",
+      "deaconess",
+      "christianity",
+      "buddhism",
+      "hinduism",
+      "islam",
+      "judaism",
+      "torah",
+      "quran",
+      "vedas",
+      "mosque",
+      "synagogue",
+      "monastery",
+      "festival of",
+      "bushido",
+      "baptism",
+      "theologian",
+      "pelagius",
+      "calvin",
+      "sutra",
+      "shoah",
+      "apocalypse",
+      "zen",
+      "maitreya"
+    ],
+    "min_signals": 2
+  },
+  "philosophy": {
+    "tier": "COMPLEX",
+    "signals": [
+      "utilitarianism",
+      "rule-utilitarianism",
+      "deontological",
+      "kantian",
+      "consequentialism",
+      "epistemology",
+      "metaphysics",
+      "ontology",
+      "moral realism",
+      "moral relativism",
+      "think critically",
+      "good reasons"
+    ],
+    "min_signals": 1
+  },
+  "philosophy_strong": {
+    "tier": "COMPLEX",
+    "signals": [
+      "every pleasure is",
+      "of philosophy",
+      "equal concern for",
+      "be chosen.",
+      "pleasure is good",
+      "for the survival of each,"
+    ],
+    "min_signals": 1
+  },
+  "moral_disputes_strong": {
+    "tier": "COMPLEX",
+    "signals": [
+      "the original position",
+      "should prohibit",
+      "prohibit things",
+      "b neither a nor",
+      "neither a nor b",
+      "according to singer",
+      "according to marquis",
+      "according to locke",
+      "according to mill",
+      "according to gardiner",
+      "according to walzer",
+      "doctrine of double effect",
+      "retributivist",
+      "death penalty",
+      "drug legalization",
+      "decriminalization",
+      "animal rights",
+      "van den haag",
+      "de marneffe",
+      "pogge argues"
+    ],
+    "min_signals": 1
+  },
+  "human_sexuality": {
+    "tier": "COMPLEX",
+    "signals": [
+      "a g-spot",
+      "masturbation produces",
+      "the vagina",
+      "sexual arousal",
+      "orgasm",
+      "erogenous"
+    ],
+    "min_signals": 1
+  },
+  "econometrics": {
+    "tier": "COMPLEX",
+    "signals": [
+      "random effects",
+      "explanatory variables",
+      "the rhs",
+      "correlated with"
+    ],
+    "min_signals": 1
+  },
+  "us_foreign_policy": {
+    "tier": "COMPLEX",
+    "signals": [
+      "cold war",
+      "league of nations",
+      "un security council",
+      "soft power",
+      "grand strategy",
+      "containment",
+      "primacy",
+      "belligerent"
+    ],
+    "min_signals": 1
+  },
+  "public_relations": {
+    "tier": "COMPLEX",
+    "signals": [
+      "public relations",
+      "your supervisor"
+    ],
+    "min_signals": 1
+  },
+  "international_law": {
+    "tier": "COMPLEX",
+    "signals": [
+      "of the treaty",
+      "optional clause",
+      "the parties to",
+      "treaties that"
+    ],
+    "min_signals": 1
+  },
+  "logical_fallacies": {
+    "tier": "COMPLEX",
+    "signals": [
+      "the fallacy of",
+      "claim should be accepted",
+      "that a claim"
+    ],
+    "min_signals": 1
+  },
+  "formal_logic": {
+    "tier": "COMPLEX",
+    "signals": [
+      "consistent. consistent valuation",
+      "consistent valuation when",
+      "are true and"
+    ],
+    "min_signals": 1
+  },
+  "jurisprudence": {
+    "tier": "COMPLEX",
+    "signals": [
+      "which proposition below",
+      "most powerful refutation",
+      "the law."
+    ],
+    "min_signals": 1
+  },
+  "human_aging": {
+    "tier": "COMPLEX",
+    "signals": [
+      "telomere strands",
+      "a bigger role",
+      "gay and lesbian couples",
+      "satisfied with their",
+      "cancer cells",
+      "normal cells"
+    ],
+    "min_signals": 1
+  },
+  "abstract_algebra": {
+    "tier": "COMPLEX",
+    "signals": [
+      "statement 1 |",
+      "statement 2 |"
+    ],
+    "min_signals": 1
+  },
+  "machine_learning": {
+    "tier": "COMPLEX",
+    "signals": [
+      "p(x, y, z)",
+      "set it to zero"
+    ],
+    "min_signals": 1
+  },
+  "electrical_engineering": {
+    "tier": "COMPLEX",
+    "signals": [
+      "no load",
+      "quantity being measured.",
+      "electric field"
+    ],
+    "min_signals": 1
+  },
+  "conceptual_physics": {
+    "tier": "COMPLEX",
+    "signals": [
+      "inclined plane",
+      "normal force",
+      "charged particles",
+      "radiates",
+      "correspondence principle",
+      "rolling down",
+      "deflected by",
+      "magnetic means",
+      "projectile",
+      "free fall",
+      "wavelength",
+      "speed of light",
+      "photon",
+      "greenhouse gas",
+      "standing waves",
+      "fission or fusion",
+      "apparent weight",
+      "hologram",
+      "radioactive nucleus",
+      "planck"
+    ],
+    "min_signals": 2
+  },
+  "conceptual_physics_strong": {
+    "tier": "COMPLEX",
+    "signals": [
+      "none of these neither",
+      "neither of these",
+      "of the atmosphere",
+      "than mg",
+      "of charge.",
+      "two separated"
+    ],
+    "min_signals": 1
+  },
+  "astronomy": {
+    "tier": "COMPLEX",
+    "signals": [
+      "blackbody",
+      "lunar maria",
+      "venus",
+      "mercury",
+      "saturn",
+      "jupiter",
+      "solar system",
+      "light-year",
+      "parsec",
+      "supernova",
+      "nebula",
+      "galaxy",
+      "telescope",
+      "red giant"
+    ],
+    "min_signals": 2
+  },
+  "astronomy_strong": {
+    "tier": "COMPLEX",
+    "signals": [
+      "peak emission wavelength",
+      "power emitted is",
+      "may not be able"
+    ],
+    "min_signals": 1
+  },
+  "computer_security": {
+    "tier": "COMPLEX",
+    "signals": [
+      "firewall",
+      "intrusion detection",
+      "buffer overflow",
+      "sql injection",
+      "cross-site scripting",
+      "authentication",
+      "cryptographic",
+      "cipher",
+      "malware",
+      "phishing",
+      "denial of service"
+    ],
+    "min_signals": 2
+  },
+  "college_computer_science": {
+    "tier": "COMPLEX",
+    "signals": [
+      "operating system",
+      "network operating",
+      "distributed operating"
+    ],
+    "min_signals": 1
+  },
+  "college_medicine": {
+    "tier": "COMPLEX",
+    "signals": [
+      "graduated cylinder",
+      "adhesive forces",
+      "fibres. type",
+      "the mercury",
+      "how many chromosomes",
+      "drugs to modify",
+      "production of atp.",
+      "cohesive forces",
+      "creatine kinase",
+      "creatine to load",
+      "contractile proteins",
+      "somatic eukaryotic"
+    ],
+    "min_signals": 1
+  },
+  "college_biology": {
+    "tier": "COMPLEX",
+    "signals": [
+      "alarm call",
+      "actin-myosin",
+      "the affected cells",
+      "polyteny",
+      "auxin",
+      "lobed thallus",
+      "rhizoids",
+      "kin selection",
+      "swimming sperm",
+      "xenopus laevis",
+      "continental drift",
+      "prokaryotes and eukaryotes"
+    ],
+    "min_signals": 1
+  },
+  "business_ethics": {
+    "tier": "COMPLEX",
+    "signals": [
+      "corporate governance",
+      "shareholders",
+      "executive directors",
+      "stakeholder",
+      "csr",
+      "sustainability agenda",
+      "disqualification of directors",
+      "business ethics",
+      "oecd"
+    ],
+    "min_signals": 1
+  },
+  "medical_genetics": {
+    "tier": "COMPLEX",
+    "signals": [
+      "sickle cell",
+      "rflp",
+      "marfan syndrome",
+      "hardy-weinberg",
+      "autosomal recessive",
+      "cell lineage",
+      "gametes",
+      "lac operon",
+      "restriction enzymes",
+      "sticky ends",
+      "heritability",
+      "base pairs"
+    ],
+    "min_signals": 1
+  },
+  "anatomy": {
+    "tier": "COMPLEX",
+    "signals": [
+      "parotid gland",
+      "intercostal space",
+      "maxillary sinus",
+      "connective tissue",
+      "tonsillar",
+      "homeostasis",
+      "stethoscope",
+      "mid-axillary",
+      "flexor",
+      "extensor",
+      "ligament"
+    ],
+    "min_signals": 1
+  },
+  "management": {
+    "tier": "COMPLEX",
+    "signals": [
+      "decision making model",
+      "corporate manager",
+      "bureaucratic organisation",
+      "power distance",
+      "key skill of management",
+      "authority refer",
+      "organisational",
+      "leadership style"
+    ],
+    "min_signals": 1
+  },
+  "moral_scenarios": {
+    "tier": "COMPLEX",
+    "signals": [
+      "for which of these two scenarios does the main character"
+    ],
+    "min_signals": 1
+  },
+  "marketing": {
+    "tier": "COMPLEX",
+    "signals": [
+      "marketing communications",
+      "segmentation",
+      "consumer segmentation",
+      "marketing mix",
+      "marketing researcher",
+      "marketing information",
+      "supply chain management",
+      "merchandise lines",
+      "brand positioning",
+      "salespeople"
+    ],
+    "min_signals": 1
+  },
+  "nutrition": {
+    "tier": "COMPLEX",
+    "signals": [
+      "dietary fat",
+      "bioavailability",
+      "basal metabolic rate",
+      "lipoproteins",
+      "vegan diet",
+      "macrobiotic",
+      "anthropometric",
+      "skeletal muscle tissue",
+      "transamination",
+      "bmr",
+      "nutrient",
+      "nutritional",
+      "provides less energy than",
+      "hydrophobic core"
+    ],
+    "min_signals": 1
+  },
+  "virology": {
+    "tier": "COMPLEX",
+    "signals": [
+      "arenavirus",
+      "cytotoxic t cell",
+      "viruses",
+      "retrovirus",
+      "hiv-1",
+      "influenza virus",
+      "hepatitis",
+      "herpes",
+      "viral replication",
+      "viral genome"
+    ],
+    "min_signals": 1
+  },
+  "clinical_knowledge": {
+    "tier": "COMPLEX",
+    "signals": [
+      "muscle fibres",
+      "peak flow",
+      "cushing",
+      "post-operative",
+      "asthma",
+      "blood pressure",
+      "pulse rate",
+      "clinical assessment"
+    ],
+    "min_signals": 1
+  },
+  "clinical_knowledge_strong": {
+    "tier": "COMPLEX",
+    "signals": [
+      "dentures should be",
+      "the pain of",
+      "released from the muscle.",
+      "the patient should be"
+    ],
+    "min_signals": 1
+  }
+}

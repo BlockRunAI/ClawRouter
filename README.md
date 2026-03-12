@@ -1,141 +1,131 @@
 # ClawRouter
 
-OpenAI-compatible LLM routing proxy that intelligently scores request complexity and routes to optimal models.
+OpenAI-compatible LLM routing proxy that scores request complexity and routes to the optimal model to save costs.
 
-## Features
+```
+Client → Proxy (TypeScript) → Scorer (Python/ML) → selects model → LLM Provider
+```
 
-- **14-Dimension Complexity Scorer** - Analyzes requests across multiple dimensions (length, code presence, reasoning depth, etc.)
-- **4-Tier Routing System** - SIMPLE, MEDIUM, COMPLEX, REASONING tiers with automatic model selection
-- **3 Routing Profiles** - Auto (balanced), Eco (cost-optimized), Premium (performance-focused)
-- **Session Persistence** - Maintains conversation context with SQLite-backed session tracking
-- **Smart Compression** - Multi-layer compression pipeline (deduplication, whitespace, JSON compaction)
-- **Response Caching** - LRU cache with configurable TTL for repeated queries
-- **Shadow Analysis** - Parallel request logging for A/B testing and model comparison
-- **OpenAI API Compatible** - Drop-in replacement for OpenAI API endpoints
-- **Multi-Upstream Support** - Routes to OpenRouter, Ollama, or custom upstreams
-- **Three-Strike Escalation** - Automatically escalates to higher tiers on repeated failures
-- **Never Downgrade** - Optional session-based tier locking to prevent quality regression
-- **Environment Override** - Full configuration via environment variables
-- **Structured Logging** - File-based logging with rotation support
-- **Health Monitoring** - Built-in health check and metrics endpoints
+## Architecture
+
+ClawRouter is split into two components:
+
+- **`proxy/`** — TypeScript HTTP proxy. Handles OpenAI API compatibility, streaming, sessions, caching, compression, and upstream routing. Calls the scorer to decide which model to use.
+- **`scorer/`** — Python FastAPI service. Uses ML (ridge regression on embeddings) to classify requests by complexity tier and knowledge domain. Runs on a local Ollama embedding model.
+
+The proxy sends each request's text to the scorer, gets back a tier (SIMPLE/MEDIUM/COMPLEX/REASONING) and domain, then routes to the appropriate model.
 
 ## Quick Start
 
+### 1. Prerequisites
+
+- [Ollama](https://ollama.ai) running locally with an embedding model
+- Node.js 18+ and Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended for Python)
+
 ```bash
-# Install dependencies
-npm install
-
-# Configure
-cp .env.example .env
-# Edit .env and add your OPENROUTER_API_KEY
-
-# Build
-npm run build
-
-# Start
-npm start
+# Pull the default embedding model
+ollama pull qwen3-embedding:4b
 ```
 
-Server runs at `http://localhost:8402`
+### 2. Start the scorer
 
-## Configuration
+```bash
+cd scorer
+uv sync
+uv run server.py
+# Runs on http://localhost:8403
+```
 
-Configuration is loaded from `config.yaml` with environment variable overrides. See `.env.example` for all available variables.
+### 3. Start the proxy
 
-### Key Settings
+```bash
+cd proxy
+npm install
+cp .env.example .env  # Edit with your OpenRouter API key
+npm run build
+npm start
+# Runs on http://localhost:8402
+```
 
-- **Port/Host** - Server binding configuration
-- **Upstreams** - OpenRouter and Ollama endpoints
-- **Routing Profiles** - Model selection per tier
-- **Session Management** - TTL, downgrade protection, escalation
-- **Compression** - Multi-layer prompt optimization
-- **Cache** - Response caching for efficiency
-- **Logging** - File-based structured logs
+### 4. Use it
 
-## API Reference
-
-### Chat Completions
+Point any OpenAI-compatible client at `http://localhost:8402`. Set the model to `auto`, `eco`, or `premium` to enable routing:
 
 ```bash
 curl http://localhost:8402/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-key" \
   -d '{
     "model": "auto",
-    "messages": [{"role": "user", "content": "Hello"}]
+    "messages": [{"role": "user", "content": "What is 2+2?"}]
   }'
 ```
 
-### Health Check
+Simple questions route to cheap models. Complex ones route to powerful models. You save money.
+
+## Using a Different Embedding Model
+
+The scorer ships with pre-trained weights for `qwen3-embedding:4b` (2560-dim). To use a different model:
 
 ```bash
-curl http://localhost:8402/health
+# 1. Pull your preferred model
+ollama pull nomic-embed-text
+
+# 2. Retrain weights (requires ~30 min for 14k MMLU questions)
+cd scorer
+pip install datasets  # one-time, for MMLU data
+EMBED_MODEL=nomic-embed-text python retrain.py
+
+# 3. Update scorer config and restart
+EMBED_MODEL=nomic-embed-text uv run server.py
 ```
 
-### Session Info
+The retraining script downloads MMLU data, embeds all training questions with your model, trains ridge regression classifiers, and exports new `weights.json`. The scorer validates on startup that the weights match the configured embedding model.
 
-```bash
-curl http://localhost:8402/session/SESSION_ID
+## Configuration
+
+### Scorer (`scorer/`)
+
+| Env var | Default | Description |
+|---|---|---|
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
+| `WEIGHTS_PATH` | `./weights.json` | Path to trained weights |
+| `SCORER_PORT` | `8403` | Scorer HTTP port |
+
+### Proxy (`proxy/`)
+
+| Env var | Default | Description |
+|---|---|---|
+| `SCORER_URL` | `http://localhost:8403` | Scorer service URL |
+| `OPENROUTER_API_KEY` | — | OpenRouter API key (required) |
+| `CLAW_PROXY_PORT` | `8402` | Proxy HTTP port |
+
+See `proxy/.env.example` for the full list.
+
+### Model Routing
+
+Edit `proxy/config.yaml` to configure which models handle each tier:
+
+```yaml
+routing:
+  profiles:
+    auto:
+      SIMPLE: google/gemini-flash-1.5          # cheap, fast
+      MEDIUM: anthropic/claude-3-5-haiku-20241022
+      COMPLEX: anthropic/claude-3-5-sonnet-20241022
+      REASONING: anthropic/claude-3-opus-20240229  # expensive, powerful
 ```
 
-See `API.md` for complete endpoint documentation.
+## How the Scorer Works
 
-## Routing
+1. The request text is sent to Ollama to get an embedding vector
+2. A ridge regression classifier predicts the MMLU subject (57 categories)
+3. The predicted subject maps to a domain (stem/humanities/social_sciences/other)
+4. For tier: if the subject classifier is confident (margin > 0.28), the subject's tier is used; otherwise a quadratic tier classifier decides
+5. High-precision keyword patterns can override the ML prediction for known patterns
+6. Domain overrides apply for specific detected subjects
 
-### Complexity Scoring
-
-Requests are scored across 14 dimensions:
-- Message length and count
-- Code block presence and complexity
-- Technical terminology density
-- Reasoning indicators (analysis, comparison, evaluation)
-- Multi-step task detection
-- Context window requirements
-- Structured output needs
-- Domain expertise requirements
-- Ambiguity and clarification needs
-- Creative vs analytical balance
-- Time sensitivity
-- Error handling complexity
-- Multi-modal content
-- Conversation depth
-
-### Tier Thresholds
-
-- **SIMPLE** (0.0-0.3) - Basic queries, greetings, simple lookups
-- **MEDIUM** (0.3-0.6) - Standard questions, moderate complexity
-- **COMPLEX** (0.6-0.8) - Advanced analysis, code generation, multi-step reasoning
-- **REASONING** (0.8+) - Deep reasoning, complex problem-solving, research
-
-### Profiles
-
-- **auto** - Balanced performance and cost (default)
-- **eco** - Cost-optimized with budget models
-- **premium** - Performance-focused with top-tier models
-
-## Shadow Analysis
-
-Shadow mode logs requests to a SQLite database for offline analysis:
-
-```bash
-npm run shadow
-```
-
-Analyzes routing decisions, model performance, and cost optimization opportunities.
-
-## Architecture
-
-See `ARCHITECTURE.md` for detailed module breakdown.
-
-## Systemd Service
-
-Install as a systemd user service:
-
-```bash
-./setup.sh
-systemctl --user enable clawrouter
-systemctl --user start clawrouter
-```
+Trained on 14,042 MMLU questions. Achieves 95.6% combined accuracy on the validation set.
 
 ## License
 

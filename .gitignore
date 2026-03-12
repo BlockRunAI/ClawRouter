@@ -8,3 +8,7 @@ logs/
 .idea/
 .kiro/
 logs-sync/
+__pycache__/
+*.pyc
+.venv/
+scorer/nohup.out

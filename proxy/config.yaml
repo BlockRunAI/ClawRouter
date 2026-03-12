@@ -41,21 +41,26 @@ routing:
   defaultTier: MEDIUM
   confidenceThreshold: 0.3
   profiles:
-    auto:
-      SIMPLE: google/gemini-flash-1.5
-      MEDIUM: anthropic/claude-3-5-haiku-20241022
-      COMPLEX: anthropic/claude-3-5-sonnet-20241022
-      REASONING: anthropic/claude-3-opus-20240229
-    eco:
-      SIMPLE: amazon/nova-lite-v1
-      MEDIUM: google/gemini-flash-1.5
-      COMPLEX: anthropic/claude-3-5-haiku-20241022
-      REASONING: anthropic/claude-3-5-sonnet-20241022
-    premium:
-      SIMPLE: anthropic/claude-3-5-haiku-20241022
-      MEDIUM: anthropic/claude-3-5-sonnet-20241022
-      COMPLEX: anthropic/claude-3-opus-20240229
-      REASONING: anthropic/claude-3-opus-20240229
+    stem:
+      SIMPLE: google/gemini-3.1-flash-lite-preview
+      MEDIUM: anthropic/claude-haiku-4.5
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-opus-4.6
+    humanities:
+      SIMPLE: amazon/nova-2-lite-v1
+      MEDIUM: google/gemini-3.1-flash-lite-preview
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-sonnet-4.6
+    social_sciences:
+      SIMPLE: amazon/nova-2-lite-v1
+      MEDIUM: google/gemini-3.1-flash-lite-preview
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-opus-4.6
+    other:
+      SIMPLE: google/gemini-3.1-flash-lite-preview
+      MEDIUM: anthropic/claude-haiku-4.5
+      COMPLEX: anthropic/claude-sonnet-4.6
+      REASONING: anthropic/claude-opus-4.6
 
 compression:
   enabled: true

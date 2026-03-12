@@ -1,0 +1,16 @@
+[project]
+name = "clawrouter-scorer"
+version = "1.0.0"
+description = "ML-based request classifier for ClawRouter"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "httpx>=0.28.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+retrain = [
+    "datasets>=3.0.0",
+]
