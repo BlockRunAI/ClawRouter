@@ -43,7 +43,7 @@ export class ProxyHandler {
     let selectedModel = model;
     let tier: Tier = 'MEDIUM';
     
-    if (model === 'auto' || model === 'eco' || model === 'premium') {
+    if (model === 'auto') {
       const scoringResult = await this.scorer.scoreAsync(messages);
       const config = loadConfig();
       
