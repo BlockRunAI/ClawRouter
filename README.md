@@ -44,6 +44,8 @@ One wallet, 41+ models, zero API keys.
 | [Screenshots](#-screenshots)              | See it in action                |
 | [Payment](#-payment)                      | x402 non-custodial USDC         |
 | [Configuration](#%EF%B8%8F-configuration) | Environment variables           |
+| [Compactor Integration](#-compactor-integration) | ClawRouter × Claw Compactor |
+| [Security Notes](#-security-notes)        | Secrets and wallet safety       |
 | [Troubleshooting](#-troubleshooting)      | `doctor` AI-powered diagnostics |
 | [vs OpenRouter](#-vs-openrouter)          | Why ClawRouter wins             |
 | [Support](#-support)                      | Telegram, X, founders           |
@@ -267,6 +269,33 @@ For basic usage, no configuration needed. For advanced options:
 | `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint     |
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
+
+---
+
+## 🦞 Compactor Integration
+
+If you want maximum savings, pair ClawRouter with Claw Compactor.
+
+- Claw Compactor reduces token volume (input size)
+- ClawRouter reduces token unit cost ($/token)
+
+Recommended order:
+
+`Compactor -> ClawRouter -> Provider`
+
+**Guide:** [docs/claw-compactor-integration.md](docs/claw-compactor-integration.md)
+
+---
+
+## 🔐 Security Notes
+
+For operators and contributors, read the secrets policy before production use:
+
+- no plaintext seed persistence
+- token redaction in logs
+- secure credential storage guidance
+
+**Policy:** [docs/security-secrets.md](docs/security-secrets.md)
 
 ---
 
