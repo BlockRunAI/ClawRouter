@@ -62,7 +62,7 @@ import { getStats, clearStats } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
 import { ResponseCache, type ResponseCacheConfig } from "./response-cache.js";
 import { BalanceMonitor } from "./balance.js";
-import { SolanaBalanceMonitor } from "./solana-balance.js";
+import type { SolanaBalanceMonitor } from "./solana-balance.js";
 
 /** Union type for chain-agnostic balance monitoring */
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
@@ -1336,11 +1336,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       reuseSolanaAddress = solanaSigner.address;
     }
 
-    // Use chain-appropriate balance monitor
-    const balanceMonitor: AnyBalanceMonitor =
-      paymentChain === "solana" && reuseSolanaAddress
-        ? new SolanaBalanceMonitor(reuseSolanaAddress)
-        : new BalanceMonitor(account.address);
+    // Use chain-appropriate balance monitor (lazy import to avoid loading @solana/kit on Base chain)
+    let balanceMonitor: AnyBalanceMonitor;
+    if (paymentChain === "solana" && reuseSolanaAddress) {
+      const { SolanaBalanceMonitor } = await import("./solana-balance.js");
+      balanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
+    } else {
+      balanceMonitor = new BalanceMonitor(account.address);
+    }
 
     options.onReady?.(listenPort);
 
@@ -1392,11 +1395,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     skipPreAuth: paymentChain === "solana",
   });
 
-  // Create balance monitor for pre-request checks (chain-appropriate)
-  const balanceMonitor: AnyBalanceMonitor =
-    paymentChain === "solana" && solanaAddress
-      ? new SolanaBalanceMonitor(solanaAddress)
-      : new BalanceMonitor(account.address);
+  // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
+  let balanceMonitor: AnyBalanceMonitor;
+  if (paymentChain === "solana" && solanaAddress) {
+    const { SolanaBalanceMonitor } = await import("./solana-balance.js");
+    balanceMonitor = new SolanaBalanceMonitor(solanaAddress);
+  } else {
+    balanceMonitor = new BalanceMonitor(account.address);
+  }
 
   // Build router options (100% local — no external API calls for routing)
   const routingConfig = mergeRoutingConfig(options.routingConfig);
