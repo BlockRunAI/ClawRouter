@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { RulesStrategy, getStrategy, registerStrategy } from "./strategy.js";
 import { DEFAULT_ROUTING_CONFIG } from "./config.js";
-import type { RouterStrategy, RouterOptions, RoutingDecision } from "./types.js";
+import type { RouterStrategy, RouterOptions } from "./types.js";
 import type { ModelPricing } from "./selector.js";
 import { route } from "./index.js";
 
