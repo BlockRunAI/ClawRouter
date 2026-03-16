@@ -881,6 +881,53 @@ function normalizeMessagesForThinking(messages: ExtendedChatMessage[]): Extended
 }
 
 /**
+ * Remove "blockrun" branding from system messages before sending upstream.
+ *
+ * OpenClaw embeds `model=blockrun/auto` and `default_model=blockrun/auto` in its
+ * system prompt Runtime section. LLMs pick up "blockrun" and adopt it as their
+ * identity (e.g. "I'm Blockrun"), overriding the user's SOUL.md persona.
+ *
+ * This function replaces `blockrun/<profile>` references with the actual resolved
+ * model name, and strips any remaining "blockrun/" prefix so the upstream LLM
+ * never sees "blockrun" as an identity to adopt.
+ */
+export function debrandSystemMessages(
+  messages: ChatMessage[],
+  resolvedModel: string,
+): ChatMessage[] {
+  // Routing profile names that get replaced with the actual model
+  const PROFILE_NAMES = ["auto", "free", "eco", "premium"];
+  const profilePattern = new RegExp(
+    `\\bblockrun/(${PROFILE_NAMES.join("|")})\\b`,
+    "gi",
+  );
+  // Also handle "blockrun/<provider>/<model>" → "<provider>/<model>"
+  const prefixPattern = /\bblockrun\/(?=[a-z])/gi;
+
+  let hasChanges = false;
+  const result = messages.map((msg) => {
+    if (msg.role !== "system" || typeof msg.content !== "string") return msg;
+
+    let content = msg.content;
+
+    // Replace routing profiles (blockrun/auto etc.) with resolved model
+    const afterProfiles = content.replace(profilePattern, resolvedModel);
+
+    // Replace remaining blockrun/ prefix (e.g. blockrun/openai/gpt-4o → openai/gpt-4o)
+    const afterPrefix = afterProfiles.replace(prefixPattern, "");
+
+    if (afterPrefix !== content) {
+      hasChanges = true;
+      content = afterPrefix;
+    }
+
+    return content !== msg.content ? { ...msg, content } : msg;
+  });
+
+  return hasChanges ? result : messages;
+}
+
+/**
  * Result of truncating messages.
  */
 type TruncationResult<T> = {
@@ -2063,6 +2110,15 @@ async function tryModelRequest(
     // Normalize message roles (e.g., "developer" -> "system")
     if (Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessageRoles(parsed.messages as ChatMessage[]);
+    }
+
+    // Remove "blockrun" branding from system messages so upstream LLMs don't
+    // adopt "Blockrun" as their identity (overriding user's SOUL.md persona).
+    if (Array.isArray(parsed.messages)) {
+      parsed.messages = debrandSystemMessages(
+        parsed.messages as ChatMessage[],
+        modelId,
+      );
     }
 
     // Truncate messages to stay under BlockRun's limit (200 messages)
