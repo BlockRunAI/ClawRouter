@@ -1,6 +1,8 @@
 import { Message, dedupMessages } from './dedup';
 import { normalizeWhitespace } from './whitespace';
 import { compactJson } from './json-compact';
+import { minifyCodeBlocks } from './code-minify';
+import { compressToolResults } from './tool-result-compress';
 import { loadConfig } from '../config';
 
 export class CompressionPipeline {
@@ -10,7 +12,9 @@ export class CompressionPipeline {
     this.layers = new Map([
       ['dedup', dedupMessages],
       ['whitespace', normalizeWhitespace],
-      ['json-compact', compactJson]
+      ['json-compact', compactJson],
+      ['code-minify', minifyCodeBlocks],
+      ['tool-result-compress', compressToolResults]
     ]);
   }
   

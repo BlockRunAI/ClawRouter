@@ -69,7 +69,7 @@ export class ProxyHandler {
       
       for (const tryModel of modelsToTry) {
         try {
-          const result = await this.executeRequest(tryModel, requestBody, stream, res, startTime, sessionResult.sessionId, tier, domain);
+          const result = await this.executeRequest(tryModel, requestBody, stream, res, startTime, sessionResult.sessionId, tier, domain, model);
           return;
         } catch (err) {
           lastError = err as Error;
@@ -80,7 +80,7 @@ export class ProxyHandler {
       throw lastError || new Error('All models failed');
     } else {
       // Direct model passthrough
-      await this.executeRequest(selectedModel, requestBody, stream, res, startTime, 'direct', 'MEDIUM', 'unknown');
+      await this.executeRequest(selectedModel, requestBody, stream, res, startTime, 'direct', 'MEDIUM', 'unknown', model);
     }
   }
   
@@ -92,7 +92,8 @@ export class ProxyHandler {
     startTime: number,
     sessionId: string,
     tier: Tier,
-    domain: string
+    domain: string,
+    requestedModel: string = ''
   ): Promise<void> {
     // Check response cache
     const cached = this.cache.getCachedResponse(model, requestBody.messages);
@@ -126,6 +127,7 @@ export class ProxyHandler {
           tier,
           domain,
           model,
+          requested_model: requestedModel,
           input_tokens: this.estimateTokens(compressed),
           output_tokens: 0,
           latency_ms: latency,
@@ -154,6 +156,7 @@ export class ProxyHandler {
         tier,
         domain,
         model,
+        requested_model: requestedModel,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
         latency_ms: latency,

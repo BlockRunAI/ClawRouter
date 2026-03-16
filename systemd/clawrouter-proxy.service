@@ -1,0 +1,16 @@
+[Unit]
+Description=ClawRouter Proxy (TypeScript)
+After=network.target clawrouter-scorer.service
+Requires=clawrouter-scorer.service
+
+[Service]
+Type=simple
+User=hahah
+WorkingDirectory=/home/hahah/ClawRouter/proxy
+EnvironmentFile=/home/hahah/ClawRouter/proxy/.env
+ExecStart=/home/hahah/.nvm/versions/node/v22.22.0/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

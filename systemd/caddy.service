@@ -1,0 +1,14 @@
+[Unit]
+Description=Caddy reverse proxy for ClawRouter
+After=network.target
+Requires=clawrouter-proxy.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/caddy run --config /home/hahah/ClawRouter/systemd/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /home/hahah/ClawRouter/systemd/Caddyfile
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

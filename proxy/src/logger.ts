@@ -8,6 +8,7 @@ interface LogEntry {
   tier: string;
   domain: string;
   model: string;
+  requested_model: string;
   input_tokens: number;
   output_tokens: number;
   latency_ms: number;
@@ -56,6 +57,7 @@ export class Logger {
     const byModel: Record<string, number> = {};
     const sessions = new Set<string>();
     let totalCost = 0, totalIn = 0, totalOut = 0, totalSavings = 0;
+    let autoCount = 0, suppliedCount = 0;
 
     for (const e of entries) {
       byTier[e.tier] = (byTier[e.tier] || 0) + 1;
@@ -66,6 +68,7 @@ export class Logger {
       totalIn += e.input_tokens || 0;
       totalOut += e.output_tokens || 0;
       totalSavings += e.compressed_savings || 0;
+      if (e.requested_model === 'auto') autoCount++; else suppliedCount++;
     }
 
     const pct = (i: number) => latencies.length ? latencies[Math.min(Math.floor(latencies.length * i), latencies.length - 1)] : 0;
@@ -80,7 +83,8 @@ export class Logger {
       by_model: byModel,
       tokens: { total_input: totalIn, total_output: totalOut },
       total_cost_estimate: Math.round(totalCost * 1e6) / 1e6,
-      compression: { total_savings_chars: totalSavings, avg_savings: entries.length ? Math.round(totalSavings / entries.length) : 0 }
+      compression: { total_savings_chars: totalSavings, avg_savings: entries.length ? Math.round(totalSavings / entries.length) : 0 },
+      routing: { auto: autoCount, supplied: suppliedCount }
     };
   }
 }

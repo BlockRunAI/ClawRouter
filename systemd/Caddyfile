@@ -1,0 +1,9 @@
+router.local {
+	reverse_proxy localhost:8402
+	tls internal
+}
+
+dashboard.local {
+	reverse_proxy localhost:8082
+	tls internal
+}

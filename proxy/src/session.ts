@@ -119,11 +119,19 @@ export class SessionManager {
   
   private generateSessionId(messages: any[]): string {
     const firstUser = messages.find(m => m.role === 'user');
-    const content = firstUser ? firstUser.content : Date.now().toString();
+    const content = firstUser ? this.extractText(firstUser.content) : Date.now().toString();
     return crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
   }
   
   private hashRequest(messages: any[]): string {
-    return crypto.createHash('sha256').update(JSON.stringify(messages)).digest('hex');
+    const userMsgs = messages.filter(m => m.role === 'user');
+    const last = userMsgs.length ? this.extractText(userMsgs[userMsgs.length - 1].content) : '';
+    return crypto.createHash('sha256').update(last).digest('hex');
+  }
+
+  private extractText(content: any): string {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) return content.map(c => c.text || '').join(' ');
+    return String(content ?? '');
   }
 }

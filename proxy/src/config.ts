@@ -42,6 +42,7 @@ export interface Config {
     dir: string;
     enabled: boolean;
   };
+  apiKeys: string[];
 }
 
 let config: Config | null = null;
@@ -153,6 +154,10 @@ function applyEnvOverrides(cfg: Config): void {
   // Logging
   if (process.env.CLAW_PROXY_LOG_DIR) cfg.logging.dir = expandTilde(process.env.CLAW_PROXY_LOG_DIR);
   if (process.env.CLAW_PROXY_LOG_ENABLED) cfg.logging.enabled = process.env.CLAW_PROXY_LOG_ENABLED === 'true';
+
+  // Auth
+  if (process.env.CLAW_PROXY_API_KEYS) cfg.apiKeys = process.env.CLAW_PROXY_API_KEYS.split(',').map(k => k.trim()).filter(Boolean);
+  if (!cfg.apiKeys) cfg.apiKeys = [];
 }
 
 function maskApiKey(key: string): string {

@@ -23,11 +23,12 @@
 # CLAW_PROXY_CACHE_MAX_ENTRIES - Max cache entries (default: 200)
 # CLAW_PROXY_CACHE_TTL - Cache TTL in seconds (default: 600)
 # CLAW_PROXY_COMPRESSION_ENABLED - Enable compression (default: true)
+# CLAW_PROXY_API_KEYS - Comma-separated API keys for Bearer auth (default: empty, no auth)
 # CLAW_PROXY_LOG_DIR - Log directory (default: ~/.claw-proxy/logs)
 # CLAW_PROXY_LOG_ENABLED - Enable logging (default: true)
 
 port: 8402
-host: 0.0.0.0
+host: 127.0.0.1
 
 upstream:
   openrouter:
@@ -42,7 +43,7 @@ routing:
   confidenceThreshold: 0.3
   profiles:
     stem:
-      SIMPLE: google/gemini-3.1-flash-lite-preview
+      SIMPLE: anthropic/claude-haiku-4.5
       MEDIUM: anthropic/claude-haiku-4.5
       COMPLEX: anthropic/claude-sonnet-4.6
       REASONING: anthropic/claude-opus-4.6
@@ -68,6 +69,7 @@ compression:
     - dedup
     - whitespace
     - json-compact
+    - code-minify
 
 session:
   ttlMinutes: 120

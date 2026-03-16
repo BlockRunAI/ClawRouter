@@ -9,6 +9,18 @@ const server = http.createServer(async (req, res) => {
   const url = req.url || '';
   
   try {
+    // Auth check (skip health endpoint)
+    const cfg = loadConfig();
+    if (cfg.apiKeys.length > 0 && url !== '/health') {
+      const auth = req.headers['authorization'];
+      const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+      if (!token || !cfg.apiKeys.includes(token)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'Invalid API key', type: 'authentication_error' } }));
+        return;
+      }
+    }
+
     if (req.method === 'GET' && url === '/') {
       const pkg = require('../package.json');
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -46,7 +58,7 @@ const server = http.createServer(async (req, res) => {
       await proxy.handleModels(req, res);
     } else if (req.method === 'GET' && url === '/health') {
       await proxy.handleHealth(req, res);
-    } else if (req.method === 'GET' && url === '/stats') {
+    } else if (req.method === 'GET' && url.startsWith('/stats')) {
       await proxy.handleStats(req, res);
     } else if (req.method === 'GET' && url === '/shadow') {
       const db = new ShadowDB();

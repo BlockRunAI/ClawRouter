@@ -47,10 +47,8 @@ function callScorer(text: string): Promise<{ tier: Tier; domain: string }> {
 
 export class Scorer {
   async scoreAsync(messages: any[]): Promise<ScoringResult> {
-    const userPrompt = messages
-      .filter((m: any) => m.role === 'user')
-      .map((m: any) => m.content)
-      .join(' ');
+    const userMsgs = messages.filter((m: any) => m.role === 'user');
+    const userPrompt = userMsgs.length ? userMsgs[userMsgs.length - 1].content : '';
 
     try {
       const result = await callScorer(userPrompt);

@@ -1,0 +1,15 @@
+[Unit]
+Description=ClawRouter Scorer (Python/FastAPI)
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=hahah
+WorkingDirectory=/home/hahah/ClawRouter/scorer
+ExecStart=/home/hahah/.local/bin/uv run server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
