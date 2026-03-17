@@ -47,9 +47,7 @@ describe("debrandSystemMessages", () => {
 
     const result = debrandSystemMessages(messages, "openai/gpt-4o");
 
-    expect(result[0].content).toBe(
-      "model=openai/gpt-4o | default_model=openai/gpt-4o",
-    );
+    expect(result[0].content).toBe("model=openai/gpt-4o | default_model=openai/gpt-4o");
   });
 
   it("does not modify non-system messages", () => {
@@ -76,9 +74,7 @@ describe("debrandSystemMessages", () => {
   });
 
   it("handles non-string system content gracefully", () => {
-    const messages = [
-      { role: "system", content: [{ type: "text", text: "blockrun/auto" }] },
-    ];
+    const messages = [{ role: "system", content: [{ type: "text", text: "blockrun/auto" }] }];
 
     const result = debrandSystemMessages(messages, "deepseek/deepseek-chat");
 
@@ -87,9 +83,7 @@ describe("debrandSystemMessages", () => {
   });
 
   it("is case-insensitive for blockrun prefix", () => {
-    const messages = [
-      { role: "system", content: "model=Blockrun/Auto" },
-    ];
+    const messages = [{ role: "system", content: "model=Blockrun/Auto" }];
 
     const result = debrandSystemMessages(messages, "deepseek/deepseek-chat");
 
@@ -97,9 +91,7 @@ describe("debrandSystemMessages", () => {
   });
 
   it("replaces blockrun/free profile", () => {
-    const messages = [
-      { role: "system", content: "default_model=blockrun/free" },
-    ];
+    const messages = [{ role: "system", content: "default_model=blockrun/free" }];
 
     const result = debrandSystemMessages(messages, "nvidia/gpt-oss-120b");
 

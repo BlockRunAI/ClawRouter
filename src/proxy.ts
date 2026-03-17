@@ -897,10 +897,7 @@ export function debrandSystemMessages(
 ): ChatMessage[] {
   // Routing profile names that get replaced with the actual model
   const PROFILE_NAMES = ["auto", "free", "eco", "premium"];
-  const profilePattern = new RegExp(
-    `\\bblockrun/(${PROFILE_NAMES.join("|")})\\b`,
-    "gi",
-  );
+  const profilePattern = new RegExp(`\\bblockrun/(${PROFILE_NAMES.join("|")})\\b`, "gi");
   // Also handle "blockrun/<provider>/<model>" → "<provider>/<model>"
   const prefixPattern = /\bblockrun\/(?=[a-z])/gi;
 
@@ -2115,10 +2112,7 @@ async function tryModelRequest(
     // Remove "blockrun" branding from system messages so upstream LLMs don't
     // adopt "Blockrun" as their identity (overriding user's SOUL.md persona).
     if (Array.isArray(parsed.messages)) {
-      parsed.messages = debrandSystemMessages(
-        parsed.messages as ChatMessage[],
-        modelId,
-      );
+      parsed.messages = debrandSystemMessages(parsed.messages as ChatMessage[], modelId);
     }
 
     // Truncate messages to stay under BlockRun's limit (200 messages)
