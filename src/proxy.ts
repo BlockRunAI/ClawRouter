@@ -3423,17 +3423,34 @@ async function proxyRequest(
 
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
 
-      const result = await tryModelRequest(
-        upstreamUrl,
-        req.method ?? "POST",
-        headers,
-        body,
-        tryModel,
-        maxTokens,
-        payFetch,
-        balanceMonitor,
-        controller.signal,
-      );
+      let result: ModelRequestResult;
+      try {
+        result = await tryModelRequest(
+          upstreamUrl,
+          req.method ?? "POST",
+          headers,
+          body,
+          tryModel,
+          maxTokens,
+          payFetch,
+          balanceMonitor,
+          controller.signal,
+        );
+      } catch (err) {
+        // Timeout (AbortError) should trigger fallback to next model, not exit the loop
+        if (err instanceof Error && err.name === "AbortError") {
+          console.log(`[ClawRouter] Timeout on ${tryModel}, trying fallback...`);
+          lastError = {
+            body: `Request timed out after ${timeoutMs}ms`,
+            status: 408,
+          };
+          if (!isLastAttempt) {
+            continue;
+          }
+        }
+        // Re-throw other errors to be handled by outer catch
+        throw err;
+      }
 
       if (result.success && result.response) {
         upstream = result.response;
