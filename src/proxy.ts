@@ -2256,6 +2256,7 @@ async function proxyRequest(
   let balanceFallbackNotice: string | undefined;
   let accumulatedContent = ""; // For session journal event extraction
   let responseInputTokens: number | undefined;
+  let responseOutputTokens: number | undefined;
   const isChatCompletion = req.url?.includes("/chat/completions");
 
   // Extract session ID early for journal operations (header-only at this point)
@@ -3664,6 +3665,7 @@ async function proxyRequest(
           if (rsp.usage && typeof rsp.usage === "object") {
             const u = rsp.usage as Record<string, unknown>;
             if (typeof u.prompt_tokens === "number") responseInputTokens = u.prompt_tokens;
+            if (typeof u.completion_tokens === "number") responseOutputTokens = u.completion_tokens;
           }
 
           // Build base chunk structure (reused for all chunks)
@@ -3882,6 +3884,8 @@ async function proxyRequest(
         if (rspJson.usage && typeof rspJson.usage === "object") {
           if (typeof rspJson.usage.prompt_tokens === "number")
             responseInputTokens = rspJson.usage.prompt_tokens;
+          if (typeof rspJson.usage.completion_tokens === "number")
+            responseOutputTokens = rspJson.usage.completion_tokens;
         }
       } catch {
         // Ignore parse errors - journal just won't have content for this response
@@ -3931,32 +3935,33 @@ async function proxyRequest(
   }
 
   // --- Usage logging (fire-and-forget) ---
-  // Note: Recalculate cost using full body length (not just system+user message)
-  // and apply 20% buffer to match actual x402 payment (see estimateAmount())
+  // Note: Use actual token counts from API response when available,
+  // fall back to estimates. Log actual cost without 20% buffer (the buffer
+  // is only needed for pre-payment estimation in estimateAmount()).
   // Log ALL requests: both auto-routed (routingDecision set) and direct model picks
   const logModel = routingDecision?.model ?? modelId;
   if (logModel) {
-    // Use full body length for accurate cost (matches x402 payment estimation)
-    const estimatedInputTokens = Math.ceil(body.length / 4);
+    // Use actual token counts when available, fall back to estimates
+    const actualInputTokens = responseInputTokens ?? Math.ceil(body.length / 4);
+    const actualOutputTokens = responseOutputTokens ?? maxTokens;
+
     const accurateCosts = calculateModelCost(
       logModel,
       routerOpts.modelPricing,
-      estimatedInputTokens,
-      maxTokens,
+      actualInputTokens,
+      actualOutputTokens,
       routingProfile ?? undefined,
     );
-    // Apply 20% buffer for cost estimation accuracy
-    const costWithBuffer = accurateCosts.costEstimate * 1.2;
-    const baselineWithBuffer = accurateCosts.baselineCost * 1.2;
     const entry: UsageEntry = {
       timestamp: new Date().toISOString(),
       model: logModel,
       tier: routingDecision?.tier ?? "DIRECT",
-      cost: costWithBuffer,
-      baselineCost: baselineWithBuffer,
+      cost: accurateCosts.costEstimate,
+      baselineCost: accurateCosts.baselineCost,
       savings: accurateCosts.savings,
       latencyMs: Date.now() - startTime,
       ...(responseInputTokens !== undefined && { inputTokens: responseInputTokens }),
+      ...(responseOutputTokens !== undefined && { outputTokens: responseOutputTokens }),
     };
     logUsage(entry).catch(() => {});
   }
