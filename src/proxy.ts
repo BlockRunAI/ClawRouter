@@ -3322,9 +3322,11 @@ async function proxyRequest(
   });
 
   // --- Request timeout ---
+  // Timeout is applied per-model-attempt (not per-request) so that AbortError
+  // from a slow primary model can trigger fallback to the next model in the chain.
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let controller = new AbortController();
+  let timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     // --- Build fallback chain ---
@@ -3423,17 +3425,38 @@ async function proxyRequest(
 
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
 
-      const result = await tryModelRequest(
-        upstreamUrl,
-        req.method ?? "POST",
-        headers,
-        body,
-        tryModel,
-        maxTokens,
-        payFetch,
-        balanceMonitor,
-        controller.signal,
-      );
+      // Reset per-attempt timeout so each model gets the full timeout window
+      clearTimeout(timeoutId);
+      controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      let result: ModelRequestResult;
+      try {
+        result = await tryModelRequest(
+          upstreamUrl,
+          req.method ?? "POST",
+          headers,
+          body,
+          tryModel,
+          maxTokens,
+          payFetch,
+          balanceMonitor,
+          controller.signal,
+        );
+      } catch (err) {
+        // Timeout (AbortError) should trigger fallback, not hard failure
+        if (err instanceof Error && err.name === "AbortError") {
+          if (!isLastAttempt) {
+            console.log(
+              `[ClawRouter] Model ${tryModel} timed out after ${timeoutMs}ms, trying fallback`,
+            );
+            continue;
+          }
+          // Last attempt — no more fallbacks, throw timeout error
+          throw new Error(`Request timed out after ${timeoutMs}ms (all ${modelsToTry.length} model(s) exhausted)`, { cause: err });
+        }
+        throw err;
+      }
 
       if (result.success && result.response) {
         upstream = result.response;
