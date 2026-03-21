@@ -1,7 +1,9 @@
 /**
  * Balance Monitor for ClawRouter
  *
- * Monitors USDC balance on Base network with intelligent caching.
+ * Monitors stablecoin balance on Base network with intelligent caching.
+ * Supports any EIP-3009 stablecoin (USDC, fxUSD, EURC, etc.) with
+ * automatic normalization from native decimals to USD micros (6 decimals).
  * Provides pre-request balance checks to prevent failed payments.
  *
  * Caching Strategy:
@@ -13,14 +15,12 @@
 import { createPublicClient, http, erc20Abi } from "viem";
 import { base } from "viem/chains";
 import { RpcError } from "./errors.js";
-
-/** USDC contract address on Base mainnet */
-const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+import { DEFAULT_BASE_PAYMENT_ASSET, type BasePaymentAsset } from "./payment-asset.js";
 
 /** Cache TTL in milliseconds (30 seconds) */
 const CACHE_TTL_MS = 30_000;
 
-/** Balance thresholds in USDC smallest unit (6 decimals) */
+/** Balance thresholds in USD micros (6 decimals, normalized from any stablecoin) */
 export const BALANCE_THRESHOLDS = {
   /** Low balance warning threshold: $1.00 */
   LOW_BALANCE_MICROS: 1_000_000n,
@@ -30,10 +30,12 @@ export const BALANCE_THRESHOLDS = {
 
 /** Balance information returned by checkBalance() */
 export type BalanceInfo = {
-  /** Raw balance in USDC smallest unit (6 decimals) */
+  /** Raw balance normalized to USD micros (6 decimals, regardless of the underlying asset's native decimals) */
   balance: bigint;
   /** Formatted balance as "$X.XX" */
   balanceUSD: string;
+  /** Symbol of the active Base payment asset */
+  assetSymbol: string;
   /** True if balance < $1.00 */
   isLow: boolean;
   /** True if balance < $0.0001 (effectively zero) */
@@ -53,7 +55,7 @@ export type SufficiencyResult = {
 };
 
 /**
- * Monitors USDC balance on Base network.
+ * Monitors stablecoin balance on Base network.
  *
  * Usage:
  *   const monitor = new BalanceMonitor("0x...");
@@ -63,14 +65,16 @@ export type SufficiencyResult = {
 export class BalanceMonitor {
   private readonly client;
   private readonly walletAddress: `0x${string}`;
+  private asset: BasePaymentAsset;
 
   /** Cached balance (null = not yet fetched) */
   private cachedBalance: bigint | null = null;
   /** Timestamp when cache was last updated */
   private cachedAt = 0;
 
-  constructor(walletAddress: string) {
+  constructor(walletAddress: string, asset: BasePaymentAsset = DEFAULT_BASE_PAYMENT_ASSET) {
     this.walletAddress = walletAddress as `0x${string}`;
+    this.asset = asset;
     this.client = createPublicClient({
       chain: base,
       transport: http(undefined, {
@@ -110,7 +114,7 @@ export class BalanceMonitor {
   /**
    * Check if balance is sufficient for an estimated cost.
    *
-   * @param estimatedCostMicros - Estimated cost in USDC smallest unit (6 decimals)
+   * @param estimatedCostMicros - Estimated cost in USD micros (6 decimals)
    */
   async checkSufficient(estimatedCostMicros: bigint): Promise<SufficiencyResult> {
     const info = await this.checkBalance();
@@ -123,7 +127,7 @@ export class BalanceMonitor {
     return {
       sufficient: false,
       info,
-      shortfall: this.formatUSDC(shortfall),
+      shortfall: this.formatUSD(shortfall),
     };
   }
 
@@ -131,7 +135,7 @@ export class BalanceMonitor {
    * Optimistically deduct estimated cost from cached balance.
    * Call this after a successful payment to keep cache accurate.
    *
-   * @param amountMicros - Amount to deduct in USDC smallest unit
+   * @param amountMicros - Amount to deduct in USD micros
    */
   deductEstimated(amountMicros: bigint): void {
     if (this.cachedBalance !== null && this.cachedBalance >= amountMicros) {
@@ -156,11 +160,25 @@ export class BalanceMonitor {
     return this.checkBalance();
   }
 
+  setAsset(asset: BasePaymentAsset): void {
+    if (
+      this.asset.asset.toLowerCase() !== asset.asset.toLowerCase() ||
+      this.asset.symbol !== asset.symbol ||
+      this.asset.decimals !== asset.decimals
+    ) {
+      this.asset = asset;
+      this.invalidate();
+    }
+  }
+
+  getAsset(): BasePaymentAsset {
+    return this.asset;
+  }
+
   /**
-   * Format USDC amount (in micros) as "$X.XX".
+   * Format a stablecoin amount (normalized to USD micros) as "$X.XX".
    */
-  formatUSDC(amountMicros: bigint): string {
-    // USDC has 6 decimals
+  formatUSD(amountMicros: bigint): string {
     const dollars = Number(amountMicros) / 1_000_000;
     return `$${dollars.toFixed(2)}`;
   }
@@ -172,16 +190,20 @@ export class BalanceMonitor {
     return this.walletAddress;
   }
 
+  getAssetSymbol(): string {
+    return this.asset.symbol;
+  }
+
   /** Fetch balance from RPC */
   private async fetchBalance(): Promise<bigint> {
     try {
       const balance = await this.client.readContract({
-        address: USDC_BASE,
+        address: this.asset.asset,
         abi: erc20Abi,
         functionName: "balanceOf",
         args: [this.walletAddress],
       });
-      return balance;
+      return this.toUsdMicros(balance);
     } catch (error) {
       // Throw typed error instead of silently returning 0
       // This allows callers to distinguish "node down" from "wallet empty"
@@ -193,10 +215,19 @@ export class BalanceMonitor {
   private buildInfo(balance: bigint): BalanceInfo {
     return {
       balance,
-      balanceUSD: this.formatUSDC(balance),
+      balanceUSD: this.formatUSD(balance),
+      assetSymbol: this.asset.symbol,
       isLow: balance < BALANCE_THRESHOLDS.LOW_BALANCE_MICROS,
       isEmpty: balance < BALANCE_THRESHOLDS.ZERO_THRESHOLD,
       walletAddress: this.walletAddress,
     };
+  }
+
+  private toUsdMicros(rawAmount: bigint): bigint {
+    if (this.asset.decimals === 6) return rawAmount;
+    if (this.asset.decimals > 6) {
+      return rawAmount / 10n ** BigInt(this.asset.decimals - 6);
+    }
+    return rawAmount * 10n ** BigInt(6 - this.asset.decimals);
   }
 }

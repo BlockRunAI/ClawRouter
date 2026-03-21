@@ -64,6 +64,12 @@ import { RequestDeduplicator } from "./dedup.js";
 import { ResponseCache, type ResponseCacheConfig } from "./response-cache.js";
 import { BalanceMonitor } from "./balance.js";
 import type { SolanaBalanceMonitor } from "./solana-balance.js";
+import {
+  DEFAULT_BASE_PAYMENT_ASSET,
+  fetchBasePaymentAsset,
+  fetchBasePaymentAssets,
+  type BasePaymentAsset,
+} from "./payment-asset.js";
 
 /** Union type for chain-agnostic balance monitoring */
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
@@ -157,7 +163,12 @@ async function readBodyWithTimeout(
  * Transform upstream payment errors into user-friendly messages.
  * Parses the raw x402 error and formats it nicely.
  */
-function transformPaymentError(errorBody: string): string {
+function transformPaymentError(
+  errorBody: string,
+  opts?: { baseAssetSymbol?: string; baseAssetDecimals?: number },
+): string {
+  const baseAssetSymbol = opts?.baseAssetSymbol || DEFAULT_BASE_PAYMENT_ASSET.symbol;
+  const baseAssetDecimals = opts?.baseAssetDecimals ?? DEFAULT_BASE_PAYMENT_ASSET.decimals;
   try {
     // Try to parse the error JSON
     const parsed = JSON.parse(errorBody) as {
@@ -187,22 +198,24 @@ function transformPaymentError(errorBody: string): string {
             /insufficient balance:\s*(\d+)\s*<\s*(\d+)/i,
           );
           if (balanceMatch) {
-            const currentMicros = parseInt(balanceMatch[1], 10);
-            const requiredMicros = parseInt(balanceMatch[2], 10);
-            const currentUSD = (currentMicros / 1_000_000).toFixed(6);
-            const requiredUSD = (requiredMicros / 1_000_000).toFixed(6);
+            const currentRaw = parseInt(balanceMatch[1], 10);
+            const requiredRaw = parseInt(balanceMatch[2], 10);
+            // Upstream error amounts are in the asset's native decimals (e.g. 6 for USDC, 18 for fxUSD)
+            const divisor = 10 ** baseAssetDecimals;
+            const currentUSD = (currentRaw / divisor).toFixed(6);
+            const requiredUSD = (requiredRaw / divisor).toFixed(6);
             const wallet = innerJson.payer || "unknown";
             const shortWallet =
               wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
 
             return JSON.stringify({
               error: {
-                message: `Insufficient USDC balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
+                message: `Insufficient ${baseAssetSymbol} balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
                 type: "insufficient_funds",
                 wallet: wallet,
                 current_balance_usd: currentUSD,
                 required_usd: requiredUSD,
-                help: `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`,
+                help: `Fund wallet ${shortWallet} with ${baseAssetSymbol} on Base, or use free model: /model free`,
               },
             });
           }
@@ -513,7 +526,16 @@ export function getProxyPort(): number {
  */
 async function checkExistingProxy(
   port: number,
-): Promise<{ wallet: string; paymentChain?: string } | undefined> {
+): Promise<
+  | {
+      wallet: string;
+      paymentChain?: string;
+      paymentAsset?: string;
+      paymentAssetSymbol?: string;
+      paymentAssetDecimals?: number;
+    }
+  | undefined
+> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
@@ -528,9 +550,18 @@ async function checkExistingProxy(
         status?: string;
         wallet?: string;
         paymentChain?: string;
+        paymentAsset?: string;
+        paymentAssetSymbol?: string;
+        paymentAssetDecimals?: number;
       };
       if (data.status === "ok" && data.wallet) {
-        return { wallet: data.wallet, paymentChain: data.paymentChain };
+        return {
+          wallet: data.wallet,
+          paymentChain: data.paymentChain,
+          paymentAsset: data.paymentAsset,
+          paymentAssetSymbol: data.paymentAssetSymbol,
+          paymentAssetDecimals: data.paymentAssetDecimals,
+        };
       }
     }
     return undefined;
@@ -1070,6 +1101,7 @@ function stripThinkingTokens(content: string): string {
 export type LowBalanceInfo = {
   balanceUSD: string;
   walletAddress: string;
+  assetSymbol: string;
 };
 
 /** Callback info for insufficient funds error */
@@ -1077,6 +1109,7 @@ export type InsufficientFundsInfo = {
   balanceUSD: string;
   requiredUSD: string;
   walletAddress: string;
+  assetSymbol: string;
 };
 
 /**
@@ -1160,6 +1193,8 @@ export type ProxyHandle = {
   baseUrl: string;
   walletAddress: string;
   solanaAddress?: string;
+  paymentAsset?: BasePaymentAsset;
+  paymentAssets?: BasePaymentAsset[];
   balanceMonitor: AnyBalanceMonitor;
   close: () => Promise<void>;
 };
@@ -1219,8 +1254,9 @@ function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
 }
 
 /**
- * Estimate USDC cost for a request based on model pricing.
- * Returns amount string in USDC smallest unit (6 decimals) or undefined if unknown.
+ * Estimate stablecoin cost for a request based on model pricing.
+ * Returns amount string in USD micros (6-decimal integer, i.e. 1 = $0.000001) or undefined if unknown.
+ * This is an internal unit used for balance checks; conversion to on-chain token units happens elsewhere.
  */
 function estimateAmount(
   modelId: string,
@@ -1238,7 +1274,7 @@ function estimateAmount(
     (estimatedInputTokens / 1_000_000) * model.inputPrice +
     (estimatedOutputTokens / 1_000_000) * model.outputPrice;
 
-  // Convert to USDC 6-decimal integer, add 20% buffer for estimation error
+  // Convert to USD micros (6-decimal integer), add 20% buffer for estimation error
   // Minimum 1000 ($0.001) to match CDP Facilitator's enforced minimum payment
   const amountMicros = Math.max(1000, Math.ceil(costUsd * 1.2 * 1_000_000));
   return amountMicros.toString();
@@ -1408,6 +1444,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const apiBase =
     options.apiBase ??
     (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  let activeBasePaymentAssets =
+    paymentChain === "base"
+      ? (await fetchBasePaymentAssets(apiBase).catch(() => undefined)) ?? [DEFAULT_BASE_PAYMENT_ASSET]
+      : [DEFAULT_BASE_PAYMENT_ASSET];
+  let activeBasePaymentAsset = activeBasePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
+  let lastSelectedBasePaymentAsset = activeBasePaymentAsset;
   if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
     console.warn(
       `[ClawRouter] ⚠ Payment chain is Solana but no mnemonic found — falling back to Base (EVM).`,
@@ -1470,7 +1512,19 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       const { SolanaBalanceMonitor } = await import("./solana-balance.js");
       balanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
     } else {
-      balanceMonitor = new BalanceMonitor(account.address);
+      if (existingProxy.paymentAsset && existingProxy.paymentAssetSymbol) {
+        activeBasePaymentAsset = {
+          ...activeBasePaymentAsset,
+          asset: existingProxy.paymentAsset as `0x${string}`,
+          symbol: existingProxy.paymentAssetSymbol,
+          ...(typeof existingProxy.paymentAssetDecimals === "number" && {
+            decimals: existingProxy.paymentAssetDecimals,
+          }),
+        };
+        activeBasePaymentAssets = [activeBasePaymentAsset];
+        lastSelectedBasePaymentAsset = activeBasePaymentAsset;
+      }
+      balanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
     }
 
     options.onReady?.(listenPort);
@@ -1480,6 +1534,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       baseUrl,
       walletAddress: existingProxy.wallet,
       solanaAddress: reuseSolanaAddress,
+      paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : undefined,
+      paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : undefined,
       balanceMonitor,
       close: async () => {
         // No-op: we didn't start this proxy, so we shouldn't close it
@@ -1511,6 +1567,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Log which chain is used for each payment
   x402.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
+    if (network.startsWith("eip155")) {
+      activeBasePaymentAssets =
+        (await fetchBasePaymentAssets(apiBase).catch(() => undefined)) ?? activeBasePaymentAssets;
+      activeBasePaymentAsset = activeBasePaymentAssets[0] ?? activeBasePaymentAsset;
+      if (balanceMonitor instanceof BalanceMonitor) {
+        balanceMonitor.setAsset(activeBasePaymentAsset);
+      }
+    }
     const chain = network.startsWith("eip155")
       ? "Base (EVM)"
       : network.startsWith("solana")
@@ -1531,7 +1595,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     const { SolanaBalanceMonitor } = await import("./solana-balance.js");
     balanceMonitor = new SolanaBalanceMonitor(solanaAddress);
   } else {
-    balanceMonitor = new BalanceMonitor(account.address);
+    balanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
   }
 
   // Build router options (100% local — no external API calls for routing)
@@ -1595,16 +1659,44 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         wallet: account.address,
         paymentChain,
       };
+      if (paymentChain === "base") {
+        response.paymentAsset = activeBasePaymentAsset.asset;
+        response.paymentAssetSymbol = activeBasePaymentAsset.symbol;
+        response.paymentAssetDecimals = activeBasePaymentAsset.decimals;
+        response.paymentAssets = activeBasePaymentAssets;
+        response.selectedPaymentAsset = lastSelectedBasePaymentAsset.asset;
+        response.selectedPaymentAssetSymbol = lastSelectedBasePaymentAsset.symbol;
+      }
       if (solanaAddress) {
         response.solana = solanaAddress;
       }
 
       if (full) {
         try {
-          const balanceInfo = await balanceMonitor.checkBalance();
-          response.balance = balanceInfo.balanceUSD;
-          response.isLow = balanceInfo.isLow;
-          response.isEmpty = balanceInfo.isEmpty;
+          if (paymentChain === "base") {
+            const assetBalances = await Promise.all(
+              activeBasePaymentAssets.map(async (asset) => {
+                const monitor = new BalanceMonitor(account.address, asset);
+                const balanceInfo = await monitor.checkBalance();
+                return {
+                  asset: asset.asset,
+                  symbol: asset.symbol,
+                  balance: balanceInfo.balanceUSD,
+                  isLow: balanceInfo.isLow,
+                  isEmpty: balanceInfo.isEmpty,
+                };
+              }),
+            );
+            response.assetBalances = assetBalances;
+            response.balance = assetBalances[0]?.balance ?? "$0.00";
+            response.isLow = assetBalances[0]?.isLow ?? true;
+            response.isEmpty = assetBalances.every((asset) => asset.isEmpty);
+          } else {
+            const balanceInfo = await balanceMonitor.checkBalance();
+            response.balance = balanceInfo.balanceUSD;
+            response.isLow = balanceInfo.isLow;
+            response.isEmpty = balanceInfo.isEmpty;
+          }
         } catch {
           response.balanceError = "Could not fetch balance";
         }
@@ -1956,6 +2048,15 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         sessionStore,
         responseCache,
         sessionJournal,
+        () => activeBasePaymentAsset.symbol,
+        () => activeBasePaymentAssets,
+        (asset) => {
+          lastSelectedBasePaymentAsset = asset;
+          activeBasePaymentAsset = asset;
+          if (balanceMonitor instanceof BalanceMonitor) {
+            balanceMonitor.setAsset(asset);
+          }
+        },
       );
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -2140,6 +2241,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     baseUrl,
     walletAddress: account.address,
     solanaAddress,
+    paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : undefined,
+    paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : undefined,
     balanceMonitor,
     close: () =>
       new Promise<void>((res, rej) => {
@@ -2319,6 +2422,9 @@ async function proxyRequest(
   sessionStore: SessionStore,
   responseCache: ResponseCache,
   sessionJournal: SessionJournal,
+  getBaseAssetSymbol: () => string,
+  getBasePaymentAssets: () => BasePaymentAsset[],
+  onBaseAssetSelected: (asset: BasePaymentAsset) => void,
 ): Promise<void> {
   const startTime = Date.now();
 
@@ -2352,6 +2458,8 @@ async function proxyRequest(
   let accumulatedContent = ""; // For session journal event extraction
   let responseInputTokens: number | undefined;
   let responseOutputTokens: number | undefined;
+  let requestBalanceMonitor = balanceMonitor;
+  let requestBasePaymentAsset = getBasePaymentAssets()[0];
   const isChatCompletion = req.url?.includes("/chat/completions");
 
   // Extract session ID early for journal operations (header-only at this point)
@@ -3326,8 +3434,40 @@ async function proxyRequest(
       const bufferedCostMicros =
         (estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
 
+      if (balanceMonitor instanceof BalanceMonitor) {
+        const baseAssets = getBasePaymentAssets();
+        let selected:
+          | {
+              asset: BasePaymentAsset;
+              monitor: BalanceMonitor;
+              sufficiency: Awaited<ReturnType<BalanceMonitor["checkSufficient"]>>;
+            }
+          | undefined;
+
+        for (const asset of baseAssets) {
+          const monitor = new BalanceMonitor(balanceMonitor.getWalletAddress(), asset);
+          const sufficiency = await monitor.checkSufficient(bufferedCostMicros);
+          if (!selected) {
+            selected = { asset, monitor, sufficiency };
+          }
+          if (sufficiency.sufficient) {
+            selected = { asset, monitor, sufficiency };
+            break;
+          }
+        }
+
+        if (selected) {
+          requestBasePaymentAsset = selected.asset;
+          requestBalanceMonitor = selected.monitor;
+          onBaseAssetSelected(selected.asset);
+          console.log(
+            `[ClawRouter] Base payment asset selected: ${selected.asset.symbol} (${selected.sufficiency.info.balanceUSD})`,
+          );
+        }
+      }
+
       // Check balance before proceeding (using buffered amount)
-      const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
+      const sufficiency = await requestBalanceMonitor.checkSufficient(bufferedCostMicros);
 
       if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
         // Wallet is empty or insufficient — ALWAYS fallback to free model
@@ -3358,12 +3498,14 @@ async function proxyRequest(
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
           walletAddress: sufficiency.info.walletAddress,
+          assetSymbol: sufficiency.info.assetSymbol,
         });
       } else if (sufficiency.info.isLow) {
         // Balance is low but sufficient — warn and proceed
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
           walletAddress: sufficiency.info.walletAddress,
+          assetSymbol: sufficiency.info.assetSymbol,
         });
       }
     }
@@ -4021,7 +4163,10 @@ async function proxyRequest(
       const errStatus = lastError?.status || 502;
 
       // Transform payment errors into user-friendly messages
-      const transformedErr = transformPaymentError(rawErrBody);
+      const transformedErr = transformPaymentError(rawErrBody, {
+        baseAssetSymbol: getBaseAssetSymbol(),
+        baseAssetDecimals: getBasePaymentAssets()[0]?.decimals,
+      });
 
       if (headersSentEarly) {
         // Streaming: send error as SSE event
@@ -4427,7 +4572,7 @@ async function proxyRequest(
 
     // --- Optimistic balance deduction after successful response ---
     if (estimatedCostMicros !== undefined) {
-      balanceMonitor.deductEstimated(estimatedCostMicros);
+      requestBalanceMonitor.deductEstimated(estimatedCostMicros);
     }
 
     // Mark request as completed (for client disconnect cleanup)
@@ -4446,7 +4591,7 @@ async function proxyRequest(
     deduplicator.removeInflight(dedupKey);
 
     // Invalidate balance cache on payment failure (might be out of date)
-    balanceMonitor.invalidate();
+    requestBalanceMonitor.invalidate();
 
     // Convert abort error to more descriptive timeout error
     if (err instanceof Error && err.name === "AbortError") {
