@@ -51,16 +51,20 @@ restore_previous_install() {
 
 run_dependency_install() {
   local plugin_dir="$1"
-  local log_file
-  log_file="$(mktemp -t clawrouter-update-npm.XXXXXX.log)"
+  local log_file="$HOME/clawrouter-npm-install.log"
 
+  echo "  (log: $log_file)"
   if (cd "$plugin_dir" && npm install --omit=dev >"$log_file" 2>&1); then
     tail -1 "$log_file"
-    rm -f "$log_file"
   else
-    echo "  npm install failed. Last 20 log lines:" >&2
-    tail -20 "$log_file" >&2 || true
-    echo "  Full log: $log_file" >&2
+    echo ""
+    echo "  ✗ npm install failed. Error log:"
+    echo "  ─────────────────────────────────"
+    tail -30 "$log_file" >&2 || true
+    echo "  ─────────────────────────────────"
+    echo ""
+    echo "  Full log saved: $log_file"
+    echo "  Send this file to @bc1max on Telegram for help."
     return 1
   fi
 }
@@ -218,6 +222,11 @@ const fs = require('fs');
 const path = require('path');
 const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
 const authPath = path.join(authDir, 'auth-profiles.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 fs.mkdirSync(authDir, { recursive: true });
 
@@ -232,7 +241,7 @@ if (fs.existsSync(authPath)) {
 const profileKey = 'blockrun:default';
 if (!store.profiles[profileKey]) {
   store.profiles[profileKey] = { type: 'api_key', provider: 'blockrun', key: 'x402-proxy-handles-auth' };
-  fs.writeFileSync(authPath, JSON.stringify(store, null, 2));
+  atomicWrite(authPath, JSON.stringify(store, null, 2));
   console.log('  Auth profile created');
 } else {
   console.log('  Auth profile already exists');
