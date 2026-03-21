@@ -1,3 +1,8 @@
+/**
+ * EIP-3009 payment asset on Base network.
+ * Represents a stablecoin that supports `transferWithAuthorization`
+ * for gasless, single-step payment settlements.
+ */
 export type BasePaymentAsset = {
   chain: "base";
   asset: `0x${string}`;
@@ -9,6 +14,7 @@ export type BasePaymentAsset = {
   enabled?: boolean;
 };
 
+/** Default payment asset: USDC on Base (6 decimals, EIP-3009). */
 export const DEFAULT_BASE_PAYMENT_ASSET: BasePaymentAsset = {
   chain: "base",
   asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -24,10 +30,16 @@ type PaymentMetadataResponse =
   | { paymentAsset?: Partial<BasePaymentAsset> }
   | { base?: Partial<BasePaymentAsset> };
 
+/** Check if a value is a valid 0x-prefixed ERC-20 contract address (40 hex chars). */
 function isHexAddress(value: unknown): value is `0x${string}` {
   return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
+/**
+ * Validate and normalize a single payment asset from an API response.
+ * Returns undefined if the input is missing required fields or uses a non-EIP-3009 transfer method.
+ * Symbols are uppercased; names are trimmed.
+ */
 export function normalizeBasePaymentAsset(
   value: unknown,
 ): BasePaymentAsset | undefined {
@@ -60,12 +72,18 @@ export function normalizeBasePaymentAsset(
   };
 }
 
+/** Sort assets by priority (ascending). Assets without priority go last. */
 function sortAssets(assets: BasePaymentAsset[]): BasePaymentAsset[] {
   return [...assets].sort(
     (a, b) => (a.priority ?? Number.MAX_SAFE_INTEGER) - (b.priority ?? Number.MAX_SAFE_INTEGER),
   );
 }
 
+/**
+ * Normalize a payment metadata response into an array of valid EIP-3009 assets.
+ * Handles flat, nested (`paymentAsset`, `base`), and array (`paymentAssets`) response shapes.
+ * Filters out disabled and non-EIP-3009 assets. Falls back to USDC if no valid assets found.
+ */
 export function normalizeBasePaymentAssets(value: unknown): BasePaymentAsset[] {
   if (!value || typeof value !== "object") return [];
 
@@ -88,6 +106,10 @@ export function normalizeBasePaymentAssets(value: unknown): BasePaymentAsset[] {
   );
 }
 
+/**
+ * Fetch all available EIP-3009 payment assets from the API.
+ * Falls back to the default USDC asset on network error or non-OK response.
+ */
 export async function fetchBasePaymentAssets(
   apiBase: string,
   baseFetch: typeof fetch = fetch,
@@ -101,6 +123,10 @@ export async function fetchBasePaymentAssets(
   return normalizeBasePaymentAssets(payload);
 }
 
+/**
+ * Fetch the highest-priority EIP-3009 payment asset from the API.
+ * Convenience wrapper around {@link fetchBasePaymentAssets} that returns only the first asset.
+ */
 export async function fetchBasePaymentAsset(
   apiBase: string,
   baseFetch: typeof fetch = fetch,
