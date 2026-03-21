@@ -337,13 +337,13 @@ function transformPaymentError(errorBody: string): string {
  * so each category can be handled independently without cross-contamination.
  */
 export type ErrorCategory =
-  | "auth_failure"   // 401, 403: Wrong key or forbidden — don't retry with same key
+  | "auth_failure" // 401, 403: Wrong key or forbidden — don't retry with same key
   | "quota_exceeded" // 403 with plan/quota body: Plan limit hit
-  | "rate_limited"   // 429: Actual throttling — 60s cooldown
-  | "overloaded"     // 529, 503+overload body: Provider capacity — 15s cooldown
-  | "server_error"   // 5xx general: Transient — fallback immediately
-  | "payment_error"  // 402: x402 payment or funds issue
-  | "config_error";  // 400, 413: Bad request content — skip this model
+  | "rate_limited" // 429: Actual throttling — 60s cooldown
+  | "overloaded" // 529, 503+overload body: Provider capacity — 15s cooldown
+  | "server_error" // 5xx general: Transient — fallback immediately
+  | "payment_error" // 402: x402 payment or funds issue
+  | "config_error"; // 400, 413: Bad request content — skip this model
 
 /**
  * Classify an upstream error response into a semantic category.
@@ -353,8 +353,7 @@ export function categorizeError(status: number, body: string): ErrorCategory | n
   if (status === 401) return "auth_failure";
   if (status === 402) return "payment_error";
   if (status === 403) {
-    if (/plan.*limit|quota.*exceeded|subscription|allowance/i.test(body))
-      return "quota_exceeded";
+    if (/plan.*limit|quota.*exceeded|subscription|allowance/i.test(body)) return "quota_exceeded";
     return "auth_failure"; // generic 403 = forbidden = likely auth issue
   }
   if (status === 429) return "rate_limited";
@@ -3422,7 +3421,9 @@ async function proxyRequest(
     const thisReqEstStr =
       estimatedCostMicros !== undefined
         ? estimatedCostMicros.toString()
-        : (modelId ? estimateAmount(modelId, body.length, maxTokens) : undefined);
+        : modelId
+          ? estimateAmount(modelId, body.length, maxTokens)
+          : undefined;
     const thisReqEstUsd = thisReqEstStr ? Number(thisReqEstStr) / 1_000_000 : 0;
     const projectedCostUsd = runCostUsd + thisReqEstUsd;
     if (projectedCostUsd > options.maxCostPerRunUsd) {
@@ -3464,9 +3465,7 @@ async function proxyRequest(
     const remainingUsd = options.maxCostPerRunUsd - runCostUsd;
 
     const isComplexOrAgentic =
-      hasTools ||
-      routingDecision?.tier === "COMPLEX" ||
-      routingDecision?.tier === "REASONING";
+      hasTools || routingDecision?.tier === "COMPLEX" || routingDecision?.tier === "REASONING";
 
     if (isComplexOrAgentic) {
       // Case A: tool/complex/agentic routing profile — check global model table
@@ -3787,6 +3786,7 @@ async function proxyRequest(
     let upstream: Response | undefined;
     let lastError: { body: string; status: number } | undefined;
     let actualModelUsed = modelId;
+    const failedAttempts: Array<{ model: string; reason: string; status: number }> = [];
 
     for (let i = 0; i < modelsToTry.length; i++) {
       const tryModel = modelsToTry[i];
@@ -3851,6 +3851,11 @@ async function proxyRequest(
         body: result.errorBody || "Unknown error",
         status: result.errorStatus || 500,
       };
+      failedAttempts.push({
+        model: tryModel,
+        reason: result.errorCategory || `HTTP ${result.errorStatus || 500}`,
+        status: result.errorStatus || 500,
+      });
 
       // If it's a provider error and not the last attempt, try next model
       if (result.isProviderError && !isLastAttempt) {
@@ -4023,7 +4028,17 @@ async function proxyRequest(
 
     // --- Handle case where all models failed ---
     if (!upstream) {
-      const rawErrBody = lastError?.body || "All models in fallback chain failed";
+      // Build structured error summary listing all attempted models
+      const attemptSummary =
+        failedAttempts.length > 0
+          ? failedAttempts.map((a) => `${a.model} (${a.reason})`).join(", ")
+          : "unknown";
+      const structuredMessage =
+        failedAttempts.length > 0
+          ? `All ${failedAttempts.length} models failed. Tried: ${attemptSummary}`
+          : "All models in fallback chain failed";
+      console.log(`[ClawRouter] ${structuredMessage}`);
+      const rawErrBody = lastError?.body || structuredMessage;
       const errStatus = lastError?.status || 502;
 
       // Transform payment errors into user-friendly messages
@@ -4133,7 +4148,7 @@ async function proxyRequest(
             id: rsp.id ?? `chatcmpl-${Date.now()}`,
             object: "chat.completion.chunk",
             created: rsp.created ?? Math.floor(Date.now() / 1000),
-            model: rsp.model ?? "unknown",
+            model: actualModelUsed || rsp.model || "unknown",
             system_fingerprint: null,
           };
 
@@ -4256,6 +4271,13 @@ async function proxyRequest(
         }
       }
 
+      // Send cost summary as SSE comment before terminator
+      if (routingDecision) {
+        const costComment = `: cost=$${routingDecision.costEstimate.toFixed(4)} savings=${(routingDecision.savings * 100).toFixed(0)}% model=${actualModelUsed} tier=${routingDecision.tier}\n\n`;
+        safeWrite(res, costComment);
+        responseChunks.push(Buffer.from(costComment));
+      }
+
       // Send SSE terminator
       safeWrite(res, "data: [DONE]\n\n");
       responseChunks.push(Buffer.from("data: [DONE]\n\n"));
@@ -4292,6 +4314,12 @@ async function proxyRequest(
         if (routingDecision.agenticScore !== undefined) {
           responseHeaders["x-clawrouter-agentic-score"] = routingDecision.agenticScore.toFixed(2);
         }
+      }
+
+      // Always include cost visibility headers when routing is active
+      if (routingDecision) {
+        responseHeaders["x-clawrouter-cost"] = routingDecision.costEstimate.toFixed(6);
+        responseHeaders["x-clawrouter-savings"] = `${(routingDecision.savings * 100).toFixed(0)}%`;
       }
 
       // Collect full body for possible notice injection
@@ -4337,6 +4365,19 @@ async function proxyRequest(
           /* not JSON, skip notice */
         }
         budgetDowngradeNotice = undefined;
+      }
+
+      // Inject actualModelUsed into non-streaming response model field
+      if (actualModelUsed && responseBody.length > 0) {
+        try {
+          const parsed = JSON.parse(responseBody.toString()) as { model?: string };
+          if (parsed.model !== undefined) {
+            parsed.model = actualModelUsed;
+            responseBody = Buffer.from(JSON.stringify(parsed));
+          }
+        } catch {
+          /* not JSON, skip model injection */
+        }
       }
 
       // B: Add budget downgrade headers for orchestration layers
