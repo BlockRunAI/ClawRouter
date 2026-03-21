@@ -85,7 +85,7 @@ function sortAssets(assets: BasePaymentAsset[]): BasePaymentAsset[] {
  * Filters out disabled and non-EIP-3009 assets. Falls back to USDC if no valid assets found.
  */
 export function normalizeBasePaymentAssets(value: unknown): BasePaymentAsset[] {
-  if (!value || typeof value !== "object") return [];
+  if (!value || typeof value !== "object") return [DEFAULT_BASE_PAYMENT_ASSET];
 
   const payload = value as PaymentMetadataResponse & { paymentAssets?: unknown };
   const candidateList = Array.isArray(payload.paymentAssets)
@@ -114,13 +114,18 @@ export async function fetchBasePaymentAssets(
   apiBase: string,
   baseFetch: typeof fetch = fetch,
 ): Promise<BasePaymentAsset[]> {
-  const response = await baseFetch(`${apiBase.replace(/\/+$/, "")}/v1/payment-metadata?chain=base`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) return [DEFAULT_BASE_PAYMENT_ASSET];
+  try {
+    const response = await baseFetch(`${apiBase.replace(/\/+$/, "")}/v1/payment-metadata?chain=base`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [DEFAULT_BASE_PAYMENT_ASSET];
 
-  const payload = (await response.json()) as PaymentMetadataResponse;
-  return normalizeBasePaymentAssets(payload);
+    const payload = (await response.json()) as PaymentMetadataResponse;
+    return normalizeBasePaymentAssets(payload);
+  } catch {
+    // Network error, JSON parse failure, or normalize exception — fall back to USDC
+    return [DEFAULT_BASE_PAYMENT_ASSET];
+  }
 }
 
 /**
