@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.67 — Mar 22, 2026
+
+### Fixed
+
+- **Config duplication on update** — `update.sh` and `reinstall.sh` accumulated stale `blockrun/*` model entries in `openclaw.json` on every update because only 2 hardcoded deprecated models were removed. Now performs a full reconciliation: removes any `blockrun/*` entries not in the current `TOP_MODELS` list before adding new ones. Non-blockrun entries are untouched.
+
+---
+
 ## v0.12.30 — Mar 9, 2026
 
 - **OpenClaw skills registration** — added `"skills": ["./skills"]` to `openclaw.plugin.json` so OpenClaw actually loads bundled skills (was missing, skills were never active)

@@ -127,6 +127,11 @@ echo "→ Cleaning config entries..."
 node -e "
 const f = require('os').homedir() + '/.openclaw/openclaw.json';
 const fs = require('fs');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 if (!fs.existsSync(f)) {
   console.log('  No openclaw.json found, skipping');
   process.exit(0);
@@ -167,7 +172,7 @@ if (c.agents?.defaults?.models) {
     }
   }
 }
-fs.writeFileSync(f, JSON.stringify(c, null, 2));
+atomicWrite(f, JSON.stringify(c, null, 2));
 console.log('  Config cleaned');
 "
 
@@ -177,7 +182,7 @@ kill_port_processes 8402
 
 # 3.1. Remove stale models.json so it gets regenerated with apiKey
 echo "→ Cleaning models cache..."
-rm -f ~/.openclaw/agents/main/agent/models.json 2>/dev/null || true
+rm -f ~/.openclaw/agents/*/agent/models.json 2>/dev/null || true
 
 # 4. Inject auth profile (ensures blockrun provider is recognized)
 echo "→ Injecting auth profile..."
@@ -187,6 +192,11 @@ const fs = require('fs');
 const path = require('path');
 const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
 const authPath = path.join(authDir, 'auth-profiles.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 // Create directory if needed
 fs.mkdirSync(authDir, { recursive: true });
@@ -216,7 +226,7 @@ if (!store.profiles[profileKey]) {
     provider: 'blockrun',
     key: 'x402-proxy-handles-auth'
   };
-  fs.writeFileSync(authPath, JSON.stringify(store, null, 2));
+  atomicWrite(authPath, JSON.stringify(store, null, 2));
   console.log('  Auth profile created');
 } else {
   console.log('  Auth profile already exists');
@@ -230,6 +240,11 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 if (fs.existsSync(configPath)) {
   try {
@@ -244,7 +259,7 @@ if (fs.existsSync(configPath)) {
     }
 
     if (changed) {
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      atomicWrite(configPath, JSON.stringify(config, null, 2));
     }
   } catch (e) {
     console.log('  Could not update config:', e.message);
@@ -288,6 +303,11 @@ node -e "
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 if (!fs.existsSync(configPath)) {
@@ -334,18 +354,18 @@ try {
   }
 
   const allowlist = config.agents.defaults.models;
-  const DEPRECATED_MODELS = [
-    'blockrun/xai/grok-code-fast-1',
-    'blockrun/xai/grok-3-fast'
-  ];
+  const currentKeys = new Set(TOP_MODELS.map(id => 'blockrun/' + id));
+
+  // Remove any blockrun/* entries not in the current TOP_MODELS list
   let removed = 0;
-  for (const key of DEPRECATED_MODELS) {
-    if (allowlist[key]) {
+  for (const key of Object.keys(allowlist)) {
+    if (key.startsWith('blockrun/') && !currentKeys.has(key)) {
       delete allowlist[key];
-      changed = true;
       removed++;
     }
   }
+
+  // Add any missing current models
   let added = 0;
   for (const id of TOP_MODELS) {
     const key = 'blockrun/' + id;
@@ -365,7 +385,7 @@ try {
     console.log('  Allowlist already up to date');
   }
   if (changed) {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    atomicWrite(configPath, JSON.stringify(config, null, 2));
   }
 } catch (err) {
   console.log('  Could not update config:', err.message);
@@ -379,6 +399,11 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 if (fs.existsSync(configPath)) {
   try {
@@ -396,7 +421,7 @@ if (fs.existsSync(configPath)) {
       console.log('  Plugin already in allow list');
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    atomicWrite(configPath, JSON.stringify(config, null, 2));
   } catch (e) {
     console.log('  Could not update config:', e.message);
   }

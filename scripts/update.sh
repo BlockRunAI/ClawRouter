@@ -290,17 +290,18 @@ try {
   }
 
   const allowlist = config.agents.defaults.models;
-  const DEPRECATED_MODELS = [
-    'blockrun/xai/grok-code-fast-1',
-    'blockrun/xai/grok-3-fast'
-  ];
+  const currentKeys = new Set(TOP_MODELS.map(id => 'blockrun/' + id));
+
+  // Remove any blockrun/* entries not in the current TOP_MODELS list
   let removed = 0;
-  for (const key of DEPRECATED_MODELS) {
-    if (allowlist[key]) {
+  for (const key of Object.keys(allowlist)) {
+    if (key.startsWith('blockrun/') && !currentKeys.has(key)) {
       delete allowlist[key];
       removed++;
     }
   }
+
+  // Add any missing current models
   let added = 0;
   for (const id of TOP_MODELS) {
     const key = 'blockrun/' + id;
