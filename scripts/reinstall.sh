@@ -159,19 +159,6 @@ if (c.plugins?.installs?.clawrouter) delete c.plugins.installs.clawrouter;
 if (Array.isArray(c.plugins?.allow)) {
   c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
 }
-// Remove deprecated model aliases from picker
-const deprecated = [
-  'blockrun/xai/grok-code-fast-1', // delisted 2026-03-12
-  'blockrun/xai/grok-3-fast',      // removed (too expensive)
-];
-if (c.agents?.defaults?.models) {
-  for (const key of deprecated) {
-    if (c.agents.defaults.models[key]) {
-      delete c.agents.defaults.models[key];
-      console.log('  Removed deprecated alias: ' + key);
-    }
-  }
-}
 atomicWrite(f, JSON.stringify(c, null, 2));
 console.log('  Config cleaned');
 "
