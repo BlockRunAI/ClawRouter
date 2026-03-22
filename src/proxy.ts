@@ -93,6 +93,14 @@ import { SessionJournal } from "./journal.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
+const NOVITA_API = "https://api.novita.ai/openai";
+
+/** Maps ClawRouter novita/ model IDs to Novita AI's native model IDs. */
+const NOVITA_MODEL_IDS: Record<string, string> = {
+  "novita/kimi-k2.5": "moonshotai/kimi-k2.5",
+  "novita/glm-5": "zai-org/glm-5",
+  "novita/minimax-m2.5": "minimax/minimax-m2.5",
+};
 const IMAGE_DIR = join(homedir(), ".openclaw", "blockrun", "images");
 // Routing profile models - virtual models that trigger intelligent routing
 const AUTO_MODEL = "blockrun/auto";
@@ -2315,6 +2323,60 @@ async function tryModelRequest(
     // If body isn't valid JSON, use as-is
   }
 
+  // Novita AI direct bypass: route novita/ models to api.novita.ai without x402
+  if (modelId.startsWith("novita/")) {
+    const novitaApiKey = process.env.NOVITA_API_KEY;
+    if (!novitaApiKey) {
+      return {
+        success: false,
+        errorBody: JSON.stringify({ error: { message: "NOVITA_API_KEY not set" } }),
+        errorStatus: 401,
+        isProviderError: false,
+        errorCategory: "auth_failure",
+      };
+    }
+    try {
+      // Remap model ID to Novita's native ID (e.g., novita/kimi-k2.5 → moonshotai/kimi-k2.5)
+      const nativeModelId = NOVITA_MODEL_IDS[modelId] ?? modelId.replace("novita/", "");
+      let novitaBody = requestBody;
+      try {
+        const bodyParsed = JSON.parse(requestBody.toString()) as Record<string, unknown>;
+        bodyParsed.model = nativeModelId;
+        novitaBody = Buffer.from(JSON.stringify(bodyParsed));
+      } catch {
+        // use requestBody as-is
+      }
+      const novitaUrl = `${NOVITA_API}/v1/chat/completions`;
+      const response = await fetch(novitaUrl, {
+        method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${novitaApiKey}` },
+        body: novitaBody.length > 0 ? new Uint8Array(novitaBody) : undefined,
+        signal,
+      });
+      if (response.status !== 200) {
+        const errorBodyChunks = await readBodyWithTimeout(response.body, ERROR_BODY_READ_TIMEOUT_MS);
+        const errorBody = Buffer.concat(errorBodyChunks).toString();
+        const category = categorizeError(response.status, errorBody);
+        return {
+          success: false,
+          errorBody,
+          errorStatus: response.status,
+          isProviderError: category !== null,
+          errorCategory: category ?? undefined,
+        };
+      }
+      return { success: true, response };
+    } catch (err) {
+      return {
+        success: false,
+        errorBody: String(err),
+        errorStatus: 500,
+        isProviderError: true,
+        errorCategory: "server_error",
+      };
+    }
+  }
+
   try {
     const response = await payFetch(upstreamUrl, {
       method,
@@ -3413,8 +3475,10 @@ async function proxyRequest(
   let estimatedCostMicros: bigint | undefined;
   // Use `let` so the balance-fallback path can update this when modelId is switched to FREE_MODEL.
   let isFreeModel = modelId === FREE_MODEL;
+  // Novita models use NOVITA_API_KEY directly — skip x402 balance check
+  const isNovitaModel = modelId.startsWith("novita/");
 
-  if (modelId && !options.skipBalanceCheck && !isFreeModel) {
+  if (modelId && !options.skipBalanceCheck && !isFreeModel && !isNovitaModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);

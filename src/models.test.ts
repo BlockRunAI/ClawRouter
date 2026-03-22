@@ -41,4 +41,22 @@ describe("resolveModelAlias", () => {
     expect(resolveModelAlias("blockrun/xai/grok-code-fast-1")).toBe("deepseek/deepseek-chat");
     expect(resolveModelAlias("grok-code-fast-1")).toBe("deepseek/deepseek-chat");
   });
+
+  it("resolves Novita AI aliases", () => {
+    expect(resolveModelAlias("novita")).toBe("novita/kimi-k2.5");
+    expect(resolveModelAlias("novita-kimi")).toBe("novita/kimi-k2.5");
+    expect(resolveModelAlias("novita-glm")).toBe("novita/glm-5");
+    expect(resolveModelAlias("novita-minimax")).toBe("novita/minimax-m2.5");
+  });
+
+  it("passes through novita/ model IDs unchanged", () => {
+    expect(resolveModelAlias("novita/kimi-k2.5")).toBe("novita/kimi-k2.5");
+    expect(resolveModelAlias("novita/glm-5")).toBe("novita/glm-5");
+    expect(resolveModelAlias("novita/minimax-m2.5")).toBe("novita/minimax-m2.5");
+  });
+
+  it("resolves Novita aliases with blockrun/ prefix", () => {
+    expect(resolveModelAlias("blockrun/novita-kimi")).toBe("novita/kimi-k2.5");
+    expect(resolveModelAlias("blockrun/novita")).toBe("novita/kimi-k2.5");
+  });
 });

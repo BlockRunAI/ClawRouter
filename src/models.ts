@@ -90,6 +90,12 @@ export const MODEL_ALIASES: Record<string, string> = {
   "glm-5": "zai/glm-5",
   "glm-5-turbo": "zai/glm-5-turbo",
 
+  // Novita AI
+  novita: "novita/kimi-k2.5",
+  "novita-kimi": "novita/kimi-k2.5",
+  "novita-glm": "novita/glm-5",
+  "novita-minimax": "novita/minimax-m2.5",
+
   // Routing profile aliases (common variations)
   "auto-router": "auto",
   router: "auto",
@@ -716,6 +722,43 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 4.0,
     contextWindow: 200000,
     maxOutput: 128000,
+    toolCalling: true,
+  },
+
+  // Novita AI — direct API access via NOVITA_API_KEY (bypasses x402)
+  {
+    id: "novita/kimi-k2.5",
+    name: "Novita Kimi K2.5",
+    version: "k2.5",
+    inputPrice: 0.6,
+    outputPrice: 3.0,
+    contextWindow: 262144,
+    maxOutput: 262144,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    id: "novita/glm-5",
+    name: "Novita GLM-5",
+    version: "5",
+    inputPrice: 1.0,
+    outputPrice: 3.2,
+    contextWindow: 202800,
+    maxOutput: 131072,
+    reasoning: true,
+    toolCalling: true,
+  },
+  {
+    id: "novita/minimax-m2.5",
+    name: "Novita MiniMax M2.5",
+    version: "m2.5",
+    inputPrice: 0.3,
+    outputPrice: 1.2,
+    contextWindow: 204800,
+    maxOutput: 131100,
+    reasoning: true,
     toolCalling: true,
   },
 ];

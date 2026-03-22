@@ -24,6 +24,7 @@ import type {
   OpenClawPluginCommandDefinition,
 } from "./types.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
+import { novitaProvider, NOVITA_MODELS } from "./novita-provider.js";
 import { startProxy, getProxyPort } from "./proxy.js";
 import {
   resolveOrGenerateWalletKey,
@@ -973,6 +974,9 @@ const plugin: OpenClawPluginDefinition = {
 
     // Register BlockRun as a provider (sync — available immediately)
     api.registerProvider(blockrunProvider);
+
+    // Register Novita AI as a provider (direct API access with NOVITA_API_KEY)
+    api.registerProvider(novitaProvider);
 
     // Inject models config into OpenClaw config file
     // This persists the config so models are recognized on restart
