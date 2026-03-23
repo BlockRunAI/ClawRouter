@@ -1,6 +1,6 @@
 # CLAUDE.md — ClawRouter
 
-> Smart LLM router for autonomous AI agents. Routes requests to 44+ models via local proxy, pays per-request with USDC micropayments on Base/Solana through the x402 protocol.
+> Smart LLM router for autonomous AI agents. Routes requests to 44+ models via local proxy, pays per-request with USDC micropayments on Base/Solana through the x402 protocol (as of 2026-03-23).
 
 ## Project Overview
 
@@ -16,7 +16,7 @@ Key differentiators:
 
 ## Architecture
 
-```
+```text
 OpenClaw / Agent
     │
     ▼ (OpenAI-compatible /v1/chat/completions)
@@ -140,10 +140,10 @@ Types: `NormalizedMessage`, `CompressionConfig`, `CompressionResult`, `Compressi
 
 | File | Purpose |
 |------|---------|
-| `src/session.ts` | `SessionStore` — pins model per session (30min timeout). Three-strike escalation (3 consecutive similar requests → auto-escalate tier). Cost accumulation for `maxCostPerRun`. `deriveSessionId()` from first user message, `hashRequestContent()` for similarity detection. |
+| `src/session.ts` | `SessionStore` — pins model per session (30 min timeout). Three-strike escalation (3 consecutive similar requests → auto-escalate tier). Cost accumulation for `maxCostPerRun`. `deriveSessionId()` from first user message, `hashRequestContent()` for similarity detection. |
 | `src/journal.ts` | `SessionJournal` — extracts key actions from LLM responses ("I created X", "I fixed Y") via regex patterns. Formats for injection as session memory. 100 entries max, 24h TTL. |
 | `src/retry.ts` | `fetchWithRetry()` — exponential backoff wrapper. Retries on 429, 502, 503, 504. Respects Retry-After header. `isRetryable()` checks network/timeout errors. |
-| `src/response-cache.ts` | `ResponseCache` — LRU cache by request hash (SHA-256 of canonical JSON). TTL: 10min default. Max 200 entries, 1MB per item. Heap-based expiration. Stats tracking (hits/misses/evictions). |
+| `src/response-cache.ts` | `ResponseCache` — LRU cache by request hash (SHA-256 of canonical JSON). TTL: 10 min default. Max 200 entries, 1MB per item. Heap-based expiration. Stats tracking (hits/misses/evictions). |
 | `src/dedup.ts` | `RequestDeduplicator` — prevents double-charging on OpenClaw retries. In-flight request tracking + 30s completed cache. Strips OpenClaw timestamps for consistent hashing. |
 | `src/exclude-models.ts` | Model exclusion persistence (`~/.openclaw/blockrun/exclude-models.json`). `loadExcludeList()`, `addExclusion()`, `removeExclusion()`, `clearExclusions()`. Resolves aliases before persisting. Safety net: if all models in a tier excluded, returns full list. |
 | `src/stats.ts` | `getStats()` — reads JSONL log files, aggregates by tier/model/day. `formatStatsAscii()` for terminal display. `clearStats()` deletes log files. |
@@ -195,7 +195,7 @@ npm run test:docker:integration     # Docker integration tests
 - `readonly` for immutable class fields and map entries
 
 ### Formatting (Prettier)
-- Double quotes, semicolons, trailing commas, 100 char print width, 2-space indent
+- Double quotes, semicolons, trailing commas, 100-char print width, 2-space indent
 - Config in `.prettierrc`
 
 ### Linting (ESLint)
@@ -226,7 +226,8 @@ npm run test:docker:integration     # Docker integration tests
 ## Payment System Details
 
 ### x402 Flow
-```
+
+```text
 1. Proxy sends request to BlockRun API
 2. API returns 402 with payment requirements (amount, recipient, etc.)
 3. Proxy parses requirements, caches for future pre-auth
@@ -242,7 +243,8 @@ npm run test:docker:integration     # Docker integration tests
 - **Both derived** from single BIP-39 mnemonic (different HD paths)
 
 ### Wallet Persistence
-```
+
+```text
 ~/.openclaw/blockrun/
 ├── wallet.key          # EVM private key (0x..., mode 0o600)
 ├── mnemonic            # BIP-39 mnemonic (mode 0o600)
@@ -262,6 +264,7 @@ npm run test:docker:integration     # Docker integration tests
 ## Router System
 
 ### Routing Profiles
+
 | Profile | Strategy | Use Case |
 |---------|----------|----------|
 | `auto` (default) | Balanced with agentic detection | General use |
@@ -345,7 +348,7 @@ npm run test:docker:integration     # Docker integration tests
 
 ## File Map
 
-```
+```text
 src/
 ├── index.ts                    # OpenClaw plugin entry — config injection, proxy start, command registration
 ├── cli.ts                      # Standalone CLI — doctor, partners, report, wallet, chain
