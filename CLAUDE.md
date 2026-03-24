@@ -257,7 +257,7 @@ npm run test:docker:integration     # Docker integration tests
 
 ### Spend Control
 - Four windows: `perRequest`, `hourly`, `daily`, `session`
-- Rolling windows (last 1h, last 24h)
+- Rolling windows (last 1 h, last 24 h)
 - Persistent to `spending.json`
 - Also supports `maxCostPerRun` via plugin config (graceful or strict mode)
 
