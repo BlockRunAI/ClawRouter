@@ -1,6 +1,23 @@
 # CLAUDE.md — ClawRouter
 
-> Smart LLM router for autonomous AI agents. Routes requests to 44+ models via local proxy, pays per-request with USDC micropayments on Base/Solana through the x402 protocol (as of 2026-03-23).
+> Smart LLM router for autonomous AI agents. Routes requests to 44+ models via local proxy, pays per-request with USDC micropayments on Base/Solana through the x402 protocol.
+>
+> **Version**: 0.12.x | **Updated**: 2026-03-23
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Key Modules](#key-modules)
+- [Development Commands](#development-commands)
+- [Code Style & Conventions](#code-style-conventions)
+- [Testing](#testing)
+- [Payment System Details](#payment-system-details)
+- [Router System](#router-system)
+- [Important Constraints](#important-constraints)
+- [Environment Variables](#environment-variables)
+- [Common Tasks](#common-tasks)
+- [File Map](#file-map)
 
 ## Project Overview
 
