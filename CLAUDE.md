@@ -10,7 +10,7 @@
 - [Architecture](#architecture)
 - [Key Modules](#key-modules)
 - [Development Commands](#development-commands)
-- [Code Style & Conventions](#code-style-conventions)
+- [Code Style & Conventions](#code-style--conventions)
 - [Testing](#testing)
 - [Payment System Details](#payment-system-details)
 - [Router System](#router-system)
