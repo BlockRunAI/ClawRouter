@@ -50,7 +50,7 @@ OpenAI / Anthropic / Google / xAI / DeepSeek / ...
 3. **Router** classifies via `RulesStrategy` (14 weighted dimensions, sigmoid confidence)
 4. **Session store** pins model per conversation (prevents mid-task switching)
 5. **Spend control** checks per-request / hourly / daily / session limits
-6. **Balance monitor** queries USDC balance on Base or Solana (30s cache, optimistic deduction)
+6. **Balance monitor** queries USDC balance on Base or Solana (30-second cache, optimistic deduction)
 7. **x402 payment**: proxy gets 402 → wallet signs USDC payment → retries with payment header
 8. **Fallback**: if primary model fails (429/5xx), tries next in fallback chain (up to 5 attempts)
 9. **Response** streams back to agent; logged as JSONL to `~/.openclaw/blockrun/logs/`
@@ -143,8 +143,8 @@ Types: `NormalizedMessage`, `CompressionConfig`, `CompressionResult`, `Compressi
 | `src/session.ts` | `SessionStore` — pins model per session (30 min timeout). Three-strike escalation (3 consecutive similar requests → auto-escalate tier). Cost accumulation for `maxCostPerRun`. `deriveSessionId()` from first user message, `hashRequestContent()` for similarity detection. |
 | `src/journal.ts` | `SessionJournal` — extracts key actions from LLM responses ("I created X", "I fixed Y") via regex patterns. Formats for injection as session memory. 100 entries max, 24h TTL. |
 | `src/retry.ts` | `fetchWithRetry()` — exponential backoff wrapper. Retries on 429, 502, 503, 504. Respects Retry-After header. `isRetryable()` checks network/timeout errors. |
-| `src/response-cache.ts` | `ResponseCache` — LRU cache by request hash (SHA-256 of canonical JSON). TTL: 10 min default. Max 200 entries, 1MB per item. Heap-based expiration. Stats tracking (hits/misses/evictions). |
-| `src/dedup.ts` | `RequestDeduplicator` — prevents double-charging on OpenClaw retries. In-flight request tracking + 30s completed cache. Strips OpenClaw timestamps for consistent hashing. |
+| `src/response-cache.ts` | `ResponseCache` — LRU cache by request hash (SHA-256 of canonical JSON). TTL: 10 min default. Max 200 entries, 1 MB per item. Heap-based expiration. Stats tracking (hits/misses/evictions). |
+| `src/dedup.ts` | `RequestDeduplicator` — prevents double-charging on OpenClaw retries. In-flight request tracking + 30-second completed cache. Strips OpenClaw timestamps for consistent hashing. |
 | `src/exclude-models.ts` | Model exclusion persistence (`~/.openclaw/blockrun/exclude-models.json`). `loadExcludeList()`, `addExclusion()`, `removeExclusion()`, `clearExclusions()`. Resolves aliases before persisting. Safety net: if all models in a tier excluded, returns full list. |
 | `src/stats.ts` | `getStats()` — reads JSONL log files, aggregates by tier/model/day. `formatStatsAscii()` for terminal display. `clearStats()` deletes log files. |
 | `src/report.ts` | `generateReport()` — markdown cost report (daily/weekly/monthly). Wraps `getStats()`. |
@@ -284,8 +284,8 @@ npm run test:docker:integration     # Docker integration tests
 
 ### Fallback Chain
 - Up to 5 models per request (`MAX_FALLBACK_ATTEMPTS`)
-- 60s per model attempt (`PER_MODEL_TIMEOUT_MS`)
-- Rate-limited models deprioritized for 60s; overloaded for 15s
+- 60 s per model attempt (`PER_MODEL_TIMEOUT_MS`)
+- Rate-limited models deprioritized for 60 s; overloaded for 15 s
 - Safety: if all models filtered by vision/tools/exclude, returns unfiltered list
 - Free model (`nvidia/gpt-oss-120b`) is universal fallback when wallet is empty
 
