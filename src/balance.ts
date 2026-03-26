@@ -65,17 +65,20 @@ export type SufficiencyResult = {
 export class BalanceMonitor {
   private readonly client;
   private readonly walletAddress: `0x${string}`;
-  private asset: BasePaymentAsset;
   private readonly assetMonitors = new Map<string, BalanceMonitor>();
-
-  /** Cached balance (null = not yet fetched) */
-  private cachedBalance: bigint | null = null;
-  /** Timestamp when cache was last updated */
-  private cachedAt = 0;
+  private state: {
+    asset: BasePaymentAsset;
+    cachedBalance: bigint | null;
+    cachedAt: number;
+  };
 
   constructor(walletAddress: string, asset: BasePaymentAsset = DEFAULT_BASE_PAYMENT_ASSET) {
     this.walletAddress = walletAddress as `0x${string}`;
-    this.asset = asset;
+    this.state = {
+      asset,
+      cachedBalance: null,
+      cachedAt: 0,
+    };
     this.client = createPublicClient({
       chain: base,
       transport: http(undefined, {
@@ -89,27 +92,28 @@ export class BalanceMonitor {
    * Uses cache if valid, otherwise fetches from RPC.
    */
   async checkBalance(): Promise<BalanceInfo> {
+    const state = this.state;
     const now = Date.now();
 
     // Use cache only when balance is positive and still fresh.
     // Zero balance is never cached — always re-fetch so a funded wallet is
     // detected on the next request without waiting for cache expiry.
     if (
-      this.cachedBalance !== null &&
-      this.cachedBalance > 0n &&
-      now - this.cachedAt < CACHE_TTL_MS
+      state.cachedBalance !== null &&
+      state.cachedBalance > 0n &&
+      now - state.cachedAt < CACHE_TTL_MS
     ) {
-      return this.buildInfo(this.cachedBalance);
+      return this.buildInfo(state.cachedBalance, state.asset);
     }
 
     // Fetch from RPC
-    const balance = await this.fetchBalance();
+    const balance = await this.fetchBalance(state.asset);
     if (balance > 0n) {
-      this.cachedBalance = balance;
-      this.cachedAt = now;
+      state.cachedBalance = balance;
+      state.cachedAt = now;
     }
 
-    return this.buildInfo(balance);
+    return this.buildInfo(balance, state.asset);
   }
 
   /**
@@ -132,6 +136,22 @@ export class BalanceMonitor {
     };
   }
 
+  private get cachedBalance(): bigint | null {
+    return this.state.cachedBalance;
+  }
+
+  private set cachedBalance(value: bigint | null) {
+    this.state.cachedBalance = value;
+  }
+
+  private get cachedAt(): number {
+    return this.state.cachedAt;
+  }
+
+  private set cachedAt(value: number) {
+    this.state.cachedAt = value;
+  }
+
   /**
    * Optimistically deduct estimated cost from cached balance.
    * Call this after a successful payment to keep cache accurate.
@@ -139,8 +159,9 @@ export class BalanceMonitor {
    * @param amountMicros - Amount to deduct in USD micros
    */
   deductEstimated(amountMicros: bigint): void {
-    if (this.cachedBalance !== null && this.cachedBalance >= amountMicros) {
-      this.cachedBalance -= amountMicros;
+    const state = this.state;
+    if (state.cachedBalance !== null && state.cachedBalance >= amountMicros) {
+      state.cachedBalance -= amountMicros;
     }
   }
 
@@ -149,8 +170,9 @@ export class BalanceMonitor {
    * Call this after a payment failure to get accurate balance.
    */
   invalidate(): void {
-    this.cachedBalance = null;
-    this.cachedAt = 0;
+    const state = this.state;
+    state.cachedBalance = null;
+    state.cachedAt = 0;
   }
 
   /**
@@ -162,18 +184,18 @@ export class BalanceMonitor {
   }
 
   setAsset(asset: BasePaymentAsset): void {
+    const currentAsset = this.state.asset;
     if (
-      this.asset.asset.toLowerCase() !== asset.asset.toLowerCase() ||
-      this.asset.symbol !== asset.symbol ||
-      this.asset.decimals !== asset.decimals
+      currentAsset.asset.toLowerCase() !== asset.asset.toLowerCase() ||
+      currentAsset.symbol !== asset.symbol ||
+      currentAsset.decimals !== asset.decimals
     ) {
-      this.asset = asset;
-      this.invalidate();
+      this.state = this.getSharedMonitorForAsset(asset).state;
     }
   }
 
   getAsset(): BasePaymentAsset {
-    return this.asset;
+    return this.state.asset;
   }
 
   /**
@@ -184,6 +206,10 @@ export class BalanceMonitor {
     return `$${dollars.toFixed(2)}`;
   }
 
+  formatUSDC(amountMicros: bigint): string {
+    return this.formatUSD(amountMicros);
+  }
+
   /**
    * Get the wallet address being monitored.
    */
@@ -192,14 +218,14 @@ export class BalanceMonitor {
   }
 
   getAssetSymbol(): string {
-    return this.asset.symbol;
+    return this.state.asset.symbol;
   }
 
   getSharedMonitorForAsset(asset: BasePaymentAsset): BalanceMonitor {
     if (
-      this.asset.asset.toLowerCase() === asset.asset.toLowerCase() &&
-      this.asset.symbol === asset.symbol &&
-      this.asset.decimals === asset.decimals
+      this.state.asset.asset.toLowerCase() === asset.asset.toLowerCase() &&
+      this.state.asset.symbol === asset.symbol &&
+      this.state.asset.decimals === asset.decimals
     ) {
       return this;
     }
@@ -214,15 +240,15 @@ export class BalanceMonitor {
   }
 
   /** Fetch balance from RPC */
-  private async fetchBalance(): Promise<bigint> {
+  private async fetchBalance(asset: BasePaymentAsset): Promise<bigint> {
     try {
       const balance = await this.client.readContract({
-        address: this.asset.asset,
+        address: asset.asset,
         abi: erc20Abi,
         functionName: "balanceOf",
         args: [this.walletAddress],
       });
-      return this.toUsdMicros(balance);
+      return this.toUsdMicros(balance, asset);
     } catch (error) {
       // Throw typed error instead of silently returning 0
       // This allows callers to distinguish "node down" from "wallet empty"
@@ -231,22 +257,22 @@ export class BalanceMonitor {
   }
 
   /** Build BalanceInfo from raw balance */
-  private buildInfo(balance: bigint): BalanceInfo {
+  private buildInfo(balance: bigint, asset: BasePaymentAsset): BalanceInfo {
     return {
       balance,
       balanceUSD: this.formatUSD(balance),
-      assetSymbol: this.asset.symbol,
+      assetSymbol: asset.symbol,
       isLow: balance < BALANCE_THRESHOLDS.LOW_BALANCE_MICROS,
       isEmpty: balance < BALANCE_THRESHOLDS.ZERO_THRESHOLD,
       walletAddress: this.walletAddress,
     };
   }
 
-  private toUsdMicros(rawAmount: bigint): bigint {
-    if (this.asset.decimals === 6) return rawAmount;
-    if (this.asset.decimals > 6) {
-      return rawAmount / 10n ** BigInt(this.asset.decimals - 6);
+  private toUsdMicros(rawAmount: bigint, asset: BasePaymentAsset): bigint {
+    if (asset.decimals === 6) return rawAmount;
+    if (asset.decimals > 6) {
+      return rawAmount / 10n ** BigInt(asset.decimals - 6);
     }
-    return rawAmount * 10n ** BigInt(6 - this.asset.decimals);
+    return rawAmount * 10n ** BigInt(6 - asset.decimals);
   }
 }

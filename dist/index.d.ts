@@ -447,12 +447,8 @@ type SufficiencyResult = {
 declare class BalanceMonitor {
     private readonly client;
     private readonly walletAddress;
-    private asset;
     private readonly assetMonitors;
-    /** Cached balance (null = not yet fetched) */
-    private cachedBalance;
-    /** Timestamp when cache was last updated */
-    private cachedAt;
+    private state;
     constructor(walletAddress: string, asset?: BasePaymentAsset);
     /**
      * Check current USDC balance.
@@ -465,6 +461,10 @@ declare class BalanceMonitor {
      * @param estimatedCostMicros - Estimated cost in USD micros (6 decimals)
      */
     checkSufficient(estimatedCostMicros: bigint): Promise<SufficiencyResult>;
+    private get cachedBalance();
+    private set cachedBalance(value);
+    private get cachedAt();
+    private set cachedAt(value);
     /**
      * Optimistically deduct estimated cost from cached balance.
      * Call this after a successful payment to keep cache accurate.
@@ -487,6 +487,7 @@ declare class BalanceMonitor {
      * Format a stablecoin amount (normalized to USD micros) as "$X.XX".
      */
     formatUSD(amountMicros: bigint): string;
+    formatUSDC(amountMicros: bigint): string;
     /**
      * Get the wallet address being monitored.
      */

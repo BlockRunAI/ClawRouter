@@ -16,7 +16,7 @@ import { resolveOrGenerateWalletKey, resolvePaymentChain, WALLET_FILE } from "./
 import { BalanceMonitor } from "./balance.js";
 import {
   DEFAULT_BASE_PAYMENT_ASSET,
-  fetchBasePaymentAsset,
+  fetchBasePaymentAssets,
   type BasePaymentAsset,
 } from "./payment-asset.js";
 import { getSolanaAddress } from "./wallet.js";
@@ -152,11 +152,28 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         const monitor = new SolanaBalanceMonitor(solanaAddress);
         balanceInfo = await monitor.checkBalance();
       } else {
-        paymentAsset =
-          (await fetchBasePaymentAsset("https://blockrun.ai/api").catch(() => undefined)) ??
-          DEFAULT_BASE_PAYMENT_ASSET;
-        const monitor = new BalanceMonitor(address, paymentAsset);
-        balanceInfo = await monitor.checkBalance();
+        const paymentAssets =
+          (await fetchBasePaymentAssets("https://blockrun.ai/api").catch(() => undefined)) ??
+          [DEFAULT_BASE_PAYMENT_ASSET];
+        const assetBalances = await Promise.all(
+          paymentAssets.map(async (asset) => {
+            const monitor = new BalanceMonitor(address, asset);
+            const info = await monitor.checkBalance();
+            return { asset, info };
+          }),
+        );
+        const selectedBalance =
+          assetBalances.find(({ info }) => !info.isLow && !info.isEmpty) ??
+          assetBalances.find(({ info }) => !info.isEmpty) ??
+          assetBalances[0];
+        paymentAsset = selectedBalance?.asset ?? DEFAULT_BASE_PAYMENT_ASSET;
+        balanceInfo = {
+          balanceUSD: selectedBalance?.info.balanceUSD ?? null,
+          isLow:
+            assetBalances.length > 0 ? assetBalances.every(({ info }) => info.isLow) : false,
+          isEmpty:
+            assetBalances.length > 0 ? assetBalances.every(({ info }) => info.isEmpty) : true,
+        };
       }
       return {
         exists: true,

@@ -25,7 +25,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 // Per-request payment tracking via AsyncLocalStorage (safe for concurrent requests).
 // The x402 onAfterPaymentCreation hook writes the actual payment amount into the
 // request-scoped store, and the logging code reads it after payFetch completes.
-const paymentStore = new AsyncLocalStorage<{ amountUsd: number }>();
+const paymentStore = new AsyncLocalStorage<{ amountUsd: number; amountUsdText: string }>();
 import { finished } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
@@ -72,7 +72,6 @@ import { BalanceMonitor } from "./balance.js";
 import type { SolanaBalanceMonitor } from "./solana-balance.js";
 import {
   DEFAULT_BASE_PAYMENT_ASSET,
-  fetchBasePaymentAsset,
   fetchBasePaymentAssets,
   type BasePaymentAsset,
 } from "./payment-asset.js";
@@ -370,6 +369,17 @@ function transformPaymentError(
     // If parsing fails, return original
   }
   return errorBody;
+}
+
+function formatStableAmount(amountRaw: bigint, decimals: number): string {
+  const divisor = 10n ** BigInt(decimals);
+  const whole = amountRaw / divisor;
+  const remainder = amountRaw % divisor;
+  const scaledFraction =
+    decimals >= 6
+      ? remainder / 10n ** BigInt(decimals - 6)
+      : remainder * 10n ** BigInt(6 - decimals);
+  return `${whole.toString()}.${scaledFraction.toString().padStart(6, "0")}`;
 }
 
 /**
@@ -1526,30 +1536,29 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Determine port: options.port > env var > default
   const listenPort = options.port ?? getProxyPort();
 
-  // Check if a proxy is already running on this port
-  const existingProxy = await checkExistingProxy(listenPort);
-  if (existingProxy) {
-    // Proxy already running — reuse it instead of failing with EADDRINUSE
+  const buildReuseHandle = async (existingProxyData: {
+    wallet: string;
+    paymentChain?: string;
+    paymentAssets?: BasePaymentAsset[];
+    selectedPaymentAsset?: string | BasePaymentAsset;
+  }): Promise<ProxyHandle> => {
     const account = privateKeyToAccount(walletKey as `0x${string}`);
     const baseUrl = `http://127.0.0.1:${listenPort}`;
 
-    // Verify the existing proxy is using the same wallet (or warn if different)
-    if (existingProxy.wallet !== account.address) {
+    if (existingProxyData.wallet !== account.address) {
       console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account.address}. Reusing existing proxy.`,
+        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxyData.wallet}, but current config uses ${account.address}. Reusing existing proxy.`,
       );
     }
 
-    // Verify the existing proxy is using the same payment chain
-    if (existingProxy.paymentChain) {
-      if (existingProxy.paymentChain !== paymentChain) {
+    if (existingProxyData.paymentChain) {
+      if (existingProxyData.paymentChain !== paymentChain) {
         throw new Error(
-          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. ` +
+          `Existing proxy on port ${listenPort} is using ${existingProxyData.paymentChain} but ${paymentChain} was requested. ` +
             `Stop the existing proxy first or use a different port.`,
         );
       }
     } else if (paymentChain !== "base") {
-      // Old proxy doesn't report chain — assume Base. Reject if Solana was requested.
       console.warn(
         `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`,
       );
@@ -1559,7 +1568,6 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       );
     }
 
-    // Derive Solana address if keys are available (for wallet status display)
     let reuseSolanaAddress: string | undefined;
     if (solanaPrivateKeyBytes) {
       const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
@@ -1567,19 +1575,18 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       reuseSolanaAddress = solanaSigner.address;
     }
 
-    // Use chain-appropriate balance monitor (lazy import to avoid loading @solana/kit on Base chain)
-    let balanceMonitor: AnyBalanceMonitor;
+    let reuseBalanceMonitor: AnyBalanceMonitor;
     if (paymentChain === "solana" && reuseSolanaAddress) {
       const { SolanaBalanceMonitor } = await import("./solana-balance.js");
-      balanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
+      reuseBalanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
     } else {
-      if (existingProxy.paymentAssets?.length) {
-        activeBasePaymentAssets = existingProxy.paymentAssets;
+      if (existingProxyData.paymentAssets?.length) {
+        activeBasePaymentAssets = existingProxyData.paymentAssets;
       }
       const selectedPaymentAssetId =
-        typeof existingProxy.selectedPaymentAsset === "string"
-          ? existingProxy.selectedPaymentAsset.toLowerCase()
-          : existingProxy.selectedPaymentAsset?.asset?.toLowerCase();
+        typeof existingProxyData.selectedPaymentAsset === "string"
+          ? existingProxyData.selectedPaymentAsset.toLowerCase()
+          : existingProxyData.selectedPaymentAsset?.asset?.toLowerCase();
       const selectedPaymentAsset = selectedPaymentAssetId
         ? activeBasePaymentAssets.find((asset) => asset.asset.toLowerCase() === selectedPaymentAssetId)
         : undefined;
@@ -1587,7 +1594,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         activeBasePaymentAsset = selectedPaymentAsset;
         lastSelectedBasePaymentAsset = selectedPaymentAsset;
       }
-      balanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
+      reuseBalanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
     }
 
     options.onReady?.(listenPort);
@@ -1595,15 +1602,21 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     return {
       port: listenPort,
       baseUrl,
-      walletAddress: existingProxy.wallet,
+      walletAddress: existingProxyData.wallet,
       solanaAddress: reuseSolanaAddress,
       paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : undefined,
       paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : undefined,
-      balanceMonitor,
+      balanceMonitor: reuseBalanceMonitor,
       close: async () => {
         // No-op: we didn't start this proxy, so we shouldn't close it
       },
     };
+  };
+
+  // Check if a proxy is already running on this port
+  const existingProxy = await checkExistingProxy(listenPort);
+  if (existingProxy) {
+    return buildReuseHandle(existingProxy);
   }
 
   // Create x402 payment client with EVM scheme (always available)
@@ -1639,22 +1652,26 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       if (refreshedActiveAsset) {
         activeBasePaymentAsset = refreshedActiveAsset;
       }
-      if (balanceMonitor instanceof BalanceMonitor) {
-        balanceMonitor.setAsset(activeBasePaymentAsset);
-      }
     }
     const chain = network.startsWith("eip155")
       ? "Base (EVM)"
       : network.startsWith("solana")
         ? "Solana"
         : network;
-    // Capture actual payment amount in USD (amount is in USDC micro units, 6 decimals)
-    const amountMicros = parseInt(context.selectedRequirements.amount || "0", 10);
-    const amountUsd = amountMicros / 1_000_000;
+    const amountRaw = BigInt(context.selectedRequirements.amount || "0");
+    const selectedRequirementsWithDecimals = context.selectedRequirements as { decimals?: number };
+    const amountDecimals =
+      selectedRequirementsWithDecimals.decimals ??
+      (network.startsWith("eip155") ? activeBasePaymentAsset.decimals : 6);
+    const amountUsdText = formatStableAmount(amountRaw, amountDecimals);
+    const amountUsd = Number.parseFloat(amountUsdText);
     // Write to request-scoped store (if available)
     const store = paymentStore.getStore();
-    if (store) store.amountUsd = amountUsd;
-    console.log(`[ClawRouter] Payment signed on ${chain} (${network}) — $${amountUsd.toFixed(6)}`);
+    if (store) {
+      store.amountUsd = amountUsd;
+      store.amountUsdText = amountUsdText;
+    }
+    console.log(`[ClawRouter] Payment signed on ${chain} (${network}) — $${amountUsdText}`);
   });
 
   const payFetch = createPayFetchWithPreAuth(fetch, x402, undefined, {
@@ -1697,7 +1714,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     // Wrap in paymentStore.run() so x402 hook can write actual payment amount per-request
-    paymentStore.run({ amountUsd: 0 }, async () => {
+    paymentStore.run({ amountUsd: 0, amountUsdText: "0.000000" }, async () => {
       // Add stream error handlers to prevent server crashes
       req.on("error", (err) => {
         console.error(`[ClawRouter] Request stream error: ${err.message}`);
@@ -2177,9 +2194,6 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         (asset) => {
           lastSelectedBasePaymentAsset = asset;
           activeBasePaymentAsset = asset;
-          if (balanceMonitor instanceof BalanceMonitor) {
-            balanceMonitor.setAsset(asset);
-          }
         },
       );
     } catch (err) {
@@ -2223,6 +2237,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               code: "REUSE_EXISTING",
               wallet: existingProxy2.wallet,
               existingChain: existingProxy2.paymentChain,
+              paymentAssets: existingProxy2.paymentAssets,
+              selectedPaymentAsset: existingProxy2.selectedPaymentAsset,
             });
             return;
           }
@@ -2266,6 +2282,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         code?: string;
         wallet?: string;
         existingChain?: string;
+        paymentAssets?: BasePaymentAsset[];
+        selectedPaymentAsset?: string | BasePaymentAsset;
         attempt?: number;
       };
 
@@ -2279,18 +2297,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           );
         }
 
-        // Proxy is running, reuse it
-        const baseUrl = `http://127.0.0.1:${listenPort}`;
-        options.onReady?.(listenPort);
-        return {
-          port: listenPort,
-          baseUrl,
-          walletAddress: error.wallet,
-          balanceMonitor,
-          close: async () => {
-            // No-op: we didn't start this proxy, so we shouldn't close it
-          },
-        };
+        return buildReuseHandle({
+          wallet: error.wallet,
+          paymentChain: error.existingChain,
+          paymentAssets: error.paymentAssets,
+          selectedPaymentAsset: error.selectedPaymentAsset,
+        });
       }
 
       if (error.code === "RETRY") {
