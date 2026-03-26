@@ -182,13 +182,11 @@ fi
 echo "→ Installing latest ClawRouter..."
 openclaw plugins install @blockrun/clawrouter
 
-# Restore credentials if they were lost during plugin install
+# Restore credentials after plugin install (always restore to preserve user's channels)
 if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
-  if [ ! -d "$CREDS_DIR" ] || [ -z "$(ls -A "$CREDS_DIR" 2>/dev/null)" ]; then
-    mkdir -p "$CREDS_DIR"
-    cp -a "$CREDS_BACKUP/"* "$CREDS_DIR/"
-    echo "  ✓ Restored OpenClaw credentials (channels preserved)"
-  fi
+  mkdir -p "$CREDS_DIR"
+  cp -a "$CREDS_BACKUP/"* "$CREDS_DIR/"
+  echo "  ✓ Restored OpenClaw credentials (channels preserved)"
   rm -rf "$(dirname "$CREDS_BACKUP")"
 fi
 
