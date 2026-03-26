@@ -15,6 +15,7 @@ const CACHE_TTL_MS = 30_000;
 export type SolanaBalanceInfo = {
   balance: bigint;
   balanceUSD: string;
+  assetSymbol: string;
   isLow: boolean;
   isEmpty: boolean;
   walletAddress: string;
@@ -102,6 +103,28 @@ export class SolanaBalanceMonitor {
     return this.walletAddress;
   }
 
+  getAssetSymbol(): string {
+    return "USDC";
+  }
+
+  /**
+   * Check native SOL balance (in lamports). Useful for detecting users who
+   * funded with SOL instead of USDC.
+   */
+  async checkSolBalance(): Promise<bigint> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BALANCE_TIMEOUT_MS);
+    try {
+      const owner = solAddress(this.walletAddress);
+      const response = await this.rpc.getBalance(owner).send({ abortSignal: controller.signal });
+      return BigInt(response.value);
+    } catch {
+      return 0n;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private async fetchBalance(): Promise<bigint> {
     const owner = solAddress(this.walletAddress);
     const mint = solAddress(SOLANA_USDC_MINT);
@@ -153,6 +176,7 @@ export class SolanaBalanceMonitor {
     return {
       balance,
       balanceUSD: `$${dollars.toFixed(2)}`,
+      assetSymbol: "USDC",
       isLow: balance < 1_000_000n,
       isEmpty: balance < 100n,
       walletAddress: this.walletAddress,

@@ -12,8 +12,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
 import { registerExactEvmScheme } from "@x402/evm/exact/client";
 import { toClientEvmSigner } from "@x402/evm";
-import { resolveOrGenerateWalletKey, WALLET_FILE } from "./auth.js";
+import { resolveOrGenerateWalletKey, resolvePaymentChain, WALLET_FILE } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
+import { DEFAULT_BASE_PAYMENT_ASSET, fetchBasePaymentAsset } from "./payment-asset.js";
 import { getSolanaAddress } from "./wallet.js";
 import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
@@ -37,6 +38,7 @@ interface WalletInfo {
   isLow: boolean;
   isEmpty: boolean;
   source: "saved" | "env" | "generated" | null;
+  paymentChain: "base" | "solana";
 }
 
 interface NetworkInfo {
@@ -104,6 +106,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         isLow: false,
         isEmpty: true,
         source: null,
+        paymentChain: "base",
       };
     }
 
@@ -117,10 +120,21 @@ async function collectWalletInfo(): Promise<WalletInfo> {
       }
     }
 
-    // Check balance
-    const monitor = new BalanceMonitor(address);
+    // Check balance on the active payment chain
+    const paymentChain = await resolvePaymentChain();
     try {
-      const balanceInfo = await monitor.checkBalance();
+      let balanceInfo: { balanceUSD: string; isLow: boolean; isEmpty: boolean };
+      if (paymentChain === "solana" && solanaAddress) {
+        const { SolanaBalanceMonitor } = await import("./solana-balance.js");
+        const monitor = new SolanaBalanceMonitor(solanaAddress);
+        balanceInfo = await monitor.checkBalance();
+      } else {
+        const paymentAsset =
+          (await fetchBasePaymentAsset("https://blockrun.ai/api").catch(() => undefined)) ??
+          DEFAULT_BASE_PAYMENT_ASSET;
+        const monitor = new BalanceMonitor(address, paymentAsset);
+        balanceInfo = await monitor.checkBalance();
+      }
       return {
         exists: true,
         valid: true,
@@ -130,6 +144,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         isLow: balanceInfo.isLow,
         isEmpty: balanceInfo.isEmpty,
         source,
+        paymentChain,
       };
     } catch {
       return {
@@ -141,6 +156,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         isLow: false,
         isEmpty: false,
         source,
+        paymentChain,
       };
     }
   } catch {
@@ -153,6 +169,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
       isLow: false,
       isEmpty: true,
       source: null,
+      paymentChain: "base",
     };
   }
 }
@@ -220,7 +237,14 @@ function identifyIssues(result: DiagnosticResult): string[] {
     issues.push("No wallet found");
   }
   if (result.wallet.isEmpty) {
-    issues.push("Wallet is empty - need to fund with USDC on Base");
+    if (result.wallet.paymentChain === "solana") {
+      issues.push("Wallet is empty - need to fund with USDC on Solana");
+    } else {
+      issues.push("Wallet is empty - need to fund the active Base payment token");
+    }
+    if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
+      issues.push("Tip: if you funded Solana, run /wallet solana to switch chains");
+    }
   } else if (result.wallet.isLow) {
     issues.push("Wallet balance is low (< $1.00)");
   }
@@ -254,8 +278,13 @@ function printDiagnostics(result: DiagnosticResult): void {
     if (result.wallet.solanaAddress) {
       console.log(`  ${green(`Solana Address: ${result.wallet.solanaAddress}`)}`);
     }
+    const chainLabel = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    console.log(`  ${green(`Chain: ${chainLabel}`)}`);
     if (result.wallet.isEmpty) {
-      console.log(`  ${red(`Balance: $0.00 - NEED TO FUND!`)}`);
+      console.log(`  ${red(`Balance: $0.00 - NEED TO FUND WITH USDC ON ${chainLabel.toUpperCase()}!`)}`);
+      if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
+        console.log(`  ${yellow(`Tip: funded Solana instead? Run /wallet solana to switch`)}`);
+      }
     } else if (result.wallet.isLow) {
       console.log(`  ${yellow(`Balance: ${result.wallet.balance} (low)`)}`);
     } else if (result.wallet.balance) {
@@ -324,12 +353,25 @@ async function analyzeWithAI(
 ): Promise<void> {
   // Check if wallet has funds
   if (diagnostics.wallet.isEmpty) {
+    const paymentAsset =
+      diagnostics.wallet.paymentChain === "solana"
+        ? DEFAULT_BASE_PAYMENT_ASSET
+        : (await fetchBasePaymentAsset("https://blockrun.ai/api").catch(() => undefined)) ??
+          DEFAULT_BASE_PAYMENT_ASSET;
     console.log("\n💳 Wallet is empty - cannot call AI for analysis.");
-    console.log(`   Fund your EVM wallet with USDC on Base: ${diagnostics.wallet.address}`);
+    console.log(
+      diagnostics.wallet.paymentChain === "solana"
+        ? `   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress ?? diagnostics.wallet.address}`
+        : `   Fund your EVM wallet with ${paymentAsset.symbol} on Base: ${diagnostics.wallet.address}`,
+    );
     if (diagnostics.wallet.solanaAddress) {
       console.log(`   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress}`);
     }
-    console.log("   Get USDC: https://www.coinbase.com/price/usd-coin");
+    console.log(
+      diagnostics.wallet.paymentChain === "solana"
+        ? "   Get USDC: https://www.coinbase.com/price/usd-coin"
+        : `   Get ${paymentAsset.symbol}: https://www.coinbase.com/price/usd-coin`,
+    );
     console.log("   Bridge to Base: https://bridge.base.org\n");
     return;
   }

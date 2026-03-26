@@ -81,12 +81,12 @@ describe("ExcludeModels", () => {
     expect(set.size).toBe(1);
   });
 
-  it("resolves aliases — 'nvidia' becomes 'nvidia/gpt-oss-120b'", () => {
+  it("resolves aliases — 'nvidia' becomes 'free/gpt-oss-120b'", () => {
     const resolved = addExclusion("nvidia", filePath);
-    expect(resolved).toBe("nvidia/gpt-oss-120b");
+    expect(resolved).toBe("free/gpt-oss-120b");
 
     const set = loadExcludeList(filePath);
-    expect(set.has("nvidia/gpt-oss-120b")).toBe(true);
+    expect(set.has("free/gpt-oss-120b")).toBe(true);
     expect(set.size).toBe(1);
   });
 
@@ -99,7 +99,7 @@ describe("ExcludeModels", () => {
   });
 
   it("remove resolves aliases too", () => {
-    addExclusion("nvidia", filePath); // "nvidia" alias → "nvidia/gpt-oss-120b"
+    addExclusion("nvidia", filePath); // "nvidia" alias → "free/gpt-oss-120b"
     const removed = removeExclusion("gpt-120b", filePath); // different alias for same model
     expect(removed).toBe(true);
 

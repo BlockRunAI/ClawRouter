@@ -19,7 +19,13 @@
  *   - Usage logging: log every request as JSON line to ~/.openclaw/blockrun/logs/
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+
+// Per-request payment tracking via AsyncLocalStorage (safe for concurrent requests).
+// The x402 onAfterPaymentCreation hook writes the actual payment amount into the
+// request-scoped store, and the logging code reads it after payFetch completes.
+const paymentStore = new AsyncLocalStorage<{ amountUsd: number }>();
 import { finished } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
@@ -98,8 +104,6 @@ const IMAGE_DIR = join(homedir(), ".openclaw", "blockrun", "images");
 const AUTO_MODEL = "blockrun/auto";
 
 const ROUTING_PROFILES = new Set([
-  "blockrun/free",
-  "free",
   "blockrun/eco",
   "eco",
   "blockrun/auto",
@@ -107,14 +111,31 @@ const ROUTING_PROFILES = new Set([
   "blockrun/premium",
   "premium",
 ]);
-const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
-const FREE_TIER_CONFIGS: Record<Tier, { primary: string; fallback: string[] }> = {
-  SIMPLE: { primary: FREE_MODEL, fallback: [] },
-  MEDIUM: { primary: FREE_MODEL, fallback: [] },
-  COMPLEX: { primary: FREE_MODEL, fallback: [] },
-  REASONING: { primary: FREE_MODEL, fallback: [] },
-};
-let freeRequestCount = 0;
+const FREE_MODEL = "free/gpt-oss-120b"; // Last-resort single free model fallback
+const FREE_MODELS = new Set([
+  "free/gpt-oss-120b",
+  "free/gpt-oss-20b",
+  "free/nemotron-ultra-253b",
+  "free/nemotron-3-super-120b",
+  "free/nemotron-super-49b",
+  "free/deepseek-v3.2",
+  "free/mistral-large-3-675b",
+  "free/qwen3-coder-480b",
+  "free/devstral-2-123b",
+  "free/glm-4.7",
+  "free/llama-4-maverick",
+]);
+/**
+ * Map free/xxx model IDs to nvidia/xxx for upstream BlockRun API.
+ * The "free/" prefix is a ClawRouter convention for the /model picker;
+ * BlockRun server expects "nvidia/" prefix.
+ */
+function toUpstreamModelId(modelId: string): string {
+  if (modelId.startsWith("free/")) {
+    return "nvidia/" + modelId.slice("free/".length);
+  }
+  return modelId;
+}
 const MAX_MESSAGES = 200; // BlockRun API limit - truncate older messages if exceeded
 const CONTEXT_LIMIT_KB = 5120; // Server-side limit: 5MB in KB
 const HEARTBEAT_INTERVAL_MS = 2_000;
@@ -1280,6 +1301,37 @@ function estimateAmount(
   return amountMicros.toString();
 }
 
+// Image pricing table (must match server's IMAGE_MODELS in blockrun/src/lib/models.ts)
+// Server applies 5% margin on top of these prices.
+const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, number> }> = {
+  "openai/dall-e-3": {
+    default: 0.04,
+    sizes: { "1024x1024": 0.04, "1792x1024": 0.08, "1024x1792": 0.08 },
+  },
+  "openai/gpt-image-1": {
+    default: 0.02,
+    sizes: { "1024x1024": 0.02, "1536x1024": 0.04, "1024x1536": 0.04 },
+  },
+  "black-forest/flux-1.1-pro": { default: 0.04 },
+  "google/nano-banana": { default: 0.05 },
+  "google/nano-banana-pro": {
+    default: 0.1,
+    sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 },
+  },
+};
+
+/**
+ * Estimate the cost of an image generation/editing request.
+ * Matches server-side calculateImagePrice() including 5% margin.
+ */
+function estimateImageCost(model: string, size?: string, n: number = 1): number {
+  const pricing = IMAGE_PRICING[model];
+  if (!pricing) return 0.04 * n * 1.05; // fallback: assume $0.04/image + margin
+  const sizePrice = size && pricing.sizes ? pricing.sizes[size] : undefined;
+  const pricePerImage = sizePrice ?? pricing.default;
+  return pricePerImage * n * 1.05; // 5% server margin
+}
+
 /**
  * Proxy a partner API request through x402 payment flow.
  *
@@ -1292,6 +1344,7 @@ async function proxyPartnerRequest(
   res: ServerResponse,
   apiBase: string,
   payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  getActualPaymentUsd: () => number,
 ): Promise<void> {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -1348,13 +1401,14 @@ async function proxyPartnerRequest(
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] Partner response: ${upstream.status} (${latencyMs}ms)`);
 
-  // Log partner usage (fire-and-forget)
+  // Log partner usage with actual x402 payment amount (previously logged cost: 0)
+  const partnerCost = getActualPaymentUsd();
   logUsage({
     timestamp: new Date().toISOString(),
     model: "partner",
     tier: "PARTNER",
-    cost: 0, // Actual cost handled by x402 settlement
-    baselineCost: 0,
+    cost: partnerCost,
+    baselineCost: partnerCost,
     savings: 0,
     latencyMs,
     partnerId:
@@ -1564,7 +1618,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
   }
 
-  // Log which chain is used for each payment
+  // Log which chain is used for each payment and capture actual payment amount
   x402.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
     if (network.startsWith("eip155")) {
@@ -1580,7 +1634,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       : network.startsWith("solana")
         ? "Solana"
         : network;
-    console.log(`[ClawRouter] Payment signed on ${chain} (${network})`);
+    // Capture actual payment amount in USD (amount is in USDC micro units, 6 decimals)
+    const amountMicros = parseInt(context.selectedRequirements.amount || "0", 10);
+    const amountUsd = amountMicros / 1_000_000;
+    // Write to request-scoped store (if available)
+    const store = paymentStore.getStore();
+    if (store) store.amountUsd = amountUsd;
+    console.log(`[ClawRouter] Payment signed on ${chain} (${network}) — $${amountUsd.toFixed(6)}`);
   });
 
   const payFetch = createPayFetchWithPreAuth(fetch, x402, undefined, {
@@ -1621,412 +1681,462 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Track active connections for graceful cleanup
   const connections = new Set<import("net").Socket>();
 
-  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    // Add stream error handlers to prevent server crashes
-    req.on("error", (err) => {
-      console.error(`[ClawRouter] Request stream error: ${err.message}`);
-      // Don't throw - just log and let request handler deal with it
-    });
-
-    res.on("error", (err) => {
-      console.error(`[ClawRouter] Response stream error: ${err.message}`);
-      // Don't try to write to failed socket - just log
-    });
-
-    // Finished wrapper for guaranteed cleanup on response completion/error
-    finished(res, (err) => {
-      if (err && err.code !== "ERR_STREAM_DESTROYED") {
-        console.error(`[ClawRouter] Response finished with error: ${err.message}`);
-      }
-      // Note: heartbeatInterval cleanup happens in res.on("close") handler
-      // Note: completed and dedup cleanup happens in the res.on("close") handler below
-    });
-
-    // Request finished wrapper for complete stream lifecycle tracking
-    finished(req, (err) => {
-      if (err && err.code !== "ERR_STREAM_DESTROYED") {
-        console.error(`[ClawRouter] Request finished with error: ${err.message}`);
-      }
-    });
-
-    // Health check with optional balance info
-    if (req.url === "/health" || req.url?.startsWith("/health?")) {
-      const url = new URL(req.url, "http://localhost");
-      const full = url.searchParams.get("full") === "true";
-
-      const response: Record<string, unknown> = {
-        status: "ok",
-        wallet: account.address,
-        paymentChain,
-      };
-      if (paymentChain === "base") {
-        response.paymentAsset = activeBasePaymentAsset.asset;
-        response.paymentAssetSymbol = activeBasePaymentAsset.symbol;
-        response.paymentAssetDecimals = activeBasePaymentAsset.decimals;
-        response.paymentAssets = activeBasePaymentAssets;
-        response.selectedPaymentAsset = lastSelectedBasePaymentAsset.asset;
-        response.selectedPaymentAssetSymbol = lastSelectedBasePaymentAsset.symbol;
-      }
-      if (solanaAddress) {
-        response.solana = solanaAddress;
-      }
-
-      if (full) {
-        try {
-          if (paymentChain === "base") {
-            const assetBalances = await Promise.all(
-              activeBasePaymentAssets.map(async (asset) => {
-                const monitor = new BalanceMonitor(account.address, asset);
-                const balanceInfo = await monitor.checkBalance();
-                return {
-                  asset: asset.asset,
-                  symbol: asset.symbol,
-                  balance: balanceInfo.balanceUSD,
-                  isLow: balanceInfo.isLow,
-                  isEmpty: balanceInfo.isEmpty,
-                };
-              }),
-            );
-            response.assetBalances = assetBalances;
-            response.balance = assetBalances[0]?.balance ?? "$0.00";
-            response.isLow = assetBalances[0]?.isLow ?? true;
-            response.isEmpty = assetBalances.every((asset) => asset.isEmpty);
-          } else {
-            const balanceInfo = await balanceMonitor.checkBalance();
-            response.balance = balanceInfo.balanceUSD;
-            response.isLow = balanceInfo.isLow;
-            response.isEmpty = balanceInfo.isEmpty;
-          }
-        } catch {
-          response.balanceError = "Could not fetch balance";
-        }
-      }
-
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(response));
-      return;
-    }
-
-    // Cache stats endpoint
-    if (req.url === "/cache" || req.url?.startsWith("/cache?")) {
-      const stats = responseCache.getStats();
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache",
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    // Wrap in paymentStore.run() so x402 hook can write actual payment amount per-request
+    paymentStore.run({ amountUsd: 0 }, async () => {
+      // Add stream error handlers to prevent server crashes
+      req.on("error", (err) => {
+        console.error(`[ClawRouter] Request stream error: ${err.message}`);
+        // Don't throw - just log and let request handler deal with it
       });
-      res.end(JSON.stringify(stats, null, 2));
-      return;
-    }
 
-    // Stats clear endpoint - delete all log files
-    if (req.url === "/stats" && req.method === "DELETE") {
-      try {
-        const result = await clearStats();
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ cleared: true, deletedFiles: result.deletedFiles }));
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: `Failed to clear stats: ${err instanceof Error ? err.message : String(err)}`,
-          }),
-        );
-      }
-      return;
-    }
+      res.on("error", (err) => {
+        console.error(`[ClawRouter] Response stream error: ${err.message}`);
+        // Don't try to write to failed socket - just log
+      });
 
-    // Stats API endpoint - returns JSON for programmatic access
-    if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
-      try {
+      // Finished wrapper for guaranteed cleanup on response completion/error
+      finished(res, (err) => {
+        if (err && err.code !== "ERR_STREAM_DESTROYED") {
+          console.error(`[ClawRouter] Response finished with error: ${err.message}`);
+        }
+        // Note: heartbeatInterval cleanup happens in res.on("close") handler
+        // Note: completed and dedup cleanup happens in the res.on("close") handler below
+      });
+
+      // Request finished wrapper for complete stream lifecycle tracking
+      finished(req, (err) => {
+        if (err && err.code !== "ERR_STREAM_DESTROYED") {
+          console.error(`[ClawRouter] Request finished with error: ${err.message}`);
+        }
+      });
+
+      // Health check with optional balance info
+      if (req.url === "/health" || req.url?.startsWith("/health?")) {
         const url = new URL(req.url, "http://localhost");
-        const days = parseInt(url.searchParams.get("days") || "7", 10);
-        const stats = await getStats(Math.min(days, 30));
+        const full = url.searchParams.get("full") === "true";
 
+        const response: Record<string, unknown> = {
+          status: "ok",
+          wallet: account.address,
+          paymentChain,
+        };
+        if (paymentChain === "base") {
+          response.paymentAsset = activeBasePaymentAsset.asset;
+          response.paymentAssetSymbol = activeBasePaymentAsset.symbol;
+          response.paymentAssetDecimals = activeBasePaymentAsset.decimals;
+          response.paymentAssets = activeBasePaymentAssets;
+          response.selectedPaymentAsset = lastSelectedBasePaymentAsset.asset;
+          response.selectedPaymentAssetSymbol = lastSelectedBasePaymentAsset.symbol;
+        }
+        if (solanaAddress) {
+          response.solana = solanaAddress;
+        }
+
+        if (full) {
+          try {
+            if (paymentChain === "base") {
+              const assetBalances = await Promise.all(
+                activeBasePaymentAssets.map(async (asset) => {
+                  const monitor = new BalanceMonitor(account.address, asset);
+                  const balanceInfo = await monitor.checkBalance();
+                  return {
+                    asset: asset.asset,
+                    symbol: asset.symbol,
+                    decimals: asset.decimals,
+                    balance: balanceInfo.balanceUSD,
+                    isLow: balanceInfo.isLow,
+                    isEmpty: balanceInfo.isEmpty,
+                  };
+                }),
+              );
+              response.assetBalances = assetBalances;
+              response.balance = assetBalances[0]?.balance ?? "$0.00";
+              response.isLow = assetBalances[0]?.isLow ?? true;
+              response.isEmpty = assetBalances.every((asset) => asset.isEmpty);
+            } else {
+              const balanceInfo = await balanceMonitor.checkBalance();
+              response.balance = balanceInfo.balanceUSD;
+              response.isLow = balanceInfo.isLow;
+              response.isEmpty = balanceInfo.isEmpty;
+            }
+          } catch {
+            response.balanceError = "Could not fetch balance";
+          }
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(response));
+        return;
+      }
+
+      // Cache stats endpoint
+      if (req.url === "/cache" || req.url?.startsWith("/cache?")) {
+        const stats = responseCache.getStats();
         res.writeHead(200, {
           "Content-Type": "application/json",
           "Cache-Control": "no-cache",
         });
-        res.end(
-          JSON.stringify(
-            {
-              ...stats,
-              providerErrors: Object.fromEntries(perProviderErrors),
-            },
-            null,
-            2,
-          ),
-        );
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`,
-          }),
-        );
-      }
-      return;
-    }
-
-    // --- Handle /v1/models locally (no upstream call needed) ---
-    if (req.url === "/v1/models" && req.method === "GET") {
-      const models = buildProxyModelList();
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ object: "list", data: models }));
-      return;
-    }
-
-    // --- Serve locally cached images (~/.openclaw/blockrun/images/) ---
-    if (req.url?.startsWith("/images/") && req.method === "GET") {
-      const filename = req.url
-        .slice("/images/".length)
-        .split("?")[0]!
-        .replace(/[^a-zA-Z0-9._-]/g, "");
-      if (!filename) {
-        res.writeHead(400);
-        res.end("Bad request");
-        return;
-      }
-      const filePath = join(IMAGE_DIR, filename);
-      try {
-        const s = await fsStat(filePath);
-        if (!s.isFile()) throw new Error("not a file");
-        const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
-        const mime: Record<string, string> = {
-          png: "image/png",
-          jpg: "image/jpeg",
-          jpeg: "image/jpeg",
-          webp: "image/webp",
-          gif: "image/gif",
-        };
-        const data = await readFile(filePath);
-        res.writeHead(200, {
-          "Content-Type": mime[ext] ?? "application/octet-stream",
-          "Content-Length": data.length,
-        });
-        res.end(data);
-      } catch {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Image not found" }));
-      }
-      return;
-    }
-
-    // --- Handle /v1/images/generations: proxy with x402 payment + save data URIs locally ---
-    // NOTE: image generation endpoints bypass maxCostPerRun budget tracking entirely.
-    // Cost is charged via x402 micropayment directly — no session accumulation or cap enforcement.
-    if (req.url === "/v1/images/generations" && req.method === "POST") {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const reqBody = Buffer.concat(chunks);
-      try {
-        const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-          body: reqBody,
-        });
-        const text = await upstream.text();
-        if (!upstream.ok) {
-          res.writeHead(upstream.status, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        let result: { created?: number; data?: Array<{ url?: string; revised_prompt?: string }> };
-        try {
-          result = JSON.parse(text);
-        } catch {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        // Save images to ~/.openclaw/blockrun/images/ and replace with localhost URLs
-        // Handles both base64 data URIs (Google) and HTTP URLs (DALL-E 3)
-        if (result.data?.length) {
-          await mkdir(IMAGE_DIR, { recursive: true });
-          const port = (server.address() as AddressInfo | null)?.port ?? 8402;
-          for (const img of result.data) {
-            const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
-            if (dataUriMatch) {
-              const [, mimeType, b64] = dataUriMatch;
-              const ext = mimeType === "image/jpeg" ? "jpg" : (mimeType!.split("/")[1] ?? "png");
-              const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-              await writeFile(join(IMAGE_DIR, filename), Buffer.from(b64!, "base64"));
-              img.url = `http://localhost:${port}/images/${filename}`;
-              console.log(`[ClawRouter] Image saved → ${img.url}`);
-            } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
-              try {
-                const imgResp = await fetch(img.url);
-                if (imgResp.ok) {
-                  const contentType = imgResp.headers.get("content-type") ?? "image/png";
-                  const ext =
-                    contentType.includes("jpeg") || contentType.includes("jpg")
-                      ? "jpg"
-                      : contentType.includes("webp")
-                        ? "webp"
-                        : "png";
-                  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                  const buf = Buffer.from(await imgResp.arrayBuffer());
-                  await writeFile(join(IMAGE_DIR, filename), buf);
-                  img.url = `http://localhost:${port}/images/${filename}`;
-                  console.log(`[ClawRouter] Image downloaded & saved → ${img.url}`);
-                }
-              } catch (downloadErr) {
-                console.warn(
-                  `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`,
-                );
-              }
-            }
-          }
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[ClawRouter] Image generation error: ${msg}`);
-        if (!res.headersSent) {
-          res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Image generation failed", details: msg }));
-        }
-      }
-      return;
-    }
-
-    // --- Handle /v1/images/image2image: proxy with x402 payment + save images locally ---
-    // Accepts image as: data URI, local file path, ~/path, or HTTP(S) URL
-    if (req.url === "/v1/images/image2image" && req.method === "POST") {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const rawBody = Buffer.concat(chunks);
-
-      // Resolve image/mask fields: file paths and URLs → data URIs
-      let reqBody: string;
-      try {
-        const parsed = JSON.parse(rawBody.toString());
-        for (const field of ["image", "mask"] as const) {
-          const val = parsed[field];
-          if (typeof val !== "string" || !val) continue;
-          if (val.startsWith("data:")) {
-            // Already a data URI — pass through
-          } else if (val.startsWith("https://") || val.startsWith("http://")) {
-            // Download URL → data URI
-            const imgResp = await fetch(val);
-            if (!imgResp.ok)
-              throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
-            const contentType = imgResp.headers.get("content-type") ?? "image/png";
-            const buf = Buffer.from(await imgResp.arrayBuffer());
-            parsed[field] = `data:${contentType};base64,${buf.toString("base64")}`;
-            console.log(
-              `[ClawRouter] img2img: downloaded ${field} URL → data URI (${buf.length} bytes)`,
-            );
-          } else {
-            // Local file path → data URI
-            parsed[field] = readImageFileAsDataUri(val);
-            console.log(`[ClawRouter] img2img: read ${field} file → data URI`);
-          }
-        }
-        // Default model if not specified
-        if (!parsed.model) parsed.model = "openai/gpt-image-1";
-        reqBody = JSON.stringify(parsed);
-      } catch (parseErr) {
-        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid request", details: msg }));
+        res.end(JSON.stringify(stats, null, 2));
         return;
       }
 
-      try {
-        const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-          body: reqBody,
-        });
-        const text = await upstream.text();
-        if (!upstream.ok) {
-          res.writeHead(upstream.status, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        let result: { created?: number; data?: Array<{ url?: string; revised_prompt?: string }> };
+      // Stats clear endpoint - delete all log files
+      if (req.url === "/stats" && req.method === "DELETE") {
         try {
-          result = JSON.parse(text);
-        } catch {
+          const result = await clearStats();
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        // Save images to ~/.openclaw/blockrun/images/ and replace with localhost URLs
-        // Handles both base64 data URIs (Google) and HTTP URLs (DALL-E 3)
-        if (result.data?.length) {
-          await mkdir(IMAGE_DIR, { recursive: true });
-          const port = (server.address() as AddressInfo | null)?.port ?? 8402;
-          for (const img of result.data) {
-            const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
-            if (dataUriMatch) {
-              const [, mimeType, b64] = dataUriMatch;
-              const ext = mimeType === "image/jpeg" ? "jpg" : (mimeType!.split("/")[1] ?? "png");
-              const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-              await writeFile(join(IMAGE_DIR, filename), Buffer.from(b64!, "base64"));
-              img.url = `http://localhost:${port}/images/${filename}`;
-              console.log(`[ClawRouter] Image saved → ${img.url}`);
-            } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
-              try {
-                const imgResp = await fetch(img.url);
-                if (imgResp.ok) {
-                  const contentType = imgResp.headers.get("content-type") ?? "image/png";
-                  const ext =
-                    contentType.includes("jpeg") || contentType.includes("jpg")
-                      ? "jpg"
-                      : contentType.includes("webp")
-                        ? "webp"
-                        : "png";
-                  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                  const buf = Buffer.from(await imgResp.arrayBuffer());
-                  await writeFile(join(IMAGE_DIR, filename), buf);
-                  img.url = `http://localhost:${port}/images/${filename}`;
-                  console.log(`[ClawRouter] Image downloaded & saved → ${img.url}`);
-                }
-              } catch (downloadErr) {
-                console.warn(
-                  `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`,
-                );
-              }
-            }
-          }
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[ClawRouter] Image editing error: ${msg}`);
-        if (!res.headersSent) {
-          res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Image editing failed", details: msg }));
-        }
-      }
-      return;
-    }
-
-    // --- Handle partner API paths (/v1/x/*, /v1/partner/*) ---
-    if (req.url?.match(/^\/v1\/(?:x|partner)\//)) {
-      try {
-        await proxyPartnerRequest(req, res, apiBase, payFetch);
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        options.onError?.(error);
-        if (!res.headersSent) {
-          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ cleared: true, deletedFiles: result.deletedFiles }));
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
-              error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" },
+              error: `Failed to clear stats: ${err instanceof Error ? err.message : String(err)}`,
             }),
           );
         }
+        return;
       }
-      return;
-    }
+
+      // Stats API endpoint - returns JSON for programmatic access
+      if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
+        try {
+          const url = new URL(req.url, "http://localhost");
+          const days = parseInt(url.searchParams.get("days") || "7", 10);
+          const stats = await getStats(Math.min(days, 30));
+
+          res.writeHead(200, {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+          });
+          res.end(
+            JSON.stringify(
+              {
+                ...stats,
+                providerErrors: Object.fromEntries(perProviderErrors),
+              },
+              null,
+              2,
+            ),
+          );
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`,
+            }),
+          );
+        }
+        return;
+      }
+
+      // --- Handle /v1/models locally (no upstream call needed) ---
+      if (req.url === "/v1/models" && req.method === "GET") {
+        const models = buildProxyModelList();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ object: "list", data: models }));
+        return;
+      }
+
+      // --- Serve locally cached images (~/.openclaw/blockrun/images/) ---
+      if (req.url?.startsWith("/images/") && req.method === "GET") {
+        const filename = req.url
+          .slice("/images/".length)
+          .split("?")[0]!
+          .replace(/[^a-zA-Z0-9._-]/g, "");
+        if (!filename) {
+          res.writeHead(400);
+          res.end("Bad request");
+          return;
+        }
+        const filePath = join(IMAGE_DIR, filename);
+        try {
+          const s = await fsStat(filePath);
+          if (!s.isFile()) throw new Error("not a file");
+          const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
+          const mime: Record<string, string> = {
+            png: "image/png",
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            webp: "image/webp",
+            gif: "image/gif",
+          };
+          const data = await readFile(filePath);
+          res.writeHead(200, {
+            "Content-Type": mime[ext] ?? "application/octet-stream",
+            "Content-Length": data.length,
+          });
+          res.end(data);
+        } catch {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Image not found" }));
+        }
+        return;
+      }
+
+      // --- Handle /v1/images/generations: proxy with x402 payment + save data URIs locally ---
+      // NOTE: image generation endpoints bypass maxCostPerRun budget tracking entirely.
+      // Cost is charged via x402 micropayment directly — no session accumulation or cap enforcement.
+      if (req.url === "/v1/images/generations" && req.method === "POST") {
+        const imgStartTime = Date.now();
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const reqBody = Buffer.concat(chunks);
+        // Parse request for usage logging
+        let imgModel = "unknown";
+        let imgCost = 0;
+        try {
+          const parsed = JSON.parse(reqBody.toString());
+          imgModel = parsed.model || "openai/dall-e-3";
+          const n = parsed.n || 1;
+          imgCost = estimateImageCost(imgModel, parsed.size, n);
+        } catch {
+          /* use defaults */
+        }
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: reqBody,
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          let result: { created?: number; data?: Array<{ url?: string; revised_prompt?: string }> };
+          try {
+            result = JSON.parse(text);
+          } catch {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          // Save images to ~/.openclaw/blockrun/images/ and replace with localhost URLs
+          // Handles both base64 data URIs (Google) and HTTP URLs (DALL-E 3)
+          if (result.data?.length) {
+            await mkdir(IMAGE_DIR, { recursive: true });
+            const port = (server.address() as AddressInfo | null)?.port ?? 8402;
+            for (const img of result.data) {
+              const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
+              if (dataUriMatch) {
+                const [, mimeType, b64] = dataUriMatch;
+                const ext = mimeType === "image/jpeg" ? "jpg" : (mimeType!.split("/")[1] ?? "png");
+                const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                await writeFile(join(IMAGE_DIR, filename), Buffer.from(b64!, "base64"));
+                img.url = `http://localhost:${port}/images/${filename}`;
+                console.log(`[ClawRouter] Image saved → ${img.url}`);
+              } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
+                try {
+                  const imgResp = await fetch(img.url);
+                  if (imgResp.ok) {
+                    const contentType = imgResp.headers.get("content-type") ?? "image/png";
+                    const ext =
+                      contentType.includes("jpeg") || contentType.includes("jpg")
+                        ? "jpg"
+                        : contentType.includes("webp")
+                          ? "webp"
+                          : "png";
+                    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                    const buf = Buffer.from(await imgResp.arrayBuffer());
+                    await writeFile(join(IMAGE_DIR, filename), buf);
+                    img.url = `http://localhost:${port}/images/${filename}`;
+                    console.log(`[ClawRouter] Image downloaded & saved → ${img.url}`);
+                  }
+                } catch (downloadErr) {
+                  console.warn(
+                    `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`,
+                  );
+                }
+              }
+            }
+          }
+          // Log image generation usage with actual x402 payment (previously missing entirely)
+          const imgActualCost = paymentStore.getStore()?.amountUsd ?? imgCost;
+          logUsage({
+            timestamp: new Date().toISOString(),
+            model: imgModel,
+            tier: "IMAGE",
+            cost: imgActualCost,
+            baselineCost: imgActualCost,
+            savings: 0,
+            latencyMs: Date.now() - imgStartTime,
+          }).catch(() => {});
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Image generation error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Image generation failed", details: msg }));
+          }
+        }
+        return;
+      }
+
+      // --- Handle /v1/images/image2image: proxy with x402 payment + save images locally ---
+      // Accepts image as: data URI, local file path, ~/path, or HTTP(S) URL
+      if (req.url === "/v1/images/image2image" && req.method === "POST") {
+        const img2imgStartTime = Date.now();
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const rawBody = Buffer.concat(chunks);
+
+        // Resolve image/mask fields: file paths and URLs → data URIs
+        let reqBody: string;
+        // eslint-disable-next-line no-useless-assignment -- reassigned in try, used after catch
+        let img2imgModel = "openai/gpt-image-1";
+        // eslint-disable-next-line no-useless-assignment -- reassigned in try, used after catch
+        let img2imgCost = 0;
+        try {
+          const parsed = JSON.parse(rawBody.toString());
+          for (const field of ["image", "mask"] as const) {
+            const val = parsed[field];
+            if (typeof val !== "string" || !val) continue;
+            if (val.startsWith("data:")) {
+              // Already a data URI — pass through
+            } else if (val.startsWith("https://") || val.startsWith("http://")) {
+              // Download URL → data URI
+              const imgResp = await fetch(val);
+              if (!imgResp.ok)
+                throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
+              const contentType = imgResp.headers.get("content-type") ?? "image/png";
+              const buf = Buffer.from(await imgResp.arrayBuffer());
+              parsed[field] = `data:${contentType};base64,${buf.toString("base64")}`;
+              console.log(
+                `[ClawRouter] img2img: downloaded ${field} URL → data URI (${buf.length} bytes)`,
+              );
+            } else {
+              // Local file path → data URI
+              parsed[field] = readImageFileAsDataUri(val);
+              console.log(`[ClawRouter] img2img: read ${field} file → data URI`);
+            }
+          }
+          // Default model if not specified
+          if (!parsed.model) parsed.model = "openai/gpt-image-1";
+          img2imgModel = parsed.model;
+          img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
+          reqBody = JSON.stringify(parsed);
+        } catch (parseErr) {
+          const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid request", details: msg }));
+          return;
+        }
+
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: reqBody,
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          let result: { created?: number; data?: Array<{ url?: string; revised_prompt?: string }> };
+          try {
+            result = JSON.parse(text);
+          } catch {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          // Save images to ~/.openclaw/blockrun/images/ and replace with localhost URLs
+          // Handles both base64 data URIs (Google) and HTTP URLs (DALL-E 3)
+          if (result.data?.length) {
+            await mkdir(IMAGE_DIR, { recursive: true });
+            const port = (server.address() as AddressInfo | null)?.port ?? 8402;
+            for (const img of result.data) {
+              const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
+              if (dataUriMatch) {
+                const [, mimeType, b64] = dataUriMatch;
+                const ext = mimeType === "image/jpeg" ? "jpg" : (mimeType!.split("/")[1] ?? "png");
+                const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                await writeFile(join(IMAGE_DIR, filename), Buffer.from(b64!, "base64"));
+                img.url = `http://localhost:${port}/images/${filename}`;
+                console.log(`[ClawRouter] Image saved → ${img.url}`);
+              } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
+                try {
+                  const imgResp = await fetch(img.url);
+                  if (imgResp.ok) {
+                    const contentType = imgResp.headers.get("content-type") ?? "image/png";
+                    const ext =
+                      contentType.includes("jpeg") || contentType.includes("jpg")
+                        ? "jpg"
+                        : contentType.includes("webp")
+                          ? "webp"
+                          : "png";
+                    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                    const buf = Buffer.from(await imgResp.arrayBuffer());
+                    await writeFile(join(IMAGE_DIR, filename), buf);
+                    img.url = `http://localhost:${port}/images/${filename}`;
+                    console.log(`[ClawRouter] Image downloaded & saved → ${img.url}`);
+                  }
+                } catch (downloadErr) {
+                  console.warn(
+                    `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`,
+                  );
+                }
+              }
+            }
+          }
+          // Log image editing usage with actual x402 payment (previously missing entirely)
+          const img2imgActualCost = paymentStore.getStore()?.amountUsd ?? img2imgCost;
+          logUsage({
+            timestamp: new Date().toISOString(),
+            model: img2imgModel,
+            tier: "IMAGE",
+            cost: img2imgActualCost,
+            baselineCost: img2imgActualCost,
+            savings: 0,
+            latencyMs: Date.now() - img2imgStartTime,
+          }).catch(() => {});
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Image editing error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Image editing failed", details: msg }));
+          }
+        }
+        return;
+      }
+
+      // --- Handle partner API paths (/v1/x/*, /v1/partner/*) ---
+      if (req.url?.match(/^\/v1\/(?:x|partner)\//)) {
+        try {
+          await proxyPartnerRequest(
+            req,
+            res,
+            apiBase,
+            payFetch,
+            () => paymentStore.getStore()?.amountUsd ?? 0,
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          options.onError?.(error);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" },
+              }),
+            );
+          }
+        }
+        return;
+      }
 
     // Only proxy paths starting with /v1
     if (!req.url?.startsWith("/v1")) {
@@ -2078,6 +2188,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         res.end();
       }
     }
+    }); // end paymentStore.run()
   });
 
   // Listen on configured port with retry logic for TIME_WAIT handling
@@ -2297,7 +2408,7 @@ async function tryModelRequest(
   let requestBody = body;
   try {
     const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
-    parsed.model = modelId;
+    parsed.model = toUpstreamModelId(modelId);
 
     // Normalize message roles (e.g., "developer" -> "system")
     if (Array.isArray(parsed.messages)) {
@@ -2451,7 +2562,7 @@ async function proxyRequest(
   let isStreaming = false;
   let modelId = "";
   let maxTokens = 4096;
-  let routingProfile: "free" | "eco" | "auto" | "premium" | null = null;
+  let routingProfile: "eco" | "auto" | "premium" | null = null;
   let balanceFallbackNotice: string | undefined;
   let budgetDowngradeNotice: string | undefined;
   let budgetDowngradeHeaderMode: "downgraded" | undefined;
@@ -2536,8 +2647,8 @@ async function proxyRequest(
           typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
         const profileName = normalizedModel.replace("blockrun/", "");
         const debugProfile = (
-          ["free", "eco", "auto", "premium"].includes(profileName) ? profileName : "auto"
-        ) as "free" | "eco" | "auto" | "premium";
+          ["eco", "auto", "premium"].includes(profileName) ? profileName : "auto"
+        ) as "eco" | "auto" | "premium";
 
         // Run scoring
         const scoring = classifyByRules(
@@ -2807,6 +2918,18 @@ async function proxyRequest(
               responseText = lines.join("\n");
             }
             console.log(`[ClawRouter] /imagegen success: ${images.length} image(s) generated`);
+            // Log /imagegen usage with actual x402 payment
+            const imagegenActualCost =
+              paymentStore.getStore()?.amountUsd ?? estimateImageCost(imageModel, imageSize, 1);
+            logUsage({
+              timestamp: new Date().toISOString(),
+              model: imageModel,
+              tier: "IMAGE",
+              cost: imagegenActualCost,
+              baselineCost: imagegenActualCost,
+              savings: 0,
+              latencyMs: 0,
+            }).catch(() => {});
           }
 
           // Return as synthetic chat completion
@@ -3034,6 +3157,18 @@ async function proxyRequest(
               responseText = lines.join("\n");
             }
             console.log(`[ClawRouter] /img2img success: ${images.length} image(s)`);
+            // Log /img2img usage with actual x402 payment
+            const img2imgActualCost2 =
+              paymentStore.getStore()?.amountUsd ?? estimateImageCost(img2imgModel, img2imgSize, 1);
+            logUsage({
+              timestamp: new Date().toISOString(),
+              model: img2imgModel,
+              tier: "IMAGE",
+              cost: img2imgActualCost2,
+              baselineCost: img2imgActualCost2,
+              savings: 0,
+              latencyMs: 0,
+            }).catch(() => {});
           }
 
           sendImg2ImgText(responseText);
@@ -3075,7 +3210,7 @@ async function proxyRequest(
       // Extract routing profile type (free/eco/auto/premium)
       if (isRoutingProfile) {
         const profileName = resolvedModel.replace("blockrun/", "");
-        routingProfile = profileName as "free" | "eco" | "auto" | "premium";
+        routingProfile = profileName as "eco" | "auto" | "premium";
       }
 
       // Debug: log received model name
@@ -3095,34 +3230,7 @@ async function proxyRequest(
 
       // Handle routing profiles (free/eco/auto/premium)
       if (isRoutingProfile) {
-        // Free profile - direct shortcut to nvidia/gpt-oss-120b (no tier routing)
-        if (routingProfile === "free") {
-          const freeModel = "nvidia/gpt-oss-120b";
-          console.log(`[ClawRouter] Free profile - using ${freeModel} directly`);
-          parsed.model = freeModel;
-          modelId = freeModel;
-          bodyModified = true;
-
-          // Nudge every 5th free request toward paid models
-          freeRequestCount++;
-          if (freeRequestCount % 5 === 0) {
-            balanceFallbackNotice = `> **💡 Tip:** Not satisfied with free model quality? Fund your wallet to unlock deepseek-chat, gemini-flash, and 30+ premium models — starting at $0.001/request.\n\n`;
-          }
-
-          // Set routing decision so end-of-request logging uses correct tier
-          // (no early logUsage here — the request will be logged after upstream call)
-          routingDecision = {
-            model: freeModel,
-            tier: "SIMPLE" as Tier,
-            confidence: 1,
-            method: "rules",
-            reasoning: "free profile",
-            costEstimate: 0,
-            baselineCost: 0,
-            savings: 1,
-            tierConfigs: FREE_TIER_CONFIGS,
-          };
-        } else {
+        {
           // eco/auto/premium - use tier routing
           // Check for session persistence - use pinned model if available
           // Fall back to deriving a session ID from message content when OpenClaw
@@ -3307,8 +3415,11 @@ async function proxyRequest(
         effectiveSessionId = deriveSessionId(parsedMessages);
       }
 
-      // Rebuild body if modified
+      // Rebuild body if modified — map free/xxx → nvidia/xxx for upstream
       if (bodyModified) {
+        if (parsed.model && typeof parsed.model === "string") {
+          parsed.model = toUpstreamModelId(parsed.model);
+        }
         body = Buffer.from(JSON.stringify(parsed));
       }
     } catch (err) {
@@ -3421,8 +3532,8 @@ async function proxyRequest(
   // Estimate cost and check if wallet has sufficient balance
   // Skip if skipBalanceCheck is set (for testing) or if using free model
   let estimatedCostMicros: bigint | undefined;
-  // Use `let` so the balance-fallback path can update this when modelId is switched to FREE_MODEL.
-  let isFreeModel = modelId === FREE_MODEL;
+  // Use `let` so the balance-fallback path can update this when modelId is switched to a free model.
+  let isFreeModel = FREE_MODELS.has(modelId ?? "");
 
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
@@ -3470,29 +3581,22 @@ async function proxyRequest(
       const sufficiency = await requestBalanceMonitor.checkSufficient(bufferedCostMicros);
 
       if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
-        // Wallet is empty or insufficient — ALWAYS fallback to free model
-        // This ensures new users with empty wallets can still use ClawRouter
+        // Wallet is empty or insufficient — fallback to free model
         const originalModel = modelId;
         console.log(
           `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} (${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL} (requested: ${originalModel})`,
         );
         modelId = FREE_MODEL;
         isFreeModel = true; // keep in sync — budget logic gates on !isFreeModel
-        // Update the body with new model
+        // Update the body with new model (map free/ → nvidia/ for upstream)
         const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
-        parsed.model = FREE_MODEL;
+        parsed.model = toUpstreamModelId(FREE_MODEL);
         body = Buffer.from(JSON.stringify(parsed));
 
         // Set notice to prepend to response so user knows about the fallback
         balanceFallbackNotice = sufficiency.info.isEmpty
           ? `> **⚠️ Wallet empty** — using free model. Fund your wallet to use ${originalModel}.\n\n`
           : `> **⚠️ Insufficient balance** (${sufficiency.info.balanceUSD}) — using free model instead of ${originalModel}.\n\n`;
-
-        // Also count balance-fallback as a free request for upgrade nudge
-        freeRequestCount++;
-        if (freeRequestCount % 5 === 0) {
-          balanceFallbackNotice = `> **💡 Tip:** Not satisfied with free model quality? Fund your wallet to unlock deepseek-chat, gemini-flash, and 30+ premium models — starting at $0.001/request.\n\n`;
-        }
 
         // Notify about the fallback
         options.onLowBalance?.({
@@ -3577,9 +3681,9 @@ async function proxyRequest(
 
     if (isComplexOrAgentic) {
       // Case A: tool/complex/agentic routing profile — check global model table
-      // Intentionally exclude FREE_MODEL: free model cannot handle complex/agentic tasks.
+      // Intentionally exclude free models: they cannot handle complex/agentic tasks.
       const canAffordAnyNonFreeModel = BLOCKRUN_MODELS.some((m) => {
-        if (m.id === FREE_MODEL) return false;
+        if (FREE_MODELS.has(m.id)) return false;
         const est = estimateAmount(m.id, body.length, maxTokens);
         return est !== undefined && Number(est) / 1_000_000 <= remainingUsd;
       });
@@ -3604,7 +3708,7 @@ async function proxyRequest(
         deduplicator.removeInflight(dedupKey);
         return;
       }
-    } else if (!routingDecision && modelId && modelId !== FREE_MODEL) {
+    } else if (!routingDecision && modelId && !FREE_MODELS.has(modelId)) {
       // Case B: explicit model request (user chose a specific model, not a routing profile).
       // Silently substituting their choice with free model is deceptive — block instead.
       const est = estimateAmount(modelId, body.length, maxTokens);
@@ -3797,7 +3901,7 @@ async function proxyRequest(
     // Skip free fallback when tools are present — nvidia/gpt-oss-120b lacks
     // tool calling support and would produce broken responses for agentic tasks.
     if (!hasTools && !modelsToTry.includes(FREE_MODEL) && !excludeList.has(FREE_MODEL)) {
-      modelsToTry.push(FREE_MODEL);
+      modelsToTry.push(FREE_MODEL); // last-resort free fallback
     }
 
     // --- Budget-aware routing (graceful mode) ---
@@ -3815,7 +3919,7 @@ async function proxyRequest(
 
       const beforeFilter = [...modelsToTry];
       modelsToTry = modelsToTry.filter((m) => {
-        if (m === FREE_MODEL) return true; // free model always fits
+        if (FREE_MODELS.has(m)) return true; // free models always fit (no cost)
         const est = estimateAmount(m, body.length, maxTokens);
         if (!est) return true; // no pricing data → keep (permissive)
         return Number(est) / 1_000_000 <= remainingUsd;
@@ -3825,7 +3929,7 @@ async function proxyRequest(
 
       // Second-pass block: the pre-check caught obvious cases early (before streaming headers).
       // Here we recheck against the actual filtered modelsToTry chain. If the ONLY remaining
-      // model is FREE_MODEL, we must block rather than silently degrade for:
+      // models are free, we must block rather than silently degrade for:
       //   (A) complex/agentic routing profile tasks (tools / COMPLEX / REASONING tier)
       //   (B) explicit model requests (user chose a specific model; free substitution is deceptive)
       // The pre-check already handles case (B) for non-streaming; this is a safety net for
@@ -3836,7 +3940,7 @@ async function proxyRequest(
         routingDecision?.tier === "REASONING" ||
         routingDecision === undefined; // explicit model: no routing profile → user chose the model
       const filteredToFreeOnly =
-        modelsToTry.length > 0 && modelsToTry.every((m) => m === FREE_MODEL);
+        modelsToTry.length > 0 && modelsToTry.every((m) => FREE_MODELS.has(m));
 
       if (isComplexOrAgenticFilter && filteredToFreeOnly) {
         const budgetSummary = `$${Math.max(0, remainingUsd).toFixed(4)} remaining (limit: $${options.maxCostPerRunUsd})`;
@@ -3878,11 +3982,11 @@ async function proxyRequest(
 
         // A: Set visible warning notice — prepended to response so user sees the downgrade
         const fromModel = excluded[0];
-        const usingFree = modelsToTry.length === 1 && modelsToTry[0] === FREE_MODEL;
+        const usingFree = modelsToTry.length === 1 && FREE_MODELS.has(modelsToTry[0]);
         if (usingFree) {
           budgetDowngradeNotice = `> **⚠️ Budget cap reached** ($${runCostUsd.toFixed(4)}/$${options.maxCostPerRunUsd}) — downgraded to free model. Quality may be reduced. Increase \`maxCostPerRun\` to continue with ${fromModel}.\n\n`;
         } else {
-          const toModel = modelsToTry[0] ?? FREE_MODEL;
+          const toModel = modelsToTry[0] ?? FREE_MODEL; // last resort
           budgetDowngradeNotice = `> **⚠️ Budget low** ($${remainingUsd > 0 ? remainingUsd.toFixed(4) : "0.0000"} remaining) — using ${toModel} instead of ${fromModel}.\n\n`;
         }
         // B: Header flag for orchestration layers (e.g. OpenClaw can pause/warn the user)
@@ -3945,7 +4049,7 @@ async function proxyRequest(
         actualModelUsed = tryModel;
         console.log(`[ClawRouter] Success with model: ${tryModel}`);
         // Accumulate estimated cost to session for maxCostPerRun tracking
-        if (options.maxCostPerRunUsd && effectiveSessionId && tryModel !== FREE_MODEL) {
+        if (options.maxCostPerRunUsd && effectiveSessionId && !FREE_MODELS.has(tryModel)) {
           const costEst = estimateAmount(tryModel, body.length, maxTokens);
           if (costEst) {
             sessionStore.addSessionCost(effectiveSessionId, BigInt(costEst));
@@ -3975,7 +4079,7 @@ async function proxyRequest(
         /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
           result.errorBody || "",
         );
-      if (isPaymentErr && tryModel !== FREE_MODEL && !isLastAttempt) {
+      if (isPaymentErr && !FREE_MODELS.has(tryModel) && !isLastAttempt) {
         failedAttempts.push({
           ...failedAttempts[failedAttempts.length - 1],
           reason: "payment_error",
@@ -3987,7 +4091,7 @@ async function proxyRequest(
           continue;
         }
         // Free model not in chain — add it and try
-        if (freeIdx === -1) {
+        if (freeIdx === -1 && !excludeList.has(FREE_MODEL)) {
           modelsToTry.push(FREE_MODEL);
           console.log(`[ClawRouter] Payment error — appending free model: ${FREE_MODEL}`);
           continue;
@@ -4602,30 +4706,54 @@ async function proxyRequest(
   }
 
   // --- Usage logging (fire-and-forget) ---
-  // Note: Use actual token counts from API response when available,
-  // fall back to estimates. Log actual cost without 20% buffer (the buffer
-  // is only needed for pre-payment estimation in estimateAmount()).
-  // Log ALL requests: both auto-routed (routingDecision set) and direct model picks
+  // Use actual x402 payment amount from the per-request AsyncLocalStorage store.
+  // This is the real amount the user paid — no estimation needed.
+  // Falls back to local estimate only for free models (no x402 payment).
   const logModel = routingDecision?.model ?? modelId;
   if (logModel) {
-    // Use actual token counts when available, fall back to estimates
-    const actualInputTokens = responseInputTokens ?? Math.ceil(body.length / 4);
-    const actualOutputTokens = responseOutputTokens ?? maxTokens;
+    const actualPayment = paymentStore.getStore()?.amountUsd ?? 0;
 
-    const accurateCosts = calculateModelCost(
-      logModel,
-      routerOpts.modelPricing,
-      actualInputTokens,
-      actualOutputTokens,
-      routingProfile ?? undefined,
-    );
+    // For free models (no x402 payment), use local cost calculation as fallback
+    let logCost: number;
+    let logBaseline: number;
+    let logSavings: number;
+    if (actualPayment > 0) {
+      logCost = actualPayment;
+      // Calculate baseline for savings comparison
+      const chargedInputTokens = Math.ceil(body.length / 4);
+      const modelDef = BLOCKRUN_MODELS.find((m) => m.id === logModel);
+      const chargedOutputTokens = modelDef ? Math.min(maxTokens, modelDef.maxOutput) : maxTokens;
+      const baseline = calculateModelCost(
+        logModel,
+        routerOpts.modelPricing,
+        chargedInputTokens,
+        chargedOutputTokens,
+        routingProfile ?? undefined,
+      );
+      logBaseline = baseline.baselineCost;
+      logSavings = logBaseline > 0 ? Math.max(0, (logBaseline - logCost) / logBaseline) : 0;
+    } else {
+      // Free model — no payment, calculate locally
+      const chargedInputTokens = Math.ceil(body.length / 4);
+      const costs = calculateModelCost(
+        logModel,
+        routerOpts.modelPricing,
+        chargedInputTokens,
+        maxTokens,
+        routingProfile ?? undefined,
+      );
+      logCost = costs.costEstimate;
+      logBaseline = costs.baselineCost;
+      logSavings = costs.savings;
+    }
+
     const entry: UsageEntry = {
       timestamp: new Date().toISOString(),
       model: logModel,
       tier: routingDecision?.tier ?? "DIRECT",
-      cost: accurateCosts.costEstimate,
-      baselineCost: accurateCosts.baselineCost,
-      savings: accurateCosts.savings,
+      cost: logCost,
+      baselineCost: logBaseline,
+      savings: logSavings,
       latencyMs: Date.now() - startTime,
       ...(responseInputTokens !== undefined && { inputTokens: responseInputTokens }),
       ...(responseOutputTokens !== undefined && { outputTokens: responseOutputTokens }),

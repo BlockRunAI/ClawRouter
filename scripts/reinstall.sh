@@ -127,6 +127,11 @@ echo "→ Cleaning config entries..."
 node -e "
 const f = require('os').homedir() + '/.openclaw/openclaw.json';
 const fs = require('fs');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 if (!fs.existsSync(f)) {
   console.log('  No openclaw.json found, skipping');
   process.exit(0);
@@ -154,20 +159,7 @@ if (c.plugins?.installs?.clawrouter) delete c.plugins.installs.clawrouter;
 if (Array.isArray(c.plugins?.allow)) {
   c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
 }
-// Remove deprecated model aliases from picker
-const deprecated = [
-  'blockrun/xai/grok-code-fast-1', // delisted 2026-03-12
-  'blockrun/xai/grok-3-fast',      // removed (too expensive)
-];
-if (c.agents?.defaults?.models) {
-  for (const key of deprecated) {
-    if (c.agents.defaults.models[key]) {
-      delete c.agents.defaults.models[key];
-      console.log('  Removed deprecated alias: ' + key);
-    }
-  }
-}
-fs.writeFileSync(f, JSON.stringify(c, null, 2));
+atomicWrite(f, JSON.stringify(c, null, 2));
 console.log('  Config cleaned');
 "
 
@@ -177,7 +169,7 @@ kill_port_processes 8402
 
 # 3.1. Remove stale models.json so it gets regenerated with apiKey
 echo "→ Cleaning models cache..."
-rm -f ~/.openclaw/agents/main/agent/models.json 2>/dev/null || true
+rm -f ~/.openclaw/agents/*/agent/models.json 2>/dev/null || true
 
 # 4. Inject auth profile (ensures blockrun provider is recognized)
 echo "→ Injecting auth profile..."
@@ -187,6 +179,11 @@ const fs = require('fs');
 const path = require('path');
 const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
 const authPath = path.join(authDir, 'auth-profiles.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 // Create directory if needed
 fs.mkdirSync(authDir, { recursive: true });
@@ -216,7 +213,7 @@ if (!store.profiles[profileKey]) {
     provider: 'blockrun',
     key: 'x402-proxy-handles-auth'
   };
-  fs.writeFileSync(authPath, JSON.stringify(store, null, 2));
+  atomicWrite(authPath, JSON.stringify(store, null, 2));
   console.log('  Auth profile created');
 } else {
   console.log('  Auth profile already exists');
@@ -230,6 +227,11 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 if (fs.existsSync(configPath)) {
   try {
@@ -244,7 +246,7 @@ if (fs.existsSync(configPath)) {
     }
 
     if (changed) {
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      atomicWrite(configPath, JSON.stringify(config, null, 2));
     }
   } catch (e) {
     console.log('  Could not update config:', e.message);
@@ -255,8 +257,25 @@ if (fs.existsSync(configPath)) {
 "
 
 # 6. Install plugin (config is ready, but no allow list yet to avoid validation error)
+# Back up OpenClaw credentials (channels, WhatsApp/Telegram state) before plugin install
+CREDS_DIR="$HOME/.openclaw/credentials"
+CREDS_BACKUP=""
+if [ -d "$CREDS_DIR" ] && [ "$(ls -A "$CREDS_DIR" 2>/dev/null)" ]; then
+  CREDS_BACKUP="$(mktemp -d)/openclaw-credentials-backup"
+  cp -a "$CREDS_DIR" "$CREDS_BACKUP"
+  echo "  ✓ Backed up OpenClaw credentials"
+fi
+
 echo "→ Installing ClawRouter..."
 openclaw plugins install @blockrun/clawrouter
+
+# Restore credentials after plugin install (always restore to preserve user's channels)
+if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
+  mkdir -p "$CREDS_DIR"
+  cp -a "$CREDS_BACKUP/"* "$CREDS_DIR/"
+  echo "  ✓ Restored OpenClaw credentials (channels preserved)"
+  rm -rf "$(dirname "$CREDS_BACKUP")"
+fi
 
 # 6.1. Verify installation (check dist/ files exist)
 echo "→ Verifying installation..."
@@ -288,6 +307,11 @@ node -e "
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 if (!fs.existsSync(configPath)) {
@@ -316,13 +340,16 @@ try {
     'auto', 'free', 'eco', 'premium',
     'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.6', 'anthropic/claude-haiku-4.5',
     'openai/gpt-5.4', 'openai/gpt-5.4-pro', 'openai/gpt-5.3', 'openai/gpt-5.3-codex',
-    'openai/gpt-5-mini', 'openai/gpt-5-nano', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o3', 'openai/o4-mini',
-    'google/gemini-3.1-pro', 'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview',
+    'openai/gpt-5-mini', 'openai/gpt-5-nano', 'openai/gpt-5.4-nano', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o3', 'openai/o4-mini',
+    'google/gemini-3.1-pro', 'google/gemini-3.1-flash-lite', 'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview',
     'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite',
     'deepseek/deepseek-chat', 'deepseek/deepseek-reasoner', 'moonshot/kimi-k2.5',
     'xai/grok-3', 'xai/grok-4-0709', 'xai/grok-4-1-fast-reasoning',
     'minimax/minimax-m2.7', 'minimax/minimax-m2.5',
-    'nvidia/gpt-oss-120b',
+    'free/gpt-oss-120b', 'free/gpt-oss-20b',
+    'free/nemotron-ultra-253b', 'free/deepseek-v3.2', 'free/mistral-large-3-675b',
+    'free/qwen3-coder-480b', 'free/devstral-2-123b', 'free/llama-4-maverick',
+    'free/nemotron-3-super-120b', 'free/nemotron-super-49b', 'free/glm-4.7',
     'zai/glm-5', 'zai/glm-5-turbo'
   ];
 
@@ -334,18 +361,18 @@ try {
   }
 
   const allowlist = config.agents.defaults.models;
-  const DEPRECATED_MODELS = [
-    'blockrun/xai/grok-code-fast-1',
-    'blockrun/xai/grok-3-fast'
-  ];
+  const currentKeys = new Set(TOP_MODELS.map(id => 'blockrun/' + id));
+
+  // Remove any blockrun/* entries not in the current TOP_MODELS list
   let removed = 0;
-  for (const key of DEPRECATED_MODELS) {
-    if (allowlist[key]) {
+  for (const key of Object.keys(allowlist)) {
+    if (key.startsWith('blockrun/') && !currentKeys.has(key)) {
       delete allowlist[key];
-      changed = true;
       removed++;
     }
   }
+
+  // Add any missing current models
   let added = 0;
   for (const id of TOP_MODELS) {
     const key = 'blockrun/' + id;
@@ -365,7 +392,7 @@ try {
     console.log('  Allowlist already up to date');
   }
   if (changed) {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    atomicWrite(configPath, JSON.stringify(config, null, 2));
   }
 } catch (err) {
   console.log('  Could not update config:', err.message);
@@ -379,6 +406,11 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 if (fs.existsSync(configPath)) {
   try {
@@ -396,7 +428,7 @@ if (fs.existsSync(configPath)) {
       console.log('  Plugin already in allow list');
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    atomicWrite(configPath, JSON.stringify(config, null, 2));
   } catch (e) {
     console.log('  Could not update config:', e.message);
   }
@@ -434,12 +466,19 @@ echo ""
 echo "Run: openclaw gateway restart"
 echo ""
 echo "Model aliases available:"
-echo "  /model sonnet    → claude-sonnet-4"
-echo "  /model opus      → claude-opus-4"
+echo "  /model sonnet    → claude-sonnet-4.6"
+echo "  /model opus      → claude-opus-4.6"
 echo "  /model codex     → openai/gpt-5.3-codex"
 echo "  /model deepseek  → deepseek/deepseek-chat"
-echo "  /model minimax   → minimax/minimax-m2.5"
-echo "  /model free      → gpt-oss-120b (FREE)"
+echo "  /model free      → nemotron-ultra-253b (strongest free)"
+echo ""
+echo "Free models (no wallet needed):"
+echo "  /model nemotron       → nemotron-ultra-253b (strongest free)"
+echo "  /model deepseek-free  → deepseek-v3.2"
+echo "  /model mistral-free   → mistral-large-675b"
+echo "  /model devstral       → devstral-2-123b (coding)"
+echo "  /model qwen-coder     → qwen3-coder-480b (coding)"
+echo "  /model maverick       → llama-4-maverick"
 echo ""
 echo "Image generation:"
 echo "  /imagegen <prompt>                           # default: nano-banana"

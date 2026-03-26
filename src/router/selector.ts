@@ -86,6 +86,11 @@ export function getFallbackChain(tier: Tier, tierConfigs: Record<Tier, TierConfi
  * Calculate cost for a specific model (used when fallback model is used).
  * Returns updated cost fields for RoutingDecision.
  */
+// Server-side margin applied to all x402 payments (must match blockrun server's MARGIN_PERCENT)
+const SERVER_MARGIN_PERCENT = 5;
+// Minimum payment enforced by CDP Facilitator (must match blockrun server's MIN_PAYMENT_USD)
+const MIN_PAYMENT_USD = 0.001;
+
 export function calculateModelCost(
   model: string,
   modelPricing: Map<string, ModelPricing>,
@@ -100,7 +105,11 @@ export function calculateModelCost(
   const outputPrice = pricing?.outputPrice ?? 0;
   const inputCost = (estimatedInputTokens / 1_000_000) * inputPrice;
   const outputCost = (maxOutputTokens / 1_000_000) * outputPrice;
-  const costEstimate = inputCost + outputCost;
+  // Include server margin + minimum payment to match actual x402 charge
+  const costEstimate = Math.max(
+    (inputCost + outputCost) * (1 + SERVER_MARGIN_PERCENT / 100),
+    MIN_PAYMENT_USD,
+  );
 
   // Baseline: what Claude Opus 4.5 would cost (the premium reference)
   const opusPricing = modelPricing.get(BASELINE_MODEL_ID);

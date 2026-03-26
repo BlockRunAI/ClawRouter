@@ -143,10 +143,6 @@ type ModelPricing = {
  * Get the ordered fallback chain for a tier: [primary, ...fallbacks].
  */
 declare function getFallbackChain(tier: Tier, tierConfigs: Record<Tier, TierConfig>): string[];
-/**
- * Calculate cost for a specific model (used when fallback model is used).
- * Returns updated cost fields for RoutingDecision.
- */
 declare function calculateModelCost(model: string, modelPricing: Map<string, ModelPricing>, estimatedInputTokens: number, maxOutputTokens: number, routingProfile?: "free" | "eco" | "auto" | "premium"): {
     costEstimate: number;
     baselineCost: number;
@@ -192,7 +188,7 @@ type RoutingDecision = {
 type RouterOptions = {
     config: RoutingConfig;
     modelPricing: Map<string, ModelPricing>;
-    routingProfile?: "free" | "eco" | "auto" | "premium";
+    routingProfile?: "eco" | "auto" | "premium";
     hasTools?: boolean;
 };
 type TierConfig = {
@@ -367,9 +363,40 @@ declare class ResponseCache {
 }
 
 /**
+ * EIP-3009 payment asset on Base network.
+ * Represents a stablecoin that supports `transferWithAuthorization`
+ * for gasless, single-step payment settlements.
+ */
+type BasePaymentAsset = {
+    chain: "base";
+    asset: `0x${string}`;
+    symbol: string;
+    decimals: number;
+    name: string;
+    transferMethod: "eip3009";
+    priority?: number;
+    enabled?: boolean;
+};
+/** Default payment asset: USDC on Base (6 decimals, EIP-3009). */
+declare const DEFAULT_BASE_PAYMENT_ASSET: BasePaymentAsset;
+/**
+ * Validate and normalize a single payment asset from an API response.
+ * Returns undefined if the input is missing required fields or uses a non-EIP-3009 transfer method.
+ * Symbols are uppercased; names are trimmed.
+ */
+declare function normalizeBasePaymentAsset(value: unknown): BasePaymentAsset | undefined;
+/**
+ * Fetch the highest-priority EIP-3009 payment asset from the API.
+ * Convenience wrapper around {@link fetchBasePaymentAssets} that returns only the first asset.
+ */
+declare function fetchBasePaymentAsset(apiBase: string, baseFetch?: typeof fetch): Promise<BasePaymentAsset | undefined>;
+
+/**
  * Balance Monitor for ClawRouter
  *
- * Monitors USDC balance on Base network with intelligent caching.
+ * Monitors stablecoin balance on Base network with intelligent caching.
+ * Supports any EIP-3009 stablecoin (USDC, fxUSD, EURC, etc.) with
+ * automatic normalization from native decimals to USD micros (6 decimals).
  * Provides pre-request balance checks to prevent failed payments.
  *
  * Caching Strategy:
@@ -377,7 +404,8 @@ declare class ResponseCache {
  *   - Optimistic deduction: after successful payment, subtract estimated cost from cache
  *   - Invalidation: on payment failure, immediately refresh from RPC
  */
-/** Balance thresholds in USDC smallest unit (6 decimals) */
+
+/** Balance thresholds in USD micros (6 decimals, normalized from any stablecoin) */
 declare const BALANCE_THRESHOLDS: {
     /** Low balance warning threshold: $1.00 */
     readonly LOW_BALANCE_MICROS: 1000000n;
@@ -386,10 +414,12 @@ declare const BALANCE_THRESHOLDS: {
 };
 /** Balance information returned by checkBalance() */
 type BalanceInfo = {
-    /** Raw balance in USDC smallest unit (6 decimals) */
+    /** Raw balance normalized to USD micros (6 decimals, regardless of the underlying asset's native decimals) */
     balance: bigint;
     /** Formatted balance as "$X.XX" */
     balanceUSD: string;
+    /** Symbol of the active Base payment asset */
+    assetSymbol: string;
     /** True if balance < $1.00 */
     isLow: boolean;
     /** True if balance < $0.0001 (effectively zero) */
@@ -407,7 +437,7 @@ type SufficiencyResult = {
     shortfall?: string;
 };
 /**
- * Monitors USDC balance on Base network.
+ * Monitors stablecoin balance on Base network.
  *
  * Usage:
  *   const monitor = new BalanceMonitor("0x...");
@@ -417,11 +447,12 @@ type SufficiencyResult = {
 declare class BalanceMonitor {
     private readonly client;
     private readonly walletAddress;
+    private asset;
     /** Cached balance (null = not yet fetched) */
     private cachedBalance;
     /** Timestamp when cache was last updated */
     private cachedAt;
-    constructor(walletAddress: string);
+    constructor(walletAddress: string, asset?: BasePaymentAsset);
     /**
      * Check current USDC balance.
      * Uses cache if valid, otherwise fetches from RPC.
@@ -430,14 +461,14 @@ declare class BalanceMonitor {
     /**
      * Check if balance is sufficient for an estimated cost.
      *
-     * @param estimatedCostMicros - Estimated cost in USDC smallest unit (6 decimals)
+     * @param estimatedCostMicros - Estimated cost in USD micros (6 decimals)
      */
     checkSufficient(estimatedCostMicros: bigint): Promise<SufficiencyResult>;
     /**
      * Optimistically deduct estimated cost from cached balance.
      * Call this after a successful payment to keep cache accurate.
      *
-     * @param amountMicros - Amount to deduct in USDC smallest unit
+     * @param amountMicros - Amount to deduct in USD micros
      */
     deductEstimated(amountMicros: bigint): void;
     /**
@@ -449,18 +480,22 @@ declare class BalanceMonitor {
      * Force refresh balance from RPC (ignores cache).
      */
     refresh(): Promise<BalanceInfo>;
+    setAsset(asset: BasePaymentAsset): void;
+    getAsset(): BasePaymentAsset;
     /**
-     * Format USDC amount (in micros) as "$X.XX".
+     * Format a stablecoin amount (normalized to USD micros) as "$X.XX".
      */
-    formatUSDC(amountMicros: bigint): string;
+    formatUSD(amountMicros: bigint): string;
     /**
      * Get the wallet address being monitored.
      */
     getWalletAddress(): string;
+    getAssetSymbol(): string;
     /** Fetch balance from RPC */
     private fetchBalance;
     /** Build BalanceInfo from raw balance */
     private buildInfo;
+    private toUsdMicros;
 }
 
 /**
@@ -472,6 +507,7 @@ declare class BalanceMonitor {
 type SolanaBalanceInfo = {
     balance: bigint;
     balanceUSD: string;
+    assetSymbol: string;
     isLow: boolean;
     isEmpty: boolean;
     walletAddress: string;
@@ -501,6 +537,12 @@ declare class SolanaBalanceMonitor {
      */
     formatUSDC(amountMicros: bigint): string;
     getWalletAddress(): string;
+    getAssetSymbol(): string;
+    /**
+     * Check native SOL balance (in lamports). Useful for detecting users who
+     * funded with SOL instead of USDC.
+     */
+    checkSolBalance(): Promise<bigint>;
     private fetchBalance;
     private fetchBalanceOnce;
     private buildInfo;
@@ -651,12 +693,14 @@ declare function getProxyPort(): number;
 type LowBalanceInfo = {
     balanceUSD: string;
     walletAddress: string;
+    assetSymbol: string;
 };
 /** Callback info for insufficient funds error */
 type InsufficientFundsInfo = {
     balanceUSD: string;
     requiredUSD: string;
     walletAddress: string;
+    assetSymbol: string;
 };
 /**
  * Wallet config: either a plain EVM private key string, or the full
@@ -743,6 +787,8 @@ type ProxyHandle = {
     baseUrl: string;
     walletAddress: string;
     solanaAddress?: string;
+    paymentAsset?: BasePaymentAsset;
+    paymentAssets?: BasePaymentAsset[];
     balanceMonitor: AnyBalanceMonitor;
     close: () => Promise<void>;
 };
@@ -832,7 +878,7 @@ declare const blockrunProvider: ProviderPlugin;
 /**
  * BlockRun Model Definitions for OpenClaw
  *
- * Maps BlockRun's 30+ AI models to OpenClaw's ModelDefinitionConfig format.
+ * Maps BlockRun's 55+ AI models to OpenClaw's ModelDefinitionConfig format.
  * All models use the "openai-completions" API since BlockRun is OpenAI-compatible.
  *
  * Pricing is in USD per 1M tokens. Operators pay these rates via x402;
@@ -874,6 +920,10 @@ type BlockRunModel = {
      * Default: false (must opt-in to prevent silent regressions on new models).
      */
     toolCalling?: boolean;
+    /** Model is deprecated — will be routed to fallbackModel if set */
+    deprecated?: boolean;
+    /** Model ID to route to when this model is deprecated */
+    fallbackModel?: string;
 };
 declare const BLOCKRUN_MODELS: BlockRunModel[];
 /**
@@ -1359,7 +1409,7 @@ declare function buildPartnerTools(proxyBaseUrl: string): PartnerToolDefinition[
 /**
  * @blockrun/clawrouter
  *
- * Smart LLM router for OpenClaw — 30+ models, x402 micropayments, 78% cost savings.
+ * Smart LLM router for OpenClaw — 55+ models, x402 micropayments, 78% cost savings.
  * Routes each request to the cheapest model that can handle it.
  *
  * Usage:
@@ -1377,4 +1427,4 @@ declare function buildPartnerTools(proxyBaseUrl: string): PartnerToolDefinition[
 
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, isAgenticModel, isBalanceError, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type BasePaymentAsset, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_BASE_PAYMENT_ASSET, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchBasePaymentAsset, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, isAgenticModel, isBalanceError, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, normalizeBasePaymentAsset, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy };

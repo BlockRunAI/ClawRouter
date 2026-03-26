@@ -2,7 +2,7 @@
 
 _March 20, 2026 | BlockRun Engineering_
 
-When you route AI requests across 46 models from 8 providers, you can't just pick the cheapest one. You can't just pick the fastest one either. We learned this the hard way.
+When you route AI requests across 55+ models from 8 providers, you can't just pick the cheapest one. You can't just pick the fastest one either. We learned this the hard way.
 
 This is the technical story of how we benchmarked every model on our platform, discovered that speed and intelligence are poorly correlated, and built a production routing system that classifies requests in under 1ms using 14 weighted dimensions with sigmoid confidence calibration.
 
@@ -21,7 +21,7 @@ We needed a system that could classify any request and route it to the optimal m
 
 ## Step 1: Benchmarking the Fleet
 
-Before building the router, we needed ground truth. We benchmarked all 46 models through our production payment pipeline.
+Before building the router, we needed ground truth. We benchmarked all 55+ models through our production payment pipeline.
 
 ### Methodology
 
@@ -312,7 +312,7 @@ We originally designed a two-stage system where low-confidence rules-based class
 
 ## Appendix: Full Benchmark Data
 
-Raw data (46 models, latency, throughput, IQ scores, pricing): [`benchmark-merged.json`](https://github.com/BlockRunAI/ClawRouter/blob/main/benchmark-merged.json)
+Raw data (55+ models, latency, throughput, IQ scores, pricing): [`benchmark-merged.json`](https://github.com/BlockRunAI/ClawRouter/blob/main/benchmark-merged.json)
 
 Routing configuration: [`src/router/config.ts`](https://github.com/BlockRunAI/ClawRouter/blob/main/src/router/config.ts)
 
@@ -320,4 +320,4 @@ Scoring implementation: [`src/router/rules.ts`](https://github.com/BlockRunAI/Cl
 
 ---
 
-_BlockRun is the x402 micropayment gateway for AI. One wallet, 46+ models, pay-per-request with USDC. [blockrun.ai](https://blockrun.ai)_
+_BlockRun is the x402 micropayment gateway for AI. One wallet, 55+ models, pay-per-request with USDC. [blockrun.ai](https://blockrun.ai)_

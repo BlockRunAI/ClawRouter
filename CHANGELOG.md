@@ -4,6 +4,48 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.81 — Mar 25, 2026
+
+### Added
+
+- **11 free NVIDIA models** — GPT-OSS 20B/120B, Nemotron Ultra 253B, Nemotron Super 49B/120B, DeepSeek V3.2, Mistral Large 3, Qwen3 Coder 480B, Devstral 2 123B, GLM 4.7, Llama 4 Maverick. All free, no wallet balance needed.
+- **`/model free` alias** — Points to nvidia/nemotron-ultra-253b (strongest free model). All 11 free models individually selectable via `/model` picker.
+- **New model aliases** — `nemotron`, `devstral`, `qwen-coder`, `maverick`, `deepseek-free`, `mistral-free`, `glm-free`, `llama-free`, and more (16 total).
+
+### Fixed
+
+- **Skills not found by OpenClaw agents** — Auto-copies bundled skills (imagegen, x-api, clawrouter) to `~/.openclaw/workspace/skills/` on plugin registration. Fixes `ENOENT` errors when agents invoke `/imagegen`.
+- **Internal `release` skill excluded** — No longer installed to user workspaces.
+- **Sync package-lock.json**
+
+---
+
+## v0.12.73 — Mar 24, 2026
+
+### Fixed
+
+- **Skills not found by OpenClaw agents** — Agents tried to read skill files (imagegen, x-api, etc.) from `~/.openclaw/workspace/skills/` but ClawRouter only bundled them inside the npm package. Now auto-copies all user-facing bundled skills into the workspace directory on plugin registration. Supports `OPENCLAW_PROFILE` for multi-profile setups. Only updates when content changes. Fixes `ENOENT: no such file or directory` errors when agents invoke `/imagegen`.
+- **Internal `release` skill excluded** — The release checklist skill is for ClawRouter maintainers only and is no longer installed to user workspaces.
+- **Sync package-lock.json** — Lock file was stuck at v0.12.69, now matches package.json.
+
+---
+
+## v0.12.70 — Mar 24, 2026
+
+### Fixed
+
+- **Plugin crash on string model config** — ClawRouter crashed during OpenClaw plugin registration with `TypeError: Cannot create property 'primary' on string 'blockrun/auto'`. This happened when `agents.defaults.model` in the OpenClaw config was a plain string (e.g. `"blockrun/auto"`) instead of the expected object `{ primary: "blockrun/auto" }`. Now auto-converts string/array/non-object model values to the correct object form.
+
+---
+
+## v0.12.67 — Mar 22, 2026
+
+### Fixed
+
+- **Config duplication on update** — `update.sh` and `reinstall.sh` accumulated stale `blockrun/*` model entries in `openclaw.json` on every update because only 2 hardcoded deprecated models were removed. Now performs a full reconciliation: removes any `blockrun/*` entries not in the current `TOP_MODELS` list before adding new ones. Non-blockrun entries are untouched.
+
+---
+
 ## v0.12.30 — Mar 9, 2026
 
 - **OpenClaw skills registration** — added `"skills": ["./skills"]` to `openclaw.plugin.json` so OpenClaw actually loads bundled skills (was missing, skills were never active)

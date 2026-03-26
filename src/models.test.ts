@@ -24,9 +24,9 @@ describe("resolveModelAlias", () => {
   });
 
   it("strips openai/ prefix from virtual routing profiles (issue #78)", () => {
-    // OpenClaw sends virtual profiles as "openai/eco", "openai/free", etc.
+    // OpenClaw sends virtual profiles as "openai/eco", "openai/auto", etc.
     expect(resolveModelAlias("openai/eco")).toBe("eco");
-    expect(resolveModelAlias("openai/free")).toBe("free");
+    expect(resolveModelAlias("openai/free")).toBe("free/nemotron-ultra-253b"); // "free" is now an alias, not a virtual profile
     expect(resolveModelAlias("openai/auto")).toBe("auto");
     expect(resolveModelAlias("openai/premium")).toBe("premium");
   });

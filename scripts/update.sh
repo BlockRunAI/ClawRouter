@@ -51,16 +51,20 @@ restore_previous_install() {
 
 run_dependency_install() {
   local plugin_dir="$1"
-  local log_file
-  log_file="$(mktemp -t clawrouter-update-npm.XXXXXX.log)"
+  local log_file="$HOME/clawrouter-npm-install.log"
 
+  echo "  (log: $log_file)"
   if (cd "$plugin_dir" && npm install --omit=dev >"$log_file" 2>&1); then
     tail -1 "$log_file"
-    rm -f "$log_file"
   else
-    echo "  npm install failed. Last 20 log lines:" >&2
-    tail -20 "$log_file" >&2 || true
-    echo "  Full log: $log_file" >&2
+    echo ""
+    echo "  ✗ npm install failed. Error log:"
+    echo "  ─────────────────────────────────"
+    tail -30 "$log_file" >&2 || true
+    echo "  ─────────────────────────────────"
+    echo ""
+    echo "  Full log saved: $log_file"
+    echo "  Send this file to @bc1max on Telegram for help."
     return 1
   fi
 }
@@ -166,8 +170,25 @@ try {
 "
 
 # ── Step 4: Install latest version ─────────────────────────────
+# Back up OpenClaw credentials (channels, WhatsApp/Telegram state) before plugin install
+CREDS_DIR="$HOME/.openclaw/credentials"
+CREDS_BACKUP=""
+if [ -d "$CREDS_DIR" ] && [ "$(ls -A "$CREDS_DIR" 2>/dev/null)" ]; then
+  CREDS_BACKUP="$(mktemp -d)/openclaw-credentials-backup"
+  cp -a "$CREDS_DIR" "$CREDS_BACKUP"
+  echo "  ✓ Backed up OpenClaw credentials"
+fi
+
 echo "→ Installing latest ClawRouter..."
 openclaw plugins install @blockrun/clawrouter
+
+# Restore credentials after plugin install (always restore to preserve user's channels)
+if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
+  mkdir -p "$CREDS_DIR"
+  cp -a "$CREDS_BACKUP/"* "$CREDS_DIR/"
+  echo "  ✓ Restored OpenClaw credentials (channels preserved)"
+  rm -rf "$(dirname "$CREDS_BACKUP")"
+fi
 
 # ── Step 4b: Ensure all dependencies are installed ────────────
 # openclaw's plugin installer may skip native/optional deps like @solana/kit.
@@ -218,6 +239,11 @@ const fs = require('fs');
 const path = require('path');
 const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
 const authPath = path.join(authDir, 'auth-profiles.json');
+function atomicWrite(filePath, data) {
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data);
+  fs.renameSync(tmpPath, filePath);
+}
 
 fs.mkdirSync(authDir, { recursive: true });
 
@@ -232,7 +258,7 @@ if (fs.existsSync(authPath)) {
 const profileKey = 'blockrun:default';
 if (!store.profiles[profileKey]) {
   store.profiles[profileKey] = { type: 'api_key', provider: 'blockrun', key: 'x402-proxy-handles-auth' };
-  fs.writeFileSync(authPath, JSON.stringify(store, null, 2));
+  atomicWrite(authPath, JSON.stringify(store, null, 2));
   console.log('  Auth profile created');
 } else {
   console.log('  Auth profile already exists');
@@ -264,13 +290,16 @@ try {
     'auto', 'free', 'eco', 'premium',
     'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.6', 'anthropic/claude-haiku-4.5',
     'openai/gpt-5.4', 'openai/gpt-5.4-pro', 'openai/gpt-5.3', 'openai/gpt-5.3-codex',
-    'openai/gpt-5-mini', 'openai/gpt-5-nano', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o3', 'openai/o4-mini',
-    'google/gemini-3.1-pro', 'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview',
+    'openai/gpt-5-mini', 'openai/gpt-5-nano', 'openai/gpt-5.4-nano', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o3', 'openai/o4-mini',
+    'google/gemini-3.1-pro', 'google/gemini-3.1-flash-lite', 'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview',
     'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite',
     'deepseek/deepseek-chat', 'deepseek/deepseek-reasoner', 'moonshot/kimi-k2.5',
     'xai/grok-3', 'xai/grok-4-0709', 'xai/grok-4-1-fast-reasoning',
     'minimax/minimax-m2.7', 'minimax/minimax-m2.5',
-    'nvidia/gpt-oss-120b',
+    'free/gpt-oss-120b', 'free/gpt-oss-20b',
+    'free/nemotron-ultra-253b', 'free/deepseek-v3.2', 'free/mistral-large-3-675b',
+    'free/qwen3-coder-480b', 'free/devstral-2-123b', 'free/llama-4-maverick',
+    'free/nemotron-3-super-120b', 'free/nemotron-super-49b', 'free/glm-4.7',
     'zai/glm-5', 'zai/glm-5-turbo'
   ];
 
@@ -281,17 +310,18 @@ try {
   }
 
   const allowlist = config.agents.defaults.models;
-  const DEPRECATED_MODELS = [
-    'blockrun/xai/grok-code-fast-1',
-    'blockrun/xai/grok-3-fast'
-  ];
+  const currentKeys = new Set(TOP_MODELS.map(id => 'blockrun/' + id));
+
+  // Remove any blockrun/* entries not in the current TOP_MODELS list
   let removed = 0;
-  for (const key of DEPRECATED_MODELS) {
-    if (allowlist[key]) {
+  for (const key of Object.keys(allowlist)) {
+    if (key.startsWith('blockrun/') && !currentKeys.has(key)) {
       delete allowlist[key];
       removed++;
     }
   }
+
+  // Add any missing current models
   let added = 0;
   for (const id of TOP_MODELS) {
     const key = 'blockrun/' + id;

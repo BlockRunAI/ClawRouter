@@ -48,7 +48,7 @@ export interface RouterStrategy {
 export type RouterOptions = {
   config: RoutingConfig;
   modelPricing: Map<string, import("./selector.js").ModelPricing>;
-  routingProfile?: "free" | "eco" | "auto" | "premium";
+  routingProfile?: "eco" | "auto" | "premium";
   hasTools?: boolean;
 };
 

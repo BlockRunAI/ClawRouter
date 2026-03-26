@@ -1,0 +1,1416 @@
+{
+  "benchmark": "BlockRun Model Performance",
+  "version": "3.0",
+  "timestamp": "2026-03-16T13:50:48Z",
+  "config": {
+    "num_requests": 2,
+    "max_tokens": 256,
+    "mode": "non-streaming"
+  },
+  "results": {
+    "openai/gpt-5.4": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 5952.0,
+          "input_tokens": 30,
+          "output_tokens": 256,
+          "total_tokens": 286,
+          "tokens_per_sec": 43.0,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 6474.0,
+          "input_tokens": 27,
+          "output_tokens": 256,
+          "total_tokens": 283,
+          "tokens_per_sec": 39.5,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 6213.0,
+        "min_latency_ms": 5952.0,
+        "max_latency_ms": 6474.0,
+        "avg_tokens_per_sec": 41.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5.4-pro": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 7865.0,
+          "input_tokens": 30,
+          "output_tokens": 256,
+          "total_tokens": 286,
+          "tokens_per_sec": 32.6,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 5477.0,
+          "input_tokens": 27,
+          "output_tokens": 256,
+          "total_tokens": 283,
+          "tokens_per_sec": 46.7,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 6671.0,
+        "min_latency_ms": 5477.0,
+        "max_latency_ms": 7865.0,
+        "avg_tokens_per_sec": 39.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5.3": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 5672.0,
+          "input_tokens": 30,
+          "output_tokens": 256,
+          "total_tokens": 286,
+          "tokens_per_sec": 45.1,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 6147.0,
+          "input_tokens": 27,
+          "output_tokens": 256,
+          "total_tokens": 283,
+          "tokens_per_sec": 41.6,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 5910.0,
+        "min_latency_ms": 5672.0,
+        "max_latency_ms": 6147.0,
+        "avg_tokens_per_sec": 43.4,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5.3-codex": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 8297.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 30.9,
+          "output_chars": 391,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 7573.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 33.8,
+          "output_chars": 634,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 7935.0,
+        "min_latency_ms": 7573.0,
+        "max_latency_ms": 8297.0,
+        "avg_tokens_per_sec": 32.3,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5.2": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 7282.0,
+          "input_tokens": 30,
+          "output_tokens": 256,
+          "total_tokens": 286,
+          "tokens_per_sec": 35.2,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 5732.0,
+          "input_tokens": 27,
+          "output_tokens": 256,
+          "total_tokens": 283,
+          "tokens_per_sec": 44.7,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 6507.0,
+        "min_latency_ms": 5732.0,
+        "max_latency_ms": 7282.0,
+        "avg_tokens_per_sec": 40.0,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5.2-pro": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 3803.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 67.3,
+          "output_chars": 244,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 3290.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 77.8,
+          "output_chars": 168,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 3546.0,
+        "min_latency_ms": 3290.0,
+        "max_latency_ms": 3803.0,
+        "avg_tokens_per_sec": 72.5,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2421.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 105.8,
+          "output_chars": 283,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2108.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 121.5,
+          "output_chars": 198,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2264.0,
+        "min_latency_ms": 2108.0,
+        "max_latency_ms": 2421.0,
+        "avg_tokens_per_sec": 113.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-5-nano": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2974.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 86.1,
+          "output_chars": 466,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 3400.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 75.3,
+          "output_chars": 729,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 3187.0,
+        "min_latency_ms": 2974.0,
+        "max_latency_ms": 3400.0,
+        "avg_tokens_per_sec": 80.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-4.1": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 5197.0,
+          "input_tokens": 30,
+          "output_tokens": 256,
+          "total_tokens": 286,
+          "tokens_per_sec": 49.3,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 5757.0,
+          "input_tokens": 27,
+          "output_tokens": 256,
+          "total_tokens": 283,
+          "tokens_per_sec": 44.5,
+          "output_chars": 0,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 5477.0,
+        "min_latency_ms": 5197.0,
+        "max_latency_ms": 5757.0,
+        "avg_tokens_per_sec": 46.9,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-4.1-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2379.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 107.6,
+          "output_chars": 220,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2301.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 111.3,
+          "output_chars": 721,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2340.0,
+        "min_latency_ms": 2301.0,
+        "max_latency_ms": 2379.0,
+        "avg_tokens_per_sec": 109.4,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-4.1-nano": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2512.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 101.9,
+          "output_chars": 484,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2769.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 92.5,
+          "output_chars": 497,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2640.0,
+        "min_latency_ms": 2512.0,
+        "max_latency_ms": 2769.0,
+        "avg_tokens_per_sec": 97.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-4o": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 5705.0,
+          "input_tokens": 31,
+          "output_tokens": 256,
+          "total_tokens": 287,
+          "tokens_per_sec": 44.9,
+          "output_chars": 956,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 5051.0,
+          "input_tokens": 28,
+          "output_tokens": 256,
+          "total_tokens": 284,
+          "tokens_per_sec": 50.7,
+          "output_chars": 870,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 5378.0,
+        "min_latency_ms": 5051.0,
+        "max_latency_ms": 5705.0,
+        "avg_tokens_per_sec": 47.8,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/gpt-4o-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2657.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 96.4,
+          "output_chars": 348,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2871.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 89.2,
+          "output_chars": 624,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2764.0,
+        "min_latency_ms": 2657.0,
+        "max_latency_ms": 2871.0,
+        "avg_tokens_per_sec": 92.8,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/o3": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2756.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 92.9,
+          "output_chars": 948,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2969.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 86.2,
+          "output_chars": 502,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2862.0,
+        "min_latency_ms": 2756.0,
+        "max_latency_ms": 2969.0,
+        "avg_tokens_per_sec": 89.6,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/o3-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2383.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 107.4,
+          "output_chars": 1106,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2137.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 119.8,
+          "output_chars": 686,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2260.0,
+        "min_latency_ms": 2137.0,
+        "max_latency_ms": 2383.0,
+        "avg_tokens_per_sec": 113.6,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/o4-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2514.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 101.8,
+          "output_chars": 53,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2142.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 119.5,
+          "output_chars": 733,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2328.0,
+        "min_latency_ms": 2142.0,
+        "max_latency_ms": 2514.0,
+        "avg_tokens_per_sec": 110.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/o1": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2659.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 96.3,
+          "output_chars": 723,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2465.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 103.9,
+          "output_chars": 551,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2562.0,
+        "min_latency_ms": 2465.0,
+        "max_latency_ms": 2659.0,
+        "avg_tokens_per_sec": 100.1,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "openai/o1-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2789.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 91.8,
+          "output_chars": 217,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2703.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 94.7,
+          "output_chars": 603,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2746.0,
+        "min_latency_ms": 2703.0,
+        "max_latency_ms": 2789.0,
+        "avg_tokens_per_sec": 93.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "anthropic/claude-sonnet-4.6": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2141.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 119.6,
+          "output_chars": 1200,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2079.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 123.1,
+          "output_chars": 662,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2110.0,
+        "min_latency_ms": 2079.0,
+        "max_latency_ms": 2141.0,
+        "avg_tokens_per_sec": 121.3,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "anthropic/claude-opus-4.6": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 2138.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 119.7,
+          "output_chars": 341,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 2140.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 119.6,
+          "output_chars": 814,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2139.0,
+        "min_latency_ms": 2138.0,
+        "max_latency_ms": 2140.0,
+        "avg_tokens_per_sec": 119.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "anthropic/claude-haiku-4.5": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 3361.0,
+          "input_tokens": 32,
+          "output_tokens": 256,
+          "total_tokens": 288,
+          "tokens_per_sec": 76.2,
+          "output_chars": 770,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1249.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 205.0,
+          "output_chars": 692,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 2305.0,
+        "min_latency_ms": 1249.0,
+        "max_latency_ms": 3361.0,
+        "avg_tokens_per_sec": 140.6,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "google/gemini-3.1-pro": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1254.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 204.1,
+          "output_chars": 335,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1964.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 130.4,
+          "output_chars": 646,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1609.0,
+        "min_latency_ms": 1254.0,
+        "max_latency_ms": 1964.0,
+        "avg_tokens_per_sec": 167.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "google/gemini-3-pro-preview": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1310.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 195.5,
+          "output_chars": 396,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1393.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 183.8,
+          "output_chars": 707,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1352.0,
+        "min_latency_ms": 1310.0,
+        "max_latency_ms": 1393.0,
+        "avg_tokens_per_sec": 189.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "google/gemini-3-flash-preview": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1410.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 181.5,
+          "output_chars": 444,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1387.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 184.6,
+          "output_chars": 510,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1398.0,
+        "min_latency_ms": 1387.0,
+        "max_latency_ms": 1410.0,
+        "avg_tokens_per_sec": 183.1,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "google/gemini-2.5-pro": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1287.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 198.9,
+          "output_chars": 623,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1301.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 196.7,
+          "output_chars": 577,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1294.0,
+        "min_latency_ms": 1287.0,
+        "max_latency_ms": 1301.0,
+        "avg_tokens_per_sec": 197.8,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "google/gemini-2.5-flash": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1167.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 219.4,
+          "output_chars": 108,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1308.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 195.8,
+          "output_chars": 636,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1238.0,
+        "min_latency_ms": 1167.0,
+        "max_latency_ms": 1308.0,
+        "avg_tokens_per_sec": 207.6,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "google/gemini-2.5-flash-lite": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1177.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 217.5,
+          "output_chars": 201,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1529.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 167.5,
+          "output_chars": 698,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1353.0,
+        "min_latency_ms": 1177.0,
+        "max_latency_ms": 1529.0,
+        "avg_tokens_per_sec": 192.5,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "deepseek/deepseek-chat": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1494.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 171.3,
+          "output_chars": 693,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1368.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 187.1,
+          "output_chars": 679,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1431.0,
+        "min_latency_ms": 1368.0,
+        "max_latency_ms": 1494.0,
+        "avg_tokens_per_sec": 179.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "deepseek/deepseek-reasoner": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1731.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 147.9,
+          "output_chars": 1216,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1177.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 217.5,
+          "output_chars": 469,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1454.0,
+        "min_latency_ms": 1177.0,
+        "max_latency_ms": 1731.0,
+        "avg_tokens_per_sec": 182.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "moonshot/kimi-k2.5": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1615.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 158.5,
+          "output_chars": 1239,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1676.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 152.8,
+          "output_chars": 526,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1646.0,
+        "min_latency_ms": 1615.0,
+        "max_latency_ms": 1676.0,
+        "avg_tokens_per_sec": 155.7,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-3": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1316.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 194.6,
+          "output_chars": 1017,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1171.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 218.6,
+          "output_chars": 742,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1244.0,
+        "min_latency_ms": 1171.0,
+        "max_latency_ms": 1316.0,
+        "avg_tokens_per_sec": 206.6,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-3-mini": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1332.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 192.2,
+          "output_chars": 672,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1072.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 238.7,
+          "output_chars": 708,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1202.0,
+        "min_latency_ms": 1072.0,
+        "max_latency_ms": 1332.0,
+        "avg_tokens_per_sec": 215.4,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-4-fast-reasoning": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1208.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 211.9,
+          "output_chars": 1275,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1387.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 184.5,
+          "output_chars": 815,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1298.0,
+        "min_latency_ms": 1208.0,
+        "max_latency_ms": 1387.0,
+        "avg_tokens_per_sec": 198.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-4-fast-non-reasoning": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1185.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 216.0,
+          "output_chars": 1288,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1101.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 232.6,
+          "output_chars": 391,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1143.0,
+        "min_latency_ms": 1101.0,
+        "max_latency_ms": 1185.0,
+        "avg_tokens_per_sec": 224.3,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-4-1-fast-reasoning": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1412.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 181.3,
+          "output_chars": 950,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1495.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 171.2,
+          "output_chars": 923,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1454.0,
+        "min_latency_ms": 1412.0,
+        "max_latency_ms": 1495.0,
+        "avg_tokens_per_sec": 176.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-4-1-fast-non-reasoning": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1272.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 201.2,
+          "output_chars": 335,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1217.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 210.4,
+          "output_chars": 726,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1244.0,
+        "min_latency_ms": 1217.0,
+        "max_latency_ms": 1272.0,
+        "avg_tokens_per_sec": 205.8,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "xai/grok-4-0709": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1389.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 184.3,
+          "output_chars": 647,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1306.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 196.1,
+          "output_chars": 836,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1348.0,
+        "min_latency_ms": 1306.0,
+        "max_latency_ms": 1389.0,
+        "avg_tokens_per_sec": 190.2,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "minimax/minimax-m2.5": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1147.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 223.1,
+          "output_chars": 718,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1408.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 181.8,
+          "output_chars": 592,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1278.0,
+        "min_latency_ms": 1147.0,
+        "max_latency_ms": 1408.0,
+        "avg_tokens_per_sec": 202.4,
+        "avg_output_tokens": 256.0
+      }
+    },
+    "nvidia/gpt-oss-120b": {
+      "raw": [
+        {
+          "request": 1,
+          "latency_ms": 1221.0,
+          "input_tokens": 89,
+          "output_tokens": 256,
+          "total_tokens": 345,
+          "tokens_per_sec": 209.6,
+          "output_chars": 201,
+          "finish_reason": "length",
+          "status": "success"
+        },
+        {
+          "request": 2,
+          "latency_ms": 1284.0,
+          "input_tokens": 86,
+          "output_tokens": 256,
+          "total_tokens": 342,
+          "tokens_per_sec": 199.3,
+          "output_chars": 574,
+          "finish_reason": "length",
+          "status": "success"
+        }
+      ],
+      "summary": {
+        "runs": 2,
+        "successes": 2,
+        "error_rate": 0.0,
+        "avg_latency_ms": 1252.0,
+        "min_latency_ms": 1221.0,
+        "max_latency_ms": 1284.0,
+        "avg_tokens_per_sec": 204.4,
+        "avg_output_tokens": 256.0
+      }
+    }
+  }
+}

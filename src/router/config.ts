@@ -1047,9 +1047,11 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
         "google/gemini-3-flash-preview", // 1,398ms, IQ 46 — smarter fallback
         "deepseek/deepseek-chat", // 1,431ms, IQ 32, 41% retention
         "moonshot/kimi-k2.5", // 1,646ms, IQ 47, strong quality
-        "google/gemini-2.5-flash-lite", // 1,353ms, 1M context, ultra cheap ($0.10/$0.40)
+        "google/gemini-3.1-flash-lite", // $0.25/$1.50, 1M context — newest flash-lite
+        "google/gemini-2.5-flash-lite", // 1,353ms, $0.10/$0.40
+        "openai/gpt-5.4-nano", // $0.20/$1.25, 1M context
         "xai/grok-4-fast-non-reasoning", // 1,143ms, $0.20/$0.50 — fast fallback
-        "nvidia/gpt-oss-120b", // 1,252ms, FREE fallback
+        "free/gpt-oss-120b", // 1,252ms, FREE fallback
       ],
     },
     MEDIUM: {
@@ -1058,7 +1060,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
         "google/gemini-3-flash-preview", // 1,398ms, IQ 46 — nearly same IQ, faster + cheaper
         "deepseek/deepseek-chat", // 1,431ms, IQ 32, 41% retention
         "google/gemini-2.5-flash", // 1,238ms, 60% retention
-        "google/gemini-2.5-flash-lite", // 1,353ms, 1M context ($0.10/$0.40)
+        "google/gemini-3.1-flash-lite", // $0.25/$1.50, 1M context
+        "google/gemini-2.5-flash-lite", // 1,353ms, $0.10/$0.40
         "xai/grok-4-1-fast-non-reasoning", // 1,244ms, fast fallback
         "xai/grok-3-mini", // 1,202ms, $0.30/$0.50
       ],
@@ -1090,28 +1093,35 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   // Eco tier configs - absolute cheapest (blockrun/eco)
   ecoTiers: {
     SIMPLE: {
-      primary: "nvidia/gpt-oss-120b", // 1,252ms, FREE! $0.00/$0.00
+      primary: "free/gpt-oss-120b", // FREE! $0.00/$0.00
       fallback: [
-        "google/gemini-2.5-flash-lite", // 1,353ms, $0.10/$0.40
-        "xai/grok-4-fast-non-reasoning", // 1,143ms, $0.20/$0.50
-        "google/gemini-2.5-flash", // 1,238ms
+        "free/gpt-oss-20b", // FREE — smaller, faster
+        "google/gemini-3.1-flash-lite", // $0.25/$1.50 — newest flash-lite
+        "openai/gpt-5.4-nano", // $0.20/$1.25 — fast nano
+        "google/gemini-2.5-flash-lite", // $0.10/$0.40
+        "xai/grok-4-fast-non-reasoning", // $0.20/$0.50
       ],
     },
     MEDIUM: {
-      primary: "google/gemini-2.5-flash-lite", // 1,353ms, $0.10/$0.40 - cheapest capable with 1M context
+      primary: "google/gemini-3.1-flash-lite", // $0.25/$1.50 — newest flash-lite
       fallback: [
+        "openai/gpt-5.4-nano", // $0.20/$1.25
+        "google/gemini-2.5-flash-lite", // $0.10/$0.40
         "xai/grok-4-fast-non-reasoning",
         "google/gemini-2.5-flash",
-        "deepseek/deepseek-chat",
-        "nvidia/gpt-oss-120b",
       ],
     },
     COMPLEX: {
-      primary: "google/gemini-2.5-flash-lite", // 1,353ms, $0.10/$0.40 - 1M context handles complexity
-      fallback: ["xai/grok-4-0709", "google/gemini-2.5-flash", "deepseek/deepseek-chat"],
+      primary: "google/gemini-3.1-flash-lite", // $0.25/$1.50
+      fallback: [
+        "google/gemini-2.5-flash-lite",
+        "xai/grok-4-0709",
+        "google/gemini-2.5-flash",
+        "deepseek/deepseek-chat",
+      ],
     },
     REASONING: {
-      primary: "xai/grok-4-1-fast-reasoning", // 1,454ms, $0.20/$0.50
+      primary: "xai/grok-4-1-fast-reasoning", // $0.20/$0.50
       fallback: ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner"],
     },
   },

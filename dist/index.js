@@ -31728,6 +31728,26 @@ var init_solana_balance = __esm({
       getWalletAddress() {
         return this.walletAddress;
       }
+      getAssetSymbol() {
+        return "USDC";
+      }
+      /**
+       * Check native SOL balance (in lamports). Useful for detecting users who
+       * funded with SOL instead of USDC.
+       */
+      async checkSolBalance() {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), BALANCE_TIMEOUT_MS);
+        try {
+          const owner = address(this.walletAddress);
+          const response = await this.rpc.getBalance(owner).send({ abortSignal: controller.signal });
+          return BigInt(response.value);
+        } catch {
+          return 0n;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       async fetchBalance() {
         const owner = address(this.walletAddress);
         const mint = address(SOLANA_USDC_MINT);
@@ -31764,6 +31784,7 @@ var init_solana_balance = __esm({
         return {
           balance,
           balanceUSD: `$${dollars.toFixed(2)}`,
+          assetSymbol: "USDC",
           isLow: balance < 1000000n,
           isEmpty: balance < 100n,
           walletAddress: this.walletAddress
@@ -32856,6 +32877,9 @@ var MODEL_ALIASES = {
   gpt5: "openai/gpt-5.4",
   "gpt-5.4": "openai/gpt-5.4",
   "gpt-5.4-pro": "openai/gpt-5.4-pro",
+  "gpt-5.4-nano": "openai/gpt-5.4-nano",
+  nano: "openai/gpt-5.4-nano",
+  "gpt-5-nano": "openai/gpt-5.4-nano",
   codex: "openai/gpt-5.3-codex",
   mini: "openai/gpt-4o-mini",
   o1: "openai/o1",
@@ -32873,6 +32897,7 @@ var MODEL_ALIASES = {
   flash: "google/gemini-2.5-flash",
   "gemini-3.1-pro-preview": "google/gemini-3.1-pro",
   "google/gemini-3.1-pro-preview": "google/gemini-3.1-pro",
+  "gemini-3.1-flash-lite": "google/gemini-3.1-flash-lite",
   // xAI
   grok: "xai/grok-3",
   "grok-fast": "xai/grok-4-fast-reasoning",
@@ -32885,9 +32910,38 @@ var MODEL_ALIASES = {
   // delisted 2026-03-12
   "xai/grok-3-fast": "xai/grok-4-fast-reasoning",
   // delisted (too expensive)
-  // NVIDIA
-  nvidia: "nvidia/gpt-oss-120b",
-  "gpt-120b": "nvidia/gpt-oss-120b",
+  // NVIDIA — backward compat aliases (nvidia/xxx → free/xxx)
+  nvidia: "free/gpt-oss-120b",
+  "gpt-120b": "free/gpt-oss-120b",
+  "gpt-20b": "free/gpt-oss-20b",
+  "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
+  "nvidia/gpt-oss-20b": "free/gpt-oss-20b",
+  "nvidia/nemotron-ultra-253b": "free/nemotron-ultra-253b",
+  "nvidia/nemotron-3-super-120b": "free/nemotron-3-super-120b",
+  "nvidia/nemotron-super-49b": "free/nemotron-super-49b",
+  "nvidia/deepseek-v3.2": "free/deepseek-v3.2",
+  "nvidia/mistral-large-3-675b": "free/mistral-large-3-675b",
+  "nvidia/qwen3-coder-480b": "free/qwen3-coder-480b",
+  "nvidia/devstral-2-123b": "free/devstral-2-123b",
+  "nvidia/glm-4.7": "free/glm-4.7",
+  "nvidia/llama-4-maverick": "free/llama-4-maverick",
+  // Free model shorthand aliases
+  "deepseek-free": "free/deepseek-v3.2",
+  "mistral-free": "free/mistral-large-3-675b",
+  "glm-free": "free/glm-4.7",
+  "llama-free": "free/llama-4-maverick",
+  nemotron: "free/nemotron-ultra-253b",
+  "nemotron-ultra": "free/nemotron-ultra-253b",
+  "nemotron-253b": "free/nemotron-ultra-253b",
+  "nemotron-super": "free/nemotron-super-49b",
+  "nemotron-49b": "free/nemotron-super-49b",
+  "nemotron-120b": "free/nemotron-3-super-120b",
+  devstral: "free/devstral-2-123b",
+  "devstral-2": "free/devstral-2-123b",
+  "qwen-coder": "free/qwen3-coder-480b",
+  "qwen-coder-free": "free/qwen3-coder-480b",
+  maverick: "free/llama-4-maverick",
+  free: "free/nemotron-ultra-253b",
   // MiniMax
   minimax: "minimax/minimax-m2.7",
   "minimax-m2.7": "minimax/minimax-m2.7",
@@ -32899,7 +32953,7 @@ var MODEL_ALIASES = {
   // Routing profile aliases (common variations)
   "auto-router": "auto",
   router: "auto"
-  // Note: auto, free, eco, premium are virtual routing profiles registered in BLOCKRUN_MODELS
+  // Note: auto, eco, premium are virtual routing profiles registered in BLOCKRUN_MODELS
   // They don't need aliases since they're already top-level model IDs
 };
 function resolveModelAlias(model) {
@@ -32934,11 +32988,12 @@ var BLOCKRUN_MODELS = [
   },
   {
     id: "free",
-    name: "Free (NVIDIA GPT-OSS-120B only)",
+    name: "Free \u2192 Nemotron Ultra 253B",
     inputPrice: 0,
     outputPrice: 0,
-    contextWindow: 128e3,
-    maxOutput: 4096
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
   },
   {
     id: "eco",
@@ -32988,7 +33043,9 @@ var BLOCKRUN_MODELS = [
     outputPrice: 0.4,
     contextWindow: 128e3,
     maxOutput: 32768,
-    toolCalling: true
+    toolCalling: true,
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-nano"
   },
   {
     id: "openai/gpt-5.2-pro",
@@ -33024,6 +33081,16 @@ var BLOCKRUN_MODELS = [
     contextWindow: 4e5,
     maxOutput: 128e3,
     reasoning: true,
+    toolCalling: true
+  },
+  {
+    id: "openai/gpt-5.4-nano",
+    name: "GPT-5.4 Nano",
+    version: "5.4",
+    inputPrice: 0.2,
+    outputPrice: 1.25,
+    contextWindow: 105e4,
+    maxOutput: 32768,
     toolCalling: true
   },
   // OpenAI GPT-5.3 Family
@@ -33270,6 +33337,16 @@ var BLOCKRUN_MODELS = [
     maxOutput: 65536,
     toolCalling: true
   },
+  {
+    id: "google/gemini-3.1-flash-lite",
+    name: "Gemini 3.1 Flash Lite",
+    version: "3.1",
+    inputPrice: 0.25,
+    outputPrice: 1.5,
+    contextWindow: 1e6,
+    maxOutput: 8192,
+    toolCalling: true
+  },
   // DeepSeek
   {
     id: "deepseek/deepseek-chat",
@@ -33378,8 +33455,8 @@ var BLOCKRUN_MODELS = [
     id: "xai/grok-4-0709",
     name: "Grok 4 (0709)",
     version: "4-0709",
-    inputPrice: 0.2,
-    outputPrice: 1.5,
+    inputPrice: 3,
+    outputPrice: 15,
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
@@ -33421,24 +33498,123 @@ var BLOCKRUN_MODELS = [
     agentic: true,
     toolCalling: true
   },
-  // NVIDIA - Free/cheap models
+  // Free models (hosted by NVIDIA, billingMode: "free" on server)
+  // IDs use "free/" prefix so users see them as free in the /model picker.
+  // ClawRouter maps free/xxx → nvidia/xxx before sending to BlockRun upstream.
+  // toolCalling intentionally omitted: structured function calling unverified.
   {
-    id: "nvidia/gpt-oss-120b",
-    name: "NVIDIA GPT-OSS 120B",
+    id: "free/gpt-oss-120b",
+    name: "[Free] GPT-OSS 120B",
     version: "120b",
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 128e3,
     maxOutput: 16384
-    // toolCalling intentionally omitted: free model, structured function
-    // calling support unverified. Excluded from tool-heavy routing paths.
   },
+  {
+    id: "free/gpt-oss-20b",
+    name: "[Free] GPT-OSS 20B",
+    version: "20b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 128e3,
+    maxOutput: 16384
+  },
+  {
+    id: "free/nemotron-ultra-253b",
+    name: "[Free] Nemotron Ultra 253B",
+    version: "253b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  {
+    id: "free/nemotron-3-super-120b",
+    name: "[Free] Nemotron 3 Super 120B",
+    version: "3-super-120b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  {
+    id: "free/nemotron-super-49b",
+    name: "[Free] Nemotron Super 49B",
+    version: "super-49b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  {
+    id: "free/deepseek-v3.2",
+    name: "[Free] DeepSeek V3.2",
+    version: "v3.2",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  {
+    id: "free/mistral-large-3-675b",
+    name: "[Free] Mistral Large 675B",
+    version: "3-675b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  {
+    id: "free/qwen3-coder-480b",
+    name: "[Free] Qwen3 Coder 480B",
+    version: "480b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384
+  },
+  {
+    id: "free/devstral-2-123b",
+    name: "[Free] Devstral 2 123B",
+    version: "2-123b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384
+  },
+  {
+    id: "free/glm-4.7",
+    name: "[Free] GLM-4.7",
+    version: "4.7",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  {
+    id: "free/llama-4-maverick",
+    name: "[Free] Llama 4 Maverick",
+    version: "4-maverick",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true
+  },
+  // NVIDIA - Paid models
   {
     id: "nvidia/kimi-k2.5",
     name: "NVIDIA Kimi K2.5",
     version: "k2.5",
-    inputPrice: 0.55,
-    outputPrice: 2.5,
+    inputPrice: 0.6,
+    outputPrice: 3,
     contextWindow: 262144,
     maxOutput: 16384,
     toolCalling: true
@@ -33553,6 +33729,7 @@ var blockrunProvider = {
 };
 
 // src/proxy.ts
+import { AsyncLocalStorage } from "async_hooks";
 import { createServer } from "http";
 import { finished } from "stream";
 import { homedir as homedir5 } from "os";
@@ -43494,13 +43671,18 @@ function getFallbackChain(tier, tierConfigs) {
   const config = tierConfigs[tier];
   return [config.primary, ...config.fallback];
 }
+var SERVER_MARGIN_PERCENT = 5;
+var MIN_PAYMENT_USD = 1e-3;
 function calculateModelCost(model, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile) {
   const pricing = modelPricing.get(model);
   const inputPrice = pricing?.inputPrice ?? 0;
   const outputPrice = pricing?.outputPrice ?? 0;
   const inputCost = estimatedInputTokens / 1e6 * inputPrice;
   const outputCost = maxOutputTokens / 1e6 * outputPrice;
-  const costEstimate = inputCost + outputCost;
+  const costEstimate = Math.max(
+    (inputCost + outputCost) * (1 + SERVER_MARGIN_PERCENT / 100),
+    MIN_PAYMENT_USD
+  );
   const opusPricing = modelPricing.get(BASELINE_MODEL_ID);
   const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE;
   const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE;
@@ -44672,11 +44854,15 @@ var DEFAULT_ROUTING_CONFIG = {
         // 1,431ms, IQ 32, 41% retention
         "moonshot/kimi-k2.5",
         // 1,646ms, IQ 47, strong quality
+        "google/gemini-3.1-flash-lite",
+        // $0.25/$1.50, 1M context — newest flash-lite
         "google/gemini-2.5-flash-lite",
-        // 1,353ms, 1M context, ultra cheap ($0.10/$0.40)
+        // 1,353ms, $0.10/$0.40
+        "openai/gpt-5.4-nano",
+        // $0.20/$1.25, 1M context
         "xai/grok-4-fast-non-reasoning",
         // 1,143ms, $0.20/$0.50 — fast fallback
-        "nvidia/gpt-oss-120b"
+        "free/gpt-oss-120b"
         // 1,252ms, FREE fallback
       ]
     },
@@ -44690,8 +44876,10 @@ var DEFAULT_ROUTING_CONFIG = {
         // 1,431ms, IQ 32, 41% retention
         "google/gemini-2.5-flash",
         // 1,238ms, 60% retention
+        "google/gemini-3.1-flash-lite",
+        // $0.25/$1.50, 1M context
         "google/gemini-2.5-flash-lite",
-        // 1,353ms, 1M context ($0.10/$0.40)
+        // 1,353ms, $0.10/$0.40
         "xai/grok-4-1-fast-non-reasoning",
         // 1,244ms, fast fallback
         "xai/grok-3-mini"
@@ -44738,35 +44926,46 @@ var DEFAULT_ROUTING_CONFIG = {
   // Eco tier configs - absolute cheapest (blockrun/eco)
   ecoTiers: {
     SIMPLE: {
-      primary: "nvidia/gpt-oss-120b",
-      // 1,252ms, FREE! $0.00/$0.00
+      primary: "free/gpt-oss-120b",
+      // FREE! $0.00/$0.00
       fallback: [
+        "free/gpt-oss-20b",
+        // FREE — smaller, faster
+        "google/gemini-3.1-flash-lite",
+        // $0.25/$1.50 — newest flash-lite
+        "openai/gpt-5.4-nano",
+        // $0.20/$1.25 — fast nano
         "google/gemini-2.5-flash-lite",
-        // 1,353ms, $0.10/$0.40
-        "xai/grok-4-fast-non-reasoning",
-        // 1,143ms, $0.20/$0.50
-        "google/gemini-2.5-flash"
-        // 1,238ms
+        // $0.10/$0.40
+        "xai/grok-4-fast-non-reasoning"
+        // $0.20/$0.50
       ]
     },
     MEDIUM: {
-      primary: "google/gemini-2.5-flash-lite",
-      // 1,353ms, $0.10/$0.40 - cheapest capable with 1M context
+      primary: "google/gemini-3.1-flash-lite",
+      // $0.25/$1.50 — newest flash-lite
       fallback: [
+        "openai/gpt-5.4-nano",
+        // $0.20/$1.25
+        "google/gemini-2.5-flash-lite",
+        // $0.10/$0.40
         "xai/grok-4-fast-non-reasoning",
-        "google/gemini-2.5-flash",
-        "deepseek/deepseek-chat",
-        "nvidia/gpt-oss-120b"
+        "google/gemini-2.5-flash"
       ]
     },
     COMPLEX: {
-      primary: "google/gemini-2.5-flash-lite",
-      // 1,353ms, $0.10/$0.40 - 1M context handles complexity
-      fallback: ["xai/grok-4-0709", "google/gemini-2.5-flash", "deepseek/deepseek-chat"]
+      primary: "google/gemini-3.1-flash-lite",
+      // $0.25/$1.50
+      fallback: [
+        "google/gemini-2.5-flash-lite",
+        "xai/grok-4-0709",
+        "google/gemini-2.5-flash",
+        "deepseek/deepseek-chat"
+      ]
     },
     REASONING: {
       primary: "xai/grok-4-1-fast-reasoning",
-      // 1,454ms, $0.20/$0.50
+      // $0.20/$0.50
       fallback: ["xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner"]
     }
   },
@@ -45547,8 +45746,77 @@ function isRpcError(error) {
   return error instanceof Error && error.code === "RPC_ERROR";
 }
 
+// src/payment-asset.ts
+var DEFAULT_BASE_PAYMENT_ASSET = {
+  chain: "base",
+  asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  symbol: "USDC",
+  decimals: 6,
+  name: "USD Coin",
+  transferMethod: "eip3009"
+};
+function isHexAddress(value) {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+function normalizeBasePaymentAsset(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  if (!isHexAddress(candidate.asset)) return void 0;
+  if (typeof candidate.symbol !== "string" || candidate.symbol.trim() === "") return void 0;
+  if (typeof candidate.decimals !== "number" || !Number.isInteger(candidate.decimals) || candidate.decimals < 0) {
+    return void 0;
+  }
+  if (typeof candidate.name !== "string" || candidate.name.trim() === "") return void 0;
+  if (candidate.transferMethod !== void 0 && candidate.transferMethod !== "eip3009") {
+    return void 0;
+  }
+  return {
+    chain: "base",
+    asset: candidate.asset,
+    symbol: candidate.symbol.trim().toUpperCase(),
+    decimals: candidate.decimals,
+    name: candidate.name.trim(),
+    transferMethod: "eip3009",
+    priority: typeof candidate.priority === "number" ? candidate.priority : void 0,
+    enabled: typeof candidate.enabled === "boolean" ? candidate.enabled : void 0
+  };
+}
+function sortAssets(assets) {
+  return [...assets].sort(
+    (a, b) => (a.priority ?? Number.MAX_SAFE_INTEGER) - (b.priority ?? Number.MAX_SAFE_INTEGER)
+  );
+}
+function normalizeBasePaymentAssets(value) {
+  if (!value || typeof value !== "object") return [DEFAULT_BASE_PAYMENT_ASSET];
+  const payload = value;
+  const candidateList = Array.isArray(payload.paymentAssets) ? payload.paymentAssets : [
+    payload.paymentAsset,
+    payload.base,
+    payload
+  ];
+  const normalized = candidateList.map((candidate) => normalizeBasePaymentAsset(candidate)).filter((asset) => Boolean(asset)).filter((asset) => asset.enabled !== false && asset.transferMethod === "eip3009");
+  return sortAssets(
+    normalized.length > 0 ? normalized : [DEFAULT_BASE_PAYMENT_ASSET]
+  );
+}
+async function fetchBasePaymentAssets(apiBase, baseFetch = fetch) {
+  try {
+    const response = await baseFetch(`${apiBase.replace(/\/+$/, "")}/v1/payment-metadata?chain=base`, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) return [DEFAULT_BASE_PAYMENT_ASSET];
+    const payload = await response.json();
+    return normalizeBasePaymentAssets(payload);
+  } catch {
+    return [DEFAULT_BASE_PAYMENT_ASSET];
+  }
+}
+async function fetchBasePaymentAsset(apiBase, baseFetch = fetch) {
+  const assets = await fetchBasePaymentAssets(apiBase, baseFetch);
+  return assets[0];
+}
+
 // src/balance.ts
-var USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 var CACHE_TTL_MS = 3e4;
 var BALANCE_THRESHOLDS = {
   /** Low balance warning threshold: $1.00 */
@@ -45559,12 +45827,14 @@ var BALANCE_THRESHOLDS = {
 var BalanceMonitor = class {
   client;
   walletAddress;
+  asset;
   /** Cached balance (null = not yet fetched) */
   cachedBalance = null;
   /** Timestamp when cache was last updated */
   cachedAt = 0;
-  constructor(walletAddress) {
+  constructor(walletAddress, asset = DEFAULT_BASE_PAYMENT_ASSET) {
     this.walletAddress = walletAddress;
+    this.asset = asset;
     this.client = createPublicClient({
       chain: base,
       transport: http(void 0, {
@@ -45592,7 +45862,7 @@ var BalanceMonitor = class {
   /**
    * Check if balance is sufficient for an estimated cost.
    *
-   * @param estimatedCostMicros - Estimated cost in USDC smallest unit (6 decimals)
+   * @param estimatedCostMicros - Estimated cost in USD micros (6 decimals)
    */
   async checkSufficient(estimatedCostMicros) {
     const info = await this.checkBalance();
@@ -45603,14 +45873,14 @@ var BalanceMonitor = class {
     return {
       sufficient: false,
       info,
-      shortfall: this.formatUSDC(shortfall)
+      shortfall: this.formatUSD(shortfall)
     };
   }
   /**
    * Optimistically deduct estimated cost from cached balance.
    * Call this after a successful payment to keep cache accurate.
    *
-   * @param amountMicros - Amount to deduct in USDC smallest unit
+   * @param amountMicros - Amount to deduct in USD micros
    */
   deductEstimated(amountMicros) {
     if (this.cachedBalance !== null && this.cachedBalance >= amountMicros) {
@@ -45632,10 +45902,19 @@ var BalanceMonitor = class {
     this.invalidate();
     return this.checkBalance();
   }
+  setAsset(asset) {
+    if (this.asset.asset.toLowerCase() !== asset.asset.toLowerCase() || this.asset.symbol !== asset.symbol || this.asset.decimals !== asset.decimals) {
+      this.asset = asset;
+      this.invalidate();
+    }
+  }
+  getAsset() {
+    return this.asset;
+  }
   /**
-   * Format USDC amount (in micros) as "$X.XX".
+   * Format a stablecoin amount (normalized to USD micros) as "$X.XX".
    */
-  formatUSDC(amountMicros) {
+  formatUSD(amountMicros) {
     const dollars = Number(amountMicros) / 1e6;
     return `$${dollars.toFixed(2)}`;
   }
@@ -45645,16 +45924,19 @@ var BalanceMonitor = class {
   getWalletAddress() {
     return this.walletAddress;
   }
+  getAssetSymbol() {
+    return this.asset.symbol;
+  }
   /** Fetch balance from RPC */
   async fetchBalance() {
     try {
       const balance = await this.client.readContract({
-        address: USDC_BASE,
+        address: this.asset.asset,
         abi: erc20Abi,
         functionName: "balanceOf",
         args: [this.walletAddress]
       });
-      return balance;
+      return this.toUsdMicros(balance);
     } catch (error) {
       throw new RpcError2(error instanceof Error ? error.message : "Unknown error", error);
     }
@@ -45663,11 +45945,19 @@ var BalanceMonitor = class {
   buildInfo(balance) {
     return {
       balance,
-      balanceUSD: this.formatUSDC(balance),
+      balanceUSD: this.formatUSD(balance),
+      assetSymbol: this.asset.symbol,
       isLow: balance < BALANCE_THRESHOLDS.LOW_BALANCE_MICROS,
       isEmpty: balance < BALANCE_THRESHOLDS.ZERO_THRESHOLD,
       walletAddress: this.walletAddress
     };
+  }
+  toUsdMicros(rawAmount) {
+    if (this.asset.decimals === 6) return rawAmount;
+    if (this.asset.decimals > 6) {
+      return rawAmount / 10n ** BigInt(this.asset.decimals - 6);
+    }
+    return rawAmount * 10n ** BigInt(6 - this.asset.decimals);
   }
 };
 
@@ -47095,13 +47385,12 @@ ${lines.join("\n")}`;
 };
 
 // src/proxy.ts
+var paymentStore = new AsyncLocalStorage();
 var BLOCKRUN_API = "https://blockrun.ai/api";
 var BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
 var IMAGE_DIR = join8(homedir5(), ".openclaw", "blockrun", "images");
 var AUTO_MODEL = "blockrun/auto";
 var ROUTING_PROFILES = /* @__PURE__ */ new Set([
-  "blockrun/free",
-  "free",
   "blockrun/eco",
   "eco",
   "blockrun/auto",
@@ -47109,14 +47398,26 @@ var ROUTING_PROFILES = /* @__PURE__ */ new Set([
   "blockrun/premium",
   "premium"
 ]);
-var FREE_MODEL = "nvidia/gpt-oss-120b";
-var FREE_TIER_CONFIGS = {
-  SIMPLE: { primary: FREE_MODEL, fallback: [] },
-  MEDIUM: { primary: FREE_MODEL, fallback: [] },
-  COMPLEX: { primary: FREE_MODEL, fallback: [] },
-  REASONING: { primary: FREE_MODEL, fallback: [] }
-};
-var freeRequestCount = 0;
+var FREE_MODEL = "free/gpt-oss-120b";
+var FREE_MODELS = /* @__PURE__ */ new Set([
+  "free/gpt-oss-120b",
+  "free/gpt-oss-20b",
+  "free/nemotron-ultra-253b",
+  "free/nemotron-3-super-120b",
+  "free/nemotron-super-49b",
+  "free/deepseek-v3.2",
+  "free/mistral-large-3-675b",
+  "free/qwen3-coder-480b",
+  "free/devstral-2-123b",
+  "free/glm-4.7",
+  "free/llama-4-maverick"
+]);
+function toUpstreamModelId(modelId) {
+  if (modelId.startsWith("free/")) {
+    return "nvidia/" + modelId.slice("free/".length);
+  }
+  return modelId;
+}
 var MAX_MESSAGES = 200;
 var CONTEXT_LIMIT_KB = 5120;
 var HEARTBEAT_INTERVAL_MS = 2e3;
@@ -47153,7 +47454,9 @@ async function readBodyWithTimeout(body, timeoutMs = MODEL_BODY_READ_TIMEOUT_MS)
   }
   return chunks;
 }
-function transformPaymentError(errorBody) {
+function transformPaymentError(errorBody, opts) {
+  const baseAssetSymbol = opts?.baseAssetSymbol || DEFAULT_BASE_PAYMENT_ASSET.symbol;
+  const baseAssetDecimals = opts?.baseAssetDecimals ?? DEFAULT_BASE_PAYMENT_ASSET.decimals;
   try {
     const parsed = JSON.parse(errorBody);
     if (parsed.error === "Payment verification failed" && parsed.details) {
@@ -47165,20 +47468,21 @@ function transformPaymentError(errorBody) {
             /insufficient balance:\s*(\d+)\s*<\s*(\d+)/i
           );
           if (balanceMatch) {
-            const currentMicros = parseInt(balanceMatch[1], 10);
-            const requiredMicros = parseInt(balanceMatch[2], 10);
-            const currentUSD = (currentMicros / 1e6).toFixed(6);
-            const requiredUSD = (requiredMicros / 1e6).toFixed(6);
+            const currentRaw = parseInt(balanceMatch[1], 10);
+            const requiredRaw = parseInt(balanceMatch[2], 10);
+            const divisor = 10 ** baseAssetDecimals;
+            const currentUSD = (currentRaw / divisor).toFixed(6);
+            const requiredUSD = (requiredRaw / divisor).toFixed(6);
             const wallet = innerJson.payer || "unknown";
             const shortWallet = wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
             return JSON.stringify({
               error: {
-                message: `Insufficient USDC balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
+                message: `Insufficient ${baseAssetSymbol} balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
                 type: "insufficient_funds",
                 wallet,
                 current_balance_usd: currentUSD,
                 required_usd: requiredUSD,
-                help: `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`
+                help: `Fund wallet ${shortWallet} with ${baseAssetSymbol} on Base, or use free model: /model free`
               }
             });
           }
@@ -47374,7 +47678,13 @@ async function checkExistingProxy(port) {
     if (response.ok) {
       const data = await response.json();
       if (data.status === "ok" && data.wallet) {
-        return { wallet: data.wallet, paymentChain: data.paymentChain };
+        return {
+          wallet: data.wallet,
+          paymentChain: data.paymentChain,
+          paymentAsset: data.paymentAsset,
+          paymentAssetSymbol: data.paymentAssetSymbol,
+          paymentAssetDecimals: data.paymentAssetDecimals
+        };
       }
     }
     return void 0;
@@ -47712,7 +48022,30 @@ function estimateAmount(modelId, bodyLength, maxTokens) {
   const amountMicros = Math.max(1e3, Math.ceil(costUsd * 1.2 * 1e6));
   return amountMicros.toString();
 }
-async function proxyPartnerRequest(req, res, apiBase, payFetch) {
+var IMAGE_PRICING = {
+  "openai/dall-e-3": {
+    default: 0.04,
+    sizes: { "1024x1024": 0.04, "1792x1024": 0.08, "1024x1792": 0.08 }
+  },
+  "openai/gpt-image-1": {
+    default: 0.02,
+    sizes: { "1024x1024": 0.02, "1536x1024": 0.04, "1024x1536": 0.04 }
+  },
+  "black-forest/flux-1.1-pro": { default: 0.04 },
+  "google/nano-banana": { default: 0.05 },
+  "google/nano-banana-pro": {
+    default: 0.1,
+    sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 }
+  }
+};
+function estimateImageCost(model, size5, n = 1) {
+  const pricing = IMAGE_PRICING[model];
+  if (!pricing) return 0.04 * n * 1.05;
+  const sizePrice = size5 && pricing.sizes ? pricing.sizes[size5] : void 0;
+  const pricePerImage = sizePrice ?? pricing.default;
+  return pricePerImage * n * 1.05;
+}
+async function proxyPartnerRequest(req, res, apiBase, payFetch, getActualPaymentUsd) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
   const bodyChunks = [];
@@ -47749,13 +48082,13 @@ async function proxyPartnerRequest(req, res, apiBase, payFetch) {
   res.end();
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] Partner response: ${upstream.status} (${latencyMs}ms)`);
+  const partnerCost = getActualPaymentUsd();
   logUsage({
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     model: "partner",
     tier: "PARTNER",
-    cost: 0,
-    // Actual cost handled by x402 settlement
-    baselineCost: 0,
+    cost: partnerCost,
+    baselineCost: partnerCost,
     savings: 0,
     latencyMs,
     partnerId: (req.url?.split("?")[0] ?? "").replace(/^\/v1\//, "").replace(/\//g, "_") || "unknown",
@@ -47812,6 +48145,9 @@ async function startProxy(options) {
   const solanaPrivateKeyBytes = typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
   const paymentChain = options.paymentChain ?? await resolvePaymentChain();
   const apiBase = options.apiBase ?? (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  let activeBasePaymentAssets = paymentChain === "base" ? await fetchBasePaymentAssets(apiBase).catch(() => void 0) ?? [DEFAULT_BASE_PAYMENT_ASSET] : [DEFAULT_BASE_PAYMENT_ASSET];
+  let activeBasePaymentAsset = activeBasePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
+  let lastSelectedBasePaymentAsset = activeBasePaymentAsset;
   if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
     console.warn(
       `[ClawRouter] \u26A0 Payment chain is Solana but no mnemonic found \u2014 falling back to Base (EVM).`
@@ -47858,7 +48194,19 @@ async function startProxy(options) {
       const { SolanaBalanceMonitor: SolanaBalanceMonitor2 } = await Promise.resolve().then(() => (init_solana_balance(), solana_balance_exports));
       balanceMonitor2 = new SolanaBalanceMonitor2(reuseSolanaAddress);
     } else {
-      balanceMonitor2 = new BalanceMonitor(account2.address);
+      if (existingProxy.paymentAsset && existingProxy.paymentAssetSymbol) {
+        activeBasePaymentAsset = {
+          ...activeBasePaymentAsset,
+          asset: existingProxy.paymentAsset,
+          symbol: existingProxy.paymentAssetSymbol,
+          ...typeof existingProxy.paymentAssetDecimals === "number" && {
+            decimals: existingProxy.paymentAssetDecimals
+          }
+        };
+        activeBasePaymentAssets = [activeBasePaymentAsset];
+        lastSelectedBasePaymentAsset = activeBasePaymentAsset;
+      }
+      balanceMonitor2 = new BalanceMonitor(account2.address, activeBasePaymentAsset);
     }
     options.onReady?.(listenPort);
     return {
@@ -47866,6 +48214,8 @@ async function startProxy(options) {
       baseUrl: baseUrl2,
       walletAddress: existingProxy.wallet,
       solanaAddress: reuseSolanaAddress,
+      paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : void 0,
+      paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : void 0,
       balanceMonitor: balanceMonitor2,
       close: async () => {
       }
@@ -47887,8 +48237,19 @@ async function startProxy(options) {
   }
   x402.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
+    if (network.startsWith("eip155")) {
+      activeBasePaymentAssets = await fetchBasePaymentAssets(apiBase).catch(() => void 0) ?? activeBasePaymentAssets;
+      activeBasePaymentAsset = activeBasePaymentAssets[0] ?? activeBasePaymentAsset;
+      if (balanceMonitor instanceof BalanceMonitor) {
+        balanceMonitor.setAsset(activeBasePaymentAsset);
+      }
+    }
     const chain3 = network.startsWith("eip155") ? "Base (EVM)" : network.startsWith("solana") ? "Solana" : network;
-    console.log(`[ClawRouter] Payment signed on ${chain3} (${network})`);
+    const amountMicros = parseInt(context.selectedRequirements.amount || "0", 10);
+    const amountUsd = amountMicros / 1e6;
+    const store = paymentStore.getStore();
+    if (store) store.amountUsd = amountUsd;
+    console.log(`[ClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsd.toFixed(6)}`);
   });
   const payFetch = createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana"
@@ -47900,7 +48261,7 @@ async function startProxy(options) {
     const { SolanaBalanceMonitor: SolanaBalanceMonitor2 } = await Promise.resolve().then(() => (init_solana_balance(), solana_balance_exports));
     balanceMonitor = new SolanaBalanceMonitor2(solanaAddress);
   } else {
-    balanceMonitor = new BalanceMonitor(account.address);
+    balanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
   }
   const routingConfig = mergeRoutingConfig(options.routingConfig);
   const modelPricing = buildModelPricing();
@@ -47913,311 +48274,426 @@ async function startProxy(options) {
   const sessionStore = new SessionStore(options.sessionConfig);
   const sessionJournal = new SessionJournal();
   const connections = /* @__PURE__ */ new Set();
-  const server = createServer(async (req, res) => {
-    req.on("error", (err) => {
-      console.error(`[ClawRouter] Request stream error: ${err.message}`);
-    });
-    res.on("error", (err) => {
-      console.error(`[ClawRouter] Response stream error: ${err.message}`);
-    });
-    finished(res, (err) => {
-      if (err && err.code !== "ERR_STREAM_DESTROYED") {
-        console.error(`[ClawRouter] Response finished with error: ${err.message}`);
-      }
-    });
-    finished(req, (err) => {
-      if (err && err.code !== "ERR_STREAM_DESTROYED") {
-        console.error(`[ClawRouter] Request finished with error: ${err.message}`);
-      }
-    });
-    if (req.url === "/health" || req.url?.startsWith("/health?")) {
-      const url = new URL(req.url, "http://localhost");
-      const full = url.searchParams.get("full") === "true";
-      const response = {
-        status: "ok",
-        wallet: account.address,
-        paymentChain
-      };
-      if (solanaAddress) {
-        response.solana = solanaAddress;
-      }
-      if (full) {
-        try {
-          const balanceInfo = await balanceMonitor.checkBalance();
-          response.balance = balanceInfo.balanceUSD;
-          response.isLow = balanceInfo.isLow;
-          response.isEmpty = balanceInfo.isEmpty;
-        } catch {
-          response.balanceError = "Could not fetch balance";
-        }
-      }
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(response));
-      return;
-    }
-    if (req.url === "/cache" || req.url?.startsWith("/cache?")) {
-      const stats = responseCache2.getStats();
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache"
+  const server = createServer((req, res) => {
+    paymentStore.run({ amountUsd: 0 }, async () => {
+      req.on("error", (err) => {
+        console.error(`[ClawRouter] Request stream error: ${err.message}`);
       });
-      res.end(JSON.stringify(stats, null, 2));
-      return;
-    }
-    if (req.url === "/stats" && req.method === "DELETE") {
-      try {
-        const result = await clearStats();
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ cleared: true, deletedFiles: result.deletedFiles }));
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: `Failed to clear stats: ${err instanceof Error ? err.message : String(err)}`
-          })
-        );
-      }
-      return;
-    }
-    if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
-      try {
+      res.on("error", (err) => {
+        console.error(`[ClawRouter] Response stream error: ${err.message}`);
+      });
+      finished(res, (err) => {
+        if (err && err.code !== "ERR_STREAM_DESTROYED") {
+          console.error(`[ClawRouter] Response finished with error: ${err.message}`);
+        }
+      });
+      finished(req, (err) => {
+        if (err && err.code !== "ERR_STREAM_DESTROYED") {
+          console.error(`[ClawRouter] Request finished with error: ${err.message}`);
+        }
+      });
+      if (req.url === "/health" || req.url?.startsWith("/health?")) {
         const url = new URL(req.url, "http://localhost");
-        const days = parseInt(url.searchParams.get("days") || "7", 10);
-        const stats = await getStats(Math.min(days, 30));
+        const full = url.searchParams.get("full") === "true";
+        const response = {
+          status: "ok",
+          wallet: account.address,
+          paymentChain
+        };
+        if (paymentChain === "base") {
+          response.paymentAsset = activeBasePaymentAsset.asset;
+          response.paymentAssetSymbol = activeBasePaymentAsset.symbol;
+          response.paymentAssetDecimals = activeBasePaymentAsset.decimals;
+          response.paymentAssets = activeBasePaymentAssets;
+          response.selectedPaymentAsset = lastSelectedBasePaymentAsset.asset;
+          response.selectedPaymentAssetSymbol = lastSelectedBasePaymentAsset.symbol;
+        }
+        if (solanaAddress) {
+          response.solana = solanaAddress;
+        }
+        if (full) {
+          try {
+            if (paymentChain === "base") {
+              const assetBalances = await Promise.all(
+                activeBasePaymentAssets.map(async (asset) => {
+                  const monitor = new BalanceMonitor(account.address, asset);
+                  const balanceInfo = await monitor.checkBalance();
+                  return {
+                    asset: asset.asset,
+                    symbol: asset.symbol,
+                    decimals: asset.decimals,
+                    balance: balanceInfo.balanceUSD,
+                    isLow: balanceInfo.isLow,
+                    isEmpty: balanceInfo.isEmpty
+                  };
+                })
+              );
+              response.assetBalances = assetBalances;
+              response.balance = assetBalances[0]?.balance ?? "$0.00";
+              response.isLow = assetBalances[0]?.isLow ?? true;
+              response.isEmpty = assetBalances.every((asset) => asset.isEmpty);
+            } else {
+              const balanceInfo = await balanceMonitor.checkBalance();
+              response.balance = balanceInfo.balanceUSD;
+              response.isLow = balanceInfo.isLow;
+              response.isEmpty = balanceInfo.isEmpty;
+            }
+          } catch {
+            response.balanceError = "Could not fetch balance";
+          }
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(response));
+        return;
+      }
+      if (req.url === "/cache" || req.url?.startsWith("/cache?")) {
+        const stats = responseCache2.getStats();
         res.writeHead(200, {
           "Content-Type": "application/json",
           "Cache-Control": "no-cache"
         });
-        res.end(
-          JSON.stringify(
-            {
-              ...stats,
-              providerErrors: Object.fromEntries(perProviderErrors)
-            },
-            null,
-            2
-          )
-        );
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`
-          })
-        );
-      }
-      return;
-    }
-    if (req.url === "/v1/models" && req.method === "GET") {
-      const models = buildProxyModelList();
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ object: "list", data: models }));
-      return;
-    }
-    if (req.url?.startsWith("/images/") && req.method === "GET") {
-      const filename = req.url.slice("/images/".length).split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "");
-      if (!filename) {
-        res.writeHead(400);
-        res.end("Bad request");
+        res.end(JSON.stringify(stats, null, 2));
         return;
       }
-      const filePath = join8(IMAGE_DIR, filename);
-      try {
-        const s3 = await fsStat(filePath);
-        if (!s3.isFile()) throw new Error("not a file");
-        const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
-        const mime = {
-          png: "image/png",
-          jpg: "image/jpeg",
-          jpeg: "image/jpeg",
-          webp: "image/webp",
-          gif: "image/gif"
-        };
-        const data = await readFile(filePath);
-        res.writeHead(200, {
-          "Content-Type": mime[ext] ?? "application/octet-stream",
-          "Content-Length": data.length
-        });
-        res.end(data);
-      } catch {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Image not found" }));
-      }
-      return;
-    }
-    if (req.url === "/v1/images/generations" && req.method === "POST") {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const reqBody = Buffer.concat(chunks);
-      try {
-        const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-          body: reqBody
-        });
-        const text = await upstream.text();
-        if (!upstream.ok) {
-          res.writeHead(upstream.status, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        let result;
+      if (req.url === "/stats" && req.method === "DELETE") {
         try {
-          result = JSON.parse(text);
-        } catch {
+          const result = await clearStats();
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(text);
+          res.end(JSON.stringify({ cleared: true, deletedFiles: result.deletedFiles }));
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: `Failed to clear stats: ${err instanceof Error ? err.message : String(err)}`
+            })
+          );
+        }
+        return;
+      }
+      if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
+        try {
+          const url = new URL(req.url, "http://localhost");
+          const days = parseInt(url.searchParams.get("days") || "7", 10);
+          const stats = await getStats(Math.min(days, 30));
+          res.writeHead(200, {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache"
+          });
+          res.end(
+            JSON.stringify(
+              {
+                ...stats,
+                providerErrors: Object.fromEntries(perProviderErrors)
+              },
+              null,
+              2
+            )
+          );
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`
+            })
+          );
+        }
+        return;
+      }
+      if (req.url === "/v1/models" && req.method === "GET") {
+        const models = buildProxyModelList();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ object: "list", data: models }));
+        return;
+      }
+      if (req.url?.startsWith("/images/") && req.method === "GET") {
+        const filename = req.url.slice("/images/".length).split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "");
+        if (!filename) {
+          res.writeHead(400);
+          res.end("Bad request");
           return;
         }
-        if (result.data?.length) {
-          await mkdir3(IMAGE_DIR, { recursive: true });
-          const port2 = server.address()?.port ?? 8402;
-          for (const img of result.data) {
-            const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
-            if (dataUriMatch) {
-              const [, mimeType, b64] = dataUriMatch;
-              const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
-              const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-              await writeFile2(join8(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
-              img.url = `http://localhost:${port2}/images/${filename}`;
-              console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
-            } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
-              try {
-                const imgResp = await fetch(img.url);
-                if (imgResp.ok) {
-                  const contentType = imgResp.headers.get("content-type") ?? "image/png";
-                  const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
-                  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                  const buf = Buffer.from(await imgResp.arrayBuffer());
-                  await writeFile2(join8(IMAGE_DIR, filename), buf);
-                  img.url = `http://localhost:${port2}/images/${filename}`;
-                  console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
+        const filePath = join8(IMAGE_DIR, filename);
+        try {
+          const s3 = await fsStat(filePath);
+          if (!s3.isFile()) throw new Error("not a file");
+          const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
+          const mime = {
+            png: "image/png",
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            webp: "image/webp",
+            gif: "image/gif"
+          };
+          const data = await readFile(filePath);
+          res.writeHead(200, {
+            "Content-Type": mime[ext] ?? "application/octet-stream",
+            "Content-Length": data.length
+          });
+          res.end(data);
+        } catch {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Image not found" }));
+        }
+        return;
+      }
+      if (req.url === "/v1/images/generations" && req.method === "POST") {
+        const imgStartTime = Date.now();
+        const chunks = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const reqBody = Buffer.concat(chunks);
+        let imgModel = "unknown";
+        let imgCost = 0;
+        try {
+          const parsed = JSON.parse(reqBody.toString());
+          imgModel = parsed.model || "openai/dall-e-3";
+          const n = parsed.n || 1;
+          imgCost = estimateImageCost(imgModel, parsed.size, n);
+        } catch {
+        }
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: reqBody
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          let result;
+          try {
+            result = JSON.parse(text);
+          } catch {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          if (result.data?.length) {
+            await mkdir3(IMAGE_DIR, { recursive: true });
+            const port2 = server.address()?.port ?? 8402;
+            for (const img of result.data) {
+              const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
+              if (dataUriMatch) {
+                const [, mimeType, b64] = dataUriMatch;
+                const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
+                const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                await writeFile2(join8(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                img.url = `http://localhost:${port2}/images/${filename}`;
+                console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
+              } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
+                try {
+                  const imgResp = await fetch(img.url);
+                  if (imgResp.ok) {
+                    const contentType = imgResp.headers.get("content-type") ?? "image/png";
+                    const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
+                    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                    const buf = Buffer.from(await imgResp.arrayBuffer());
+                    await writeFile2(join8(IMAGE_DIR, filename), buf);
+                    img.url = `http://localhost:${port2}/images/${filename}`;
+                    console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
+                  }
+                } catch (downloadErr) {
+                  console.warn(
+                    `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`
+                  );
                 }
-              } catch (downloadErr) {
-                console.warn(
-                  `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`
-                );
               }
             }
           }
+          const imgActualCost = paymentStore.getStore()?.amountUsd ?? imgCost;
+          logUsage({
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            model: imgModel,
+            tier: "IMAGE",
+            cost: imgActualCost,
+            baselineCost: imgActualCost,
+            savings: 0,
+            latencyMs: Date.now() - imgStartTime
+          }).catch(() => {
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Image generation error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Image generation failed", details: msg }));
+          }
         }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[ClawRouter] Image generation error: ${msg}`);
-        if (!res.headersSent) {
-          res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Image generation failed", details: msg }));
+        return;
+      }
+      if (req.url === "/v1/images/image2image" && req.method === "POST") {
+        const img2imgStartTime = Date.now();
+        const chunks = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         }
+        const rawBody = Buffer.concat(chunks);
+        let reqBody;
+        let img2imgModel = "openai/gpt-image-1";
+        let img2imgCost = 0;
+        try {
+          const parsed = JSON.parse(rawBody.toString());
+          for (const field of ["image", "mask"]) {
+            const val = parsed[field];
+            if (typeof val !== "string" || !val) continue;
+            if (val.startsWith("data:")) {
+            } else if (val.startsWith("https://") || val.startsWith("http://")) {
+              const imgResp = await fetch(val);
+              if (!imgResp.ok)
+                throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
+              const contentType = imgResp.headers.get("content-type") ?? "image/png";
+              const buf = Buffer.from(await imgResp.arrayBuffer());
+              parsed[field] = `data:${contentType};base64,${buf.toString("base64")}`;
+              console.log(
+                `[ClawRouter] img2img: downloaded ${field} URL \u2192 data URI (${buf.length} bytes)`
+              );
+            } else {
+              parsed[field] = readImageFileAsDataUri(val);
+              console.log(`[ClawRouter] img2img: read ${field} file \u2192 data URI`);
+            }
+          }
+          if (!parsed.model) parsed.model = "openai/gpt-image-1";
+          img2imgModel = parsed.model;
+          img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
+          reqBody = JSON.stringify(parsed);
+        } catch (parseErr) {
+          const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid request", details: msg }));
+          return;
+        }
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: reqBody
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          let result;
+          try {
+            result = JSON.parse(text);
+          } catch {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          if (result.data?.length) {
+            await mkdir3(IMAGE_DIR, { recursive: true });
+            const port2 = server.address()?.port ?? 8402;
+            for (const img of result.data) {
+              const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
+              if (dataUriMatch) {
+                const [, mimeType, b64] = dataUriMatch;
+                const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
+                const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                await writeFile2(join8(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                img.url = `http://localhost:${port2}/images/${filename}`;
+                console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
+              } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
+                try {
+                  const imgResp = await fetch(img.url);
+                  if (imgResp.ok) {
+                    const contentType = imgResp.headers.get("content-type") ?? "image/png";
+                    const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
+                    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                    const buf = Buffer.from(await imgResp.arrayBuffer());
+                    await writeFile2(join8(IMAGE_DIR, filename), buf);
+                    img.url = `http://localhost:${port2}/images/${filename}`;
+                    console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
+                  }
+                } catch (downloadErr) {
+                  console.warn(
+                    `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`
+                  );
+                }
+              }
+            }
+          }
+          const img2imgActualCost = paymentStore.getStore()?.amountUsd ?? img2imgCost;
+          logUsage({
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            model: img2imgModel,
+            tier: "IMAGE",
+            cost: img2imgActualCost,
+            baselineCost: img2imgActualCost,
+            savings: 0,
+            latencyMs: Date.now() - img2imgStartTime
+          }).catch(() => {
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Image editing error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Image editing failed", details: msg }));
+          }
+        }
+        return;
       }
-      return;
-    }
-    if (req.url === "/v1/images/image2image" && req.method === "POST") {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const rawBody = Buffer.concat(chunks);
-      let reqBody;
-      try {
-        const parsed = JSON.parse(rawBody.toString());
-        for (const field of ["image", "mask"]) {
-          const val = parsed[field];
-          if (typeof val !== "string" || !val) continue;
-          if (val.startsWith("data:")) {
-          } else if (val.startsWith("https://") || val.startsWith("http://")) {
-            const imgResp = await fetch(val);
-            if (!imgResp.ok)
-              throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
-            const contentType = imgResp.headers.get("content-type") ?? "image/png";
-            const buf = Buffer.from(await imgResp.arrayBuffer());
-            parsed[field] = `data:${contentType};base64,${buf.toString("base64")}`;
-            console.log(
-              `[ClawRouter] img2img: downloaded ${field} URL \u2192 data URI (${buf.length} bytes)`
+      if (req.url?.match(/^\/v1\/(?:x|partner)\//)) {
+        try {
+          await proxyPartnerRequest(
+            req,
+            res,
+            apiBase,
+            payFetch,
+            () => paymentStore.getStore()?.amountUsd ?? 0
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          options.onError?.(error);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" }
+              })
             );
-          } else {
-            parsed[field] = readImageFileAsDataUri(val);
-            console.log(`[ClawRouter] img2img: read ${field} file \u2192 data URI`);
           }
         }
-        if (!parsed.model) parsed.model = "openai/gpt-image-1";
-        reqBody = JSON.stringify(parsed);
-      } catch (parseErr) {
-        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid request", details: msg }));
+        return;
+      }
+      if (!req.url?.startsWith("/v1")) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Not found" }));
         return;
       }
       try {
-        const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-          body: reqBody
-        });
-        const text = await upstream.text();
-        if (!upstream.ok) {
-          res.writeHead(upstream.status, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        let result;
-        try {
-          result = JSON.parse(text);
-        } catch {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(text);
-          return;
-        }
-        if (result.data?.length) {
-          await mkdir3(IMAGE_DIR, { recursive: true });
-          const port2 = server.address()?.port ?? 8402;
-          for (const img of result.data) {
-            const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
-            if (dataUriMatch) {
-              const [, mimeType, b64] = dataUriMatch;
-              const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
-              const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-              await writeFile2(join8(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
-              img.url = `http://localhost:${port2}/images/${filename}`;
-              console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
-            } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
-              try {
-                const imgResp = await fetch(img.url);
-                if (imgResp.ok) {
-                  const contentType = imgResp.headers.get("content-type") ?? "image/png";
-                  const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
-                  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                  const buf = Buffer.from(await imgResp.arrayBuffer());
-                  await writeFile2(join8(IMAGE_DIR, filename), buf);
-                  img.url = `http://localhost:${port2}/images/${filename}`;
-                  console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
-                }
-              } catch (downloadErr) {
-                console.warn(
-                  `[ClawRouter] Failed to download image, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`
-                );
-              }
+        await proxyRequest(
+          req,
+          res,
+          apiBase,
+          payFetch,
+          options,
+          routerOpts,
+          deduplicator,
+          balanceMonitor,
+          sessionStore,
+          responseCache2,
+          sessionJournal,
+          () => activeBasePaymentAsset.symbol,
+          () => activeBasePaymentAssets,
+          (asset) => {
+            lastSelectedBasePaymentAsset = asset;
+            activeBasePaymentAsset = asset;
+            if (balanceMonitor instanceof BalanceMonitor) {
+              balanceMonitor.setAsset(asset);
             }
           }
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[ClawRouter] Image editing error: ${msg}`);
-        if (!res.headersSent) {
-          res.writeHead(502, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Image editing failed", details: msg }));
-        }
-      }
-      return;
-    }
-    if (req.url?.match(/^\/v1\/(?:x|partner)\//)) {
-      try {
-        await proxyPartnerRequest(req, res, apiBase, payFetch);
+        );
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         options.onError?.(error);
@@ -48225,52 +48701,20 @@ async function startProxy(options) {
           res.writeHead(502, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
-              error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" }
+              error: { message: `Proxy error: ${error.message}`, type: "proxy_error" }
             })
           );
-        }
-      }
-      return;
-    }
-    if (!req.url?.startsWith("/v1")) {
-      res.writeHead(404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Not found" }));
-      return;
-    }
-    try {
-      await proxyRequest(
-        req,
-        res,
-        apiBase,
-        payFetch,
-        options,
-        routerOpts,
-        deduplicator,
-        balanceMonitor,
-        sessionStore,
-        responseCache2,
-        sessionJournal
-      );
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      options.onError?.(error);
-      if (!res.headersSent) {
-        res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: { message: `Proxy error: ${error.message}`, type: "proxy_error" }
-          })
-        );
-      } else if (!res.writableEnded) {
-        res.write(
-          `data: ${JSON.stringify({ error: { message: error.message, type: "proxy_error" } })}
+        } else if (!res.writableEnded) {
+          res.write(
+            `data: ${JSON.stringify({ error: { message: error.message, type: "proxy_error" } })}
 
 `
-        );
-        res.write("data: [DONE]\n\n");
-        res.end();
+          );
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
       }
-    }
+    });
   });
   const tryListen = (attempt) => {
     return new Promise((resolveAttempt, rejectAttempt) => {
@@ -48381,6 +48825,8 @@ async function startProxy(options) {
     baseUrl,
     walletAddress: account.address,
     solanaAddress,
+    paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : void 0,
+    paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : void 0,
     balanceMonitor,
     close: () => new Promise((res, rej) => {
       const timeout = setTimeout(() => {
@@ -48406,7 +48852,7 @@ async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxT
   let requestBody = body;
   try {
     const parsed = JSON.parse(body.toString());
-    parsed.model = modelId;
+    parsed.model = toUpstreamModelId(modelId);
     if (Array.isArray(parsed.messages)) {
       parsed.messages = normalizeMessageRoles(parsed.messages);
     }
@@ -48481,7 +48927,7 @@ async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxT
     };
   }
 }
-async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, deduplicator, balanceMonitor, sessionStore, responseCache2, sessionJournal) {
+async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, deduplicator, balanceMonitor, sessionStore, responseCache2, sessionJournal, getBaseAssetSymbol, getBasePaymentAssets, onBaseAssetSelected) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
   const bodyChunks = [];
@@ -48504,6 +48950,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   let accumulatedContent = "";
   let responseInputTokens;
   let responseOutputTokens;
+  let requestBalanceMonitor = balanceMonitor;
+  let requestBasePaymentAsset = getBasePaymentAssets()[0];
   const isChatCompletion = req.url?.includes("/chat/completions");
   const sessionId = getSessionId(req.headers);
   let effectiveSessionId = sessionId;
@@ -48550,7 +48998,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         const estimatedTokens = Math.ceil(fullText.length / 4);
         const normalizedModel2 = typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
         const profileName = normalizedModel2.replace("blockrun/", "");
-        const debugProfile = ["free", "eco", "auto", "premium"].includes(profileName) ? profileName : "auto";
+        const debugProfile = ["eco", "auto", "premium"].includes(profileName) ? profileName : "auto";
         const scoring = classifyByRules(
           debugPrompt,
           systemPrompt,
@@ -48784,6 +49232,17 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
               responseText = lines.join("\n");
             }
             console.log(`[ClawRouter] /imagegen success: ${images.length} image(s) generated`);
+            const imagegenActualCost = paymentStore.getStore()?.amountUsd ?? estimateImageCost(imageModel, imageSize, 1);
+            logUsage({
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              model: imageModel,
+              tier: "IMAGE",
+              cost: imagegenActualCost,
+              baselineCost: imagegenActualCost,
+              savings: 0,
+              latencyMs: 0
+            }).catch(() => {
+            });
           }
           const completionId = `chatcmpl-image-${Date.now()}`;
           const timestamp = Math.floor(Date.now() / 1e3);
@@ -48993,6 +49452,17 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
               responseText = lines.join("\n");
             }
             console.log(`[ClawRouter] /img2img success: ${images.length} image(s)`);
+            const img2imgActualCost2 = paymentStore.getStore()?.amountUsd ?? estimateImageCost(img2imgModel, img2imgSize, 1);
+            logUsage({
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              model: img2imgModel,
+              tier: "IMAGE",
+              cost: img2imgActualCost2,
+              baselineCost: img2imgActualCost2,
+              savings: 0,
+              latencyMs: 0
+            }).catch(() => {
+            });
           }
           sendImg2ImgText(responseText);
         } catch (err) {
@@ -49032,30 +49502,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         modelId = resolvedModel;
       }
       if (isRoutingProfile) {
-        if (routingProfile === "free") {
-          const freeModel = "nvidia/gpt-oss-120b";
-          console.log(`[ClawRouter] Free profile - using ${freeModel} directly`);
-          parsed.model = freeModel;
-          modelId = freeModel;
-          bodyModified = true;
-          freeRequestCount++;
-          if (freeRequestCount % 5 === 0) {
-            balanceFallbackNotice = `> **\u{1F4A1} Tip:** Not satisfied with free model quality? Fund your wallet to unlock deepseek-chat, gemini-flash, and 30+ premium models \u2014 starting at $0.001/request.
-
-`;
-          }
-          routingDecision = {
-            model: freeModel,
-            tier: "SIMPLE",
-            confidence: 1,
-            method: "rules",
-            reasoning: "free profile",
-            costEstimate: 0,
-            baselineCost: 0,
-            savings: 1,
-            tierConfigs: FREE_TIER_CONFIGS
-          };
-        } else {
+        {
           effectiveSessionId = getSessionId(req.headers) ?? deriveSessionId(parsedMessages);
           const existingSession = effectiveSessionId ? sessionStore.getSession(effectiveSessionId) : void 0;
           const rawPrompt = lastUserMsg?.content;
@@ -49177,6 +49624,9 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         effectiveSessionId = deriveSessionId(parsedMessages);
       }
       if (bodyModified) {
+        if (parsed.model && typeof parsed.model === "string") {
+          parsed.model = toUpstreamModelId(parsed.model);
+        }
         body = Buffer.from(JSON.stringify(parsed));
       }
     } catch (err) {
@@ -49266,13 +49716,36 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   }
   deduplicator.markInflight(dedupKey);
   let estimatedCostMicros;
-  let isFreeModel = modelId === FREE_MODEL;
+  let isFreeModel = FREE_MODELS.has(modelId ?? "");
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
       const bufferedCostMicros = estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
-      const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
+      if (balanceMonitor instanceof BalanceMonitor) {
+        const baseAssets = getBasePaymentAssets();
+        let selected;
+        for (const asset of baseAssets) {
+          const monitor = new BalanceMonitor(balanceMonitor.getWalletAddress(), asset);
+          const sufficiency2 = await monitor.checkSufficient(bufferedCostMicros);
+          if (!selected) {
+            selected = { asset, monitor, sufficiency: sufficiency2 };
+          }
+          if (sufficiency2.sufficient) {
+            selected = { asset, monitor, sufficiency: sufficiency2 };
+            break;
+          }
+        }
+        if (selected) {
+          requestBasePaymentAsset = selected.asset;
+          requestBalanceMonitor = selected.monitor;
+          onBaseAssetSelected(selected.asset);
+          console.log(
+            `[ClawRouter] Base payment asset selected: ${selected.asset.symbol} (${selected.sufficiency.info.balanceUSD})`
+          );
+        }
+      }
+      const sufficiency = await requestBalanceMonitor.checkSufficient(bufferedCostMicros);
       if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
         const originalModel = modelId;
         console.log(
@@ -49281,27 +49754,23 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         modelId = FREE_MODEL;
         isFreeModel = true;
         const parsed = JSON.parse(body.toString());
-        parsed.model = FREE_MODEL;
+        parsed.model = toUpstreamModelId(FREE_MODEL);
         body = Buffer.from(JSON.stringify(parsed));
         balanceFallbackNotice = sufficiency.info.isEmpty ? `> **\u26A0\uFE0F Wallet empty** \u2014 using free model. Fund your wallet to use ${originalModel}.
 
 ` : `> **\u26A0\uFE0F Insufficient balance** (${sufficiency.info.balanceUSD}) \u2014 using free model instead of ${originalModel}.
 
 `;
-        freeRequestCount++;
-        if (freeRequestCount % 5 === 0) {
-          balanceFallbackNotice = `> **\u{1F4A1} Tip:** Not satisfied with free model quality? Fund your wallet to unlock deepseek-chat, gemini-flash, and 30+ premium models \u2014 starting at $0.001/request.
-
-`;
-        }
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          walletAddress: sufficiency.info.walletAddress
+          walletAddress: sufficiency.info.walletAddress,
+          assetSymbol: sufficiency.info.assetSymbol
         });
       } else if (sufficiency.info.isLow) {
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          walletAddress: sufficiency.info.walletAddress
+          walletAddress: sufficiency.info.walletAddress,
+          assetSymbol: sufficiency.info.assetSymbol
         });
       }
     }
@@ -49338,7 +49807,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
     const isComplexOrAgentic = hasTools || routingDecision?.tier === "COMPLEX" || routingDecision?.tier === "REASONING";
     if (isComplexOrAgentic) {
       const canAffordAnyNonFreeModel = BLOCKRUN_MODELS.some((m) => {
-        if (m.id === FREE_MODEL) return false;
+        if (FREE_MODELS.has(m.id)) return false;
         const est = estimateAmount(m.id, body.length, maxTokens);
         return est !== void 0 && Number(est) / 1e6 <= remainingUsd;
       });
@@ -49363,7 +49832,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         deduplicator.removeInflight(dedupKey);
         return;
       }
-    } else if (!routingDecision && modelId && modelId !== FREE_MODEL) {
+    } else if (!routingDecision && modelId && !FREE_MODELS.has(modelId)) {
       const est = estimateAmount(modelId, body.length, maxTokens);
       const canAfford = !est || Number(est) / 1e6 <= remainingUsd;
       if (!canAfford) {
@@ -49504,14 +49973,14 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
       const remainingUsd = options.maxCostPerRunUsd - runCostUsd;
       const beforeFilter = [...modelsToTry];
       modelsToTry = modelsToTry.filter((m) => {
-        if (m === FREE_MODEL) return true;
+        if (FREE_MODELS.has(m)) return true;
         const est = estimateAmount(m, body.length, maxTokens);
         if (!est) return true;
         return Number(est) / 1e6 <= remainingUsd;
       });
       const excluded = beforeFilter.filter((m) => !modelsToTry.includes(m));
       const isComplexOrAgenticFilter = hasTools || routingDecision?.tier === "COMPLEX" || routingDecision?.tier === "REASONING" || routingDecision === void 0;
-      const filteredToFreeOnly = modelsToTry.length > 0 && modelsToTry.every((m) => m === FREE_MODEL);
+      const filteredToFreeOnly = modelsToTry.length > 0 && modelsToTry.every((m) => FREE_MODELS.has(m));
       if (isComplexOrAgenticFilter && filteredToFreeOnly) {
         const budgetSummary = `$${Math.max(0, remainingUsd).toFixed(4)} remaining (limit: $${options.maxCostPerRunUsd})`;
         console.log(
@@ -49549,7 +50018,7 @@ data: [DONE]
           `[ClawRouter] Budget downgrade (${budgetSummary}): excluded ${excluded.join(", ")}`
         );
         const fromModel = excluded[0];
-        const usingFree = modelsToTry.length === 1 && modelsToTry[0] === FREE_MODEL;
+        const usingFree = modelsToTry.length === 1 && FREE_MODELS.has(modelsToTry[0]);
         if (usingFree) {
           budgetDowngradeNotice = `> **\u26A0\uFE0F Budget cap reached** ($${runCostUsd.toFixed(4)}/$${options.maxCostPerRunUsd}) \u2014 downgraded to free model. Quality may be reduced. Increase \`maxCostPerRun\` to continue with ${fromModel}.
 
@@ -49603,7 +50072,7 @@ data: [DONE]
         upstream = result.response;
         actualModelUsed = tryModel;
         console.log(`[ClawRouter] Success with model: ${tryModel}`);
-        if (options.maxCostPerRunUsd && effectiveSessionId && tryModel !== FREE_MODEL) {
+        if (options.maxCostPerRunUsd && effectiveSessionId && !FREE_MODELS.has(tryModel)) {
           const costEst = estimateAmount(tryModel, body.length, maxTokens);
           if (costEst) {
             sessionStore.addSessionCost(effectiveSessionId, BigInt(costEst));
@@ -49623,7 +50092,7 @@ data: [DONE]
       const isPaymentErr = /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
         result.errorBody || ""
       );
-      if (isPaymentErr && tryModel !== FREE_MODEL && !isLastAttempt) {
+      if (isPaymentErr && !FREE_MODELS.has(tryModel) && !isLastAttempt) {
         failedAttempts.push({
           ...failedAttempts[failedAttempts.length - 1],
           reason: "payment_error"
@@ -49634,7 +50103,7 @@ data: [DONE]
           i = freeIdx - 1;
           continue;
         }
-        if (freeIdx === -1) {
+        if (freeIdx === -1 && !excludeList.has(FREE_MODEL)) {
           modelsToTry.push(FREE_MODEL);
           console.log(`[ClawRouter] Payment error \u2014 appending free model: ${FREE_MODEL}`);
           continue;
@@ -49771,7 +50240,10 @@ data: [DONE]
       console.log(`[ClawRouter] ${structuredMessage}`);
       const rawErrBody = lastError?.body || structuredMessage;
       const errStatus = lastError?.status || 502;
-      const transformedErr = transformPaymentError(rawErrBody);
+      const transformedErr = transformPaymentError(rawErrBody, {
+        baseAssetSymbol: getBaseAssetSymbol(),
+        baseAssetDecimals: getBasePaymentAssets()[0]?.decimals
+      });
       if (headersSentEarly) {
         let errPayload;
         try {
@@ -50073,7 +50545,7 @@ data: [DONE]
       }
     }
     if (estimatedCostMicros !== void 0) {
-      balanceMonitor.deductEstimated(estimatedCostMicros);
+      requestBalanceMonitor.deductEstimated(estimatedCostMicros);
     }
     completed = true;
   } catch (err) {
@@ -50083,7 +50555,7 @@ data: [DONE]
       heartbeatInterval = void 0;
     }
     deduplicator.removeInflight(dedupKey);
-    balanceMonitor.invalidate();
+    requestBalanceMonitor.invalidate();
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Request timed out after ${timeoutMs}ms`, { cause: err });
     }
@@ -50091,22 +50563,44 @@ data: [DONE]
   }
   const logModel = routingDecision?.model ?? modelId;
   if (logModel) {
-    const actualInputTokens = responseInputTokens ?? Math.ceil(body.length / 4);
-    const actualOutputTokens = responseOutputTokens ?? maxTokens;
-    const accurateCosts = calculateModelCost(
-      logModel,
-      routerOpts.modelPricing,
-      actualInputTokens,
-      actualOutputTokens,
-      routingProfile ?? void 0
-    );
+    const actualPayment = paymentStore.getStore()?.amountUsd ?? 0;
+    let logCost;
+    let logBaseline;
+    let logSavings;
+    if (actualPayment > 0) {
+      logCost = actualPayment;
+      const chargedInputTokens = Math.ceil(body.length / 4);
+      const modelDef = BLOCKRUN_MODELS.find((m) => m.id === logModel);
+      const chargedOutputTokens = modelDef ? Math.min(maxTokens, modelDef.maxOutput) : maxTokens;
+      const baseline = calculateModelCost(
+        logModel,
+        routerOpts.modelPricing,
+        chargedInputTokens,
+        chargedOutputTokens,
+        routingProfile ?? void 0
+      );
+      logBaseline = baseline.baselineCost;
+      logSavings = logBaseline > 0 ? Math.max(0, (logBaseline - logCost) / logBaseline) : 0;
+    } else {
+      const chargedInputTokens = Math.ceil(body.length / 4);
+      const costs = calculateModelCost(
+        logModel,
+        routerOpts.modelPricing,
+        chargedInputTokens,
+        maxTokens,
+        routingProfile ?? void 0
+      );
+      logCost = costs.costEstimate;
+      logBaseline = costs.baselineCost;
+      logSavings = costs.savings;
+    }
     const entry = {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       model: logModel,
       tier: routingDecision?.tier ?? "DIRECT",
-      cost: accurateCosts.costEstimate,
-      baselineCost: accurateCosts.baselineCost,
-      savings: accurateCosts.savings,
+      cost: logCost,
+      baselineCost: logBaseline,
+      savings: logSavings,
       latencyMs: Date.now() - startTime,
       ...responseInputTokens !== void 0 && { inputTokens: responseInputTokens },
       ...responseOutputTokens !== void 0 && { outputTokens: responseOutputTokens }
@@ -50126,7 +50620,8 @@ import {
   renameSync
 } from "fs";
 import { homedir as homedir7 } from "os";
-import { join as join10 } from "path";
+import { join as join10, dirname as dirname3 } from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
 init_accounts();
 
 // src/partners/registry.ts
@@ -50547,6 +51042,50 @@ async function waitForProxyHealth(port, timeoutMs = 3e3) {
   }
   return false;
 }
+function installSkillsToWorkspace(logger) {
+  try {
+    const packageRoot = join10(dirname3(fileURLToPath2(import.meta.url)), "..");
+    const bundledSkillsDir = join10(packageRoot, "skills");
+    if (!existsSync3(bundledSkillsDir)) {
+      return;
+    }
+    const profile = (process["env"].OPENCLAW_PROFILE ?? "").trim().toLowerCase();
+    const workspaceDirName = profile && profile !== "default" ? `workspace-${profile}` : "workspace";
+    const workspaceSkillsDir = join10(homedir7(), ".openclaw", workspaceDirName, "skills");
+    mkdirSync3(workspaceSkillsDir, { recursive: true });
+    const INTERNAL_SKILLS = /* @__PURE__ */ new Set(["release"]);
+    const entries = readdirSync(bundledSkillsDir, { withFileTypes: true });
+    let installed = 0;
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillName = entry.name;
+      if (INTERNAL_SKILLS.has(skillName)) continue;
+      const srcSkillFile = join10(bundledSkillsDir, skillName, "SKILL.md");
+      if (!existsSync3(srcSkillFile)) continue;
+      const destDir = join10(workspaceSkillsDir, skillName);
+      const destSkillFile = join10(destDir, "SKILL.md");
+      let needsUpdate = true;
+      if (existsSync3(destSkillFile)) {
+        try {
+          const srcContent = readTextFileSync(srcSkillFile);
+          const destContent = readTextFileSync(destSkillFile);
+          if (srcContent === destContent) needsUpdate = false;
+        } catch {
+        }
+      }
+      if (needsUpdate) {
+        mkdirSync3(destDir, { recursive: true });
+        copyFileSync(srcSkillFile, destSkillFile);
+        installed++;
+      }
+    }
+    if (installed > 0) {
+      logger.info(`Installed ${installed} skill(s) to ${workspaceSkillsDir}`);
+    }
+  } catch (err) {
+    logger.warn(`Failed to install skills: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 function isCompletionMode() {
   const args = process.argv;
   return args.some((arg, i) => arg === "completion" && i >= 1 && i <= 3);
@@ -50661,8 +51200,9 @@ function injectModelsConfig(logger) {
     needsWrite = true;
   }
   const defaults = agents.defaults;
-  if (!defaults.model) {
-    defaults.model = {};
+  if (!defaults.model || typeof defaults.model !== "object" || Array.isArray(defaults.model)) {
+    const prev = typeof defaults.model === "string" ? defaults.model : void 0;
+    defaults.model = prev ? { primary: prev } : {};
     needsWrite = true;
   }
   const model = defaults.model;
@@ -50689,7 +51229,19 @@ function injectModelsConfig(logger) {
     "deepseek/deepseek-chat",
     "moonshot/kimi-k2.5",
     "xai/grok-3",
-    "minimax/minimax-m2.5"
+    "minimax/minimax-m2.5",
+    // Free models (free/ prefix so users see "free" in picker)
+    "free/gpt-oss-120b",
+    "free/gpt-oss-20b",
+    "free/nemotron-ultra-253b",
+    "free/deepseek-v3.2",
+    "free/mistral-large-3-675b",
+    "free/qwen3-coder-480b",
+    "free/devstral-2-123b",
+    "free/llama-4-maverick",
+    "free/nemotron-3-super-120b",
+    "free/nemotron-super-49b",
+    "free/glm-4.7"
   ];
   if (!defaults.models || typeof defaults.models !== "object" || Array.isArray(defaults.models)) {
     defaults.models = {};
@@ -50835,11 +51387,13 @@ async function startProxyInBackground(api) {
       );
     },
     onLowBalance: (info) => {
-      api.logger.warn(`[!] Low balance: ${info.balanceUSD}. Fund wallet: ${info.walletAddress}`);
+      api.logger.warn(
+        `[!] Low balance: ${info.balanceUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`
+      );
     },
     onInsufficientFunds: (info) => {
       api.logger.error(
-        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund wallet: ${info.walletAddress}`
+        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`
       );
     }
   });
@@ -50856,11 +51410,12 @@ async function startProxyInBackground(api) {
   const currentChain = await resolvePaymentChain();
   const displayAddress = currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet.address;
   const network = currentChain === "solana" ? "Solana" : "Base";
-  proxy.balanceMonitor.checkBalance().then((balance) => {
+  const paymentAssetLabel = currentChain === "solana" ? "USDC" : proxy.paymentAsset?.symbol ?? DEFAULT_BASE_PAYMENT_ASSET.symbol;
+  proxy.balanceMonitor.checkBalance().then(async (balance) => {
     if (balance.isEmpty) {
       api.logger.info(`Wallet (${network}): ${displayAddress}`);
       api.logger.info(
-        `Balance: $0.00 \u2014 send USDC on ${network} to the address above to unlock paid models.`
+        `Balance: $0.00 \u2014 send ${paymentAssetLabel} on ${network} to the address above to unlock paid models.`
       );
     } else if (balance.isLow) {
       api.logger.info(
@@ -50868,6 +51423,18 @@ async function startProxyInBackground(api) {
       );
     } else {
       api.logger.info(`Wallet (${network}): ${displayAddress} | Balance: ${balance.balanceUSD}`);
+    }
+    if (currentChain === "solana" && (balance.isEmpty || balance.isLow)) {
+      try {
+        const solLamports = await proxy.balanceMonitor.checkSolBalance();
+        if (solLamports > 10000000n) {
+          const sol = Number(solLamports) / 1e9;
+          api.logger.info(
+            `You have ${sol.toFixed(2)} SOL \u2014 swap to USDC: https://jup.ag/swap/SOL-USDC`
+          );
+        }
+      } catch {
+      }
     }
   }).catch(() => {
     api.logger.info(`Wallet (${network}): ${displayAddress} | Balance: (checking...)`);
@@ -51124,13 +51691,28 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
           };
         }
       }
+      const basePaymentAssets = await fetchBasePaymentAssets("https://blockrun.ai/api").catch(() => void 0) ?? [DEFAULT_BASE_PAYMENT_ASSET];
+      const basePaymentAsset = basePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
       let evmBalanceText;
+      let baseAssetLines = [];
       try {
-        const monitor = new BalanceMonitor(address2);
+        const monitor = new BalanceMonitor(address2, basePaymentAsset);
         const balance = await monitor.checkBalance();
         evmBalanceText = `Balance: ${balance.balanceUSD}`;
+        baseAssetLines = await Promise.all(
+          basePaymentAssets.map(async (asset) => {
+            try {
+              const assetMonitor = new BalanceMonitor(address2, asset);
+              const assetBalance = await assetMonitor.checkBalance();
+              return `  ${asset.symbol}: ${assetBalance.balanceUSD}`;
+            } catch {
+              return `  ${asset.symbol}: (could not check)`;
+            }
+          })
+        );
       } catch {
         evmBalanceText = "Balance: (could not check)";
+        baseAssetLines = basePaymentAssets.map((asset) => `  ${asset.symbol}: (could not check)`);
       }
       let solanaSection = "";
       try {
@@ -51191,7 +51773,9 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
           "**Base (EVM):**",
           `  Address: \`${address2}\``,
           `  ${evmBalanceText}`,
-          `  Fund (USDC only): https://basescan.org/address/${address2}`,
+          `  Supported assets (priority order):`,
+          ...baseAssetLines,
+          `  Fund supported Base assets: https://basescan.org/address/${address2}`,
           solanaSection,
           usageSection,
           "",
@@ -51212,7 +51796,7 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
 var plugin = {
   id: "clawrouter",
   name: "ClawRouter",
-  description: "Smart LLM router \u2014 30+ models, x402 micropayments, 78% cost savings",
+  description: "Smart LLM router \u2014 55+ models, x402 micropayments, 78% cost savings",
   version: VERSION,
   register(api) {
     const isDisabled = process["env"].CLAWROUTER_DISABLED === "true" || process["env"].CLAWROUTER_DISABLED === "1";
@@ -51220,6 +51804,7 @@ var plugin = {
       api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
       return;
     }
+    installSkillsToWorkspace(api.logger);
     if (isCompletionMode()) {
       api.registerProvider(blockrunProvider);
       return;
@@ -51241,7 +51826,7 @@ var plugin = {
       apiKey: "x402-proxy-handles-auth",
       models: OPENCLAW_MODELS
     };
-    api.logger.info("BlockRun provider registered (30+ models via x402)");
+    api.logger.info("BlockRun provider registered (55+ models via x402)");
     try {
       const proxyBaseUrl = `http://127.0.0.1:${runtimePort}`;
       const partnerTools = buildPartnerTools(proxyBaseUrl);
@@ -51362,6 +51947,7 @@ export {
   BALANCE_THRESHOLDS,
   BLOCKRUN_MODELS,
   BalanceMonitor,
+  DEFAULT_BASE_PAYMENT_ASSET,
   DEFAULT_RETRY_CONFIG,
   DEFAULT_ROUTING_CONFIG,
   DEFAULT_SESSION_CONFIG,
@@ -51387,6 +51973,7 @@ export {
   deriveAllKeys,
   deriveEvmKey,
   deriveSolanaKeyBytes,
+  fetchBasePaymentAsset,
   fetchWithRetry,
   formatDuration,
   formatStatsAscii,
@@ -51409,6 +51996,7 @@ export {
   isValidMnemonic,
   loadPaymentChain,
   logUsage,
+  normalizeBasePaymentAsset,
   resolveModelAlias,
   resolvePaymentChain,
   route,

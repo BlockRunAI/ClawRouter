@@ -1,7 +1,7 @@
 /**
  * BlockRun Model Definitions for OpenClaw
  *
- * Maps BlockRun's 30+ AI models to OpenClaw's ModelDefinitionConfig format.
+ * Maps BlockRun's 55+ AI models to OpenClaw's ModelDefinitionConfig format.
  * All models use the "openai-completions" API since BlockRun is OpenAI-compatible.
  *
  * Pricing is in USD per 1M tokens. Operators pay these rates via x402;
@@ -46,6 +46,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   gpt5: "openai/gpt-5.4",
   "gpt-5.4": "openai/gpt-5.4",
   "gpt-5.4-pro": "openai/gpt-5.4-pro",
+  "gpt-5.4-nano": "openai/gpt-5.4-nano",
+  nano: "openai/gpt-5.4-nano",
+  "gpt-5-nano": "openai/gpt-5.4-nano",
   codex: "openai/gpt-5.3-codex",
   mini: "openai/gpt-4o-mini",
   o1: "openai/o1",
@@ -66,6 +69,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   flash: "google/gemini-2.5-flash",
   "gemini-3.1-pro-preview": "google/gemini-3.1-pro",
   "google/gemini-3.1-pro-preview": "google/gemini-3.1-pro",
+  "gemini-3.1-flash-lite": "google/gemini-3.1-flash-lite",
 
   // xAI
   grok: "xai/grok-3",
@@ -76,9 +80,38 @@ export const MODEL_ALIASES: Record<string, string> = {
   "xai/grok-code-fast-1": "deepseek/deepseek-chat", // delisted 2026-03-12
   "xai/grok-3-fast": "xai/grok-4-fast-reasoning", // delisted (too expensive)
 
-  // NVIDIA
-  nvidia: "nvidia/gpt-oss-120b",
-  "gpt-120b": "nvidia/gpt-oss-120b",
+  // NVIDIA — backward compat aliases (nvidia/xxx → free/xxx)
+  nvidia: "free/gpt-oss-120b",
+  "gpt-120b": "free/gpt-oss-120b",
+  "gpt-20b": "free/gpt-oss-20b",
+  "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
+  "nvidia/gpt-oss-20b": "free/gpt-oss-20b",
+  "nvidia/nemotron-ultra-253b": "free/nemotron-ultra-253b",
+  "nvidia/nemotron-3-super-120b": "free/nemotron-3-super-120b",
+  "nvidia/nemotron-super-49b": "free/nemotron-super-49b",
+  "nvidia/deepseek-v3.2": "free/deepseek-v3.2",
+  "nvidia/mistral-large-3-675b": "free/mistral-large-3-675b",
+  "nvidia/qwen3-coder-480b": "free/qwen3-coder-480b",
+  "nvidia/devstral-2-123b": "free/devstral-2-123b",
+  "nvidia/glm-4.7": "free/glm-4.7",
+  "nvidia/llama-4-maverick": "free/llama-4-maverick",
+  // Free model shorthand aliases
+  "deepseek-free": "free/deepseek-v3.2",
+  "mistral-free": "free/mistral-large-3-675b",
+  "glm-free": "free/glm-4.7",
+  "llama-free": "free/llama-4-maverick",
+  nemotron: "free/nemotron-ultra-253b",
+  "nemotron-ultra": "free/nemotron-ultra-253b",
+  "nemotron-253b": "free/nemotron-ultra-253b",
+  "nemotron-super": "free/nemotron-super-49b",
+  "nemotron-49b": "free/nemotron-super-49b",
+  "nemotron-120b": "free/nemotron-3-super-120b",
+  devstral: "free/devstral-2-123b",
+  "devstral-2": "free/devstral-2-123b",
+  "qwen-coder": "free/qwen3-coder-480b",
+  "qwen-coder-free": "free/qwen3-coder-480b",
+  maverick: "free/llama-4-maverick",
+  free: "free/nemotron-ultra-253b",
 
   // MiniMax
   minimax: "minimax/minimax-m2.7",
@@ -94,7 +127,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   "auto-router": "auto",
   router: "auto",
 
-  // Note: auto, free, eco, premium are virtual routing profiles registered in BLOCKRUN_MODELS
+  // Note: auto, eco, premium are virtual routing profiles registered in BLOCKRUN_MODELS
   // They don't need aliases since they're already top-level model IDs
 };
 
@@ -124,14 +157,14 @@ export function resolveModelAlias(model: string): string {
   }
 
   // Strip "openai/" prefix when it wraps a virtual routing profile or alias.
-  // OpenClaw sends virtual models as "openai/eco", "openai/free", etc. because
+  // OpenClaw sends virtual models as "openai/eco", "openai/auto", etc. because
   // the provider uses the openai-completions API type.
   if (normalized.startsWith("openai/")) {
     const withoutPrefix = normalized.slice("openai/".length);
     const resolvedWithoutPrefix = MODEL_ALIASES[withoutPrefix];
     if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
 
-    // If it's a known BlockRun virtual profile (eco, free, auto, premium), return bare id
+    // If it's a known BlockRun virtual profile (eco, auto, premium), return bare id
     const isVirtualProfile = BLOCKRUN_MODELS.some((m) => m.id === withoutPrefix);
     if (isVirtualProfile) return withoutPrefix;
   }
@@ -159,6 +192,10 @@ type BlockRunModel = {
    * Default: false (must opt-in to prevent silent regressions on new models).
    */
   toolCalling?: boolean;
+  /** Model is deprecated — will be routed to fallbackModel if set */
+  deprecated?: boolean;
+  /** Model ID to route to when this model is deprecated */
+  fallbackModel?: string;
 };
 
 export const BLOCKRUN_MODELS: BlockRunModel[] = [
@@ -174,11 +211,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   {
     id: "free",
-    name: "Free (NVIDIA GPT-OSS-120B only)",
+    name: "Free → Nemotron Ultra 253B",
     inputPrice: 0,
     outputPrice: 0,
-    contextWindow: 128_000,
-    maxOutput: 4_096,
+    contextWindow: 131_072,
+    maxOutput: 16_384,
+    reasoning: true,
   },
   {
     id: "eco",
@@ -230,6 +268,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 128000,
     maxOutput: 32768,
     toolCalling: true,
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-nano",
   },
   {
     id: "openai/gpt-5.2-pro",
@@ -265,6 +305,16 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 400000,
     maxOutput: 128000,
     reasoning: true,
+    toolCalling: true,
+  },
+  {
+    id: "openai/gpt-5.4-nano",
+    name: "GPT-5.4 Nano",
+    version: "5.4",
+    inputPrice: 0.2,
+    outputPrice: 1.25,
+    contextWindow: 1050000,
+    maxOutput: 32768,
     toolCalling: true,
   },
 
@@ -517,6 +567,16 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 65536,
     toolCalling: true,
   },
+  {
+    id: "google/gemini-3.1-flash-lite",
+    name: "Gemini 3.1 Flash Lite",
+    version: "3.1",
+    inputPrice: 0.25,
+    outputPrice: 1.5,
+    contextWindow: 1000000,
+    maxOutput: 8192,
+    toolCalling: true,
+  },
 
   // DeepSeek
   {
@@ -629,8 +689,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "xai/grok-4-0709",
     name: "Grok 4 (0709)",
     version: "4-0709",
-    inputPrice: 0.2,
-    outputPrice: 1.5,
+    inputPrice: 3.0,
+    outputPrice: 15.0,
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
@@ -674,24 +734,124 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
 
-  // NVIDIA - Free/cheap models
+  // Free models (hosted by NVIDIA, billingMode: "free" on server)
+  // IDs use "free/" prefix so users see them as free in the /model picker.
+  // ClawRouter maps free/xxx → nvidia/xxx before sending to BlockRun upstream.
+  // toolCalling intentionally omitted: structured function calling unverified.
   {
-    id: "nvidia/gpt-oss-120b",
-    name: "NVIDIA GPT-OSS 120B",
+    id: "free/gpt-oss-120b",
+    name: "[Free] GPT-OSS 120B",
     version: "120b",
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 128000,
     maxOutput: 16384,
-    // toolCalling intentionally omitted: free model, structured function
-    // calling support unverified. Excluded from tool-heavy routing paths.
   },
+  {
+    id: "free/gpt-oss-20b",
+    name: "[Free] GPT-OSS 20B",
+    version: "20b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 128000,
+    maxOutput: 16384,
+  },
+  {
+    id: "free/nemotron-ultra-253b",
+    name: "[Free] Nemotron Ultra 253B",
+    version: "253b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "free/nemotron-3-super-120b",
+    name: "[Free] Nemotron 3 Super 120B",
+    version: "3-super-120b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "free/nemotron-super-49b",
+    name: "[Free] Nemotron Super 49B",
+    version: "super-49b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "free/deepseek-v3.2",
+    name: "[Free] DeepSeek V3.2",
+    version: "v3.2",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "free/mistral-large-3-675b",
+    name: "[Free] Mistral Large 675B",
+    version: "3-675b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "free/qwen3-coder-480b",
+    name: "[Free] Qwen3 Coder 480B",
+    version: "480b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+  {
+    id: "free/devstral-2-123b",
+    name: "[Free] Devstral 2 123B",
+    version: "2-123b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+  {
+    id: "free/glm-4.7",
+    name: "[Free] GLM-4.7",
+    version: "4.7",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "free/llama-4-maverick",
+    name: "[Free] Llama 4 Maverick",
+    version: "4-maverick",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+
+  // NVIDIA - Paid models
   {
     id: "nvidia/kimi-k2.5",
     name: "NVIDIA Kimi K2.5",
     version: "k2.5",
-    inputPrice: 0.55,
-    outputPrice: 2.5,
+    inputPrice: 0.6,
+    outputPrice: 3.0,
     contextWindow: 262144,
     maxOutput: 16384,
     toolCalling: true,

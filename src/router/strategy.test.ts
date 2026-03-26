@@ -16,6 +16,16 @@ const MODEL_PRICING = new Map<string, ModelPricing>([
   ["google/gemini-3.1-pro", { inputPrice: 1.25, outputPrice: 10 }],
   ["xai/grok-4-1-fast-reasoning", { inputPrice: 0.2, outputPrice: 0.5 }],
   ["nvidia/gpt-oss-120b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/gpt-oss-20b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/nemotron-ultra-253b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/nemotron-3-super-120b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/nemotron-super-49b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/deepseek-v3.2", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/mistral-large-3-675b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/qwen3-coder-480b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/devstral-2-123b", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/glm-4.7", { inputPrice: 0, outputPrice: 0 }],
+  ["nvidia/llama-4-maverick", { inputPrice: 0, outputPrice: 0 }],
 ]);
 
 const baseOptions: RouterOptions = {

@@ -1,7 +1,7 @@
 /**
  * @blockrun/clawrouter
  *
- * Smart LLM router for OpenClaw — 30+ models, x402 micropayments, 78% cost savings.
+ * Smart LLM router for OpenClaw — 55+ models, x402 micropayments, 78% cost savings.
  * Routes each request to the cheapest model that can handle it.
  *
  * Usage:
@@ -35,6 +35,10 @@ import {
 } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
+import {
+  DEFAULT_BASE_PAYMENT_ASSET,
+  fetchBasePaymentAssets,
+} from "./payment-asset.js";
 import {
   loadExcludeList,
   addExclusion,
@@ -70,11 +74,92 @@ import {
 } from "node:fs";
 import { readTextFileSync } from "./fs-read.js";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { VERSION } from "./version.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { getStats, formatStatsAscii, clearStats } from "./stats.js";
 import { buildPartnerTools, PARTNER_SERVICES } from "./partners/index.js";
+
+/**
+ * Install ClawRouter skills into OpenClaw's workspace skills directory.
+ *
+ * OpenClaw agents discover skills by scanning {workspaceDir}/skills/ for SKILL.md
+ * files. While the plugin manifest (`openclaw.plugin.json`) exposes skills for
+ * OpenClaw's internal registry, agents often try to read skills from the workspace
+ * path directly. This copies our bundled skills so they're always resolvable.
+ *
+ * Workspace path follows OpenClaw's convention:
+ *   - Default: ~/.openclaw/workspace/skills/
+ *   - With profile: ~/.openclaw/workspace-{profile}/skills/
+ *
+ * Only copies if the skill is missing or the content has changed.
+ */
+function installSkillsToWorkspace(logger: {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+}) {
+  try {
+    // Resolve the package root: dist/index.js -> package root
+    const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const bundledSkillsDir = join(packageRoot, "skills");
+
+    if (!existsSync(bundledSkillsDir)) {
+      // Skills directory not bundled (dev mode or stripped package)
+      return;
+    }
+
+    // Match OpenClaw's workspace resolution: ~/.openclaw/workspace[-{profile}]/
+    const profile = (process["env"].OPENCLAW_PROFILE ?? "").trim().toLowerCase();
+    const workspaceDirName =
+      profile && profile !== "default" ? `workspace-${profile}` : "workspace";
+    const workspaceSkillsDir = join(homedir(), ".openclaw", workspaceDirName, "skills");
+    mkdirSync(workspaceSkillsDir, { recursive: true });
+
+    // Scan bundled skills: each subdirectory contains a SKILL.md
+    // Skip internal-only skills (release is for ClawRouter maintainers, not end users)
+    const INTERNAL_SKILLS = new Set(["release"]);
+    const entries = readdirSync(bundledSkillsDir, { withFileTypes: true });
+    let installed = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const skillName = entry.name;
+      if (INTERNAL_SKILLS.has(skillName)) continue;
+      const srcSkillFile = join(bundledSkillsDir, skillName, "SKILL.md");
+      if (!existsSync(srcSkillFile)) continue;
+
+      // Use original skill name as folder (matches what agents expect)
+      const destDir = join(workspaceSkillsDir, skillName);
+      const destSkillFile = join(destDir, "SKILL.md");
+
+      // Check if update needed: compare content
+      let needsUpdate = true;
+      if (existsSync(destSkillFile)) {
+        try {
+          const srcContent = readTextFileSync(srcSkillFile);
+          const destContent = readTextFileSync(destSkillFile);
+          if (srcContent === destContent) needsUpdate = false;
+        } catch {
+          // Can't read — overwrite
+        }
+      }
+
+      if (needsUpdate) {
+        mkdirSync(destDir, { recursive: true });
+        copyFileSync(srcSkillFile, destSkillFile);
+        installed++;
+      }
+    }
+
+    if (installed > 0) {
+      logger.info(`Installed ${installed} skill(s) to ${workspaceSkillsDir}`);
+    }
+  } catch (err) {
+    logger.warn(`Failed to install skills: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 /**
  * Detect if we're running in shell completion mode.
@@ -252,8 +337,11 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     needsWrite = true;
   }
   const defaults = agents.defaults as Record<string, unknown>;
-  if (!defaults.model) {
-    defaults.model = {};
+  if (!defaults.model || typeof defaults.model !== "object" || Array.isArray(defaults.model)) {
+    // Convert plain string "blockrun/auto" → { primary: "blockrun/auto" }
+    // Also handles number, boolean, array, or any other non-object type
+    const prev = typeof defaults.model === "string" ? defaults.model : undefined;
+    defaults.model = prev ? { primary: prev } : {};
     needsWrite = true;
   }
   const model = defaults.model as Record<string, unknown>;
@@ -268,7 +356,6 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
 
   // Populate agents.defaults.models (the allowlist) with top BlockRun models.
   // OpenClaw uses this as a whitelist — only listed models appear in the /model picker.
-  // We show the 16 most popular models to keep the picker clean.
   // Existing non-blockrun entries are preserved (e.g. from other providers).
   const TOP_MODELS = [
     "auto",
@@ -289,6 +376,18 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     "moonshot/kimi-k2.5",
     "xai/grok-3",
     "minimax/minimax-m2.5",
+    // Free models (free/ prefix so users see "free" in picker)
+    "free/gpt-oss-120b",
+    "free/gpt-oss-20b",
+    "free/nemotron-ultra-253b",
+    "free/deepseek-v3.2",
+    "free/mistral-large-3-675b",
+    "free/qwen3-coder-480b",
+    "free/devstral-2-123b",
+    "free/llama-4-maverick",
+    "free/nemotron-3-super-120b",
+    "free/nemotron-super-49b",
+    "free/glm-4.7",
   ];
   if (!defaults.models || typeof defaults.models !== "object" || Array.isArray(defaults.models)) {
     defaults.models = {};
@@ -490,11 +589,13 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
       );
     },
     onLowBalance: (info) => {
-      api.logger.warn(`[!] Low balance: ${info.balanceUSD}. Fund wallet: ${info.walletAddress}`);
+      api.logger.warn(
+        `[!] Low balance: ${info.balanceUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`,
+      );
     },
     onInsufficientFunds: (info) => {
       api.logger.error(
-        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund wallet: ${info.walletAddress}`,
+        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`,
       );
     },
   });
@@ -518,13 +619,17 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   const displayAddress =
     currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet.address;
   const network = currentChain === "solana" ? "Solana" : "Base";
+  const paymentAssetLabel =
+    currentChain === "solana"
+      ? "USDC"
+      : proxy.paymentAsset?.symbol ?? DEFAULT_BASE_PAYMENT_ASSET.symbol;
   proxy.balanceMonitor
     .checkBalance()
-    .then((balance) => {
+    .then(async (balance) => {
       if (balance.isEmpty) {
         api.logger.info(`Wallet (${network}): ${displayAddress}`);
         api.logger.info(
-          `Balance: $0.00 — send USDC on ${network} to the address above to unlock paid models.`,
+          `Balance: $0.00 — send ${paymentAssetLabel} on ${network} to the address above to unlock paid models.`,
         );
       } else if (balance.isLow) {
         api.logger.info(
@@ -532,6 +637,22 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
         );
       } else {
         api.logger.info(`Wallet (${network}): ${displayAddress} | Balance: ${balance.balanceUSD}`);
+      }
+      // On Solana, if USDC is low/empty, check for SOL and suggest swap
+      if (currentChain === "solana" && (balance.isEmpty || balance.isLow)) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const solLamports: bigint = await (proxy.balanceMonitor as any).checkSolBalance();
+          // Only suggest if they have meaningful SOL (> 0.01 SOL = 10M lamports)
+          if (solLamports > 10_000_000n) {
+            const sol = Number(solLamports) / 1_000_000_000;
+            api.logger.info(
+              `You have ${sol.toFixed(2)} SOL — swap to USDC: https://jup.ag/swap/SOL-USDC`,
+            );
+          }
+        } catch {
+          // SOL check is best-effort, don't block startup
+        }
       }
     })
     .catch(() => {
@@ -840,13 +961,30 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
       }
 
       // Default: show wallet status
+      const basePaymentAssets =
+        (await fetchBasePaymentAssets("https://blockrun.ai/api").catch(() => undefined)) ??
+        [DEFAULT_BASE_PAYMENT_ASSET];
+      const basePaymentAsset = basePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
       let evmBalanceText: string;
+      let baseAssetLines: string[] = [];
       try {
-        const monitor = new BalanceMonitor(address);
+        const monitor = new BalanceMonitor(address, basePaymentAsset);
         const balance = await monitor.checkBalance();
         evmBalanceText = `Balance: ${balance.balanceUSD}`;
+        baseAssetLines = await Promise.all(
+          basePaymentAssets.map(async (asset) => {
+            try {
+              const assetMonitor = new BalanceMonitor(address, asset);
+              const assetBalance = await assetMonitor.checkBalance();
+              return `  ${asset.symbol}: ${assetBalance.balanceUSD}`;
+            } catch {
+              return `  ${asset.symbol}: (could not check)`;
+            }
+          }),
+        );
       } catch {
         evmBalanceText = "Balance: (could not check)";
+        baseAssetLines = basePaymentAssets.map((asset) => `  ${asset.symbol}: (could not check)`);
       }
 
       // Check for Solana wallet
@@ -927,7 +1065,9 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
           "**Base (EVM):**",
           `  Address: \`${address}\``,
           `  ${evmBalanceText}`,
-          `  Fund (USDC only): https://basescan.org/address/${address}`,
+          `  Supported assets (priority order):`,
+          ...baseAssetLines,
+          `  Fund supported Base assets: https://basescan.org/address/${address}`,
           solanaSection,
           usageSection,
           "",
@@ -951,7 +1091,7 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
 const plugin: OpenClawPluginDefinition = {
   id: "clawrouter",
   name: "ClawRouter",
-  description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
+  description: "Smart LLM router — 55+ models, x402 micropayments, 78% cost savings",
   version: VERSION,
 
   register(api: OpenClawPluginApi) {
@@ -963,6 +1103,10 @@ const plugin: OpenClawPluginDefinition = {
       api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
       return;
     }
+
+    // Install skills into OpenClaw workspace so agents can discover them
+    // Must run before completion short-circuit so skills are available even on first install
+    installSkillsToWorkspace(api.logger);
 
     // Skip heavy initialization in completion mode — only completion script is needed
     // Logging to stdout during completion pollutes the script and causes zsh errors
@@ -998,7 +1142,7 @@ const plugin: OpenClawPluginDefinition = {
       models: OPENCLAW_MODELS,
     };
 
-    api.logger.info("BlockRun provider registered (30+ models via x402)");
+    api.logger.info("BlockRun provider registered (55+ models via x402)");
 
     // Register partner API tools (Twitter/X lookup, etc.)
     try {
@@ -1195,6 +1339,12 @@ export { BalanceMonitor, BALANCE_THRESHOLDS } from "./balance.js";
 export type { BalanceInfo, SufficiencyResult } from "./balance.js";
 export { SolanaBalanceMonitor } from "./solana-balance.js";
 export type { SolanaBalanceInfo } from "./solana-balance.js";
+export {
+  DEFAULT_BASE_PAYMENT_ASSET,
+  fetchBasePaymentAsset,
+  normalizeBasePaymentAsset,
+} from "./payment-asset.js";
+export type { BasePaymentAsset } from "./payment-asset.js";
 export {
   SpendControl,
   FileSpendControlStorage,

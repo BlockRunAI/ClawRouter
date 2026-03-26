@@ -28,7 +28,7 @@ describe("exclude-models e2e", () => {
   let originalLog: typeof console.log;
 
   // Models to exclude for this test
-  const EXCLUDED_MODELS = new Set(["nvidia/gpt-oss-120b", "google/gemini-2.5-flash-lite"]);
+  const EXCLUDED_MODELS = new Set(["free/gpt-oss-120b", "google/gemini-2.5-flash-lite"]);
 
   beforeAll(async () => {
     // Capture console.log to inspect which models the proxy tries
@@ -69,7 +69,7 @@ describe("exclude-models e2e", () => {
   it("exclude filter log appears for excluded models in eco SIMPLE tier", async () => {
     // Verify excluded models ARE in the unfiltered eco SIMPLE chain
     const ecoSimpleChain = getFallbackChain("SIMPLE", DEFAULT_ROUTING_CONFIG.ecoTiers!);
-    expect(ecoSimpleChain).toContain("nvidia/gpt-oss-120b");
+    expect(ecoSimpleChain).toContain("free/gpt-oss-120b");
 
     consoleLogs.length = 0;
 
@@ -128,7 +128,7 @@ describe("exclude-models e2e", () => {
     // nvidia/gpt-oss-120b (FREE_MODEL) should never be tried
     const tryingLogs = consoleLogs.filter((l) => l.includes("[ClawRouter] Trying model"));
     for (const tryLog of tryingLogs) {
-      expect(tryLog).not.toContain("nvidia/gpt-oss-120b");
+      expect(tryLog).not.toContain("free/gpt-oss-120b");
     }
   }, 30_000);
 
