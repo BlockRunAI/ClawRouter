@@ -14,7 +14,11 @@ import { registerExactEvmScheme } from "@x402/evm/exact/client";
 import { toClientEvmSigner } from "@x402/evm";
 import { resolveOrGenerateWalletKey, resolvePaymentChain, WALLET_FILE } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
-import { DEFAULT_BASE_PAYMENT_ASSET, fetchBasePaymentAsset } from "./payment-asset.js";
+import {
+  DEFAULT_BASE_PAYMENT_ASSET,
+  fetchBasePaymentAsset,
+  type BasePaymentAsset,
+} from "./payment-asset.js";
 import { getSolanaAddress } from "./wallet.js";
 import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
@@ -39,6 +43,7 @@ interface WalletInfo {
   isEmpty: boolean;
   source: "saved" | "env" | "generated" | null;
   paymentChain: "base" | "solana";
+  paymentAsset: BasePaymentAsset;
 }
 
 interface NetworkInfo {
@@ -80,6 +85,22 @@ function yellow(text: string): string {
   return `\x1b[33m⚠\x1b[0m ${text}`;
 }
 
+function getBuyLinkForAsset(symbol: string): { label: string; url: string } {
+  const normalized = symbol.trim().toUpperCase();
+  const knownLinks: Record<string, string> = {
+    USDC: "https://www.coinbase.com/price/usd-coin",
+    EURC: "https://www.coinbase.com/price/euro-coin",
+  };
+  const knownUrl = knownLinks[normalized];
+  if (knownUrl) {
+    return { label: `Get ${normalized}`, url: knownUrl };
+  }
+  return {
+    label: `Find ${normalized} on Coinbase`,
+    url: `https://www.coinbase.com/search?q=${encodeURIComponent(normalized)}`,
+  };
+}
+
 // Collect system info
 function collectSystemInfo(): SystemInfo {
   return {
@@ -107,6 +128,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         isEmpty: true,
         source: null,
         paymentChain: "base",
+        paymentAsset: DEFAULT_BASE_PAYMENT_ASSET,
       };
     }
 
@@ -122,6 +144,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
 
     // Check balance on the active payment chain
     const paymentChain = await resolvePaymentChain();
+    let paymentAsset = DEFAULT_BASE_PAYMENT_ASSET;
     try {
       let balanceInfo: { balanceUSD: string; isLow: boolean; isEmpty: boolean };
       if (paymentChain === "solana" && solanaAddress) {
@@ -129,7 +152,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         const monitor = new SolanaBalanceMonitor(solanaAddress);
         balanceInfo = await monitor.checkBalance();
       } else {
-        const paymentAsset =
+        paymentAsset =
           (await fetchBasePaymentAsset("https://blockrun.ai/api").catch(() => undefined)) ??
           DEFAULT_BASE_PAYMENT_ASSET;
         const monitor = new BalanceMonitor(address, paymentAsset);
@@ -145,6 +168,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         isEmpty: balanceInfo.isEmpty,
         source,
         paymentChain,
+        paymentAsset,
       };
     } catch {
       return {
@@ -157,6 +181,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
         isEmpty: false,
         source,
         paymentChain,
+        paymentAsset,
       };
     }
   } catch {
@@ -170,6 +195,7 @@ async function collectWalletInfo(): Promise<WalletInfo> {
       isEmpty: true,
       source: null,
       paymentChain: "base",
+      paymentAsset: DEFAULT_BASE_PAYMENT_ASSET,
     };
   }
 }
@@ -240,7 +266,7 @@ function identifyIssues(result: DiagnosticResult): string[] {
     if (result.wallet.paymentChain === "solana") {
       issues.push("Wallet is empty - need to fund with USDC on Solana");
     } else {
-      issues.push("Wallet is empty - need to fund the active Base payment token");
+      issues.push(`Wallet is empty - need to fund with ${result.wallet.paymentAsset.symbol} on Base`);
     }
     if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
       issues.push("Tip: if you funded Solana, run /wallet solana to switch chains");
@@ -279,9 +305,12 @@ function printDiagnostics(result: DiagnosticResult): void {
       console.log(`  ${green(`Solana Address: ${result.wallet.solanaAddress}`)}`);
     }
     const chainLabel = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    const assetLabel = result.wallet.paymentChain === "solana" ? "USDC" : result.wallet.paymentAsset.symbol;
     console.log(`  ${green(`Chain: ${chainLabel}`)}`);
     if (result.wallet.isEmpty) {
-      console.log(`  ${red(`Balance: $0.00 - NEED TO FUND WITH USDC ON ${chainLabel.toUpperCase()}!`)}`);
+      console.log(
+        `  ${red(`Balance: $0.00 - NEED TO FUND WITH ${assetLabel} ON ${chainLabel.toUpperCase()}!`)}`,
+      );
       if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
         console.log(`  ${yellow(`Tip: funded Solana instead? Run /wallet solana to switch`)}`);
       }
@@ -353,24 +382,21 @@ async function analyzeWithAI(
 ): Promise<void> {
   // Check if wallet has funds
   if (diagnostics.wallet.isEmpty) {
-    const paymentAsset =
-      diagnostics.wallet.paymentChain === "solana"
-        ? DEFAULT_BASE_PAYMENT_ASSET
-        : (await fetchBasePaymentAsset("https://blockrun.ai/api").catch(() => undefined)) ??
-          DEFAULT_BASE_PAYMENT_ASSET;
+    const paymentAsset = diagnostics.wallet.paymentAsset;
+    const buyLink = getBuyLinkForAsset(paymentAsset.symbol);
     console.log("\n💳 Wallet is empty - cannot call AI for analysis.");
     console.log(
       diagnostics.wallet.paymentChain === "solana"
         ? `   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress ?? diagnostics.wallet.address}`
         : `   Fund your EVM wallet with ${paymentAsset.symbol} on Base: ${diagnostics.wallet.address}`,
     );
-    if (diagnostics.wallet.solanaAddress) {
+    if (diagnostics.wallet.paymentChain === "base" && diagnostics.wallet.solanaAddress) {
       console.log(`   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress}`);
     }
     console.log(
       diagnostics.wallet.paymentChain === "solana"
         ? "   Get USDC: https://www.coinbase.com/price/usd-coin"
-        : `   Get ${paymentAsset.symbol}: https://www.coinbase.com/price/usd-coin`,
+        : `   ${buyLink.label}: ${buyLink.url}`,
     );
     console.log("   Bridge to Base: https://bridge.base.org\n");
     return;

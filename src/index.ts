@@ -964,26 +964,24 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
       const basePaymentAssets =
         (await fetchBasePaymentAssets("https://blockrun.ai/api").catch(() => undefined)) ??
         [DEFAULT_BASE_PAYMENT_ASSET];
-      const basePaymentAsset = basePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
-      let evmBalanceText: string;
+      let basePaymentAsset = basePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
+      let evmBalanceText = "Balance: (could not check)";
       let baseAssetLines: string[] = [];
       try {
-        const monitor = new BalanceMonitor(address, basePaymentAsset);
-        const balance = await monitor.checkBalance();
-        evmBalanceText = `Balance: ${balance.balanceUSD}`;
-        baseAssetLines = await Promise.all(
-          basePaymentAssets.map(async (asset) => {
-            try {
-              const assetMonitor = new BalanceMonitor(address, asset);
-              const assetBalance = await assetMonitor.checkBalance();
-              return `  ${asset.symbol}: ${assetBalance.balanceUSD}`;
-            } catch {
-              return `  ${asset.symbol}: (could not check)`;
+        for (const asset of basePaymentAssets) {
+          try {
+            const assetMonitor = new BalanceMonitor(address, asset);
+            const assetBalance = await assetMonitor.checkBalance();
+            baseAssetLines.push(`  ${asset.symbol}: ${assetBalance.balanceUSD}`);
+            if (assetBalance.balance > 0n && evmBalanceText === "Balance: (could not check)") {
+              basePaymentAsset = asset;
+              evmBalanceText = `Balance: ${assetBalance.balanceUSD}`;
             }
-          }),
-        );
+          } catch {
+            baseAssetLines.push(`  ${asset.symbol}: (could not check)`);
+          }
+        }
       } catch {
-        evmBalanceText = "Balance: (could not check)";
         baseAssetLines = basePaymentAssets.map((asset) => `  ${asset.symbol}: (could not check)`);
       }
 

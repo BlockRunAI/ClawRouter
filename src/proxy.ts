@@ -190,6 +190,15 @@ function transformPaymentError(
 ): string {
   const baseAssetSymbol = opts?.baseAssetSymbol || DEFAULT_BASE_PAYMENT_ASSET.symbol;
   const baseAssetDecimals = opts?.baseAssetDecimals ?? DEFAULT_BASE_PAYMENT_ASSET.decimals;
+  const formatRawAssetAmount = (amountRaw: bigint, decimals: number): string => {
+    const divisor = 10n ** BigInt(decimals);
+    const whole = amountRaw / divisor;
+    const remainder = amountRaw % divisor;
+    const scaledFraction = decimals >= 6
+      ? remainder / 10n ** BigInt(decimals - 6)
+      : remainder * 10n ** BigInt(6 - decimals);
+    return `${whole.toString()}.${scaledFraction.toString().padStart(6, "0")}`;
+  };
   try {
     // Try to parse the error JSON
     const parsed = JSON.parse(errorBody) as {
@@ -219,12 +228,10 @@ function transformPaymentError(
             /insufficient balance:\s*(\d+)\s*<\s*(\d+)/i,
           );
           if (balanceMatch) {
-            const currentRaw = parseInt(balanceMatch[1], 10);
-            const requiredRaw = parseInt(balanceMatch[2], 10);
-            // Upstream error amounts are in the asset's native decimals (e.g. 6 for USDC, 18 for fxUSD)
-            const divisor = 10 ** baseAssetDecimals;
-            const currentUSD = (currentRaw / divisor).toFixed(6);
-            const requiredUSD = (requiredRaw / divisor).toFixed(6);
+            const currentRaw = BigInt(balanceMatch[1]);
+            const requiredRaw = BigInt(balanceMatch[2]);
+            const currentUSD = formatRawAssetAmount(currentRaw, baseAssetDecimals);
+            const requiredUSD = formatRawAssetAmount(requiredRaw, baseAssetDecimals);
             const wallet = innerJson.payer || "unknown";
             const shortWallet =
               wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
@@ -551,9 +558,8 @@ async function checkExistingProxy(
   | {
       wallet: string;
       paymentChain?: string;
-      paymentAsset?: string;
-      paymentAssetSymbol?: string;
-      paymentAssetDecimals?: number;
+      paymentAssets?: BasePaymentAsset[];
+      selectedPaymentAsset?: string | BasePaymentAsset;
     }
   | undefined
 > {
@@ -571,6 +577,8 @@ async function checkExistingProxy(
         status?: string;
         wallet?: string;
         paymentChain?: string;
+        paymentAssets?: BasePaymentAsset[];
+        selectedPaymentAsset?: string | BasePaymentAsset;
         paymentAsset?: string;
         paymentAssetSymbol?: string;
         paymentAssetDecimals?: number;
@@ -579,9 +587,8 @@ async function checkExistingProxy(
         return {
           wallet: data.wallet,
           paymentChain: data.paymentChain,
-          paymentAsset: data.paymentAsset,
-          paymentAssetSymbol: data.paymentAssetSymbol,
-          paymentAssetDecimals: data.paymentAssetDecimals,
+          paymentAssets: data.paymentAssets,
+          selectedPaymentAsset: data.selectedPaymentAsset ?? data.paymentAsset,
         };
       }
     }
@@ -1566,17 +1573,19 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       const { SolanaBalanceMonitor } = await import("./solana-balance.js");
       balanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
     } else {
-      if (existingProxy.paymentAsset && existingProxy.paymentAssetSymbol) {
-        activeBasePaymentAsset = {
-          ...activeBasePaymentAsset,
-          asset: existingProxy.paymentAsset as `0x${string}`,
-          symbol: existingProxy.paymentAssetSymbol,
-          ...(typeof existingProxy.paymentAssetDecimals === "number" && {
-            decimals: existingProxy.paymentAssetDecimals,
-          }),
-        };
-        activeBasePaymentAssets = [activeBasePaymentAsset];
-        lastSelectedBasePaymentAsset = activeBasePaymentAsset;
+      if (existingProxy.paymentAssets?.length) {
+        activeBasePaymentAssets = existingProxy.paymentAssets;
+      }
+      const selectedPaymentAssetId =
+        typeof existingProxy.selectedPaymentAsset === "string"
+          ? existingProxy.selectedPaymentAsset.toLowerCase()
+          : existingProxy.selectedPaymentAsset?.asset?.toLowerCase();
+      const selectedPaymentAsset = selectedPaymentAssetId
+        ? activeBasePaymentAssets.find((asset) => asset.asset.toLowerCase() === selectedPaymentAssetId)
+        : undefined;
+      if (selectedPaymentAsset) {
+        activeBasePaymentAsset = selectedPaymentAsset;
+        lastSelectedBasePaymentAsset = selectedPaymentAsset;
       }
       balanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
     }
@@ -1624,7 +1633,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     if (network.startsWith("eip155")) {
       activeBasePaymentAssets =
         (await fetchBasePaymentAssets(apiBase).catch(() => undefined)) ?? activeBasePaymentAssets;
-      activeBasePaymentAsset = activeBasePaymentAssets[0] ?? activeBasePaymentAsset;
+      const refreshedActiveAsset = activeBasePaymentAssets.find(
+        (asset) => asset.asset.toLowerCase() === activeBasePaymentAsset.asset.toLowerCase(),
+      );
+      if (refreshedActiveAsset) {
+        activeBasePaymentAsset = refreshedActiveAsset;
+      }
       if (balanceMonitor instanceof BalanceMonitor) {
         balanceMonitor.setAsset(activeBasePaymentAsset);
       }
@@ -3556,7 +3570,7 @@ async function proxyRequest(
           | undefined;
 
         for (const asset of baseAssets) {
-          const monitor = new BalanceMonitor(balanceMonitor.getWalletAddress(), asset);
+          const monitor = balanceMonitor.getSharedMonitorForAsset(asset);
           const sufficiency = await monitor.checkSufficient(bufferedCostMicros);
           if (!selected) {
             selected = { asset, monitor, sufficiency };
@@ -4268,8 +4282,8 @@ async function proxyRequest(
 
       // Transform payment errors into user-friendly messages
       const transformedErr = transformPaymentError(rawErrBody, {
-        baseAssetSymbol: getBaseAssetSymbol(),
-        baseAssetDecimals: getBasePaymentAssets()[0]?.decimals,
+        baseAssetSymbol: requestBasePaymentAsset.symbol,
+        baseAssetDecimals: requestBasePaymentAsset.decimals,
       });
 
       if (headersSentEarly) {

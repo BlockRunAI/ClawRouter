@@ -66,6 +66,7 @@ export class BalanceMonitor {
   private readonly client;
   private readonly walletAddress: `0x${string}`;
   private asset: BasePaymentAsset;
+  private readonly assetMonitors = new Map<string, BalanceMonitor>();
 
   /** Cached balance (null = not yet fetched) */
   private cachedBalance: bigint | null = null;
@@ -192,6 +193,24 @@ export class BalanceMonitor {
 
   getAssetSymbol(): string {
     return this.asset.symbol;
+  }
+
+  getSharedMonitorForAsset(asset: BasePaymentAsset): BalanceMonitor {
+    if (
+      this.asset.asset.toLowerCase() === asset.asset.toLowerCase() &&
+      this.asset.symbol === asset.symbol &&
+      this.asset.decimals === asset.decimals
+    ) {
+      return this;
+    }
+
+    const key = `${asset.asset.toLowerCase()}:${asset.symbol}:${asset.decimals}`;
+    const existing = this.assetMonitors.get(key);
+    if (existing) return existing;
+
+    const monitor = new BalanceMonitor(this.walletAddress, asset);
+    this.assetMonitors.set(key, monitor);
+    return monitor;
   }
 
   /** Fetch balance from RPC */
