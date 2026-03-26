@@ -448,6 +448,7 @@ declare class BalanceMonitor {
     private readonly client;
     private readonly walletAddress;
     private asset;
+    private readonly assetMonitors;
     /** Cached balance (null = not yet fetched) */
     private cachedBalance;
     /** Timestamp when cache was last updated */
@@ -491,6 +492,7 @@ declare class BalanceMonitor {
      */
     getWalletAddress(): string;
     getAssetSymbol(): string;
+    getSharedMonitorForAsset(asset: BasePaymentAsset): BalanceMonitor;
     /** Fetch balance from RPC */
     private fetchBalance;
     /** Build BalanceInfo from raw balance */
