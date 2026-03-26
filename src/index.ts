@@ -36,6 +36,10 @@ import {
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
 import {
+  DEFAULT_BASE_PAYMENT_ASSET,
+  fetchBasePaymentAssets,
+} from "./payment-asset.js";
+import {
   loadExcludeList,
   addExclusion,
   removeExclusion,
@@ -585,11 +589,13 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
       );
     },
     onLowBalance: (info) => {
-      api.logger.warn(`[!] Low balance: ${info.balanceUSD}. Fund wallet: ${info.walletAddress}`);
+      api.logger.warn(
+        `[!] Low balance: ${info.balanceUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`,
+      );
     },
     onInsufficientFunds: (info) => {
       api.logger.error(
-        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund wallet: ${info.walletAddress}`,
+        `[!] Insufficient funds. Balance: ${info.balanceUSD}, Needed: ${info.requiredUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`,
       );
     },
   });
@@ -613,13 +619,17 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   const displayAddress =
     currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet.address;
   const network = currentChain === "solana" ? "Solana" : "Base";
+  const paymentAssetLabel =
+    currentChain === "solana"
+      ? "USDC"
+      : proxy.paymentAsset?.symbol ?? DEFAULT_BASE_PAYMENT_ASSET.symbol;
   proxy.balanceMonitor
     .checkBalance()
     .then(async (balance) => {
       if (balance.isEmpty) {
         api.logger.info(`Wallet (${network}): ${displayAddress}`);
         api.logger.info(
-          `Balance: $0.00 — send USDC on ${network} to the address above to unlock paid models.`,
+          `Balance: $0.00 — send ${paymentAssetLabel} on ${network} to the address above to unlock paid models.`,
         );
       } else if (balance.isLow) {
         api.logger.info(
@@ -951,13 +961,28 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
       }
 
       // Default: show wallet status
-      let evmBalanceText: string;
+      const basePaymentAssets =
+        (await fetchBasePaymentAssets("https://blockrun.ai/api").catch(() => undefined)) ??
+        [DEFAULT_BASE_PAYMENT_ASSET];
+      let basePaymentAsset = basePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
+      let evmBalanceText = "Balance: (could not check)";
+      let baseAssetLines: string[] = [];
       try {
-        const monitor = new BalanceMonitor(address);
-        const balance = await monitor.checkBalance();
-        evmBalanceText = `Balance: ${balance.balanceUSD}`;
+        for (const asset of basePaymentAssets) {
+          try {
+            const assetMonitor = new BalanceMonitor(address, asset);
+            const assetBalance = await assetMonitor.checkBalance();
+            baseAssetLines.push(`  ${asset.symbol}: ${assetBalance.balanceUSD}`);
+            if (assetBalance.balance > 0n && evmBalanceText === "Balance: (could not check)") {
+              basePaymentAsset = asset;
+              evmBalanceText = `Balance: ${assetBalance.balanceUSD}`;
+            }
+          } catch {
+            baseAssetLines.push(`  ${asset.symbol}: (could not check)`);
+          }
+        }
       } catch {
-        evmBalanceText = "Balance: (could not check)";
+        baseAssetLines = basePaymentAssets.map((asset) => `  ${asset.symbol}: (could not check)`);
       }
 
       // Check for Solana wallet
@@ -1038,7 +1063,9 @@ async function createWalletCommand(): Promise<OpenClawPluginCommandDefinition> {
           "**Base (EVM):**",
           `  Address: \`${address}\``,
           `  ${evmBalanceText}`,
-          `  Fund (USDC only): https://basescan.org/address/${address}`,
+          `  Supported assets (priority order):`,
+          ...baseAssetLines,
+          `  Fund supported Base assets: https://basescan.org/address/${address}`,
           solanaSection,
           usageSection,
           "",
@@ -1310,6 +1337,12 @@ export { BalanceMonitor, BALANCE_THRESHOLDS } from "./balance.js";
 export type { BalanceInfo, SufficiencyResult } from "./balance.js";
 export { SolanaBalanceMonitor } from "./solana-balance.js";
 export type { SolanaBalanceInfo } from "./solana-balance.js";
+export {
+  DEFAULT_BASE_PAYMENT_ASSET,
+  fetchBasePaymentAsset,
+  normalizeBasePaymentAsset,
+} from "./payment-asset.js";
+export type { BasePaymentAsset } from "./payment-asset.js";
 export {
   SpendControl,
   FileSpendControlStorage,

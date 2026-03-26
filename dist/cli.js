@@ -24423,6 +24423,9 @@ var init_solana_balance = __esm({
       getWalletAddress() {
         return this.walletAddress;
       }
+      getAssetSymbol() {
+        return "USDC";
+      }
       /**
        * Check native SOL balance (in lamports). Useful for detecting users who
        * funded with SOL instead of USDC.
@@ -24476,6 +24479,7 @@ var init_solana_balance = __esm({
         return {
           balance,
           balanceUSD: `$${dollars.toFixed(2)}`,
+          assetSymbol: "USDC",
           isLow: balance < 1000000n,
           isEmpty: balance < 100n,
           walletAddress: this.walletAddress
@@ -41823,8 +41827,73 @@ var RpcError2 = class extends Error {
   }
 };
 
+// src/payment-asset.ts
+var DEFAULT_BASE_PAYMENT_ASSET = {
+  chain: "base",
+  asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  symbol: "USDC",
+  decimals: 6,
+  name: "USD Coin",
+  transferMethod: "eip3009"
+};
+function isHexAddress(value) {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+function normalizeBasePaymentAsset(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  if (!isHexAddress(candidate.asset)) return void 0;
+  if (typeof candidate.symbol !== "string" || candidate.symbol.trim() === "") return void 0;
+  if (typeof candidate.decimals !== "number" || !Number.isInteger(candidate.decimals) || candidate.decimals < 0) {
+    return void 0;
+  }
+  if (typeof candidate.name !== "string" || candidate.name.trim() === "") return void 0;
+  if (candidate.transferMethod !== void 0 && candidate.transferMethod !== "eip3009") {
+    return void 0;
+  }
+  return {
+    chain: "base",
+    asset: candidate.asset,
+    symbol: candidate.symbol.trim().toUpperCase(),
+    decimals: candidate.decimals,
+    name: candidate.name.trim(),
+    transferMethod: "eip3009",
+    priority: typeof candidate.priority === "number" ? candidate.priority : void 0,
+    enabled: typeof candidate.enabled === "boolean" ? candidate.enabled : void 0
+  };
+}
+function sortAssets(assets) {
+  return [...assets].sort(
+    (a, b) => (a.priority ?? Number.MAX_SAFE_INTEGER) - (b.priority ?? Number.MAX_SAFE_INTEGER)
+  );
+}
+function normalizeBasePaymentAssets(value) {
+  if (!value || typeof value !== "object") return [DEFAULT_BASE_PAYMENT_ASSET];
+  const payload = value;
+  const candidateList = Array.isArray(payload.paymentAssets) ? payload.paymentAssets : [
+    payload.paymentAsset,
+    payload.base,
+    payload
+  ];
+  const normalized = candidateList.map((candidate) => normalizeBasePaymentAsset(candidate)).filter((asset) => Boolean(asset)).filter((asset) => asset.enabled !== false && asset.transferMethod === "eip3009");
+  return sortAssets(
+    normalized.length > 0 ? normalized : [DEFAULT_BASE_PAYMENT_ASSET]
+  );
+}
+async function fetchBasePaymentAssets(apiBase, baseFetch = fetch) {
+  try {
+    const response = await baseFetch(`${apiBase.replace(/\/+$/, "")}/v1/payment-metadata?chain=base`, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) return [DEFAULT_BASE_PAYMENT_ASSET];
+    const payload = await response.json();
+    return normalizeBasePaymentAssets(payload);
+  } catch {
+    return [DEFAULT_BASE_PAYMENT_ASSET];
+  }
+}
+
 // src/balance.ts
-var USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 var CACHE_TTL_MS = 3e4;
 var BALANCE_THRESHOLDS = {
   /** Low balance warning threshold: $1.00 */
@@ -41832,15 +41901,18 @@ var BALANCE_THRESHOLDS = {
   /** Effectively zero threshold: $0.0001 (covers dust/rounding) */
   ZERO_THRESHOLD: 100n
 };
-var BalanceMonitor = class {
+var BalanceMonitor = class _BalanceMonitor {
   client;
   walletAddress;
-  /** Cached balance (null = not yet fetched) */
-  cachedBalance = null;
-  /** Timestamp when cache was last updated */
-  cachedAt = 0;
-  constructor(walletAddress) {
+  assetMonitors = /* @__PURE__ */ new Map();
+  state;
+  constructor(walletAddress, asset = DEFAULT_BASE_PAYMENT_ASSET) {
     this.walletAddress = walletAddress;
+    this.state = {
+      asset,
+      cachedBalance: null,
+      cachedAt: 0
+    };
     this.client = createPublicClient({
       chain: base,
       transport: http(void 0, {
@@ -41854,21 +41926,22 @@ var BalanceMonitor = class {
    * Uses cache if valid, otherwise fetches from RPC.
    */
   async checkBalance() {
+    const state = this.state;
     const now = Date.now();
-    if (this.cachedBalance !== null && this.cachedBalance > 0n && now - this.cachedAt < CACHE_TTL_MS) {
-      return this.buildInfo(this.cachedBalance);
+    if (state.cachedBalance !== null && state.cachedBalance > 0n && now - state.cachedAt < CACHE_TTL_MS) {
+      return this.buildInfo(state.cachedBalance, state.asset);
     }
-    const balance = await this.fetchBalance();
+    const balance = await this.fetchBalance(state.asset);
     if (balance > 0n) {
-      this.cachedBalance = balance;
-      this.cachedAt = now;
+      state.cachedBalance = balance;
+      state.cachedAt = now;
     }
-    return this.buildInfo(balance);
+    return this.buildInfo(balance, state.asset);
   }
   /**
    * Check if balance is sufficient for an estimated cost.
    *
-   * @param estimatedCostMicros - Estimated cost in USDC smallest unit (6 decimals)
+   * @param estimatedCostMicros - Estimated cost in USD micros (6 decimals)
    */
   async checkSufficient(estimatedCostMicros) {
     const info = await this.checkBalance();
@@ -41879,18 +41952,31 @@ var BalanceMonitor = class {
     return {
       sufficient: false,
       info,
-      shortfall: this.formatUSDC(shortfall)
+      shortfall: this.formatUSD(shortfall)
     };
+  }
+  get cachedBalance() {
+    return this.state.cachedBalance;
+  }
+  set cachedBalance(value) {
+    this.state.cachedBalance = value;
+  }
+  get cachedAt() {
+    return this.state.cachedAt;
+  }
+  set cachedAt(value) {
+    this.state.cachedAt = value;
   }
   /**
    * Optimistically deduct estimated cost from cached balance.
    * Call this after a successful payment to keep cache accurate.
    *
-   * @param amountMicros - Amount to deduct in USDC smallest unit
+   * @param amountMicros - Amount to deduct in USD micros
    */
   deductEstimated(amountMicros) {
-    if (this.cachedBalance !== null && this.cachedBalance >= amountMicros) {
-      this.cachedBalance -= amountMicros;
+    const state = this.state;
+    if (state.cachedBalance !== null && state.cachedBalance >= amountMicros) {
+      state.cachedBalance -= amountMicros;
     }
   }
   /**
@@ -41898,8 +41984,9 @@ var BalanceMonitor = class {
    * Call this after a payment failure to get accurate balance.
    */
   invalidate() {
-    this.cachedBalance = null;
-    this.cachedAt = 0;
+    const state = this.state;
+    state.cachedBalance = null;
+    state.cachedAt = 0;
   }
   /**
    * Force refresh balance from RPC (ignores cache).
@@ -41908,12 +41995,24 @@ var BalanceMonitor = class {
     this.invalidate();
     return this.checkBalance();
   }
+  setAsset(asset) {
+    const currentAsset = this.state.asset;
+    if (currentAsset.asset.toLowerCase() !== asset.asset.toLowerCase() || currentAsset.symbol !== asset.symbol || currentAsset.decimals !== asset.decimals) {
+      this.state = this.getSharedMonitorForAsset(asset).state;
+    }
+  }
+  getAsset() {
+    return this.state.asset;
+  }
   /**
-   * Format USDC amount (in micros) as "$X.XX".
+   * Format a stablecoin amount (normalized to USD micros) as "$X.XX".
    */
-  formatUSDC(amountMicros) {
+  formatUSD(amountMicros) {
     const dollars = Number(amountMicros) / 1e6;
     return `$${dollars.toFixed(2)}`;
+  }
+  formatUSDC(amountMicros) {
+    return this.formatUSD(amountMicros);
   }
   /**
    * Get the wallet address being monitored.
@@ -41921,29 +42020,51 @@ var BalanceMonitor = class {
   getWalletAddress() {
     return this.walletAddress;
   }
+  getAssetSymbol() {
+    return this.state.asset.symbol;
+  }
+  getSharedMonitorForAsset(asset) {
+    if (this.state.asset.asset.toLowerCase() === asset.asset.toLowerCase() && this.state.asset.symbol === asset.symbol && this.state.asset.decimals === asset.decimals) {
+      return this;
+    }
+    const key = `${asset.asset.toLowerCase()}:${asset.symbol}:${asset.decimals}`;
+    const existing = this.assetMonitors.get(key);
+    if (existing) return existing;
+    const monitor = new _BalanceMonitor(this.walletAddress, asset);
+    this.assetMonitors.set(key, monitor);
+    return monitor;
+  }
   /** Fetch balance from RPC */
-  async fetchBalance() {
+  async fetchBalance(asset) {
     try {
       const balance = await this.client.readContract({
-        address: USDC_BASE,
+        address: asset.asset,
         abi: erc20Abi,
         functionName: "balanceOf",
         args: [this.walletAddress]
       });
-      return balance;
+      return this.toUsdMicros(balance, asset);
     } catch (error) {
       throw new RpcError2(error instanceof Error ? error.message : "Unknown error", error);
     }
   }
   /** Build BalanceInfo from raw balance */
-  buildInfo(balance) {
+  buildInfo(balance, asset) {
     return {
       balance,
-      balanceUSD: this.formatUSDC(balance),
+      balanceUSD: this.formatUSD(balance),
+      assetSymbol: asset.symbol,
       isLow: balance < BALANCE_THRESHOLDS.LOW_BALANCE_MICROS,
       isEmpty: balance < BALANCE_THRESHOLDS.ZERO_THRESHOLD,
       walletAddress: this.walletAddress
     };
+  }
+  toUsdMicros(rawAmount, asset) {
+    if (asset.decimals === 6) return rawAmount;
+    if (asset.decimals > 6) {
+      return rawAmount / 10n ** BigInt(asset.decimals - 6);
+    }
+    return rawAmount * 10n ** BigInt(6 - asset.decimals);
   }
 };
 
@@ -46839,7 +46960,16 @@ async function readBodyWithTimeout(body, timeoutMs = MODEL_BODY_READ_TIMEOUT_MS)
   }
   return chunks;
 }
-function transformPaymentError(errorBody) {
+function transformPaymentError(errorBody, opts) {
+  const baseAssetSymbol = opts?.baseAssetSymbol || DEFAULT_BASE_PAYMENT_ASSET.symbol;
+  const baseAssetDecimals = opts?.baseAssetDecimals ?? DEFAULT_BASE_PAYMENT_ASSET.decimals;
+  const formatRawAssetAmount = (amountRaw, decimals) => {
+    const divisor = 10n ** BigInt(decimals);
+    const whole = amountRaw / divisor;
+    const remainder = amountRaw % divisor;
+    const scaledFraction = decimals >= 6 ? remainder / 10n ** BigInt(decimals - 6) : remainder * 10n ** BigInt(6 - decimals);
+    return `${whole.toString()}.${scaledFraction.toString().padStart(6, "0")}`;
+  };
   try {
     const parsed = JSON.parse(errorBody);
     if (parsed.error === "Payment verification failed" && parsed.details) {
@@ -46851,20 +46981,20 @@ function transformPaymentError(errorBody) {
             /insufficient balance:\s*(\d+)\s*<\s*(\d+)/i
           );
           if (balanceMatch) {
-            const currentMicros = parseInt(balanceMatch[1], 10);
-            const requiredMicros = parseInt(balanceMatch[2], 10);
-            const currentUSD = (currentMicros / 1e6).toFixed(6);
-            const requiredUSD = (requiredMicros / 1e6).toFixed(6);
+            const currentRaw = BigInt(balanceMatch[1]);
+            const requiredRaw = BigInt(balanceMatch[2]);
+            const currentUSD = formatRawAssetAmount(currentRaw, baseAssetDecimals);
+            const requiredUSD = formatRawAssetAmount(requiredRaw, baseAssetDecimals);
             const wallet = innerJson.payer || "unknown";
             const shortWallet = wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
             return JSON.stringify({
               error: {
-                message: `Insufficient USDC balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
+                message: `Insufficient ${baseAssetSymbol} balance. Current: $${currentUSD}, Required: ~$${requiredUSD}`,
                 type: "insufficient_funds",
                 wallet,
                 current_balance_usd: currentUSD,
                 required_usd: requiredUSD,
-                help: `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`
+                help: `Fund wallet ${shortWallet} with ${baseAssetSymbol} on Base, or use free model: /model free`
               }
             });
           }
@@ -46960,6 +47090,13 @@ function transformPaymentError(errorBody) {
   } catch {
   }
   return errorBody;
+}
+function formatStableAmount(amountRaw, decimals) {
+  const divisor = 10n ** BigInt(decimals);
+  const whole = amountRaw / divisor;
+  const remainder = amountRaw % divisor;
+  const scaledFraction = decimals >= 6 ? remainder / 10n ** BigInt(decimals - 6) : remainder * 10n ** BigInt(6 - decimals);
+  return `${whole.toString()}.${scaledFraction.toString().padStart(6, "0")}`;
 }
 function categorizeError(status, body) {
   if (status === 401) return "auth_failure";
@@ -47060,7 +47197,12 @@ async function checkExistingProxy(port) {
     if (response.ok) {
       const data = await response.json();
       if (data.status === "ok" && data.wallet) {
-        return { wallet: data.wallet, paymentChain: data.paymentChain };
+        return {
+          wallet: data.wallet,
+          paymentChain: data.paymentChain,
+          paymentAssets: data.paymentAssets,
+          selectedPaymentAsset: data.selectedPaymentAsset ?? data.paymentAsset
+        };
       }
     }
     return void 0;
@@ -47521,6 +47663,9 @@ async function startProxy(options) {
   const solanaPrivateKeyBytes = typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
   const paymentChain = options.paymentChain ?? await resolvePaymentChain();
   const apiBase = options.apiBase ?? (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  let activeBasePaymentAssets = paymentChain === "base" ? await fetchBasePaymentAssets(apiBase).catch(() => void 0) ?? [DEFAULT_BASE_PAYMENT_ASSET] : [DEFAULT_BASE_PAYMENT_ASSET];
+  let activeBasePaymentAsset = activeBasePaymentAssets[0] ?? DEFAULT_BASE_PAYMENT_ASSET;
+  let lastSelectedBasePaymentAsset = activeBasePaymentAsset;
   if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
     console.warn(
       `[ClawRouter] \u26A0 Payment chain is Solana but no mnemonic found \u2014 falling back to Base (EVM).`
@@ -47533,19 +47678,18 @@ async function startProxy(options) {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
   }
   const listenPort = options.port ?? getProxyPort();
-  const existingProxy = await checkExistingProxy(listenPort);
-  if (existingProxy) {
+  const buildReuseHandle = async (existingProxyData) => {
     const account2 = privateKeyToAccount(walletKey);
     const baseUrl2 = `http://127.0.0.1:${listenPort}`;
-    if (existingProxy.wallet !== account2.address) {
+    if (existingProxyData.wallet !== account2.address) {
       console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`
+        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxyData.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`
       );
     }
-    if (existingProxy.paymentChain) {
-      if (existingProxy.paymentChain !== paymentChain) {
+    if (existingProxyData.paymentChain) {
+      if (existingProxyData.paymentChain !== paymentChain) {
         throw new Error(
-          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`
+          `Existing proxy on port ${listenPort} is using ${existingProxyData.paymentChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`
         );
       }
     } else if (paymentChain !== "base") {
@@ -47562,23 +47706,38 @@ async function startProxy(options) {
       const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes2(solanaPrivateKeyBytes);
       reuseSolanaAddress = solanaSigner.address;
     }
-    let balanceMonitor2;
+    let reuseBalanceMonitor;
     if (paymentChain === "solana" && reuseSolanaAddress) {
       const { SolanaBalanceMonitor: SolanaBalanceMonitor2 } = await Promise.resolve().then(() => (init_solana_balance(), solana_balance_exports));
-      balanceMonitor2 = new SolanaBalanceMonitor2(reuseSolanaAddress);
+      reuseBalanceMonitor = new SolanaBalanceMonitor2(reuseSolanaAddress);
     } else {
-      balanceMonitor2 = new BalanceMonitor(account2.address);
+      if (existingProxyData.paymentAssets?.length) {
+        activeBasePaymentAssets = existingProxyData.paymentAssets;
+      }
+      const selectedPaymentAssetId = typeof existingProxyData.selectedPaymentAsset === "string" ? existingProxyData.selectedPaymentAsset.toLowerCase() : existingProxyData.selectedPaymentAsset?.asset?.toLowerCase();
+      const selectedPaymentAsset = selectedPaymentAssetId ? activeBasePaymentAssets.find((asset) => asset.asset.toLowerCase() === selectedPaymentAssetId) : void 0;
+      if (selectedPaymentAsset) {
+        activeBasePaymentAsset = selectedPaymentAsset;
+        lastSelectedBasePaymentAsset = selectedPaymentAsset;
+      }
+      reuseBalanceMonitor = new BalanceMonitor(account2.address, activeBasePaymentAsset);
     }
     options.onReady?.(listenPort);
     return {
       port: listenPort,
       baseUrl: baseUrl2,
-      walletAddress: existingProxy.wallet,
+      walletAddress: existingProxyData.wallet,
       solanaAddress: reuseSolanaAddress,
-      balanceMonitor: balanceMonitor2,
+      paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : void 0,
+      paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : void 0,
+      balanceMonitor: reuseBalanceMonitor,
       close: async () => {
       }
     };
+  };
+  const existingProxy = await checkExistingProxy(listenPort);
+  if (existingProxy) {
+    return buildReuseHandle(existingProxy);
   }
   const account = privateKeyToAccount(walletKey);
   const evmPublicClient = createPublicClient({ chain: base, transport: http() });
@@ -47596,12 +47755,27 @@ async function startProxy(options) {
   }
   x402.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
+    if (network.startsWith("eip155")) {
+      activeBasePaymentAssets = await fetchBasePaymentAssets(apiBase).catch(() => void 0) ?? activeBasePaymentAssets;
+      const refreshedActiveAsset = activeBasePaymentAssets.find(
+        (asset) => asset.asset.toLowerCase() === activeBasePaymentAsset.asset.toLowerCase()
+      );
+      if (refreshedActiveAsset) {
+        activeBasePaymentAsset = refreshedActiveAsset;
+      }
+    }
     const chain3 = network.startsWith("eip155") ? "Base (EVM)" : network.startsWith("solana") ? "Solana" : network;
-    const amountMicros = parseInt(context.selectedRequirements.amount || "0", 10);
-    const amountUsd = amountMicros / 1e6;
+    const amountRaw = BigInt(context.selectedRequirements.amount || "0");
+    const selectedRequirementsWithDecimals = context.selectedRequirements;
+    const amountDecimals = selectedRequirementsWithDecimals.decimals ?? (network.startsWith("eip155") ? activeBasePaymentAsset.decimals : 6);
+    const amountUsdText = formatStableAmount(amountRaw, amountDecimals);
+    const amountUsd = Number.parseFloat(amountUsdText);
     const store = paymentStore.getStore();
-    if (store) store.amountUsd = amountUsd;
-    console.log(`[ClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsd.toFixed(6)}`);
+    if (store) {
+      store.amountUsd = amountUsd;
+      store.amountUsdText = amountUsdText;
+    }
+    console.log(`[ClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsdText}`);
   });
   const payFetch = createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana"
@@ -47613,7 +47787,7 @@ async function startProxy(options) {
     const { SolanaBalanceMonitor: SolanaBalanceMonitor2 } = await Promise.resolve().then(() => (init_solana_balance(), solana_balance_exports));
     balanceMonitor = new SolanaBalanceMonitor2(solanaAddress);
   } else {
-    balanceMonitor = new BalanceMonitor(account.address);
+    balanceMonitor = new BalanceMonitor(account.address, activeBasePaymentAsset);
   }
   const routingConfig = mergeRoutingConfig(options.routingConfig);
   const modelPricing = buildModelPricing();
@@ -47627,7 +47801,7 @@ async function startProxy(options) {
   const sessionJournal = new SessionJournal();
   const connections = /* @__PURE__ */ new Set();
   const server = createServer((req, res) => {
-    paymentStore.run({ amountUsd: 0 }, async () => {
+    paymentStore.run({ amountUsd: 0, amountUsdText: "0.000000" }, async () => {
       req.on("error", (err) => {
         console.error(`[ClawRouter] Request stream error: ${err.message}`);
       });
@@ -47652,15 +47826,44 @@ async function startProxy(options) {
           wallet: account.address,
           paymentChain
         };
+        if (paymentChain === "base") {
+          response.paymentAsset = activeBasePaymentAsset.asset;
+          response.paymentAssetSymbol = activeBasePaymentAsset.symbol;
+          response.paymentAssetDecimals = activeBasePaymentAsset.decimals;
+          response.paymentAssets = activeBasePaymentAssets;
+          response.selectedPaymentAsset = lastSelectedBasePaymentAsset.asset;
+          response.selectedPaymentAssetSymbol = lastSelectedBasePaymentAsset.symbol;
+        }
         if (solanaAddress) {
           response.solana = solanaAddress;
         }
         if (full) {
           try {
-            const balanceInfo = await balanceMonitor.checkBalance();
-            response.balance = balanceInfo.balanceUSD;
-            response.isLow = balanceInfo.isLow;
-            response.isEmpty = balanceInfo.isEmpty;
+            if (paymentChain === "base") {
+              const assetBalances = await Promise.all(
+                activeBasePaymentAssets.map(async (asset) => {
+                  const monitor = new BalanceMonitor(account.address, asset);
+                  const balanceInfo = await monitor.checkBalance();
+                  return {
+                    asset: asset.asset,
+                    symbol: asset.symbol,
+                    decimals: asset.decimals,
+                    balance: balanceInfo.balanceUSD,
+                    isLow: balanceInfo.isLow,
+                    isEmpty: balanceInfo.isEmpty
+                  };
+                })
+              );
+              response.assetBalances = assetBalances;
+              response.balance = assetBalances[0]?.balance ?? "$0.00";
+              response.isLow = assetBalances[0]?.isLow ?? true;
+              response.isEmpty = assetBalances.every((asset) => asset.isEmpty);
+            } else {
+              const balanceInfo = await balanceMonitor.checkBalance();
+              response.balance = balanceInfo.balanceUSD;
+              response.isLow = balanceInfo.isLow;
+              response.isEmpty = balanceInfo.isEmpty;
+            }
           } catch {
             response.balanceError = "Could not fetch balance";
           }
@@ -48006,7 +48209,13 @@ async function startProxy(options) {
           balanceMonitor,
           sessionStore,
           responseCache2,
-          sessionJournal
+          sessionJournal,
+          () => activeBasePaymentAsset.symbol,
+          () => activeBasePaymentAssets,
+          (asset) => {
+            lastSelectedBasePaymentAsset = asset;
+            activeBasePaymentAsset = asset;
+          }
         );
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -48041,7 +48250,9 @@ async function startProxy(options) {
             rejectAttempt({
               code: "REUSE_EXISTING",
               wallet: existingProxy2.wallet,
-              existingChain: existingProxy2.paymentChain
+              existingChain: existingProxy2.paymentChain,
+              paymentAssets: existingProxy2.paymentAssets,
+              selectedPaymentAsset: existingProxy2.selectedPaymentAsset
             });
             return;
           }
@@ -48081,16 +48292,12 @@ async function startProxy(options) {
             { cause: err }
           );
         }
-        const baseUrl2 = `http://127.0.0.1:${listenPort}`;
-        options.onReady?.(listenPort);
-        return {
-          port: listenPort,
-          baseUrl: baseUrl2,
-          walletAddress: error.wallet,
-          balanceMonitor,
-          close: async () => {
-          }
-        };
+        return buildReuseHandle({
+          wallet: error.wallet,
+          paymentChain: error.existingChain,
+          paymentAssets: error.paymentAssets,
+          selectedPaymentAsset: error.selectedPaymentAsset
+        });
       }
       if (error.code === "RETRY") {
         await new Promise((r) => setTimeout(r, PORT_RETRY_DELAY_MS));
@@ -48139,6 +48346,8 @@ async function startProxy(options) {
     baseUrl,
     walletAddress: account.address,
     solanaAddress,
+    paymentAsset: paymentChain === "base" ? activeBasePaymentAsset : void 0,
+    paymentAssets: paymentChain === "base" ? activeBasePaymentAssets : void 0,
     balanceMonitor,
     close: () => new Promise((res, rej) => {
       const timeout = setTimeout(() => {
@@ -48239,7 +48448,7 @@ async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxT
     };
   }
 }
-async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, deduplicator, balanceMonitor, sessionStore, responseCache2, sessionJournal) {
+async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, deduplicator, balanceMonitor, sessionStore, responseCache2, sessionJournal, getBaseAssetSymbol, getBasePaymentAssets, onBaseAssetSelected) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
   const bodyChunks = [];
@@ -48262,6 +48471,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   let accumulatedContent = "";
   let responseInputTokens;
   let responseOutputTokens;
+  let requestBalanceMonitor = balanceMonitor;
+  let requestBasePaymentAsset = getBasePaymentAssets()[0];
   const isChatCompletion = req.url?.includes("/chat/completions");
   const sessionId = getSessionId(req.headers);
   let effectiveSessionId = sessionId;
@@ -49032,7 +49243,30 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
       const bufferedCostMicros = estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
-      const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
+      if (balanceMonitor instanceof BalanceMonitor) {
+        const baseAssets = getBasePaymentAssets();
+        let selected;
+        for (const asset of baseAssets) {
+          const monitor = balanceMonitor.getSharedMonitorForAsset(asset);
+          const sufficiency2 = await monitor.checkSufficient(bufferedCostMicros);
+          if (!selected) {
+            selected = { asset, monitor, sufficiency: sufficiency2 };
+          }
+          if (sufficiency2.sufficient) {
+            selected = { asset, monitor, sufficiency: sufficiency2 };
+            break;
+          }
+        }
+        if (selected) {
+          requestBasePaymentAsset = selected.asset;
+          requestBalanceMonitor = selected.monitor;
+          onBaseAssetSelected(selected.asset);
+          console.log(
+            `[ClawRouter] Base payment asset selected: ${selected.asset.symbol} (${selected.sufficiency.info.balanceUSD})`
+          );
+        }
+      }
+      const sufficiency = await requestBalanceMonitor.checkSufficient(bufferedCostMicros);
       if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
         const originalModel = modelId;
         console.log(
@@ -49050,12 +49284,14 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
 `;
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          walletAddress: sufficiency.info.walletAddress
+          walletAddress: sufficiency.info.walletAddress,
+          assetSymbol: sufficiency.info.assetSymbol
         });
       } else if (sufficiency.info.isLow) {
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
-          walletAddress: sufficiency.info.walletAddress
+          walletAddress: sufficiency.info.walletAddress,
+          assetSymbol: sufficiency.info.assetSymbol
         });
       }
     }
@@ -49388,7 +49624,7 @@ data: [DONE]
           i = freeIdx - 1;
           continue;
         }
-        if (freeIdx === -1) {
+        if (freeIdx === -1 && !excludeList.has(FREE_MODEL)) {
           modelsToTry.push(FREE_MODEL);
           console.log(`[ClawRouter] Payment error \u2014 appending free model: ${FREE_MODEL}`);
           continue;
@@ -49525,7 +49761,10 @@ data: [DONE]
       console.log(`[ClawRouter] ${structuredMessage}`);
       const rawErrBody = lastError?.body || structuredMessage;
       const errStatus = lastError?.status || 502;
-      const transformedErr = transformPaymentError(rawErrBody);
+      const transformedErr = transformPaymentError(rawErrBody, {
+        baseAssetSymbol: requestBasePaymentAsset.symbol,
+        baseAssetDecimals: requestBasePaymentAsset.decimals
+      });
       if (headersSentEarly) {
         let errPayload;
         try {
@@ -49827,7 +50066,7 @@ data: [DONE]
       }
     }
     if (estimatedCostMicros !== void 0) {
-      balanceMonitor.deductEstimated(estimatedCostMicros);
+      requestBalanceMonitor.deductEstimated(estimatedCostMicros);
     }
     completed = true;
   } catch (err) {
@@ -49837,7 +50076,7 @@ data: [DONE]
       heartbeatInterval = void 0;
     }
     deduplicator.removeInflight(dedupKey);
-    balanceMonitor.invalidate();
+    requestBalanceMonitor.invalidate();
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Request timed out after ${timeoutMs}ms`, { cause: err });
     }
@@ -49946,6 +50185,21 @@ function red(text) {
 function yellow(text) {
   return `\x1B[33m\u26A0\x1B[0m ${text}`;
 }
+function getBuyLinkForAsset(symbol) {
+  const normalized = symbol.trim().toUpperCase();
+  const knownLinks = {
+    USDC: "https://www.coinbase.com/price/usd-coin",
+    EURC: "https://www.coinbase.com/price/euro-coin"
+  };
+  const knownUrl = knownLinks[normalized];
+  if (knownUrl) {
+    return { label: `Get ${normalized}`, url: knownUrl };
+  }
+  return {
+    label: `Find ${normalized} on Coinbase`,
+    url: `https://www.coinbase.com/search?q=${encodeURIComponent(normalized)}`
+  };
+}
 function collectSystemInfo() {
   return {
     os: `${platform()} ${arch()}`,
@@ -49968,7 +50222,8 @@ async function collectWalletInfo() {
         isLow: false,
         isEmpty: true,
         source: null,
-        paymentChain: "base"
+        paymentChain: "base",
+        paymentAsset: DEFAULT_BASE_PAYMENT_ASSET
       };
     }
     let solanaAddress = null;
@@ -49979,6 +50234,7 @@ async function collectWalletInfo() {
       }
     }
     const paymentChain = await resolvePaymentChain();
+    let paymentAsset = DEFAULT_BASE_PAYMENT_ASSET;
     try {
       let balanceInfo;
       if (paymentChain === "solana" && solanaAddress) {
@@ -49986,8 +50242,21 @@ async function collectWalletInfo() {
         const monitor = new SolanaBalanceMonitor2(solanaAddress);
         balanceInfo = await monitor.checkBalance();
       } else {
-        const monitor = new BalanceMonitor(address2);
-        balanceInfo = await monitor.checkBalance();
+        const paymentAssets = await fetchBasePaymentAssets("https://blockrun.ai/api").catch(() => void 0) ?? [DEFAULT_BASE_PAYMENT_ASSET];
+        const assetBalances = await Promise.all(
+          paymentAssets.map(async (asset) => {
+            const monitor = new BalanceMonitor(address2, asset);
+            const info = await monitor.checkBalance();
+            return { asset, info };
+          })
+        );
+        const selectedBalance = assetBalances.find(({ info }) => !info.isLow && !info.isEmpty) ?? assetBalances.find(({ info }) => !info.isEmpty) ?? assetBalances[0];
+        paymentAsset = selectedBalance?.asset ?? DEFAULT_BASE_PAYMENT_ASSET;
+        balanceInfo = {
+          balanceUSD: selectedBalance?.info.balanceUSD ?? null,
+          isLow: assetBalances.length > 0 ? assetBalances.every(({ info }) => info.isLow) : false,
+          isEmpty: assetBalances.length > 0 ? assetBalances.every(({ info }) => info.isEmpty) : true
+        };
       }
       return {
         exists: true,
@@ -49998,7 +50267,8 @@ async function collectWalletInfo() {
         isLow: balanceInfo.isLow,
         isEmpty: balanceInfo.isEmpty,
         source,
-        paymentChain
+        paymentChain,
+        paymentAsset
       };
     } catch {
       return {
@@ -50010,7 +50280,8 @@ async function collectWalletInfo() {
         isLow: false,
         isEmpty: false,
         source,
-        paymentChain
+        paymentChain,
+        paymentAsset
       };
     }
   } catch {
@@ -50023,7 +50294,8 @@ async function collectWalletInfo() {
       isLow: false,
       isEmpty: true,
       source: null,
-      paymentChain: "base"
+      paymentChain: "base",
+      paymentAsset: DEFAULT_BASE_PAYMENT_ASSET
     };
   }
 }
@@ -50078,8 +50350,11 @@ function identifyIssues(result) {
     issues.push("No wallet found");
   }
   if (result.wallet.isEmpty) {
-    const chain3 = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
-    issues.push(`Wallet is empty - need to fund with USDC on ${chain3}`);
+    if (result.wallet.paymentChain === "solana") {
+      issues.push("Wallet is empty - need to fund with USDC on Solana");
+    } else {
+      issues.push(`Wallet is empty - need to fund with ${result.wallet.paymentAsset.symbol} on Base`);
+    }
     if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
       issues.push("Tip: if you funded Solana, run /wallet solana to switch chains");
     }
@@ -50110,9 +50385,12 @@ function printDiagnostics(result) {
       console.log(`  ${green(`Solana Address: ${result.wallet.solanaAddress}`)}`);
     }
     const chainLabel = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    const assetLabel = result.wallet.paymentChain === "solana" ? "USDC" : result.wallet.paymentAsset.symbol;
     console.log(`  ${green(`Chain: ${chainLabel}`)}`);
     if (result.wallet.isEmpty) {
-      console.log(`  ${red(`Balance: $0.00 - NEED TO FUND WITH USDC ON ${chainLabel.toUpperCase()}!`)}`);
+      console.log(
+        `  ${red(`Balance: $0.00 - NEED TO FUND WITH ${assetLabel} ON ${chainLabel.toUpperCase()}!`)}`
+      );
       if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
         console.log(`  ${yellow(`Tip: funded Solana instead? Run /wallet solana to switch`)}`);
       }
@@ -50167,12 +50445,18 @@ var DOCTOR_MODELS = {
 };
 async function analyzeWithAI(diagnostics, userQuestion, model = "sonnet") {
   if (diagnostics.wallet.isEmpty) {
+    const paymentAsset = diagnostics.wallet.paymentAsset;
+    const buyLink = getBuyLinkForAsset(paymentAsset.symbol);
     console.log("\n\u{1F4B3} Wallet is empty - cannot call AI for analysis.");
-    console.log(`   Fund your EVM wallet with USDC on Base: ${diagnostics.wallet.address}`);
-    if (diagnostics.wallet.solanaAddress) {
+    console.log(
+      diagnostics.wallet.paymentChain === "solana" ? `   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress ?? diagnostics.wallet.address}` : `   Fund your EVM wallet with ${paymentAsset.symbol} on Base: ${diagnostics.wallet.address}`
+    );
+    if (diagnostics.wallet.paymentChain === "base" && diagnostics.wallet.solanaAddress) {
       console.log(`   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress}`);
     }
-    console.log("   Get USDC: https://www.coinbase.com/price/usd-coin");
+    console.log(
+      diagnostics.wallet.paymentChain === "solana" ? "   Get USDC: https://www.coinbase.com/price/usd-coin" : `   ${buyLink.label}: ${buyLink.url}`
+    );
     console.log("   Bridge to Base: https://bridge.base.org\n");
     return;
   }
@@ -50508,7 +50792,9 @@ ClawRouter Partner APIs (v${VERSION})
       console.log(`[ClawRouter] [${decision.tier}] ${decision.model} $${cost} (saved ${saved}%)`);
     },
     onLowBalance: (info) => {
-      console.warn(`[ClawRouter] Low balance: ${info.balanceUSD}. Fund: ${info.walletAddress}`);
+      console.warn(
+        `[ClawRouter] Low balance: ${info.balanceUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`
+      );
     },
     onInsufficientFunds: (info) => {
       console.error(
@@ -50523,7 +50809,9 @@ ClawRouter Partner APIs (v${VERSION})
     const balance = await proxy.balanceMonitor.checkBalance();
     if (balance.isEmpty) {
       console.log(`[ClawRouter] Wallet balance: $0.00 (using FREE model)`);
-      console.log(`[ClawRouter] Fund wallet for premium models: ${displayAddress}`);
+      console.log(
+        `[ClawRouter] Fund wallet with ${balance.assetSymbol} for premium models: ${displayAddress}`
+      );
     } else if (balance.isLow) {
       console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD} (low)`);
     } else {

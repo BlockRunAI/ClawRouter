@@ -280,7 +280,9 @@ async function main(): Promise<void> {
       console.log(`[ClawRouter] [${decision.tier}] ${decision.model} $${cost} (saved ${saved}%)`);
     },
     onLowBalance: (info) => {
-      console.warn(`[ClawRouter] Low balance: ${info.balanceUSD}. Fund: ${info.walletAddress}`);
+      console.warn(
+        `[ClawRouter] Low balance: ${info.balanceUSD}. Fund with ${info.assetSymbol}: ${info.walletAddress}`,
+      );
     },
     onInsufficientFunds: (info) => {
       console.error(
@@ -298,7 +300,9 @@ async function main(): Promise<void> {
     const balance = await proxy.balanceMonitor.checkBalance();
     if (balance.isEmpty) {
       console.log(`[ClawRouter] Wallet balance: $0.00 (using FREE model)`);
-      console.log(`[ClawRouter] Fund wallet for premium models: ${displayAddress}`);
+      console.log(
+        `[ClawRouter] Fund wallet with ${balance.assetSymbol} for premium models: ${displayAddress}`,
+      );
     } else if (balance.isLow) {
       console.log(`[ClawRouter] Wallet balance: ${balance.balanceUSD} (low)`);
     } else {
