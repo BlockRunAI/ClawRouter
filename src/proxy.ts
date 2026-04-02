@@ -4431,8 +4431,15 @@ async function proxyRequest(
             }
           }
         } catch {
-          // If parsing fails, send raw response as single chunk
-          const sseData = `data: ${jsonStr}\n\n`;
+          // If parsing fails, wrap in OpenAI error format so SDKs surface a
+          // meaningful message instead of throwing a generic "Unexpected error".
+          const errPayload = JSON.stringify({
+            error: {
+              message: `Upstream response could not be parsed: ${jsonStr.slice(0, 200)}`,
+              type: "proxy_error",
+            },
+          });
+          const sseData = `data: ${errPayload}\n\n`;
           safeWrite(res, sseData);
           responseChunks.push(Buffer.from(sseData));
         }
