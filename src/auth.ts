@@ -215,7 +215,7 @@ async function generateAndSaveWallet(): Promise<{
 export type WalletResolution = {
   key: string;
   address: string;
-  source: "saved" | "env" | "generated";
+  source: "saved" | "env" | "config" | "generated";
   mnemonic?: string;
   solanaPrivateKeyBytes?: Uint8Array;
 };

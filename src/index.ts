@@ -33,6 +33,7 @@ import {
   WALLET_FILE,
   MNEMONIC_FILE,
 } from "./auth.js";
+import type { WalletResolution } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
 import {
@@ -532,8 +533,18 @@ let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
  * treating activate() as an alias (def.register ?? def.activate).
  */
 async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
-  // Resolve wallet key: saved file → env var → auto-generate
-  const wallet = await resolveOrGenerateWalletKey();
+  // Resolve wallet key: plugin config → saved file → env var → auto-generate.
+  // pluginConfig.walletKey is declared in openclaw.plugin.json configSchema but
+  // was previously never read here — that was a bug.
+  const configKey = api.pluginConfig?.walletKey as string | undefined;
+  let wallet: WalletResolution;
+
+  if (typeof configKey === "string" && configKey.startsWith("0x") && configKey.length === 66) {
+    const account = privateKeyToAccount(configKey as `0x${string}`);
+    wallet = { key: configKey, address: account.address, source: "config" };
+  } else {
+    wallet = await resolveOrGenerateWalletKey();
+  }
 
   // Log wallet source
   if (wallet.source === "generated") {
@@ -545,6 +556,8 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
     api.logger.warn(`════════════════════════════════════════════════`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
+  } else if (wallet.source === "config") {
+    api.logger.info(`Using wallet from plugin config: ${wallet.address}`);
   } else {
     api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${wallet.address}`);
   }
