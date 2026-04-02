@@ -539,10 +539,15 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   const configKey = api.pluginConfig?.walletKey as string | undefined;
   let wallet: WalletResolution;
 
-  if (typeof configKey === "string" && configKey.startsWith("0x") && configKey.length === 66) {
+  if (typeof configKey === "string" && /^0x[0-9a-fA-F]{64}$/.test(configKey)) {
     const account = privateKeyToAccount(configKey as `0x${string}`);
     wallet = { key: configKey, address: account.address, source: "config" };
   } else {
+    if (configKey !== undefined) {
+      api.logger.warn(
+        `pluginConfig.walletKey is set but invalid (expected 0x + 64 hex chars) — falling back to saved wallet`,
+      );
+    }
     wallet = await resolveOrGenerateWalletKey();
   }
 
