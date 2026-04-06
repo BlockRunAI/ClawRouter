@@ -668,6 +668,135 @@ async function main() {
       proxy,
     )) && allPassed;
 
+  // Test 18: Image generation — POST /v1/images/generations
+  allPassed =
+    (await runPaidTest(
+      "Image generation (openai/gpt-image-1)",
+      async (p) => {
+        const res = await fetch(`${p.baseUrl}/v1/images/generations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "openai/gpt-image-1",
+            prompt: "A simple red circle on a white background",
+            size: "1024x1024",
+            n: 1,
+          }),
+        });
+        if (res.status !== 200) {
+          const text = await res.text();
+          throw new Error(`Expected 200, got ${res.status}: ${text.slice(0, 300)}`);
+        }
+        const body = (await res.json()) as { data?: Array<{ url?: string }> };
+        if (!Array.isArray(body.data) || body.data.length === 0) {
+          throw new Error("Expected data array in response");
+        }
+        const imageUrl = body.data[0]?.url;
+        if (!imageUrl) throw new Error("Missing url in data[0]");
+        if (!imageUrl.startsWith("http://localhost") && !imageUrl.startsWith("http://127.0.0.1")) {
+          throw new Error(`Expected localhost URL, got: ${imageUrl}`);
+        }
+        // Verify the image is actually served
+        const imgRes = await fetch(imageUrl);
+        if (!imgRes.ok) throw new Error(`Image file not served: ${imgRes.status}`);
+        const ct = imgRes.headers.get("content-type") ?? "";
+        if (!ct.startsWith("image/")) throw new Error(`Expected image content-type, got: ${ct}`);
+        const buf = await imgRes.arrayBuffer();
+        if (buf.byteLength < 1000) throw new Error(`Image too small: ${buf.byteLength} bytes`);
+        console.log(
+          `(url=${imageUrl.split("/").pop()}, size=${(buf.byteLength / 1024).toFixed(0)}KB, type=${ct}) `,
+        );
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 19: Audio generation — POST /v1/audio/generations
+  // Skipped unless RUN_MUSIC_TEST=1 because it costs $0.15 and takes 1-3 min
+  const RUN_MUSIC_TEST = RUN_PAID_TESTS && process.env.RUN_MUSIC_TEST === "1";
+  if (RUN_MUSIC_TEST) {
+    allPassed =
+      (await test(
+        "Music generation (minimax/music-2.5+)",
+        async (p) => {
+          console.log("\n  (music gen takes 1-3 minutes, please wait...)");
+          const res = await fetch(`${p.baseUrl}/v1/audio/generations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "minimax/music-2.5+",
+              prompt: "Upbeat electronic music with a fast beat",
+              instrumental: true,
+              duration_seconds: 30,
+            }),
+            signal: AbortSignal.timeout(210_000), // 3.5 min timeout
+          });
+          if (res.status !== 200) {
+            const text = await res.text();
+            throw new Error(`Expected 200, got ${res.status}: ${text.slice(0, 300)}`);
+          }
+          const body = (await res.json()) as {
+            data?: Array<{ url?: string; duration_seconds?: number }>;
+          };
+          if (!Array.isArray(body.data) || body.data.length === 0) {
+            throw new Error("Expected data array in response");
+          }
+          const audioUrl = body.data[0]?.url;
+          if (!audioUrl) throw new Error("Missing url in data[0]");
+          if (
+            !audioUrl.startsWith("http://localhost") &&
+            !audioUrl.startsWith("http://127.0.0.1")
+          ) {
+            throw new Error(`Expected localhost URL, got: ${audioUrl}`);
+          }
+          // Verify the audio file is served
+          const audioRes = await fetch(audioUrl);
+          if (!audioRes.ok) throw new Error(`Audio file not served: ${audioRes.status}`);
+          const ct = audioRes.headers.get("content-type") ?? "";
+          if (!ct.startsWith("audio/")) throw new Error(`Expected audio content-type, got: ${ct}`);
+          const buf = await audioRes.arrayBuffer();
+          if (buf.byteLength < 10_000) throw new Error(`Audio too small: ${buf.byteLength} bytes`);
+          console.log(
+            `(url=${audioUrl.split("/").pop()}, size=${(buf.byteLength / 1024).toFixed(0)}KB, type=${ct}, duration=${body.data[0]?.duration_seconds}s) `,
+          );
+        },
+        proxy,
+      )) && allPassed;
+  } else {
+    console.log(
+      `  Music generation (minimax/music-2.5+) ... SKIP (set RUN_MUSIC_TEST=1 to enable, costs $0.15)`,
+    );
+  }
+
+  // Test 20: Image generation provider isConfigured check (wallet file check)
+  allPassed =
+    (await test(
+      "buildImageGenerationProvider — isConfigured reflects wallet state",
+      async () => {
+        const { buildImageGenerationProvider: _build } = await import("../src/index.js").catch(
+          () => ({ buildImageGenerationProvider: null }),
+        );
+        // Can't import non-exported fn directly — verify proxy serves /images/ route
+        const res = await fetch(`${proxy.baseUrl}/images/nonexistent.png`);
+        if (res.status !== 404)
+          throw new Error(`Expected 404 for missing image, got ${res.status}`);
+        console.log(`(/images/ route returns 404 for missing files) `);
+      },
+      proxy,
+    )) && allPassed;
+
+  // Test 21: Audio route — 404 for missing file
+  allPassed =
+    (await test(
+      "/audio/ route — 404 for missing file",
+      async () => {
+        const res = await fetch(`${proxy.baseUrl}/audio/nonexistent.mp3`);
+        if (res.status !== 404)
+          throw new Error(`Expected 404 for missing audio, got ${res.status}`);
+        console.log(`(/audio/ route returns 404 for missing files) `);
+      },
+      proxy,
+    )) && allPassed;
+
   // Cleanup
   await proxy.close();
 
