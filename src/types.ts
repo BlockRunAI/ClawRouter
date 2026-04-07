@@ -257,6 +257,7 @@ export type OpenClawPluginDefinition = {
   version?: string;
   register?: (api: OpenClawPluginApi) => void | Promise<void>;
   activate?: (api: OpenClawPluginApi) => void | Promise<void>;
+  deactivate?: (api: OpenClawPluginApi) => void | Promise<void>;
 };
 
 // Command types for registerCommand

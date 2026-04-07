@@ -1498,6 +1498,95 @@ const plugin: OpenClawPluginDefinition = {
         );
       });
   },
+
+  deactivate(api: OpenClawPluginApi) {
+    // Clean up config entries so uninstalling doesn't leave orphaned references
+    // that cause errors on restart
+    try {
+      const configPath = join(homedir(), ".openclaw", "openclaw.json");
+      if (!existsSync(configPath)) return;
+
+      const content = readTextFileSync(configPath).trim();
+      if (!content) return;
+
+      const config = JSON.parse(content) as Record<string, unknown>;
+      let changed = false;
+
+      // Remove blockrun provider
+      const models = config.models as Record<string, unknown> | undefined;
+      const providers = models?.providers as Record<string, unknown> | undefined;
+      if (providers?.blockrun) {
+        delete providers.blockrun;
+        changed = true;
+      }
+
+      // Remove plugin entries (check all possible key variants)
+      const plugins = config.plugins as Record<string, unknown> | undefined;
+      for (const key of ["clawrouter", "ClawRouter", "@blockrun/clawrouter"]) {
+        const entries = plugins?.entries as Record<string, unknown> | undefined;
+        if (entries?.[key]) {
+          delete entries[key];
+          changed = true;
+        }
+        const installs = plugins?.installs as Record<string, unknown> | undefined;
+        if (installs?.[key]) {
+          delete installs[key];
+          changed = true;
+        }
+      }
+
+      // Remove from plugins.allow
+      if (Array.isArray(plugins?.allow)) {
+        const before = (plugins.allow as string[]).length;
+        plugins.allow = (plugins.allow as string[]).filter(
+          (p: string) => !["clawrouter", "ClawRouter", "@blockrun/clawrouter"].includes(p),
+        );
+        if ((plugins.allow as string[]).length !== before) changed = true;
+      }
+
+      // Reset default model if it's blockrun/auto
+      const agents = config.agents as Record<string, unknown> | undefined;
+      const defaults = agents?.defaults as Record<string, unknown> | undefined;
+      const model = defaults?.model as Record<string, unknown> | undefined;
+      if (model?.primary === "blockrun/auto") {
+        delete model.primary;
+        changed = true;
+      }
+
+      // Remove blockrun models from allowlist
+      const modelsList = defaults?.models as Record<string, unknown> | undefined;
+      if (modelsList) {
+        for (const key of Object.keys(modelsList)) {
+          if (key.startsWith("blockrun/")) {
+            delete modelsList[key];
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        const tmpPath = configPath + ".tmp";
+        writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+        renameSync(tmpPath, configPath);
+        api.logger.info("Cleaned up ClawRouter config entries");
+      }
+    } catch (err) {
+      api.logger.warn(
+        `Failed to clean config on deactivate: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Close proxy if running
+    if (activeProxyHandle) {
+      try {
+        void activeProxyHandle.close();
+        activeProxyHandle = null;
+        api.logger.info("BlockRun proxy closed");
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+  },
 };
 
 export default plugin;
