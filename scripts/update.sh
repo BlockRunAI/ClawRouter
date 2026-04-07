@@ -8,6 +8,7 @@ set -o pipefail
 #  restores it if the update process somehow wiped it.
 # ─────────────────────────────────────────────────────────────
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$HOME/.openclaw/extensions/clawrouter"
 CONFIG_PATH="$HOME/.openclaw/openclaw.json"
 WALLET_FILE="$HOME/.openclaw/blockrun/wallet.key"
@@ -85,6 +86,19 @@ validate_config() {
   fi
 }
 
+kill_port_processes() {
+  local port="$1"
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -ti :"$port" 2>/dev/null || true)"
+  elif command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser "$port"/tcp 2>/dev/null || true)"
+  fi
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+  fi
+}
+
 # ── Step 1: Back up wallet key ─────────────────────────────────
 echo "🦞 ClawRouter Update"
 echo ""
@@ -146,8 +160,6 @@ fi
 echo ""
 
 # ── Step 1b: Remove Crossmint/lobster extension ───────────────
-# lobster.cash is a third-party plugin that conflicts with /wallet command.
-# Remove it so ClawRouter owns /wallet without conflict.
 echo "→ Removing Crossmint/lobster extension..."
 LOBSTER_DIR="$HOME/.openclaw/extensions/lobster.cash"
 if [ -d "$LOBSTER_DIR" ]; then
@@ -156,127 +168,19 @@ if [ -d "$LOBSTER_DIR" ]; then
 else
   echo "  ✓ Not installed"
 fi
-# Clean crossmint/lobster from openclaw.json
-node -e "
-const fs = require('fs');
-const configPath = '$CONFIG_PATH';
-if (!fs.existsSync(configPath)) process.exit(0);
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  let changed = false;
-  // Remove from plugins.entries
-  for (const key of ['lobster.cash', 'lobster', 'crossmint']) {
-    if (config?.plugins?.entries?.[key]) { delete config.plugins.entries[key]; changed = true; console.log('  Removed plugins.entries.' + key); }
-    if (config?.plugins?.installs?.[key]) { delete config.plugins.installs[key]; changed = true; }
-  }
-  // Remove from plugins.allow
-  if (Array.isArray(config?.plugins?.allow)) {
-    const before = config.plugins.allow.length;
-    config.plugins.allow = config.plugins.allow.filter(p => !['lobster.cash','lobster','crossmint'].includes(p));
-    if (config.plugins.allow.length !== before) { changed = true; console.log('  Removed lobster/crossmint from plugins.allow'); }
-  }
-  if (changed) {
-    const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
-    fs.renameSync(tmp, configPath);
-  } else { console.log('  Config clean'); }
-} catch (e) { console.log('  Skipped: ' + e.message); }
-"
 echo ""
 
 # ── Step 2: Kill old proxy ──────────────────────────────────────
 echo "→ Stopping old proxy..."
-kill_port_processes() {
-  local port="$1"
-  local pids=""
-  if command -v lsof >/dev/null 2>&1; then
-    pids="$(lsof -ti :"$port" 2>/dev/null || true)"
-  elif command -v fuser >/dev/null 2>&1; then
-    pids="$(fuser "$port"/tcp 2>/dev/null || true)"
-  fi
-  if [ -n "$pids" ]; then
-    echo "$pids" | xargs kill -9 2>/dev/null || true
-  fi
-}
 kill_port_processes 8402
 
-# ── Step 3: Clean stale plugin entry from config ──────────────
-# The old plugin dir is staged in a backup above. Remove the stale
-# plugin entry so a fresh install can proceed, and restore it on error.
+# ── Step 3: Clean config and prepare for install ────────────────
+# Single pass: clean stale entries, remove lobster, verify provider
 echo "→ Cleaning config..."
-node -e "
-const fs = require('fs');
-const path = require('path');
-const configPath = '$CONFIG_PATH';
-if (!fs.existsSync(configPath)) process.exit(0);
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  let changed = false;
-
-  // Remove stale plugin entry
-  const entries = config?.plugins?.entries;
-  if (entries && entries.clawrouter) {
-    delete entries.clawrouter;
-    changed = true;
-    console.log('  Removed stale plugin entry');
-  }
-
-  // Clean plugins.allow — remove clawrouter (re-added later) and any stale bare
-  // single-word entries that aren't bundled OpenClaw plugins (e.g. "wallet" added
-  // by an AI agent — shows a warning on every gateway start).
-  if (Array.isArray(config?.plugins?.allow)) {
-    const BUNDLED = [
-      'http','mcp','computer-use','browser','code','image','voice',
-      'search','memory','calendar','email','slack','discord','telegram',
-      'whatsapp','matrix','teams','notion','github','jira','linear',
-      'comfyui',
-    ];
-    const before = config.plugins.allow.length;
-    config.plugins.allow = config.plugins.allow.filter(p => {
-      if (p === 'clawrouter' || p === '@blockrun/clawrouter') return false;
-      if (BUNDLED.includes(p)) return true;
-      if (p.startsWith('@') || p.includes('/')) return true;
-      return false;
-    });
-    const removed = before - config.plugins.allow.length;
-    if (removed > 0) { changed = true; console.log('  Removed ' + removed + ' stale plugins.allow entry(ies)'); }
-  }
-
-  if (changed) {
-    const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
-    fs.renameSync(tmp, configPath);
-  } else {
-    console.log('  Config clean');
-  }
-} catch (err) {
-  console.log('  Skipped: ' + err.message);
-}
-"
-
-# ── Step 3b: Ensure baseUrl is set (must happen BEFORE install, which validates config) ──
-echo "→ Verifying provider config..."
-node -e "
-const fs = require('fs');
-const configPath = '$CONFIG_PATH';
-if (!fs.existsSync(configPath)) { console.log('  No config, skipping'); process.exit(0); }
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  const provider = config?.models?.providers?.blockrun;
-  if (!provider) { console.log('  No blockrun provider, skipping'); process.exit(0); }
-  let changed = false;
-  if (!provider.baseUrl) { provider.baseUrl = 'http://127.0.0.1:8402/v1'; changed = true; console.log('  Fixed missing baseUrl'); }
-  if (!provider.apiKey) { provider.apiKey = 'x402-proxy-handles-auth'; changed = true; console.log('  Fixed missing apiKey'); }
-  if (changed) {
-    const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
-    fs.renameSync(tmp, configPath);
-  } else { console.log('  Provider config OK'); }
-} catch (err) { console.log('  Skipped: ' + err.message); }
-"
+node "$SCRIPT_DIR/setup-config.cjs" --clean-entries --clean-lobster --verify-provider
 
 # ── Step 4: Install latest version ─────────────────────────────
-# Back up OpenClaw credentials (channels, WhatsApp/Telegram state) before plugin install
+# Back up channel config before install (may get wiped)
 CREDS_DIR="$HOME/.openclaw/credentials"
 CREDS_BACKUP=""
 if [ -d "$CREDS_DIR" ] && [ "$(ls -A "$CREDS_DIR" 2>/dev/null)" ]; then
@@ -285,29 +189,13 @@ if [ -d "$CREDS_DIR" ] && [ "$(ls -A "$CREDS_DIR" 2>/dev/null)" ]; then
   echo "  ✓ Backed up OpenClaw credentials"
 fi
 
-# Extract channel config (Telegram tokens, etc.) from openclaw.json before install
-# openclaw plugins install can overwrite config and wipe channel settings
-CHANNEL_CONFIG_BACKUP=""
+CHANNEL_BACKUP_FILE=""
 if [ -f "$CONFIG_PATH" ]; then
-  CHANNEL_CONFIG_BACKUP="$(mktemp)"
-  node -e "
-const fs = require('fs');
-try {
-  const config = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
-  const preserved = {};
-  if (config.channels) preserved.channels = config.channels;
-  if (config.gateway) preserved.gateway = config.gateway;
-  fs.writeFileSync('$CHANNEL_CONFIG_BACKUP', JSON.stringify(preserved, null, 2));
-  const channelCount = Object.keys(config.channels || {}).length;
-  if (channelCount > 0) console.log('  ✓ Preserved config for channels: ' + Object.keys(config.channels).join(', '));
-} catch (e) { fs.writeFileSync('$CHANNEL_CONFIG_BACKUP', '{}'); }
-"
+  CHANNEL_BACKUP_FILE="$(mktemp)"
+  node "$SCRIPT_DIR/setup-config.cjs" --backup-channels "$CHANNEL_BACKUP_FILE"
 fi
 
 echo "→ Installing latest ClawRouter..."
-# Run with timeout — openclaw plugins install may hang after printing
-# "Installed plugin: clawrouter" in OpenClaw v2026.4.5 (parallel plugin loading).
-# 120s is enough for slow connections; the install itself completes in ~30s.
 if command -v timeout >/dev/null 2>&1; then
   timeout 120 openclaw plugins install @blockrun/clawrouter || {
     exit_code=$?
@@ -323,55 +211,14 @@ else
 fi
 
 # Install is complete — clear the rollback trap immediately.
-# From this point on, Ctrl+C or errors should NOT roll back the install.
 trap - EXIT INT TERM
 
-# Restore credentials after plugin install (always restore to preserve user's channels)
+# Restore credentials after plugin install
 if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
   mkdir -p "$CREDS_DIR"
   cp -a "$CREDS_BACKUP/"* "$CREDS_DIR/"
   echo "  ✓ Restored OpenClaw credentials (channels preserved)"
   rm -rf "$(dirname "$CREDS_BACKUP")"
-fi
-
-# Restore channel config (Telegram tokens etc.) that may have been wiped by plugin install
-if [ -n "$CHANNEL_CONFIG_BACKUP" ] && [ -f "$CHANNEL_CONFIG_BACKUP" ] && [ -f "$CONFIG_PATH" ]; then
-  node -e "
-const fs = require('fs');
-function atomicWrite(filePath, data) {
-  const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
-  fs.renameSync(tmpPath, filePath);
-}
-try {
-  const config = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
-  const preserved = JSON.parse(fs.readFileSync('$CHANNEL_CONFIG_BACKUP', 'utf8'));
-  let changed = false;
-  if (preserved.channels && Object.keys(preserved.channels).length > 0) {
-    if (!config.channels || Object.keys(config.channels).length === 0) {
-      config.channels = preserved.channels;
-      changed = true;
-      console.log('  ✓ Restored channel config (Telegram/WhatsApp/etc.)');
-    } else {
-      let merged = 0;
-      for (const [ch, val] of Object.entries(preserved.channels)) {
-        if (!config.channels[ch]) { config.channels[ch] = val; merged++; }
-      }
-      if (merged > 0) { changed = true; console.log('  ✓ Merged ' + merged + ' missing channel(s) back into config'); }
-      else { console.log('  Channel config intact'); }
-    }
-  }
-  if (preserved.gateway?.mode && (!config.gateway || !config.gateway.mode)) {
-    if (!config.gateway) config.gateway = {};
-    config.gateway.mode = preserved.gateway.mode;
-    changed = true;
-  }
-  if (changed) atomicWrite('$CONFIG_PATH', JSON.stringify(config, null, 2));
-} catch (e) {
-  console.log('  Warning: could not restore channel config:', e.message);
-}
-"
-  rm -f "$CHANNEL_CONFIG_BACKUP"
 fi
 
 # ── Step 4b: Verify version — force-update if openclaw served a stale cache ──
@@ -409,8 +256,6 @@ if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
 fi
 
 # ── Step 4c: Ensure all dependencies are installed ────────────
-# openclaw's plugin installer may skip native/optional deps like @solana/kit.
-# Run npm install in the plugin directory to fill any gaps.
 if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
   echo "→ Installing dependencies (Solana, x402, etc.)..."
   run_dependency_install "$PLUGIN_DIR"
@@ -449,159 +294,25 @@ else
   fi
 fi
 
-# ── Step 6: Inject auth profile ─────────────────────────────────
-echo "→ Refreshing auth profile..."
-node -e "
-const os = require('os');
-const fs = require('fs');
-const path = require('path');
-const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
-const authPath = path.join(authDir, 'auth-profiles.json');
-function atomicWrite(filePath, data) {
-  const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
-  fs.renameSync(tmpPath, filePath);
-}
+# ── Step 6: Post-install config setup ──────────────────────────
+# Single pass: restore channels, populate allowlist, add to allow, set gateway.mode, inject auth, clean models cache
+echo "→ Finalizing config..."
+RESTORE_FLAG=""
+if [ -n "$CHANNEL_BACKUP_FILE" ] && [ -f "$CHANNEL_BACKUP_FILE" ]; then
+  RESTORE_FLAG="--restore-channels $CHANNEL_BACKUP_FILE"
+fi
+node "$SCRIPT_DIR/setup-config.cjs" \
+  --verify-provider --populate-allowlist --add-to-allow \
+  --set-gateway-mode --inject-auth $RESTORE_FLAG
 
-fs.mkdirSync(authDir, { recursive: true });
+if [ -n "$CHANNEL_BACKUP_FILE" ]; then
+  rm -f "$CHANNEL_BACKUP_FILE"
+fi
 
-let store = { version: 1, profiles: {} };
-if (fs.existsSync(authPath)) {
-  try {
-    const existing = JSON.parse(fs.readFileSync(authPath, 'utf8'));
-    if (existing.version && existing.profiles) store = existing;
-  } catch {}
-}
-
-const profileKey = 'blockrun:default';
-if (!store.profiles[profileKey]) {
-  store.profiles[profileKey] = { type: 'api_key', provider: 'blockrun', key: 'x402-proxy-handles-auth' };
-  atomicWrite(authPath, JSON.stringify(store, null, 2));
-  console.log('  Auth profile created');
-} else {
-  console.log('  Auth profile already exists');
-}
-"
-
-# ── Step 7: Clean models cache ──────────────────────────────────
 echo "→ Cleaning models cache..."
 rm -f ~/.openclaw/agents/*/agent/models.json 2>/dev/null || true
 
-# ── Step 8: Populate model allowlist with top 16 models ────────
-echo "→ Populating model allowlist..."
-node -e "
-const os = require('os');
-const fs = require('fs');
-const path = require('path');
-const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-
-if (!fs.existsSync(configPath)) {
-  console.log('  No config file found, skipping');
-  process.exit(0);
-}
-
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-  // Curated models for the /model picker
-  const TOP_MODELS = [
-    'auto', 'free', 'eco', 'premium',
-    'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.6', 'anthropic/claude-haiku-4.5',
-    'openai/gpt-5.4', 'openai/gpt-5.4-mini', 'openai/gpt-5.4-pro', 'openai/gpt-5.3', 'openai/gpt-5.3-codex',
-    'openai/gpt-5-mini', 'openai/gpt-5-nano', 'openai/gpt-5.4-nano', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o3', 'openai/o4-mini',
-    'google/gemini-3.1-pro', 'google/gemini-3.1-flash-lite', 'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview',
-    'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite',
-    'deepseek/deepseek-chat', 'deepseek/deepseek-reasoner', 'nvidia/kimi-k2.5',
-    'xai/grok-3', 'xai/grok-4-0709', 'xai/grok-4-1-fast-reasoning',
-    'minimax/minimax-m2.7', 'minimax/minimax-m2.5',
-    'free/gpt-oss-120b', 'free/gpt-oss-20b',
-    'free/nemotron-ultra-253b', 'free/deepseek-v3.2', 'free/mistral-large-3-675b',
-    'free/qwen3-coder-480b', 'free/devstral-2-123b', 'free/llama-4-maverick',
-    'free/nemotron-3-super-120b', 'free/nemotron-super-49b', 'free/glm-4.7',
-    'zai/glm-5', 'zai/glm-5-turbo'
-  ];
-
-  if (!config.agents) config.agents = {};
-  if (!config.agents.defaults) config.agents.defaults = {};
-  if (!config.agents.defaults.models || typeof config.agents.defaults.models !== 'object') {
-    config.agents.defaults.models = {};
-  }
-
-  const allowlist = config.agents.defaults.models;
-  const currentKeys = new Set(TOP_MODELS.map(id => 'blockrun/' + id));
-
-  // Remove any blockrun/* entries not in the current TOP_MODELS list
-  let removed = 0;
-  for (const key of Object.keys(allowlist)) {
-    if (key.startsWith('blockrun/') && !currentKeys.has(key)) {
-      delete allowlist[key];
-      removed++;
-    }
-  }
-
-  // Add any missing current models
-  let added = 0;
-  for (const id of TOP_MODELS) {
-    const key = 'blockrun/' + id;
-    if (!allowlist[key]) {
-      allowlist[key] = {};
-      added++;
-    }
-  }
-
-  // Atomic write
-  const tmpPath = configPath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2));
-  fs.renameSync(tmpPath, configPath);
-
-  if (removed > 0) {
-    console.log('  Removed ' + removed + ' deprecated models from allowlist');
-  }
-  if (added > 0) {
-    console.log('  Added ' + added + ' models to allowlist (' + TOP_MODELS.length + ' total)');
-  }
-  if (added === 0 && removed === 0) {
-    console.log('  Allowlist already up to date');
-  }
-} catch (err) {
-  console.log('  Migration skipped: ' + err.message);
-}
-"
-
-# Ensure gateway.mode is set (required by OpenClaw v2026.4.5+)
-echo "→ Ensuring gateway.mode is set..."
-node -e "
-const os = require('os');
-const fs = require('fs');
-const path = require('path');
-const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-function atomicWrite(filePath, data) {
-  const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
-  fs.renameSync(tmpPath, filePath);
-}
-
-if (fs.existsSync(configPath)) {
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (!config.gateway) config.gateway = {};
-    if (!config.gateway.mode) {
-      config.gateway.mode = 'local';
-      atomicWrite(configPath, JSON.stringify(config, null, 2));
-      console.log('  Set gateway.mode = local (required by OpenClaw v2026.4.5+)');
-    } else {
-      console.log('  gateway.mode already set: ' + config.gateway.mode);
-    }
-  } catch (e) {
-    console.log('  Could not update config:', e.message);
-    console.log('  Fix manually: openclaw config set gateway.mode local');
-  }
-} else {
-  console.log('  No openclaw.json found, skipping');
-}
-"
-
-# Clean up stale plugin backups — these cause "duplicate plugin" warnings on restart
+# Clean up stale plugin backups
 echo "→ Cleaning up stale plugin backups..."
 CLEANED=0
 for backup_dir in "$HOME/.openclaw/extensions/clawrouter.backup."*; do
