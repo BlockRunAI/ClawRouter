@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mergeRoutingConfig, mergeTierRecord } from "./proxy.js";
 import { DEFAULT_ROUTING_CONFIG } from "./router/index.js";
-import type { Tier, TierConfig, RoutingConfig } from "./router/index.js";
+import type { Tier, TierConfig } from "./router/index.js";
 
 describe("mergeTierRecord", () => {
   const baseTiers: Record<Tier, TierConfig> = {
