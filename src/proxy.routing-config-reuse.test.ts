@@ -27,7 +27,7 @@ describe("startProxy routing config reuse", () => {
       const customConfig: Parameters<typeof startProxy>[0]["routingConfig"] = {
         tiers: {
           SIMPLE: { primary: "test-model-simple", fallback: ["test-fallback-1"] },
-        } as any,
+        } as Record<string, { primary: string; fallback: string[] }>,
       };
 
       // Start proxy again on same port — enters reuse path
