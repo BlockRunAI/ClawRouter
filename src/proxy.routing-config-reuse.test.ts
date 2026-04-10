@@ -49,7 +49,9 @@ describe("startProxy routing config reuse", () => {
       expect(updatedConfig.tiers.SIMPLE.fallback).toEqual(["test-fallback-1"]);
 
       // Other tiers should still have defaults (merged, not replaced)
-      expect(updatedConfig.tiers.COMPLEX.primary).toBe(DEFAULT_ROUTING_CONFIG.tiers.COMPLEX.primary);
+      expect(updatedConfig.tiers.COMPLEX.primary).toBe(
+        DEFAULT_ROUTING_CONFIG.tiers.COMPLEX.primary,
+      );
     } finally {
       await firstProxy.close();
     }
