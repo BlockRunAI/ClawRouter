@@ -53,6 +53,7 @@ import {
   type RoutingConfig,
   type ModelPricing,
   type Tier,
+  type TierConfig,
 } from "./router/index.js";
 import { classifyByRules } from "./router/rules.js";
 import {
@@ -1284,7 +1285,17 @@ export function buildProxyModelList(
 /**
  * Merge partial routing config overrides with defaults.
  */
-function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
+export function mergeTierRecord(
+  base: Record<Tier, TierConfig> | undefined,
+  override: Record<Tier, TierConfig> | null | undefined,
+): Record<Tier, TierConfig> | undefined {
+  if (override === null) return undefined; // explicitly disabled
+  if (override === undefined) return base; // not provided, keep default
+  if (!base) return override; // no default, use override as-is
+  return { ...base, ...override };
+}
+
+export function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
   if (!overrides) return DEFAULT_ROUTING_CONFIG;
   return {
     ...DEFAULT_ROUTING_CONFIG,
@@ -1292,6 +1303,15 @@ function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
     classifier: { ...DEFAULT_ROUTING_CONFIG.classifier, ...overrides.classifier },
     scoring: { ...DEFAULT_ROUTING_CONFIG.scoring, ...overrides.scoring },
     tiers: { ...DEFAULT_ROUTING_CONFIG.tiers, ...overrides.tiers },
+    agenticTiers: mergeTierRecord(
+      DEFAULT_ROUTING_CONFIG.agenticTiers,
+      overrides.agenticTiers,
+    ),
+    ecoTiers: mergeTierRecord(DEFAULT_ROUTING_CONFIG.ecoTiers, overrides.ecoTiers),
+    premiumTiers: mergeTierRecord(
+      DEFAULT_ROUTING_CONFIG.premiumTiers,
+      overrides.premiumTiers,
+    ),
     overrides: { ...DEFAULT_ROUTING_CONFIG.overrides, ...overrides.overrides },
   };
 }

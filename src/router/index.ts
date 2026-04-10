@@ -35,6 +35,7 @@ export { DEFAULT_ROUTING_CONFIG } from "./config.js";
 export type {
   RoutingDecision,
   Tier,
+  TierConfig,
   RoutingConfig,
   RouterOptions,
   RouterStrategy,
