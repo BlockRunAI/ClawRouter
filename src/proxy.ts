@@ -1806,9 +1806,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           };
           if (body.routingConfig) {
             routerOpts.config = mergeRoutingConfig(body.routingConfig);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ updated: true }));
+          } else {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ updated: false }));
           }
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ updated: true }));
         } catch (err) {
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(
