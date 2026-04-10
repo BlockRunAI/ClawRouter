@@ -516,9 +516,6 @@ function injectModelsConfig(
   }
 }
 
-function readStringSafe(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 /**
  * Inject dummy auth profile for BlockRun into agent auth stores.
