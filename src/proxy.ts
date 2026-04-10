@@ -1303,15 +1303,9 @@ export function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingC
     classifier: { ...DEFAULT_ROUTING_CONFIG.classifier, ...overrides.classifier },
     scoring: { ...DEFAULT_ROUTING_CONFIG.scoring, ...overrides.scoring },
     tiers: { ...DEFAULT_ROUTING_CONFIG.tiers, ...overrides.tiers },
-    agenticTiers: mergeTierRecord(
-      DEFAULT_ROUTING_CONFIG.agenticTiers,
-      overrides.agenticTiers,
-    ),
+    agenticTiers: mergeTierRecord(DEFAULT_ROUTING_CONFIG.agenticTiers, overrides.agenticTiers),
     ecoTiers: mergeTierRecord(DEFAULT_ROUTING_CONFIG.ecoTiers, overrides.ecoTiers),
-    premiumTiers: mergeTierRecord(
-      DEFAULT_ROUTING_CONFIG.premiumTiers,
-      overrides.premiumTiers,
-    ),
+    premiumTiers: mergeTierRecord(DEFAULT_ROUTING_CONFIG.premiumTiers, overrides.premiumTiers),
     overrides: { ...DEFAULT_ROUTING_CONFIG.overrides, ...overrides.overrides },
   };
 }

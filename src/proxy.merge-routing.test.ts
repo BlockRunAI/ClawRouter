@@ -66,9 +66,7 @@ describe("mergeRoutingConfig", () => {
     });
     expect(result.agenticTiers!.SIMPLE).toEqual(customSimple);
     // Other tiers preserved from default
-    expect(result.agenticTiers!.COMPLEX).toEqual(
-      DEFAULT_ROUTING_CONFIG.agenticTiers!.COMPLEX,
-    );
+    expect(result.agenticTiers!.COMPLEX).toEqual(DEFAULT_ROUTING_CONFIG.agenticTiers!.COMPLEX);
   });
 
   it("disables ecoTiers when set to null", () => {
@@ -105,9 +103,7 @@ describe("mergeRoutingConfig", () => {
       },
     });
     expect(result.premiumTiers!.COMPLEX).toEqual(customComplex);
-    expect(result.premiumTiers!.SIMPLE).toEqual(
-      DEFAULT_ROUTING_CONFIG.premiumTiers!.SIMPLE,
-    );
+    expect(result.premiumTiers!.SIMPLE).toEqual(DEFAULT_ROUTING_CONFIG.premiumTiers!.SIMPLE);
   });
 
   it("disables premiumTiers when set to null", () => {
