@@ -1621,6 +1621,26 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       balanceMonitor = new BalanceMonitor(account.address);
     }
 
+    // If a routing config was provided, push it to the running proxy so it takes effect
+    if (options.routingConfig) {
+      try {
+        const updateRes = await fetch(`${baseUrl}/__update-routing`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ routingConfig: options.routingConfig }),
+        });
+        if (!updateRes.ok) {
+          console.warn(
+            `[ClawRouter] Failed to update routing config on existing proxy: ${updateRes.status}`,
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `[ClawRouter] Could not update routing config on existing proxy: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     options.onReady?.(listenPort);
 
     return {
@@ -1771,6 +1791,39 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(response));
+        return;
+      }
+
+      // Internal endpoint: update routing config on a running proxy (used by reuse path)
+      if (req.method === "POST" && req.url === "/__update-routing") {
+        try {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+          }
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as {
+            routingConfig?: Partial<RoutingConfig>;
+          };
+          if (body.routingConfig) {
+            routerOpts.config = mergeRoutingConfig(body.routingConfig);
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ updated: true }));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: `Invalid routing config: ${err instanceof Error ? err.message : String(err)}`,
+            }),
+          );
+        }
+        return;
+      }
+
+      // Internal endpoint: read current routing config (for testing/debugging)
+      if (req.method === "GET" && req.url === "/__routing-config") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(routerOpts.config));
         return;
       }
 
