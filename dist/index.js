@@ -81365,6 +81365,76 @@ var plugin = {
         `Failed to start BlockRun proxy: ${err instanceof Error ? err.message : String(err)}`
       );
     });
+  },
+  deactivate(api) {
+    try {
+      const configPath = join10(homedir7(), ".openclaw", "openclaw.json");
+      if (!existsSync3(configPath)) return;
+      const content = readTextFileSync(configPath).trim();
+      if (!content) return;
+      const config = JSON.parse(content);
+      let changed = false;
+      const models = config.models;
+      const providers = models?.providers;
+      if (providers?.blockrun) {
+        delete providers.blockrun;
+        changed = true;
+      }
+      const plugins = config.plugins;
+      for (const key of ["clawrouter", "ClawRouter", "@blockrun/clawrouter"]) {
+        const entries = plugins?.entries;
+        if (entries?.[key]) {
+          delete entries[key];
+          changed = true;
+        }
+        const installs = plugins?.installs;
+        if (installs?.[key]) {
+          delete installs[key];
+          changed = true;
+        }
+      }
+      if (Array.isArray(plugins?.allow)) {
+        const before = plugins.allow.length;
+        plugins.allow = plugins.allow.filter(
+          (p) => !["clawrouter", "ClawRouter", "@blockrun/clawrouter"].includes(p)
+        );
+        if (plugins.allow.length !== before) changed = true;
+      }
+      const agents = config.agents;
+      const defaults = agents?.defaults;
+      const model = defaults?.model;
+      if (model?.primary === "blockrun/auto") {
+        delete model.primary;
+        changed = true;
+      }
+      const modelsList = defaults?.models;
+      if (modelsList) {
+        for (const key of Object.keys(modelsList)) {
+          if (key.startsWith("blockrun/")) {
+            delete modelsList[key];
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        const tmpPath = configPath + ".tmp";
+        writeFileSync3(tmpPath, JSON.stringify(config, null, 2));
+        renameSync(tmpPath, configPath);
+        api.logger.info("Cleaned up ClawRouter config entries");
+      }
+    } catch (err) {
+      api.logger.warn(
+        `Failed to clean config on deactivate: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+    if (activeProxyHandle) {
+      try {
+        void activeProxyHandle.close();
+        activeProxyHandle = null;
+        api.logger.info("BlockRun proxy closed");
+      } catch {
+      }
+    }
   }
 };
 var index_default2 = plugin;

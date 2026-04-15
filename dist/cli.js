@@ -80365,6 +80365,7 @@ ClawRouter v${VERSION} - Smart LLM Router
 
 Usage:
   clawrouter [options]
+  clawrouter setup                     # Configure OpenClaw (no GitHub required)
   clawrouter status                    # Live proxy status (wallet, balance, chain)
   clawrouter wallet                    # Wallet details + balance
   clawrouter models                    # List available models
@@ -80388,6 +80389,9 @@ Query Commands (talk to running proxy on localhost:${getProxyPort()}):
   cache             Response cache stats (hit rate, size)
 
 Management Commands:
+  setup             Configure OpenClaw config + auth profile (npm-only install)
+                    Alias: install. Runs bundled scripts/setup-config.cjs \u2014 no
+                    GitHub fetch. Use after: npm install -g @blockrun/clawrouter
   doctor            AI-powered diagnostics (default: Sonnet ~$0.003)
   doctor opus       Use Opus for deeper analysis (~$0.01)
   logs              Per-request breakdown: model, cost, latency, status
@@ -80525,10 +80529,49 @@ Cache Stats
     process.exit(1);
   }
 }
+async function cmdSetup() {
+  const { spawnSync } = await import("child_process");
+  const { fileURLToPath: fileURLToPath2 } = await import("url");
+  const { dirname: dirname3, join: join9 } = await import("path");
+  const { existsSync: existsSync2 } = await import("fs");
+  const packageRoot = join9(dirname3(fileURLToPath2(import.meta.url)), "..");
+  const setupScript = join9(packageRoot, "scripts", "setup-config.cjs");
+  if (!existsSync2(setupScript)) {
+    console.error(`\u2717 setup-config.cjs not found at ${setupScript}`);
+    console.error(`  The npm package may be incomplete. Try reinstalling:`);
+    console.error(`    npm install -g @blockrun/clawrouter@latest`);
+    process.exit(1);
+  }
+  console.log(`\u{1F99E} ClawRouter Setup v${VERSION}`);
+  console.log(`   Configuring OpenClaw (no GitHub required)...`);
+  console.log();
+  const result = spawnSync(
+    process.execPath,
+    [
+      setupScript,
+      "--clean-entries",
+      "--clean-lobster",
+      "--verify-provider",
+      "--populate-allowlist",
+      "--add-to-allow",
+      "--set-gateway-mode",
+      "--inject-auth"
+    ],
+    { stdio: "inherit" }
+  );
+  if (result.status !== 0) {
+    console.error(`\u2717 Setup failed (exit ${result.status ?? "unknown"})`);
+    process.exit(result.status ?? 1);
+  }
+  console.log();
+  console.log(`\u2713 ClawRouter configured. Restart OpenClaw to activate:`);
+  console.log(`    openclaw gateway restart`);
+}
 function parseArgs(args) {
   const result = {
     version: false,
     help: false,
+    setup: false,
     doctor: false,
     logs: false,
     logsDays: 1,
@@ -80553,6 +80596,8 @@ function parseArgs(args) {
       result.version = true;
     } else if (arg === "--help" || arg === "-h") {
       result.help = true;
+    } else if (arg === "setup" || arg === "install") {
+      result.setup = true;
     } else if (arg === "status") {
       result.queryStatus = true;
     } else if (arg === "models") {
@@ -80621,6 +80666,10 @@ async function main() {
   }
   if (args.help) {
     printHelp();
+    process.exit(0);
+  }
+  if (args.setup) {
+    await cmdSetup();
     process.exit(0);
   }
   const queryPort = args.port ?? getProxyPort();
