@@ -33,6 +33,7 @@ ClawRouter v${VERSION} - Smart LLM Router
 
 Usage:
   clawrouter [options]
+  clawrouter setup                     # Configure OpenClaw (no GitHub required)
   clawrouter status                    # Live proxy status (wallet, balance, chain)
   clawrouter wallet                    # Wallet details + balance
   clawrouter models                    # List available models
@@ -56,6 +57,9 @@ Query Commands (talk to running proxy on localhost:${getProxyPort()}):
   cache             Response cache stats (hit rate, size)
 
 Management Commands:
+  setup             Configure OpenClaw config + auth profile (npm-only install)
+                    Alias: install. Runs bundled scripts/setup-config.cjs — no
+                    GitHub fetch. Use after: npm install -g @blockrun/clawrouter
   doctor            AI-powered diagnostics (default: Sonnet ~$0.003)
   doctor opus       Use Opus for deeper analysis (~$0.01)
   logs              Per-request breakdown: model, cost, latency, status
@@ -204,9 +208,67 @@ async function cmdCache(port: number): Promise<void> {
   }
 }
 
+/**
+ * Run the OpenClaw config setup (no GitHub required).
+ *
+ * Users can install entirely via npm without GitHub access:
+ *   1. npm install -g @blockrun/clawrouter
+ *   2. openclaw plugins install @blockrun/clawrouter  (or symlink into ~/.openclaw/extensions/)
+ *   3. npx @blockrun/clawrouter setup
+ *
+ * This runs the same setup-config.cjs that reinstall.sh/update.sh use,
+ * bundled inside the npm package at scripts/setup-config.cjs.
+ */
+async function cmdSetup(): Promise<void> {
+  const { spawnSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+  const { existsSync } = await import("node:fs");
+
+  // Resolve package root: dist/cli.js -> package root
+  const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const setupScript = join(packageRoot, "scripts", "setup-config.cjs");
+
+  if (!existsSync(setupScript)) {
+    console.error(`✗ setup-config.cjs not found at ${setupScript}`);
+    console.error(`  The npm package may be incomplete. Try reinstalling:`);
+    console.error(`    npm install -g @blockrun/clawrouter@latest`);
+    process.exit(1);
+  }
+
+  console.log(`🦞 ClawRouter Setup v${VERSION}`);
+  console.log(`   Configuring OpenClaw (no GitHub required)...`);
+  console.log();
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      setupScript,
+      "--clean-entries",
+      "--clean-lobster",
+      "--verify-provider",
+      "--populate-allowlist",
+      "--add-to-allow",
+      "--set-gateway-mode",
+      "--inject-auth",
+    ],
+    { stdio: "inherit" },
+  );
+
+  if (result.status !== 0) {
+    console.error(`✗ Setup failed (exit ${result.status ?? "unknown"})`);
+    process.exit(result.status ?? 1);
+  }
+
+  console.log();
+  console.log(`✓ ClawRouter configured. Restart OpenClaw to activate:`);
+  console.log(`    openclaw gateway restart`);
+}
+
 function parseArgs(args: string[]): {
   version: boolean;
   help: boolean;
+  setup: boolean;
   doctor: boolean;
   logs: boolean;
   logsDays: number;
@@ -229,6 +291,7 @@ function parseArgs(args: string[]): {
   const result = {
     version: false,
     help: false,
+    setup: false,
     doctor: false,
     logs: false,
     logsDays: 1,
@@ -254,6 +317,8 @@ function parseArgs(args: string[]): {
       result.version = true;
     } else if (arg === "--help" || arg === "-h") {
       result.help = true;
+    } else if (arg === "setup" || arg === "install") {
+      result.setup = true;
     } else if (arg === "status") {
       result.queryStatus = true;
     } else if (arg === "models") {
@@ -329,6 +394,11 @@ async function main(): Promise<void> {
 
   if (args.help) {
     printHelp();
+    process.exit(0);
+  }
+
+  if (args.setup) {
+    await cmdSetup();
     process.exit(0);
   }
 
