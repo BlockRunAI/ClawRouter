@@ -72178,7 +72178,7 @@ function calibrateConfidence(distance, steepness) {
 }
 
 // src/router/selector.ts
-var BASELINE_MODEL_ID = "anthropic/claude-opus-4.6";
+var BASELINE_MODEL_ID = "anthropic/claude-opus-4.7";
 var BASELINE_INPUT_PRICE = 5;
 var BASELINE_OUTPUT_PRICE = 25;
 function selectModel(tier, confidence, method, reasoning, tierConfigs, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile, agenticScore) {
@@ -73576,7 +73576,7 @@ var DEFAULT_ROUTING_CONFIG = {
       ]
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4.6",
+      primary: "anthropic/claude-opus-4.7",
       // Best quality for complex tasks
       fallback: [
         "openai/gpt-5.4",
@@ -73594,6 +73594,8 @@ var DEFAULT_ROUTING_CONFIG = {
       primary: "anthropic/claude-sonnet-4.6",
       // 2,110ms, $3/$15 - best for reasoning/instructions
       fallback: [
+        "anthropic/claude-opus-4.7",
+        // Flagship Opus w/ adaptive thinking
         "anthropic/claude-opus-4.6",
         // 2,139ms
         "xai/grok-4-1-fast-reasoning",
@@ -73637,8 +73639,10 @@ var DEFAULT_ROUTING_CONFIG = {
       primary: "anthropic/claude-sonnet-4.6",
       // 2,110ms — best agentic quality
       fallback: [
+        "anthropic/claude-opus-4.7",
+        // Flagship Opus — top quality
         "anthropic/claude-opus-4.6",
-        // 2,139ms — top quality
+        // 2,139ms
         "google/gemini-3.1-pro",
         // 1,609ms
         "xai/grok-4-0709",
@@ -73651,6 +73655,8 @@ var DEFAULT_ROUTING_CONFIG = {
       primary: "anthropic/claude-sonnet-4.6",
       // 2,110ms — strong tool use + reasoning
       fallback: [
+        "anthropic/claude-opus-4.7",
+        // Flagship Opus w/ adaptive thinking
         "anthropic/claude-opus-4.6",
         // 2,139ms
         "xai/grok-4-1-fast-reasoning",
@@ -73690,28 +73696,32 @@ function route(prompt, systemPrompt, maxOutputTokens, options) {
 
 // src/models.ts
 var MODEL_ALIASES = {
-  // Claude - use newest versions (4.6)
+  // Claude - flagship opus is 4.7; sonnet stays at 4.6
   claude: "anthropic/claude-sonnet-4.6",
   sonnet: "anthropic/claude-sonnet-4.6",
   "sonnet-4": "anthropic/claude-sonnet-4.6",
   "sonnet-4.6": "anthropic/claude-sonnet-4.6",
   "sonnet-4-6": "anthropic/claude-sonnet-4.6",
-  opus: "anthropic/claude-opus-4.6",
-  "opus-4": "anthropic/claude-opus-4.6",
+  opus: "anthropic/claude-opus-4.7",
+  "opus-4": "anthropic/claude-opus-4.7",
+  "opus-4.7": "anthropic/claude-opus-4.7",
+  "opus-4-7": "anthropic/claude-opus-4.7",
   "opus-4.6": "anthropic/claude-opus-4.6",
   "opus-4-6": "anthropic/claude-opus-4.6",
   haiku: "anthropic/claude-haiku-4.5",
   // Claude - provider/shortname patterns (common in agent frameworks)
   "anthropic/sonnet": "anthropic/claude-sonnet-4.6",
-  "anthropic/opus": "anthropic/claude-opus-4.6",
+  "anthropic/opus": "anthropic/claude-opus-4.7",
   "anthropic/haiku": "anthropic/claude-haiku-4.5",
   "anthropic/claude": "anthropic/claude-sonnet-4.6",
-  // Backward compatibility - map all variants to 4.6
+  // Backward compatibility - generic opus-4 and older flagships point at 4.7;
+  // explicit version pins (claude-opus-4-6) stay on 4.6 since server still routes it.
   "anthropic/claude-sonnet-4": "anthropic/claude-sonnet-4.6",
   "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-4.6",
-  "anthropic/claude-opus-4": "anthropic/claude-opus-4.6",
+  "anthropic/claude-opus-4": "anthropic/claude-opus-4.7",
+  "anthropic/claude-opus-4-7": "anthropic/claude-opus-4.7",
   "anthropic/claude-opus-4-6": "anthropic/claude-opus-4.6",
-  "anthropic/claude-opus-4.5": "anthropic/claude-opus-4.6",
+  "anthropic/claude-opus-4.5": "anthropic/claude-opus-4.7",
   "anthropic/claude-haiku-4": "anthropic/claude-haiku-4.5",
   "anthropic/claude-haiku-4-5": "anthropic/claude-haiku-4.5",
   // OpenAI
@@ -74130,8 +74140,21 @@ var BLOCKRUN_MODELS = [
     version: "4.6",
     inputPrice: 5,
     outputPrice: 25,
-    contextWindow: 2e5,
-    maxOutput: 32e3,
+    contextWindow: 1e6,
+    maxOutput: 128e3,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true
+  },
+  {
+    id: "anthropic/claude-opus-4.7",
+    name: "Claude Opus 4.7",
+    version: "4.7",
+    inputPrice: 5,
+    outputPrice: 25,
+    contextWindow: 1e6,
+    maxOutput: 128e3,
     reasoning: true,
     vision: true,
     agentic: true,
@@ -80344,8 +80367,8 @@ var DOCTOR_MODELS = {
     cost: "~$0.003"
   },
   opus: {
-    id: "anthropic/claude-opus-4.6",
-    name: "Claude Opus 4.6",
+    id: "anthropic/claude-opus-4.7",
+    name: "Claude Opus 4.7",
     cost: "~$0.01"
   }
 };

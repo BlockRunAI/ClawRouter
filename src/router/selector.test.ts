@@ -18,11 +18,11 @@ const TIER_CONFIGS: Record<"SIMPLE" | "MEDIUM" | "COMPLEX" | "REASONING", TierCo
 
 const MODEL_PRICING = new Map<string, ModelPricing>([
   ["moonshot/kimi-k2.5", { inputPrice: 0.5, outputPrice: 2.4 }],
-  ["anthropic/claude-opus-4.6", { inputPrice: 5, outputPrice: 25 }],
+  ["anthropic/claude-opus-4.7", { inputPrice: 5, outputPrice: 25 }],
 ]);
 
 describe("selectModel", () => {
-  it("uses claude-opus-4.6 as baseline ID when computing savings", () => {
+  it("uses claude-opus-4.7 as baseline ID when computing savings", () => {
     const decision = selectModel(
       "SIMPLE",
       0.95,
@@ -90,7 +90,7 @@ describe("filterByExcludeList", () => {
 });
 
 describe("calculateModelCost", () => {
-  it("uses claude-opus-4.6 as baseline ID when recomputing fallback costs", () => {
+  it("uses claude-opus-4.7 as baseline ID when recomputing fallback costs", () => {
     const costs = calculateModelCost("moonshot/kimi-k2.5", MODEL_PRICING, 1000, 1000);
 
     expect(costs.baselineCost).toBeGreaterThan(0);

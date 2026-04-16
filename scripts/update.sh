@@ -571,7 +571,7 @@ try {
   // Curated models for the /model picker
   const TOP_MODELS = [
     'auto', 'free', 'eco', 'premium',
-    'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.6', 'anthropic/claude-haiku-4.5',
+    'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.7', 'anthropic/claude-opus-4.6', 'anthropic/claude-haiku-4.5',
     'openai/gpt-5.4', 'openai/gpt-5.4-mini', 'openai/gpt-5.4-pro', 'openai/gpt-5.3', 'openai/gpt-5.3-codex',
     'openai/gpt-5-mini', 'openai/gpt-5-nano', 'openai/gpt-5.4-nano', 'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/o3', 'openai/o4-mini',
     'google/gemini-3.1-pro', 'google/gemini-3.1-flash-lite', 'google/gemini-3-pro-preview', 'google/gemini-3-flash-preview',

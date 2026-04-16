@@ -14,9 +14,9 @@ export type ModelPricing = {
   flatPrice?: number;
 };
 
-const BASELINE_MODEL_ID = "anthropic/claude-opus-4.6";
+const BASELINE_MODEL_ID = "anthropic/claude-opus-4.7";
 
-// Hardcoded fallback: Claude Opus 4.6 pricing (per 1M tokens)
+// Hardcoded fallback: Claude Opus 4.7 pricing (per 1M tokens)
 // Used when baseline model not found in dynamic pricing map
 const BASELINE_INPUT_PRICE = 5.0;
 const BASELINE_OUTPUT_PRICE = 25.0;

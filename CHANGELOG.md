@@ -1,22 +1,18 @@
 # Changelog
 
-All notable changes to XClawRouter.
+All notable changes to ClawRouter.
 
 ---
 
-## 2026-04-22 — NVIDIA free-tier refresh (sync with mainline backend)
+## v0.12.153 — Apr 16, 2026
 
-- **Retired NVIDIA models** deprecated in `BLOCKRUN_MODELS` with `fallbackModel` wired so the resolver routes through to a successor:
-  - `free/nemotron-ultra-253b` → `free/qwen3-next-80b-a3b-thinking`
-  - `free/nemotron-3-super-120b` → `free/qwen3-next-80b-a3b-thinking`
-  - `free/nemotron-super-49b` → `free/qwen3-next-80b-a3b-thinking`
-  - `free/mistral-large-3-675b` → `free/mistral-small-4-119b`
-  - `free/devstral-2-123b` → `free/qwen3-coder-480b`
-- **Two new free models registered**: `free/qwen3-next-80b-a3b-thinking` (116 tok/s reasoning flagship), `free/mistral-small-4-119b` (114 tok/s fastest chat).
-- **Kimi alias flip**: `kimi`, `moonshot`, `kimi-k2.5`, `moonshot/kimi-k2.5` all now resolve to `moonshot/kimi-k2.5` (direct). `nvidia/kimi-k2.5` was retired — nvidia-hosted path kept as an alias redirect so legacy callers don't break. Added `kimi-k2.6` alias.
-- **`free` meta-model** renamed from "Free → Nemotron Ultra 253B" to "Free → Qwen3-Next 80B Thinking".
-- **Alias shorthand cleanup**: `nemotron*`, `devstral*`, `mistral-free` now point at successors, not retired IDs. Added `qwen-next`, `qwen3-next`, `mistral-small-free` shorthands.
-- **Router config** (`src/router/config.ts`): 7 `nvidia/kimi-k2.5` references swapped to `moonshot/kimi-k2.5` (runtime-equivalent via alias resolver, but keeps the config honest).
+- **Claude Opus 4.7 flagship** — BlockRun API has promoted `anthropic/claude-opus-4.7` to flagship (1M context, 128K output, adaptive thinking; $5/$25 per 1M tokens). Added to `BLOCKRUN_MODELS`, now the primary for the `COMPLEX` routing tier across default/premium profiles and the new cost-savings `BASELINE_MODEL_ID`. Aliases: `opus`, `opus-4`, `anthropic/opus`, `anthropic/claude-opus-4`, and `anthropic/claude-opus-4.5` now resolve to 4.7. Explicit 4.6 pins (`opus-4.6`, `anthropic/claude-opus-4-6`) still route to 4.6, which the server keeps available. Opus 4.7 is also added to the curated `TOP_MODELS` picker list and `doctor` command. Opus 4.6 ClawRouter metadata updated to match server specs (1M/128K, was stale at 200K/32K).
+
+---
+
+## v0.12.152 — Apr 16, 2026
+
+- **Repository URL fixed** — `package.json` `repository.url` now points at `gitlab.com/blockrunai/ClawRouter`. The previous value (`github.com/BlockRunAI/ClawRouter`) has been dead since the GitHub org was banned 2026-04-15. Metadata-only bump; no code changes.
 
 ---
 
@@ -41,8 +37,8 @@ All notable changes to XClawRouter.
 
 ## v0.12.87 — Mar 30, 2026
 
-- **Predexon skill** — New vendor skill ships with XClawRouter: 39 prediction market endpoints (Polymarket, Kalshi, dFlow, Binance, cross-market matching, wallet analytics, smart money). OpenClaw agents now auto-invoke this skill when users ask about prediction markets, market odds, or smart money positioning.
-- **Partner proxy extended** — `/v1/pm/*` paths now route through XClawRouter's partner proxy (same as `/v1/x/*`), enabling automatic x402 payment for all Predexon endpoints via `localhost:8402`.
+- **Predexon skill** — New vendor skill ships with ClawRouter: 39 prediction market endpoints (Polymarket, Kalshi, dFlow, Binance, cross-market matching, wallet analytics, smart money). OpenClaw agents now auto-invoke this skill when users ask about prediction markets, market odds, or smart money positioning.
+- **Partner proxy extended** — `/v1/pm/*` paths now route through ClawRouter's partner proxy (same as `/v1/x/*`), enabling automatic x402 payment for all Predexon endpoints via `localhost:8402`.
 
 ---
 
@@ -90,8 +86,8 @@ All notable changes to XClawRouter.
 
 ### Fixed
 
-- **Skills not found by OpenClaw agents** — Agents tried to read skill files (imagegen, x-api, etc.) from `~/.openclaw/workspace/skills/` but XClawRouter only bundled them inside the npm package. Now auto-copies all user-facing bundled skills into the workspace directory on plugin registration. Supports `OPENCLAW_PROFILE` for multi-profile setups. Only updates when content changes. Fixes `ENOENT: no such file or directory` errors when agents invoke `/imagegen`.
-- **Internal `release` skill excluded** — The release checklist skill is for XClawRouter maintainers only and is no longer installed to user workspaces.
+- **Skills not found by OpenClaw agents** — Agents tried to read skill files (imagegen, x-api, etc.) from `~/.openclaw/workspace/skills/` but ClawRouter only bundled them inside the npm package. Now auto-copies all user-facing bundled skills into the workspace directory on plugin registration. Supports `OPENCLAW_PROFILE` for multi-profile setups. Only updates when content changes. Fixes `ENOENT: no such file or directory` errors when agents invoke `/imagegen`.
+- **Internal `release` skill excluded** — The release checklist skill is for ClawRouter maintainers only and is no longer installed to user workspaces.
 - **Sync package-lock.json** — Lock file was stuck at v0.12.69, now matches package.json.
 
 ---
@@ -100,7 +96,7 @@ All notable changes to XClawRouter.
 
 ### Fixed
 
-- **Plugin crash on string model config** — XClawRouter crashed during OpenClaw plugin registration with `TypeError: Cannot create property 'primary' on string 'blockrun/auto'`. This happened when `agents.defaults.model` in the OpenClaw config was a plain string (e.g. `"blockrun/auto"`) instead of the expected object `{ primary: "blockrun/auto" }`. Now auto-converts string/array/non-object model values to the correct object form.
+- **Plugin crash on string model config** — ClawRouter crashed during OpenClaw plugin registration with `TypeError: Cannot create property 'primary' on string 'blockrun/auto'`. This happened when `agents.defaults.model` in the OpenClaw config was a plain string (e.g. `"blockrun/auto"`) instead of the expected object `{ primary: "blockrun/auto" }`. Now auto-converts string/array/non-object model values to the correct object form.
 
 ---
 
@@ -136,7 +132,7 @@ All notable changes to XClawRouter.
 ## v0.12.14 — Mar 6, 2026
 
 - **`/chain` command** — persist payment chain selection (Base or Solana) across restarts via `/chain solana` or `/chain base`
-- **Update nudge improved** — now shows `npx @blockrun/xclawrouter@latest` instead of `curl | bash`
+- **Update nudge improved** — now shows `npx @blockrun/clawrouter@latest` instead of `curl | bash`
 - **Zero balance cache fix** — funded wallets are detected immediately (zero balance never cached)
 - **`wallet recover` command** — restore `wallet.key` from BIP-39 mnemonic on a new machine
 - **Solana balance retry** — retries once on empty to handle flaky public RPC endpoints
@@ -153,7 +149,7 @@ All notable changes to XClawRouter.
 
 ## v0.12.11 — Mar 5, 2026
 
-- **Server-side update nudge** — 429 responses from BlockRun now surface update hints when running an outdated XClawRouter version
+- **Server-side update nudge** — 429 responses from BlockRun now surface update hints when running an outdated ClawRouter version
 - **Body-read timeout** — prevents proxy from hanging on stalled upstream streams
 - **@solana/kit version fix** — pinned to `^5.0.0` to resolve cross-version signing bug causing `transaction_simulation_failed` (#74)
 - **`/stats clear` command** — reset usage statistics
@@ -230,7 +226,7 @@ Full Solana chain support. Pay with **USDC on Solana** (not SOL) alongside Base 
 
 ## v0.11.5 — Mar 1, 2026
 
-- **`clawrouter report` command** — daily/weekly/monthly usage reports via `npx @blockrun/xclawrouter report`
+- **`clawrouter report` command** — daily/weekly/monthly usage reports via `npx @blockrun/clawrouter report`
 - **`clawrouter doctor` command** — AI diagnostics for troubleshooting
 
 ## v0.11.4 — Mar 1, 2026

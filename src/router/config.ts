@@ -1149,7 +1149,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       ],
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4.6", // Best quality for complex tasks
+      primary: "anthropic/claude-opus-4.7", // Best quality for complex tasks
       fallback: [
         "openai/gpt-5.4", // Newest flagship
         "openai/gpt-5.3-codex",
@@ -1163,6 +1163,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     REASONING: {
       primary: "anthropic/claude-sonnet-4.6", // 2,110ms, $3/$15 - best for reasoning/instructions
       fallback: [
+        "anthropic/claude-opus-4.7", // Flagship Opus w/ adaptive thinking
         "anthropic/claude-opus-4.6", // 2,139ms
         "xai/grok-4-1-fast-reasoning", // 1,454ms, cheap fast reasoning
         "openai/o4-mini", // 2,328ms ($1.10/$4.40)
@@ -1193,7 +1194,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     COMPLEX: {
       primary: "anthropic/claude-sonnet-4.6", // 2,110ms — best agentic quality
       fallback: [
-        "anthropic/claude-opus-4.6", // 2,139ms — top quality
+        "anthropic/claude-opus-4.7", // Flagship Opus — top quality
+        "anthropic/claude-opus-4.6", // 2,139ms
         "google/gemini-3.1-pro", // 1,609ms
         "xai/grok-4-0709", // 1,348ms
         "openai/gpt-5.4", // 6,213ms — slow but highest quality fallback
@@ -1202,6 +1204,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     REASONING: {
       primary: "anthropic/claude-sonnet-4.6", // 2,110ms — strong tool use + reasoning
       fallback: [
+        "anthropic/claude-opus-4.7", // Flagship Opus w/ adaptive thinking
         "anthropic/claude-opus-4.6", // 2,139ms
         "xai/grok-4-1-fast-reasoning", // 1,454ms
         "deepseek/deepseek-reasoner", // 1,454ms

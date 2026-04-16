@@ -5,14 +5,14 @@ import type { ModelPricing } from "./router/index.js";
 // Minimal pricing map covering the models used in these tests.
 // Prices are per 1M tokens, matching the real BLOCKRUN_MODELS table shape.
 const pricing = new Map<string, ModelPricing>([
-  // Baseline (Opus) — high cost so savings show up
-  ["anthropic/claude-opus-4.6", { inputPrice: 15, outputPrice: 75 }],
+  // Baseline (Opus 4.7) — high cost so savings show up
+  ["anthropic/claude-opus-4.7", { inputPrice: 15, outputPrice: 75 }],
   // Cheap middle model
   ["google/gemini-2.5-flash", { inputPrice: 0.15, outputPrice: 0.6 }],
   // Free model
   ["free/glm-4.7", { inputPrice: 0, outputPrice: 0 }],
   // Premium model (cost ~= baseline so savings_pct ≈ 0)
-  ["anthropic/claude-opus-4.6-premium", { inputPrice: 15, outputPrice: 75 }],
+  ["anthropic/claude-opus-4.7-premium", { inputPrice: 15, outputPrice: 75 }],
 ]);
 
 describe("buildCostBreakdown", () => {
@@ -100,7 +100,7 @@ describe("buildCostBreakdown", () => {
 
   it("omits savings_pct for premium profile", () => {
     const result = buildCostBreakdown({
-      actualModelUsed: "anthropic/claude-opus-4.6",
+      actualModelUsed: "anthropic/claude-opus-4.7",
       routingProfile: "premium",
       routingDecision: { tier: "REASONING" },
       modelPricing: pricing,

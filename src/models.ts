@@ -15,28 +15,32 @@ import type { ModelDefinitionConfig, ModelProviderConfig } from "./types.js";
  * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4-6`.
  */
 export const MODEL_ALIASES: Record<string, string> = {
-  // Claude - use newest versions (4.6)
+  // Claude - flagship opus is 4.7; sonnet stays at 4.6
   claude: "anthropic/claude-sonnet-4.6",
   sonnet: "anthropic/claude-sonnet-4.6",
   "sonnet-4": "anthropic/claude-sonnet-4.6",
   "sonnet-4.6": "anthropic/claude-sonnet-4.6",
   "sonnet-4-6": "anthropic/claude-sonnet-4.6",
-  opus: "anthropic/claude-opus-4.6",
-  "opus-4": "anthropic/claude-opus-4.6",
+  opus: "anthropic/claude-opus-4.7",
+  "opus-4": "anthropic/claude-opus-4.7",
+  "opus-4.7": "anthropic/claude-opus-4.7",
+  "opus-4-7": "anthropic/claude-opus-4.7",
   "opus-4.6": "anthropic/claude-opus-4.6",
   "opus-4-6": "anthropic/claude-opus-4.6",
   haiku: "anthropic/claude-haiku-4.5",
   // Claude - provider/shortname patterns (common in agent frameworks)
   "anthropic/sonnet": "anthropic/claude-sonnet-4.6",
-  "anthropic/opus": "anthropic/claude-opus-4.6",
+  "anthropic/opus": "anthropic/claude-opus-4.7",
   "anthropic/haiku": "anthropic/claude-haiku-4.5",
   "anthropic/claude": "anthropic/claude-sonnet-4.6",
-  // Backward compatibility - map all variants to 4.6
+  // Backward compatibility - generic opus-4 and older flagships point at 4.7;
+  // explicit version pins (claude-opus-4-6) stay on 4.6 since server still routes it.
   "anthropic/claude-sonnet-4": "anthropic/claude-sonnet-4.6",
   "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-4.6",
-  "anthropic/claude-opus-4": "anthropic/claude-opus-4.6",
+  "anthropic/claude-opus-4": "anthropic/claude-opus-4.7",
+  "anthropic/claude-opus-4-7": "anthropic/claude-opus-4.7",
   "anthropic/claude-opus-4-6": "anthropic/claude-opus-4.6",
-  "anthropic/claude-opus-4.5": "anthropic/claude-opus-4.6",
+  "anthropic/claude-opus-4.5": "anthropic/claude-opus-4.7",
   "anthropic/claude-haiku-4": "anthropic/claude-haiku-4.5",
   "anthropic/claude-haiku-4-5": "anthropic/claude-haiku-4.5",
 
@@ -537,8 +541,21 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4.6",
     inputPrice: 5.0,
     outputPrice: 25.0,
-    contextWindow: 200000,
-    maxOutput: 32000,
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    id: "anthropic/claude-opus-4.7",
+    name: "Claude Opus 4.7",
+    version: "4.7",
+    inputPrice: 5.0,
+    outputPrice: 25.0,
+    contextWindow: 1000000,
+    maxOutput: 128000,
     reasoning: true,
     vision: true,
     agentic: true,

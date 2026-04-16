@@ -3,24 +3,25 @@ import { describe, expect, it } from "vitest";
 import { resolveModelAlias } from "./models.js";
 
 describe("resolveModelAlias", () => {
-  it("maps Claude aliases to newest 4.6 versions", () => {
-    // Use newest versions (4.6) with full provider prefix
+  it("maps Claude aliases to current flagship versions", () => {
+    // Sonnet → 4.6, Opus → 4.7 (new flagship), Haiku → 4.5
     expect(resolveModelAlias("claude")).toBe("anthropic/claude-sonnet-4.6");
     expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-4.6");
+    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-4.7");
     expect(resolveModelAlias("haiku")).toBe("anthropic/claude-haiku-4.5");
   });
 
   it("resolves aliases even when sent with blockrun/ prefix", () => {
     expect(resolveModelAlias("blockrun/claude")).toBe("anthropic/claude-sonnet-4.6");
     expect(resolveModelAlias("blockrun/sonnet-4.6")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("blockrun/opus")).toBe("anthropic/claude-opus-4.6");
+    expect(resolveModelAlias("blockrun/opus")).toBe("anthropic/claude-opus-4.7");
   });
 
-  it("maps legacy Claude IDs to 4.6", () => {
+  it("keeps explicit 4.6 pin routable, promotes generic opus-4 to flagship 4.7", () => {
     expect(resolveModelAlias("anthropic/claude-sonnet-4")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("anthropic/claude-opus-4")).toBe("anthropic/claude-opus-4.6");
-    expect(resolveModelAlias("anthropic/claude-opus-4.5")).toBe("anthropic/claude-opus-4.6");
+    expect(resolveModelAlias("anthropic/claude-opus-4")).toBe("anthropic/claude-opus-4.7");
+    expect(resolveModelAlias("anthropic/claude-opus-4.5")).toBe("anthropic/claude-opus-4.7");
+    expect(resolveModelAlias("anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4.6");
   });
 
   it("strips openai/ prefix from virtual routing profiles (issue #78)", () => {

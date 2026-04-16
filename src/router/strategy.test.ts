@@ -9,6 +9,7 @@ import { route } from "./index.js";
 const MODEL_PRICING = new Map<string, ModelPricing>([
   ["moonshot/kimi-k2.5", { inputPrice: 0.5, outputPrice: 2.4 }],
   ["anthropic/claude-opus-4.6", { inputPrice: 5, outputPrice: 25 }],
+  ["anthropic/claude-opus-4.7", { inputPrice: 5, outputPrice: 25 }],
   ["google/gemini-2.5-flash", { inputPrice: 0.15, outputPrice: 0.6 }],
   ["google/gemini-2.5-flash-lite", { inputPrice: 0.1, outputPrice: 0.4 }],
   ["deepseek/deepseek-chat", { inputPrice: 0.14, outputPrice: 0.28 }],
