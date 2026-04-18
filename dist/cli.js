@@ -73780,6 +73780,7 @@ var MODEL_ALIASES = {
   "nvidia/deepseek-v3.2": "free/deepseek-v3.2",
   "nvidia/mistral-large-3-675b": "free/mistral-large-3-675b",
   "nvidia/qwen3-coder-480b": "free/qwen3-coder-480b",
+  "qwen/qwen3-coder-480b-a35b-instruct": "free/qwen3-coder-480b",
   "nvidia/devstral-2-123b": "free/devstral-2-123b",
   "nvidia/glm-4.7": "free/glm-4.7",
   "nvidia/llama-4-maverick": "free/llama-4-maverick",
@@ -74377,6 +74378,39 @@ var BLOCKRUN_MODELS = [
     contextWindow: 131072,
     maxOutput: 16384,
     vision: true,
+    toolCalling: true
+  },
+  // xAI Grok 4.20 Family (hidden in picker; explicit-only — mirrors BlockRun hidden:true)
+  {
+    id: "xai/grok-4.20-reasoning",
+    name: "Grok 4.20 Reasoning",
+    version: "4.20",
+    inputPrice: 2,
+    outputPrice: 6,
+    contextWindow: 2e6,
+    maxOutput: 16384,
+    reasoning: true,
+    toolCalling: true
+  },
+  {
+    id: "xai/grok-4.20-non-reasoning",
+    name: "Grok 4.20",
+    version: "4.20",
+    inputPrice: 2,
+    outputPrice: 6,
+    contextWindow: 2e6,
+    maxOutput: 16384,
+    toolCalling: true
+  },
+  {
+    id: "xai/grok-4.20-multi-agent",
+    name: "Grok 4.20 Multi-Agent",
+    version: "4.20",
+    inputPrice: 2,
+    outputPrice: 6,
+    contextWindow: 2e6,
+    maxOutput: 16384,
+    reasoning: true,
     toolCalling: true
   },
   // MiniMax
@@ -76535,6 +76569,7 @@ var BLOCKRUN_API = "https://blockrun.ai/api";
 var BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
 var IMAGE_DIR = join8(homedir5(), ".openclaw", "blockrun", "images");
 var AUDIO_DIR = join8(homedir5(), ".openclaw", "blockrun", "audio");
+var VIDEO_DIR = join8(homedir5(), ".openclaw", "blockrun", "videos");
 var AUTO_MODEL = "blockrun/auto";
 var ROUTING_PROFILES = /* @__PURE__ */ new Set([
   "blockrun/eco",
@@ -77242,8 +77277,30 @@ var IMAGE_PRICING = {
   "google/nano-banana-pro": {
     default: 0.1,
     sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 }
+  },
+  "xai/grok-imagine-image": { default: 0.02, sizes: { "1024x1024": 0.02 } },
+  "xai/grok-imagine-image-pro": { default: 0.07, sizes: { "1024x1024": 0.07 } },
+  "zai/cogview-4": {
+    default: 0.015,
+    sizes: {
+      "512x512": 0.015,
+      "768x768": 0.015,
+      "1024x1024": 0.015,
+      "768x1344": 0.015,
+      "1344x768": 0.015,
+      "1440x1440": 0.02
+    }
   }
 };
+var VIDEO_PRICING = {
+  "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 }
+};
+function estimateVideoCost(model, durationSeconds) {
+  const p = VIDEO_PRICING[model];
+  if (!p) return 0.4 * 1.05;
+  const dur = durationSeconds ?? p.defaultDurationSeconds;
+  return p.pricePerSecond * dur * 1.05;
+}
 function estimateImageCost(model, size5, n = 1) {
   const pricing = IMAGE_PRICING[model];
   if (!pricing) return 0.04 * n * 1.05;
@@ -77630,6 +77687,35 @@ async function startProxy(options) {
         }
         return;
       }
+      if (req.url?.startsWith("/videos/") && req.method === "GET") {
+        const filename = req.url.slice("/videos/".length).split("?")[0].replace(/[^a-zA-Z0-9._-]/g, "");
+        if (!filename) {
+          res.writeHead(400);
+          res.end("Bad request");
+          return;
+        }
+        const filePath = join8(VIDEO_DIR, filename);
+        try {
+          const s3 = await fsStat(filePath);
+          if (!s3.isFile()) throw new Error("not a file");
+          const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
+          const mime = {
+            mp4: "video/mp4",
+            webm: "video/webm",
+            mov: "video/quicktime"
+          };
+          const data = await readFile(filePath);
+          res.writeHead(200, {
+            "Content-Type": mime[ext] ?? "video/mp4",
+            "Content-Length": data.length
+          });
+          res.end(data);
+        } catch {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Video not found" }));
+        }
+        return;
+      }
       if (req.url === "/v1/images/generations" && req.method === "POST") {
         const imgStartTime = Date.now();
         const chunks = [];
@@ -77913,6 +77999,88 @@ async function startProxy(options) {
           if (!res.headersSent) {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Audio generation failed", details: msg }));
+          }
+        }
+        return;
+      }
+      if (req.url === "/v1/videos/generations" && req.method === "POST") {
+        const videoStartTime = Date.now();
+        const chunks = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const reqBody = Buffer.concat(chunks);
+        let videoModel = "xai/grok-imagine-video";
+        let videoDuration;
+        try {
+          const parsed = JSON.parse(reqBody.toString());
+          videoModel = parsed.model || videoModel;
+          videoDuration = typeof parsed.duration_seconds === "number" ? parsed.duration_seconds : void 0;
+        } catch {
+        }
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/videos/generations`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: reqBody
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          let result;
+          try {
+            result = JSON.parse(text);
+          } catch {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          if (result.data?.length) {
+            await mkdir3(VIDEO_DIR, { recursive: true });
+            const port2 = server.address()?.port ?? 8402;
+            for (const clip of result.data) {
+              if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
+                try {
+                  const videoResp = await fetch(clip.url);
+                  if (videoResp.ok) {
+                    const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
+                    const ext = contentType.includes("webm") ? "webm" : contentType.includes("quicktime") ? "mov" : "mp4";
+                    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                    const buf = Buffer.from(await videoResp.arrayBuffer());
+                    await writeFile2(join8(VIDEO_DIR, filename), buf);
+                    clip.url = `http://localhost:${port2}/videos/${filename}`;
+                    console.log(`[ClawRouter] Video saved \u2192 ${clip.url}`);
+                  }
+                } catch (downloadErr) {
+                  console.warn(
+                    `[ClawRouter] Failed to download video, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`
+                  );
+                }
+              }
+            }
+          }
+          const videoActualCost = paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration);
+          logUsage({
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            model: videoModel,
+            tier: "VIDEO",
+            cost: videoActualCost,
+            baselineCost: videoActualCost,
+            savings: 0,
+            latencyMs: Date.now() - videoStartTime
+          }).catch(() => {
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Video generation error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Video generation failed", details: msg }));
           }
         }
         return;

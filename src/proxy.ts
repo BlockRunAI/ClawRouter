@@ -97,6 +97,7 @@ const BLOCKRUN_API = "https://blockrun.ai/api";
 const BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
 const IMAGE_DIR = join(homedir(), ".openclaw", "blockrun", "images");
 const AUDIO_DIR = join(homedir(), ".openclaw", "blockrun", "audio");
+const VIDEO_DIR = join(homedir(), ".openclaw", "blockrun", "videos");
 // Routing profile models - virtual models that trigger intelligent routing
 const AUTO_MODEL = "blockrun/auto";
 
@@ -1447,7 +1448,35 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
     default: 0.1,
     sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 },
   },
+  "xai/grok-imagine-image": { default: 0.02, sizes: { "1024x1024": 0.02 } },
+  "xai/grok-imagine-image-pro": { default: 0.07, sizes: { "1024x1024": 0.07 } },
+  "zai/cogview-4": {
+    default: 0.015,
+    sizes: {
+      "512x512": 0.015,
+      "768x768": 0.015,
+      "1024x1024": 0.015,
+      "768x1344": 0.015,
+      "1344x768": 0.015,
+      "1440x1440": 0.02,
+    },
+  },
 };
+
+// Video pricing (must match server's VIDEO_MODELS in blockrun/src/lib/models.ts)
+const VIDEO_PRICING: Record<string, { pricePerSecond: number; defaultDurationSeconds: number }> = {
+  "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 },
+};
+
+/**
+ * Estimate the cost of a video generation request (pricePerSecond × duration + 5% margin).
+ */
+function estimateVideoCost(model: string, durationSeconds?: number): number {
+  const p = VIDEO_PRICING[model];
+  if (!p) return 0.4 * 1.05; // fallback: ~$0.40/clip + margin
+  const dur = durationSeconds ?? p.defaultDurationSeconds;
+  return p.pricePerSecond * dur * 1.05;
+}
 
 /**
  * Estimate the cost of an image generation/editing request.
@@ -1999,6 +2028,40 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         return;
       }
 
+      // --- Serve locally cached videos (~/.openclaw/blockrun/videos/) ---
+      if (req.url?.startsWith("/videos/") && req.method === "GET") {
+        const filename = req.url
+          .slice("/videos/".length)
+          .split("?")[0]!
+          .replace(/[^a-zA-Z0-9._-]/g, "");
+        if (!filename) {
+          res.writeHead(400);
+          res.end("Bad request");
+          return;
+        }
+        const filePath = join(VIDEO_DIR, filename);
+        try {
+          const s = await fsStat(filePath);
+          if (!s.isFile()) throw new Error("not a file");
+          const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
+          const mime: Record<string, string> = {
+            mp4: "video/mp4",
+            webm: "video/webm",
+            mov: "video/quicktime",
+          };
+          const data = await readFile(filePath);
+          res.writeHead(200, {
+            "Content-Type": mime[ext] ?? "video/mp4",
+            "Content-Length": data.length,
+          });
+          res.end(data);
+        } catch {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Video not found" }));
+        }
+        return;
+      }
+
       // --- Handle /v1/images/generations: proxy with x402 payment + save data URIs locally ---
       // NOTE: image generation endpoints bypass maxCostPerRun budget tracking entirely.
       // Cost is charged via x402 micropayment directly — no session accumulation or cap enforcement.
@@ -2320,6 +2383,102 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           if (!res.headersSent) {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Audio generation failed", details: msg }));
+          }
+        }
+        return;
+      }
+
+      // --- Handle /v1/videos/generations: proxy with x402 + save MP4 locally ---
+      // Upstream (xAI) polls async; this handler may take 30-120s.
+      if (req.url === "/v1/videos/generations" && req.method === "POST") {
+        const videoStartTime = Date.now();
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const reqBody = Buffer.concat(chunks);
+        let videoModel = "xai/grok-imagine-video";
+        let videoDuration: number | undefined;
+        try {
+          const parsed = JSON.parse(reqBody.toString());
+          videoModel = parsed.model || videoModel;
+          videoDuration =
+            typeof parsed.duration_seconds === "number" ? parsed.duration_seconds : undefined;
+        } catch {
+          /* use defaults */
+        }
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/videos/generations`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: reqBody,
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          let result: {
+            created?: number;
+            model?: string;
+            data?: Array<{ url?: string; duration_seconds?: number; backed_up?: boolean }>;
+          };
+          try {
+            result = JSON.parse(text);
+          } catch {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+          // Download video from remote URL and save locally
+          if (result.data?.length) {
+            await mkdir(VIDEO_DIR, { recursive: true });
+            const port = (server.address() as AddressInfo | null)?.port ?? 8402;
+            for (const clip of result.data) {
+              if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
+                try {
+                  const videoResp = await fetch(clip.url);
+                  if (videoResp.ok) {
+                    const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
+                    const ext = contentType.includes("webm")
+                      ? "webm"
+                      : contentType.includes("quicktime")
+                        ? "mov"
+                        : "mp4";
+                    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+                    const buf = Buffer.from(await videoResp.arrayBuffer());
+                    await writeFile(join(VIDEO_DIR, filename), buf);
+                    clip.url = `http://localhost:${port}/videos/${filename}`;
+                    console.log(`[ClawRouter] Video saved → ${clip.url}`);
+                  }
+                } catch (downloadErr) {
+                  console.warn(
+                    `[ClawRouter] Failed to download video, using original URL: ${downloadErr instanceof Error ? downloadErr.message : String(downloadErr)}`,
+                  );
+                }
+              }
+            }
+          }
+          const videoActualCost =
+            paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration);
+          logUsage({
+            timestamp: new Date().toISOString(),
+            model: videoModel,
+            tier: "VIDEO",
+            cost: videoActualCost,
+            baselineCost: videoActualCost,
+            savings: 0,
+            latencyMs: Date.now() - videoStartTime,
+          }).catch(() => {});
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Video generation error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Video generation failed", details: msg }));
           }
         }
         return;

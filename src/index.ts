@@ -27,6 +27,8 @@ import type {
   ImageGenerationRequest,
   MusicGenerationProviderPlugin,
   MusicGenerationRequest,
+  VideoGenerationProviderPlugin,
+  VideoGenerationRequest,
 } from "./types.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
 import { startProxy, getProxyPort } from "./proxy.js";
@@ -1077,6 +1079,86 @@ function buildMusicGenerationProvider(): MusicGenerationProviderPlugin {
   };
 }
 
+const VIDEO_DIR = join(homedir(), ".openclaw", "blockrun", "videos");
+
+/**
+ * Build the VideoGenerationProvider that registers BlockRun video models
+ * with OpenClaw's native video generation UI.
+ * Delegates to the local proxy (which handles x402 payment + polling).
+ */
+function buildVideoGenerationProvider(): VideoGenerationProviderPlugin {
+  return {
+    id: "blockrun",
+    label: "BlockRun",
+    defaultModel: "xai/grok-imagine-video",
+    models: ["xai/grok-imagine-video"],
+    capabilities: {
+      maxVideos: 1,
+      maxInputImages: 1,
+      maxDurationSeconds: 8,
+      supportedDurationSeconds: [8],
+      supportsAudio: false,
+      imageToVideo: {
+        enabled: true,
+        maxInputImages: 1,
+        maxDurationSeconds: 8,
+        supportedDurationSeconds: [8],
+      },
+    },
+    isConfigured: () => existsSync(WALLET_FILE),
+    generateVideo: async (req: VideoGenerationRequest) => {
+      const port = getProxyPort();
+      const imageUrl = req.inputImages?.[0]?.url;
+      const body = JSON.stringify({
+        model: req.model,
+        prompt: req.prompt,
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+        ...(req.durationSeconds ? { duration_seconds: req.durationSeconds } : {}),
+      });
+      // Video generation can take 30-120s (upstream polling), allow 3 minutes
+      const timeoutMs = req.timeoutMs ?? 200_000;
+      const resp = await fetch(`http://127.0.0.1:${port}/v1/videos/generations`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        throw new Error(`BlockRun video generation failed (${resp.status}): ${errText}`);
+      }
+      const result = (await resp.json()) as {
+        data?: Array<{ url?: string; duration_seconds?: number }>;
+        model?: string;
+      };
+      const videos = await Promise.all(
+        (result.data ?? []).map(async (clip) => {
+          // URL format: http://localhost:PORT/videos/FILENAME
+          const filename = clip.url?.split("/videos/").pop();
+          if (!filename) throw new Error(`Unexpected video URL format: ${clip.url}`);
+          const filePath = join(VIDEO_DIR, filename);
+          const buffer = await readFileAsync(filePath);
+          const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
+          const mimeType =
+            ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
+          return {
+            buffer,
+            mimeType,
+            fileName: filename,
+            metadata: {
+              ...(clip.duration_seconds ? { duration_seconds: clip.duration_seconds } : {}),
+            },
+          };
+        }),
+      );
+      return {
+        videos,
+        model: result.model ?? req.model,
+      };
+    },
+  };
+}
+
 /**
  * Restart the proxy in-place after a chain switch.
  * Closes the running proxy (freeing port 8402) and starts a fresh one
@@ -1435,6 +1517,13 @@ const plugin: OpenClawPluginDefinition = {
     // appear in OpenClaw's /imagine and music generation UIs.
     api.registerImageGenerationProvider(buildImageGenerationProvider());
     api.registerMusicGenerationProvider(buildMusicGenerationProvider());
+    if (typeof api.registerVideoGenerationProvider === "function") {
+      api.registerVideoGenerationProvider(buildVideoGenerationProvider());
+    } else {
+      api.logger.warn(
+        "OpenClaw runtime does not expose registerVideoGenerationProvider(); BlockRun video models unavailable on this version.",
+      );
+    }
     if (typeof api.registerWebSearchProvider === "function") {
       api.registerWebSearchProvider(blockrunExaWebSearchProvider);
     } else {

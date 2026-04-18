@@ -239,6 +239,82 @@ export type MusicGenerationProviderPlugin = {
   generateMusic: (req: MusicGenerationRequest) => Promise<MusicGenerationResult>;
 };
 
+// --- Video generation provider types ---
+
+export type VideoGenerationResolution = "480P" | "720P" | "768P" | "1080P";
+
+export type GeneratedVideoAsset = {
+  buffer: Buffer;
+  mimeType: string;
+  fileName?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type VideoGenerationSourceAsset = {
+  url?: string;
+  buffer?: Buffer;
+  mimeType?: string;
+  fileName?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type VideoGenerationRequest = {
+  provider: string;
+  model: string;
+  prompt: string;
+  cfg: Record<string, unknown>;
+  agentDir?: string;
+  timeoutMs?: number;
+  size?: string;
+  aspectRatio?: string;
+  resolution?: VideoGenerationResolution;
+  durationSeconds?: number;
+  audio?: boolean;
+  watermark?: boolean;
+  inputImages?: VideoGenerationSourceAsset[];
+  inputVideos?: VideoGenerationSourceAsset[];
+};
+
+export type VideoGenerationResult = {
+  videos: GeneratedVideoAsset[];
+  model?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type VideoGenerationModeCapabilities = {
+  maxVideos?: number;
+  maxInputImages?: number;
+  maxInputVideos?: number;
+  maxDurationSeconds?: number;
+  supportedDurationSeconds?: readonly number[];
+  supportsSize?: boolean;
+  supportsAspectRatio?: boolean;
+  supportsResolution?: boolean;
+  supportsAudio?: boolean;
+  supportsWatermark?: boolean;
+};
+
+export type VideoGenerationTransformCapabilities = VideoGenerationModeCapabilities & {
+  enabled: boolean;
+};
+
+export type VideoGenerationProviderCapabilities = VideoGenerationModeCapabilities & {
+  generate?: VideoGenerationModeCapabilities;
+  imageToVideo?: VideoGenerationTransformCapabilities;
+  videoToVideo?: VideoGenerationTransformCapabilities;
+};
+
+export type VideoGenerationProviderPlugin = {
+  id: string;
+  aliases?: string[];
+  label?: string;
+  defaultModel?: string;
+  models?: string[];
+  capabilities: VideoGenerationProviderCapabilities;
+  isConfigured?: (ctx: { cfg?: Record<string, unknown> }) => boolean;
+  generateVideo: (req: VideoGenerationRequest) => Promise<VideoGenerationResult>;
+};
+
 // --- Web search provider types ---
 
 export type WebSearchProviderToolDefinition = {
@@ -288,7 +364,7 @@ export type OpenClawPluginApi = {
   registerProvider: (provider: ProviderPlugin) => void;
   registerImageGenerationProvider: (provider: ImageGenerationProviderPlugin) => void;
   registerMusicGenerationProvider: (provider: MusicGenerationProviderPlugin) => void;
-  registerVideoGenerationProvider?: (provider: unknown) => void;
+  registerVideoGenerationProvider?: (provider: VideoGenerationProviderPlugin) => void;
   registerWebSearchProvider?: (provider: WebSearchProviderPlugin) => void;
   registerTool: (tool: unknown, opts?: unknown) => void;
   registerHook: (events: string | string[], handler: unknown, opts?: unknown) => void;
