@@ -1494,8 +1494,9 @@ function estimateImageCost(model: string, size?: string, n: number = 1): number 
 /**
  * Proxy a paid BlockRun data request through x402 payment flow.
  *
- * Used for partner endpoints (/v1/x/*, /v1/partner/*, /v1/pm/*) and
- * wallet-backed data tools such as BlockRun Exa (/v1/exa/*). No smart routing,
+ * Used for partner endpoints (/v1/x/*, /v1/partner/*, /v1/pm/*), market data
+ * (/v1/stocks/*, /v1/usstock/*, /v1/crypto/*, /v1/fx/*, /v1/commodity/*),
+ * and wallet-backed data tools such as BlockRun Exa (/v1/exa/*). No smart routing,
  * SSE, compression, or sessions — just collect body, forward via payFetch
  * (which handles 402 automatically), and stream back.
  */
@@ -2510,8 +2511,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         return;
       }
 
-      // --- Handle paid API paths (/v1/x/*, /v1/partner/*, /v1/pm/*, /v1/exa/*, /v1/modal/*) ---
-      if (req.url?.match(/^\/v1\/(?:x|partner|pm|exa|modal)\//)) {
+      // --- Handle paid API paths (/v1/x/*, /v1/partner/*, /v1/pm/*, /v1/exa/*, /v1/modal/*,
+      // /v1/stocks/*, /v1/usstock/*, /v1/crypto/*, /v1/fx/*, /v1/commodity/*) ---
+      if (req.url?.match(/^\/v1\/(?:x|partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity)\//)) {
         try {
           await proxyPaidApiRequest(
             req,

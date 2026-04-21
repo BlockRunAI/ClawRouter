@@ -4,6 +4,31 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.159 — Apr 21, 2026
+
+- **Market data tools** — BlockRun gateway now exposes realtime and historical market data; ClawRouter wires them into OpenClaw as 6 first-class agent tools so the model stops scraping finance sites. Paid ($0.001 via x402, same wallet as LLM calls): `blockrun_stock_price` and `blockrun_stock_history` across **12 global equity markets** (US, HK, JP, KR, UK, DE, FR, NL, IE, LU, CN, CA). Free (no x402 charge): `blockrun_stock_list` (ticker lookup / company-name search), `blockrun_crypto_price` (BTC-USD, ETH-USD, SOL-USD, …), `blockrun_fx_price` (EUR-USD, GBP-USD, JPY-USD, …), `blockrun_commodity_price` (XAU-USD gold, XAG-USD silver, XPT-USD platinum). Tool schemas advertise market codes, session hints (pre/post/on), and bar resolutions (1/5/15/60/240/D/W/M). Path routing extended: the partner-proxy whitelist in `src/proxy.ts` now matches `/v1/(?:x|partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity)/`, routing all new paths through `proxyPaidApiRequest` (payFetch handles 402 when present, passes through 200 for free categories). Tool definitions added in `src/partners/registry.ts`; `skills/clawrouter/SKILL.md` gains a "Built-in Agent Tools" section listing market data + X intelligence + Polymarket alongside the LLM router.
+
+---
+
+## v0.12.158 — Apr 20, 2026
+
+- **SKILL.md data-flow + key-storage transparency** — second-pass fix for the OpenClaw scanner on clawhub.ai. After v0.12.157 cleared the original scanner concerns (opaque credentials, implied multi-provider keys, no install artifact), a deeper rescan surfaced three new, more nuanced flags: (1) prompts go to blockrun.ai as a data-privacy risk not obvious from a "local router" framing, (2) wallet private-key storage location/encryption undocumented, (3) users may expect strictly-local routing. All three addressed: (a) description frontmatter and body lead reframed as "Hosted-gateway LLM router" + "This is not a local-inference tool" with explicit Ollama pointer for users who need local-only, (b) new **Data Flow** section with ASCII diagram + enumerated sent/not-sent lists + link to https://blockrun.ai/privacy, (c) new **Credentials & Local Key Storage** section documenting config file locations per OS (`~/.config/openclaw`, `~/Library/Application Support/openclaw`, `%APPDATA%\openclaw`), `0600` POSIX permissions, plaintext storage parity with other OpenClaw provider keys, encryption guidance (FileVault/LUKS/BitLocker or burner wallet), and a `src/wallet.ts` source pointer for key-derivation auditing, (d) new **Supply-Chain Integrity** section with `npm pack` verification instructions and tagged-release invariant from the release checklist.
+
+---
+
+## v0.12.157 — Apr 20, 2026
+
+- **SKILL.md credential transparency** — rewrote `skills/clawrouter/SKILL.md` to clear the OpenClaw scanner's medium-confidence suspicious verdict on clawhub.ai. Frontmatter now declares `repository: https://github.com/BlockRunAI/ClawRouter`, `license: MIT`, and a structured `metadata.openclaw.install` array (`kind: node`, `package: @blockrun/clawrouter`, `bins: [clawrouter]`) so the registry entry has an auditable install artifact instead of a bare bash block. Body adds a **Credentials & Data Handling** section fully enumerating what `models.providers.blockrun` stores (`walletKey` / `solanaKey` — auto-generated locally, never transmitted; `gateway` / `routing` — non-sensitive), and explicitly states the plugin does not collect or forward third-party provider API keys (OpenAI/Anthropic/Google/DeepSeek/xAI/NVIDIA) — the blockrun.ai gateway owns those relationships and routes on the server side. Addresses the three scanner flags (opaque credential declaration, implied multi-provider credential collection, no install artifact for review) raised against v0.12.156 on https://clawhub.ai/1bcmax/clawrouter.
+
+---
+
+## v0.12.156 — Apr 20, 2026
+
+- **Kimi K2.6 added** — Moonshot's new flagship (`moonshot/kimi-k2.6`, 256K context, vision + reasoning, $0.95 in / $4.00 out per 1M) registered in `BLOCKRUN_MODELS` with `kimi-k2.6` alias. Added to the curated `/model` picker list (`src/index.ts`, `scripts/update.sh`, `scripts/reinstall.sh`), the README pricing table, `docs/routing-profiles.md`, and the AI-agent-facing model catalog in `skills/clawrouter/SKILL.md`. Premium routing tier (`blockrun/premium`) now uses K2.6 as the SIMPLE primary and as a fallback in MEDIUM/COMPLEX, with `nvidia/kimi-k2.5` retained as the first fallback for reliability. The generic `kimi`/`moonshot` aliases still resolve to `nvidia/kimi-k2.5` (matches BlockRun server's `blockrun/kimi` stance); users opt in to K2.6 explicitly via `kimi-k2.6` or `blockrun/premium`.
+- **GitHub restored as canonical source** — BlockRunAI GitHub org is back. `package.json` `repository.url`, README badges, CONTRIBUTING clone URL, `openclaw.security.json`, all docs (`anthropic-*`, `clawrouter-cuts-*`, `clawrouter-vs-openrouter`, `11-free-ai-models`, `llm-router-benchmark-*`, `smart-llm-router-14-dimension-classifier`, `subscription-failover`, `troubleshooting`), `skills/release/SKILL.md`, and the `sse-error-format` regression-test comment now point at `github.com/BlockRunAI/ClawRouter`. GitLab mirror (`gitlab.com/blockrunai/ClawRouter`) is kept as a secondary remote for redundancy but is no longer advertised. Metadata + docs only; no runtime/code changes.
+
+---
+
 ## v0.12.155 — Apr 18, 2026
 
 - **Docs: video generation endpoint** — README now documents `POST /v1/videos/generations` with `xai/grok-imagine-video` ($0.05/sec, 8s default). The proxy handler, cost estimator (`estimateVideoCost`), and local-file download path were already in place in `proxy.ts`; only the README was missing.

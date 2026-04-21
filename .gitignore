@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-e2e/
+.tmp-e2e/
 *.tsbuildinfo
 .DS_Store
 .playwright-mcp/

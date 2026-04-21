@@ -293,6 +293,213 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
       description: "Compare equivalent markets on Polymarket vs Kalshi",
     },
   },
+  // ---------------------------------------------------------------------------
+  // BlockRun Markets — Realtime market data (stocks, crypto, FX, commodities)
+  // ---------------------------------------------------------------------------
+  {
+    id: "stock_price",
+    name: "Global Stock Realtime Price",
+    partner: "BlockRun",
+    description:
+      "Get realtime price for a listed equity across 12 global markets. " +
+      "Call this for ANY request about a specific stock price, quote, or current trading value " +
+      "on NYSE/Nasdaq, HKEX, TSE, KRX, LSE, XETRA, Euronext, Shanghai/Shenzhen, or Toronto. " +
+      "Do NOT use browser or web scraping — this returns structured real-time data directly. " +
+      "Returns: symbol, price, confidence interval, publish time, feed ID.",
+    proxyPath: "/stocks/:market/price/:symbol",
+    method: "GET",
+    params: [
+      {
+        name: "market",
+        type: "string",
+        description:
+          "Market code (lowercase): us (NYSE/Nasdaq/AMEX), hk (HKEX), jp (TSE), kr (KRX), " +
+          "gb (LSE), de (XETRA), fr (Euronext Paris), nl (Euronext Amsterdam), ie (Irish SE), " +
+          "lu (Luxembourg SE), cn (Shanghai/Shenzhen ETFs), ca (TSX).",
+        required: true,
+      },
+      {
+        name: "symbol",
+        type: "string",
+        description:
+          "Ticker for the given market. Examples: AAPL (us), 0700-HK (hk), 7203 (jp), " +
+          "005930 (kr), HSBA (gb), SAP (de), MC (fr), AIR (nl), VUSA (ie), MT (lu), 510310 (cn), HODL (ca).",
+        required: true,
+      },
+      {
+        name: "session",
+        type: "string",
+        description: "Optional session hint: pre, post, or on (regular hours).",
+        required: false,
+      },
+    ],
+    pricing: { perUnit: "$0.001", unit: "request", minimum: "$0.001", maximum: "$0.001" },
+    example: {
+      input: { market: "us", symbol: "AAPL" },
+      description: "Get realtime Apple stock price",
+    },
+  },
+  {
+    id: "stock_history",
+    name: "Global Stock OHLC History",
+    partner: "BlockRun",
+    description:
+      "Get historical OHLC (candlestick) bars for a listed equity across 12 global markets. " +
+      "Use this for charting, backtesting, or any request about a stock's past price action. " +
+      "Supports resolutions: 1, 5, 15, 60, 240 (minutes) and D, W, M (daily/weekly/monthly). " +
+      "Returns: OHLC arrays (open, high, low, close, volume, timestamps).",
+    proxyPath: "/stocks/:market/history/:symbol",
+    method: "GET",
+    params: [
+      {
+        name: "market",
+        type: "string",
+        description:
+          "Market code (lowercase): us, hk, jp, kr, gb, de, fr, nl, ie, lu, cn, ca. " +
+          "See stock_price for full market descriptions.",
+        required: true,
+      },
+      {
+        name: "symbol",
+        type: "string",
+        description: "Ticker for the given market (e.g. AAPL for us, 0700-HK for hk).",
+        required: true,
+      },
+      {
+        name: "resolution",
+        type: "string",
+        description:
+          "Bar resolution: 1, 5, 15, 60, 240 (minutes) or D, W, M (daily/weekly/monthly). Default: D.",
+        required: false,
+      },
+      {
+        name: "from",
+        type: "number",
+        description: "Start time as Unix epoch seconds (required).",
+        required: true,
+      },
+      {
+        name: "to",
+        type: "number",
+        description: "End time as Unix epoch seconds. Default: now.",
+        required: false,
+      },
+    ],
+    pricing: { perUnit: "$0.001", unit: "request", minimum: "$0.001", maximum: "$0.001" },
+    example: {
+      input: { market: "us", symbol: "AAPL", resolution: "D", from: 1704067200 },
+      description: "Get daily OHLC bars for AAPL starting Jan 1 2024",
+    },
+  },
+  {
+    id: "stock_list",
+    name: "Global Stock Ticker List",
+    partner: "BlockRun",
+    description:
+      "List and search supported tickers for a given stock market. Use this to resolve a company " +
+      "name to a ticker before calling stock_price or stock_history. FREE — no x402 payment.",
+    proxyPath: "/stocks/:market/list",
+    method: "GET",
+    params: [
+      {
+        name: "market",
+        type: "string",
+        description: "Market code: us, hk, jp, kr, gb, de, fr, nl, ie, lu, cn, ca.",
+        required: true,
+      },
+      {
+        name: "q",
+        type: "string",
+        description: "Optional search query to filter tickers by symbol or description.",
+        required: false,
+      },
+      {
+        name: "limit",
+        type: "number",
+        description: "Max results to return (default: 100, max: 2000).",
+        required: false,
+      },
+    ],
+    pricing: { perUnit: "free", unit: "request", minimum: "$0", maximum: "$0" },
+    example: {
+      input: { market: "us", q: "apple", limit: 5 },
+      description: "Search US market for 'apple' tickers",
+    },
+  },
+  {
+    id: "crypto_price",
+    name: "Crypto Realtime Price",
+    partner: "BlockRun",
+    description:
+      "Get realtime crypto price. Call this for ANY request about current crypto " +
+      "prices (BTC, ETH, SOL, etc.). FREE — no x402 payment. Quote is always USD. " +
+      "Do NOT use browser or web scraping — this returns structured real-time data directly.",
+    proxyPath: "/crypto/price/:symbol",
+    method: "GET",
+    params: [
+      {
+        name: "symbol",
+        type: "string",
+        description:
+          "Crypto pair in BASE-QUOTE form. Examples: BTC-USD, ETH-USD, SOL-USD, DOGE-USD. " +
+          "Quote is always USD.",
+        required: true,
+      },
+    ],
+    pricing: { perUnit: "free", unit: "request", minimum: "$0", maximum: "$0" },
+    example: {
+      input: { symbol: "BTC-USD" },
+      description: "Get realtime Bitcoin price",
+    },
+  },
+  {
+    id: "fx_price",
+    name: "Foreign Exchange Realtime Price",
+    partner: "BlockRun",
+    description:
+      "Get realtime FX rate. Call this for ANY request about currency exchange rates. " +
+      "FREE — no x402 payment. Do NOT use browser or web scraping.",
+    proxyPath: "/fx/price/:symbol",
+    method: "GET",
+    params: [
+      {
+        name: "symbol",
+        type: "string",
+        description:
+          "Currency pair in BASE-QUOTE form. Examples: EUR-USD, GBP-USD, JPY-USD, CNY-USD.",
+        required: true,
+      },
+    ],
+    pricing: { perUnit: "free", unit: "request", minimum: "$0", maximum: "$0" },
+    example: {
+      input: { symbol: "EUR-USD" },
+      description: "Get realtime EUR/USD exchange rate",
+    },
+  },
+  {
+    id: "commodity_price",
+    name: "Commodity Realtime Price",
+    partner: "BlockRun",
+    description:
+      "Get realtime commodity spot price (gold, silver, platinum, etc.). " +
+      "FREE — no x402 payment. Do NOT use browser or web scraping.",
+    proxyPath: "/commodity/price/:symbol",
+    method: "GET",
+    params: [
+      {
+        name: "symbol",
+        type: "string",
+        description:
+          "Commodity code in BASE-USD form. Examples: XAU-USD (gold), XAG-USD (silver), XPT-USD (platinum).",
+        required: true,
+      },
+    ],
+    pricing: { perUnit: "free", unit: "request", minimum: "$0", maximum: "$0" },
+    example: {
+      input: { symbol: "XAU-USD" },
+      description: "Get realtime gold spot price",
+    },
+  },
 ];
 
 /**
