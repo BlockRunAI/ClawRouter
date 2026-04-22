@@ -2,7 +2,7 @@
 
 <h1>The LLM router built for autonomous agents</h1>
 
-<h3>Powered by <a href="https://www.okx.com/web3">OKX Agent Wallet</a> — the onchain identity layer for AI agents</h3>
+<h3><a href="https://www.okx.com/web3">OKX Agent Wallet</a> + <a href="https://github.com/BlockRunAI/ClawRouter">ClawRouter</a></h3>
 
 <p>Agents can't sign up for accounts. Agents can't enter credit cards.<br>
 Agents can only sign transactions.<br><br>
