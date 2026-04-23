@@ -164,7 +164,7 @@ clawrouter start
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:4402/v1",
+    base_url="http://localhost:8402/v1",
     api_key="your-blockrun-key"
 )
 
@@ -266,7 +266,7 @@ npm install -g @blockrun/clawrouter
 clawrouter start
 ```
 
-Point your `base_url` to `http://localhost:4402/v1`. That's the whole setup.
+Point your `base_url` to `http://localhost:8402/v1`. That's the whole setup.
 
 Eleven free models. 128K context. Unlimited calls. Zero cost.
 
