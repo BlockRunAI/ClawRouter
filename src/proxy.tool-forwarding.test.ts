@@ -134,7 +134,7 @@ describe("tool forwarding", () => {
                 type: "function",
                 function: {
                   name: "get_current_time",
-                  arguments: "{\"city\":\"Chicago\"}",
+                  arguments: '{"city":"Chicago"}',
                 },
               },
             ],
