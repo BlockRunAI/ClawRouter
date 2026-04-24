@@ -214,7 +214,9 @@ describe("tool forwarding", () => {
       body: JSON.stringify({
         model: "moonshot/kimi-k2.6",
         stream: true,
-        messages: [{ role: "user", content: "What time is it in Chicago right now? Use the tool." }],
+        messages: [
+          { role: "user", content: "What time is it in Chicago right now? Use the tool." },
+        ],
         tools: [
           {
             type: "function",
