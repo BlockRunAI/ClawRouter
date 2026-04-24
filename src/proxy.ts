@@ -5069,9 +5069,14 @@ async function proxyRequest(
           // Process each choice (usually just one)
           if (rsp.choices && Array.isArray(rsp.choices)) {
             for (const choice of rsp.choices) {
+              // Some OpenAI-compatible providers include planning prose in content
+              // alongside tool_calls. Tool execution only needs tool_calls, so do
+              // not forward that prose to chat channels.
+              const toolCalls = choice.message?.tool_calls ?? choice.delta?.tool_calls;
               // Strip thinking tokens (Kimi <｜...｜> and standard <think> tags)
               const rawContent = choice.message?.content ?? choice.delta?.content ?? "";
-              const content = stripThinkingTokens(rawContent);
+              const content =
+                toolCalls && toolCalls.length > 0 ? "" : stripThinkingTokens(rawContent);
               const role = choice.message?.role ?? choice.delta?.role ?? "assistant";
               const index = choice.index ?? 0;
 
@@ -5139,7 +5144,6 @@ async function proxyRequest(
               }
 
               // Chunk 2b: tool_calls (forward tool calls from upstream)
-              const toolCalls = choice.message?.tool_calls ?? choice.delta?.tool_calls;
               if (toolCalls && toolCalls.length > 0) {
                 const toolCallChunk = {
                   ...baseChunk,
@@ -5295,15 +5299,33 @@ async function proxyRequest(
       if (responseBody.length > 0) {
         try {
           const parsed = JSON.parse(responseBody.toString()) as {
-            choices?: Array<{ message?: { content?: string } }>;
+            choices?: Array<{
+              message?: {
+                content?: string;
+                tool_calls?: unknown[];
+              };
+            }>;
           };
-          if (parsed.choices?.[0]?.message?.content) {
-            const stripped = stripThinkingTokens(parsed.choices[0].message.content);
-            if (stripped !== parsed.choices[0].message.content) {
-              parsed.choices[0].message.content = stripped;
-              responseBody = Buffer.from(JSON.stringify(parsed));
+          let changed = false;
+          for (const choice of parsed.choices ?? []) {
+            const message = choice.message;
+            if (!message || typeof message.content !== "string") continue;
+
+            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+              if (message.content !== "") {
+                message.content = "";
+                changed = true;
+              }
+              continue;
+            }
+
+            const stripped = stripThinkingTokens(message.content);
+            if (stripped !== message.content) {
+              message.content = stripped;
+              changed = true;
             }
           }
+          if (changed) responseBody = Buffer.from(JSON.stringify(parsed));
         } catch {
           /* not JSON, skip */
         }
