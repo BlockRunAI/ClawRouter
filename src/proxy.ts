@@ -2475,7 +2475,11 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 pollError = `Non-JSON poll response (${pollResp.status}): ${pollText.slice(0, 200)}`;
                 break;
               }
-              if (pollResp.status === 202 || pollBody.status === "queued" || pollBody.status === "in_progress") {
+              if (
+                pollResp.status === 202 ||
+                pollBody.status === "queued" ||
+                pollBody.status === "in_progress"
+              ) {
                 await new Promise((r) => setTimeout(r, pollInterval));
                 continue;
               }
@@ -2499,9 +2503,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
             if (pollError) {
               res.writeHead(502, { "Content-Type": "application/json" });
-              res.end(
-                JSON.stringify({ error: "Video generation failed", details: pollError }),
-              );
+              res.end(JSON.stringify({ error: "Video generation failed", details: pollError }));
               return;
             }
             if (!finalResult.data) {
@@ -2571,9 +2573,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
       // --- Handle paid API paths (/v1/partner/*, /v1/pm/*, /v1/exa/*, /v1/modal/*,
       // /v1/stocks/*, /v1/usstock/*, /v1/crypto/*, /v1/fx/*, /v1/commodity/*) ---
-      if (
-        req.url?.match(/^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity)\//)
-      ) {
+      if (req.url?.match(/^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity)\//)) {
         try {
           await proxyPaidApiRequest(
             req,

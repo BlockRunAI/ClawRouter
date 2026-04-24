@@ -9,6 +9,7 @@ metadata: { "openclaw": { "emoji": "🖼️", "requires": { "config": ["models.p
 Generate or edit images through ClawRouter. Payment is automatic via x402.
 
 **Shortcuts:**
+
 - Slash: `/imagegen <prompt> [--model=<alias>] [--size=1024x1024] [--n=1]`
 - Partner tool: `blockrun_image_generation` (LLM-callable) / `blockrun_image_edit` (inpainting)
 
@@ -40,16 +41,16 @@ Display inline: `![generated image](http://localhost:8402/images/abc123.png)`
 
 ### Model Selection
 
-| Alias              | Full ID                       | Price          | Sizes                             | Best for                              |
-| ------------------ | ----------------------------- | -------------- | --------------------------------- | ------------------------------------- |
-| `nano-banana`      | `google/nano-banana`          | $0.05          | 1024×1024, 1216×832, 1024×1792    | Default — fast, cheap, good quality   |
-| `banana-pro`       | `google/nano-banana-pro`      | $0.10–$0.15    | up to 4096×4096                   | High-res, large format                |
-| `dalle`            | `openai/dall-e-3`             | $0.04–$0.08    | 1024×1024, 1792×1024, 1024×1792   | Photorealistic, complex scenes        |
-| `gpt-image`        | `openai/gpt-image-1`          | $0.02–$0.04    | 1024×1024, 1536×1024, 1024×1536   | Budget option; supports editing       |
-| `flux`             | `black-forest/flux-1.1-pro`   | $0.04          | 1024×1024, 1216×832, 832×1216     | Artistic styles, fewer restrictions   |
-| `grok-imagine`     | `xai/grok-imagine-image`      | $0.02          | 1024×1024                         | xAI Grok image style                  |
-| `grok-imagine-pro` | `xai/grok-imagine-image-pro`  | $0.07          | 1024×1024                         | Grok high-quality                     |
-| `cogview`          | `zai/cogview-4`               | $0.015–$0.02   | 512×512 to 1440×1440              | Cheapest — Zhipu CogView              |
+| Alias              | Full ID                      | Price        | Sizes                           | Best for                            |
+| ------------------ | ---------------------------- | ------------ | ------------------------------- | ----------------------------------- |
+| `nano-banana`      | `google/nano-banana`         | $0.05        | 1024×1024, 1216×832, 1024×1792  | Default — fast, cheap, good quality |
+| `banana-pro`       | `google/nano-banana-pro`     | $0.10–$0.15  | up to 4096×4096                 | High-res, large format              |
+| `dalle`            | `openai/dall-e-3`            | $0.04–$0.08  | 1024×1024, 1792×1024, 1024×1792 | Photorealistic, complex scenes      |
+| `gpt-image`        | `openai/gpt-image-1`         | $0.02–$0.04  | 1024×1024, 1536×1024, 1024×1536 | Budget option; supports editing     |
+| `flux`             | `black-forest/flux-1.1-pro`  | $0.04        | 1024×1024, 1216×832, 832×1216   | Artistic styles, fewer restrictions |
+| `grok-imagine`     | `xai/grok-imagine-image`     | $0.02        | 1024×1024                       | xAI Grok image style                |
+| `grok-imagine-pro` | `xai/grok-imagine-image-pro` | $0.07        | 1024×1024                       | Grok high-quality                   |
+| `cogview`          | `zai/cogview-4`              | $0.015–$0.02 | 512×512 to 1440×1440            | Cheapest — Zhipu CogView            |
 
 **Choosing a model:**
 

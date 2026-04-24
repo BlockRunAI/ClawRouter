@@ -1684,10 +1684,7 @@ const plugin: OpenClawPluginDefinition = {
         }
 
         // Column width — keep tool names + pricing aligned across groups.
-        const toolWidth = Math.max(
-          ...PARTNER_SERVICES.map((s) => `blockrun_${s.id}`.length),
-          28,
-        );
+        const toolWidth = Math.max(...PARTNER_SERVICES.map((s) => `blockrun_${s.id}`.length), 28);
         const priceWidth = Math.max(
           ...PARTNER_SERVICES.map((s) =>
             s.pricing.perUnit === "free" ? 4 : `${s.pricing.perUnit}/${s.pricing.unit}`.length,
