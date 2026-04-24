@@ -5069,14 +5069,19 @@ async function proxyRequest(
           // Process each choice (usually just one)
           if (rsp.choices && Array.isArray(rsp.choices)) {
             for (const choice of rsp.choices) {
+              const endsWithToolCalls = choice.finish_reason === "tool_calls";
               // Some OpenAI-compatible providers include planning prose in content
-              // alongside tool_calls. Tool execution only needs tool_calls, so do
-              // not forward that prose to chat channels.
+              // alongside tool_calls, or mark the turn as a tool-call turn via
+              // finish_reason before exposing the tool_calls array at the same
+              // object shape. Tool execution only needs tool_calls, so do not
+              // forward that prose to chat channels.
               const toolCalls = choice.message?.tool_calls ?? choice.delta?.tool_calls;
               // Strip thinking tokens (Kimi <｜...｜> and standard <think> tags)
               const rawContent = choice.message?.content ?? choice.delta?.content ?? "";
               const content =
-                toolCalls && toolCalls.length > 0 ? "" : stripThinkingTokens(rawContent);
+                endsWithToolCalls || (toolCalls && toolCalls.length > 0)
+                  ? ""
+                  : stripThinkingTokens(rawContent);
               const role = choice.message?.role ?? choice.delta?.role ?? "assistant";
               const index = choice.index ?? 0;
 
@@ -5170,7 +5175,7 @@ async function proxyRequest(
                     delta: {},
                     logprobs: null,
                     finish_reason:
-                      toolCalls && toolCalls.length > 0
+                      endsWithToolCalls || (toolCalls && toolCalls.length > 0)
                         ? "tool_calls"
                         : (choice.finish_reason ?? "stop"),
                   },
@@ -5300,6 +5305,7 @@ async function proxyRequest(
         try {
           const parsed = JSON.parse(responseBody.toString()) as {
             choices?: Array<{
+              finish_reason?: string | null;
               message?: {
                 content?: string;
                 tool_calls?: unknown[];
@@ -5311,7 +5317,10 @@ async function proxyRequest(
             const message = choice.message;
             if (!message || typeof message.content !== "string") continue;
 
-            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+            if (
+              choice.finish_reason === "tool_calls" ||
+              (Array.isArray(message.tool_calls) && message.tool_calls.length > 0)
+            ) {
               if (message.content !== "") {
                 message.content = "";
                 changed = true;

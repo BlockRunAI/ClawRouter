@@ -286,4 +286,57 @@ describe("tool forwarding", () => {
     );
     expect(finishReasons).toContain("tool_calls");
   });
+
+  it("suppresses assistant content when upstream marks finish_reason as tool_calls", async () => {
+    upstreamResponse = {
+      id: "chatcmpl-tool-finish-reason",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: "moonshot/kimi-k2.6",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "I should look up Barcelona's next match before replying.",
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    };
+
+    const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "moonshot/kimi-k2.6",
+        stream: false,
+        messages: [{ role: "user", content: "When is Barcelona's next match?" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "web_search",
+              description: "Search the web",
+              parameters: { type: "object" },
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      choices?: Array<{
+        finish_reason?: string | null;
+        message?: {
+          content?: string;
+          tool_calls?: unknown[];
+        };
+      }>;
+    };
+    expect(json.choices?.[0]?.finish_reason).toBe("tool_calls");
+    expect(json.choices?.[0]?.message?.content).toBe("");
+  });
 });
