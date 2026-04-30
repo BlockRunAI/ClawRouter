@@ -74,8 +74,10 @@ import type { SolanaBalanceMonitor } from "./solana-balance.js";
 
 /** Union type for chain-agnostic balance monitoring */
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
-import { resolvePaymentChain, resolveWalletAdapter } from "./auth.js";
-import type { WalletAdapter } from "./wallet-adapter.js";
+import { resolvePaymentChain } from "./auth.js";
+import type { WalletResolution } from "./auth.js";
+import { OnchainOsAdapter } from "./onchainos-adapter.js";
+import { createOnchainosPayFetch } from "./okx-x402-fetch.js";
 import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
 // Error classes available for programmatic use but not used in proxy
 // (universal free fallback means we don't throw balance errors anymore)
@@ -1153,7 +1155,17 @@ export type InsufficientFundsInfo = {
  * Solana keys. Using the full object prevents callers from accidentally
  * forgetting to forward Solana key bytes.
  */
-export type WalletConfig = string | { key: string; solanaPrivateKeyBytes?: Uint8Array };
+/**
+ * Wallet config accepts:
+ *   - string: legacy plain EVM private key
+ *   - { key, ... }: legacy resolution with optional Solana keys
+ *   - { source: "okx", address, onchainos }: OKX onchainos wallet — no
+ *     local key, signing delegated to the onchainos CLI.
+ */
+export type WalletConfig =
+  | string
+  | { key: string; solanaPrivateKeyBytes?: Uint8Array }
+  | WalletResolution;
 
 export type PaymentChain = "base" | "solana";
 
@@ -1665,10 +1677,28 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[XClawRouter] Upstream proxy: ${upstreamProxy}`);
   }
 
-  // Normalize wallet config: string = EVM-only, object = full resolution
-  const walletKey = typeof options.wallet === "string" ? options.wallet : options.wallet.key;
-  const solanaPrivateKeyBytes =
-    typeof options.wallet === "string" ? undefined : options.wallet.solanaPrivateKeyBytes;
+  // Normalize wallet config. Three shapes:
+  //   1. Plain string private key (legacy CLI/test path)
+  //   2. Full resolution object with `key` (legacy local-key path)
+  //   3. OKX resolution with `source: "okx"` and an `onchainos` adapter — no
+  //      local key, signing happens via the onchainos CLI.
+  const walletObj = typeof options.wallet === "string" ? undefined : options.wallet;
+  const isOkxWallet =
+    walletObj !== undefined &&
+    "source" in walletObj &&
+    walletObj.source === "okx" &&
+    walletObj.onchainos !== undefined;
+  const walletKey = typeof options.wallet === "string" ? options.wallet : walletObj?.key;
+  const solanaPrivateKeyBytes = walletObj?.solanaPrivateKeyBytes;
+  const okxAdapter: OnchainOsAdapter | undefined = isOkxWallet ? walletObj?.onchainos : undefined;
+  const okxAddress: `0x${string}` | undefined = isOkxWallet
+    ? (walletObj!.address as `0x${string}`)
+    : undefined;
+  if (!walletKey && !okxAdapter) {
+    throw new Error(
+      "Wallet config has no signing backend: provide a private key or an OKX onchainos wallet.",
+    );
+  }
 
   // Payment chain: options > env var > persisted file > default "base".
   // No dynamic switching — user selects chain via /wallet solana or /wallet base.
@@ -1695,13 +1725,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const existingProxy = await checkExistingProxy(listenPort);
   if (existingProxy) {
     // Proxy already running — reuse it instead of failing with EADDRINUSE
-    const account = privateKeyToAccount(walletKey as `0x${string}`);
+    const expectedAddress: `0x${string}` =
+      okxAddress ?? privateKeyToAccount(walletKey as `0x${string}`).address;
     const baseUrl = `http://127.0.0.1:${listenPort}`;
 
     // Verify the existing proxy is using the same wallet (or warn if different)
-    if (existingProxy.wallet !== account.address) {
+    if (existingProxy.wallet !== expectedAddress) {
       console.warn(
-        `[XClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account.address}. Reusing existing proxy.`,
+        `[XClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${expectedAddress}. Reusing existing proxy.`,
       );
     }
 
@@ -1738,7 +1769,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       const { SolanaBalanceMonitor } = await import("./solana-balance.js");
       balanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
     } else {
-      balanceMonitor = new BalanceMonitor(account.address);
+      balanceMonitor = new BalanceMonitor(expectedAddress);
     }
 
     options.onReady?.(listenPort);
@@ -1755,24 +1786,18 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     };
   }
 
-  // Create x402 payment client. Signing backend is selected via XCLAWROUTER_USE_ONCHAINOS:
-  //   - "1" → delegate to OKX's agentic wallet CLI (no private keys in this process)
-  //   - default → legacy viem account from BIP-39-derived private key
-  const useOnchainos = process.env.XCLAWROUTER_USE_ONCHAINOS === "1";
+  // Create x402 payment client. Two signing backends:
+  //   - OKX onchainos (when wallet source is "okx") — payments signed via the
+  //     `onchainos payment x402-pay` CLI, no private keys in this process.
+  //   - Local viem account (default) — derived from BIP-39 / env private key.
+  const useOnchainos = !!okxAdapter;
   const evmPublicClient = createPublicClient({ chain: base, transport: http() });
   const x402 = new x402Client();
 
   let account: { address: `0x${string}` };
-  let walletAdapter: WalletAdapter | undefined;
   if (useOnchainos) {
-    walletAdapter = resolveWalletAdapter({
-      enableSolana: !!solanaPrivateKeyBytes || paymentChain === "solana",
-    });
-    const evmAddress = await walletAdapter.evm.getAddress();
-    account = { address: evmAddress };
-    const evmSigner = await walletAdapter.evm.toX402Signer(evmPublicClient);
-    registerExactEvmScheme(x402, { signer: evmSigner });
-    console.log(`[XClawRouter] Agentic wallet (onchainos) — EVM ${evmAddress}`);
+    account = { address: okxAddress! };
+    console.log(`[XClawRouter] OKX onchainos wallet — EVM ${okxAddress}`);
   } else {
     const acct = privateKeyToAccount(walletKey as `0x${string}`);
     account = { address: acct.address };
@@ -1780,12 +1805,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     registerExactEvmScheme(x402, { signer: evmSigner });
   }
 
-  // Register Solana scheme if key is available (legacy path only — onchainos Solana
-  // support is TODO; see OnchainOsSvmAdapter in src/onchainos-adapter.ts).
-  //
-  // Uses registerExactSvmScheme helper which registers:
-  //   - solana:* wildcard (catches any CAIP-2 Solana network)
-  //   - V1 compat names: "solana", "solana-devnet", "solana-testnet"
+  // Register Solana scheme if key is available. OKX onchainos focuses on Base
+  // (EVM); Solana support stays on the legacy local-mnemonic path.
   let solanaAddress: string | undefined;
   if (!useOnchainos && solanaPrivateKeyBytes) {
     const { registerExactSvmScheme } = await import("@x402/svm/exact/client");
@@ -1818,9 +1839,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[XClawRouter] Payment signed on ${chain} (${network}) — $${amountUsd.toFixed(6)}`);
   });
 
-  const payFetch = createPayFetchWithPreAuth(fetch, x402, undefined, {
-    skipPreAuth: paymentChain === "solana",
-  });
+  // OKX mode: bypass @x402/fetch — onchainos exposes only the high-level
+  // `payment x402-pay` command, not raw typed-data signing, so we hand-roll
+  // 402-handling in createOnchainosPayFetch.
+  const payFetch = useOnchainos
+    ? createOnchainosPayFetch(fetch, okxAdapter!)
+    : createPayFetchWithPreAuth(fetch, x402, undefined, {
+        skipPreAuth: paymentChain === "solana",
+      });
 
   // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
   let balanceMonitor: AnyBalanceMonitor;

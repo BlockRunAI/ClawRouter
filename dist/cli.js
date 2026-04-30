@@ -31680,12 +31680,18 @@ var init_wallet = __esm({
 });
 
 // src/onchainos-adapter.ts
-import { execFile, spawn } from "child_process";
+import { execFile, execFileSync } from "child_process";
+import { existsSync } from "fs";
+import { homedir as homedir3 } from "os";
 import { promisify } from "util";
+function resolveOnchainosBin(override) {
+  if (override) return override;
+  const env = process.env.XCLAWROUTER_ONCHAINOS_BIN ?? process.env.ONCHAINOS_BIN;
+  if (env) return env;
+  const fallback = FALLBACK_CANDIDATES.find((candidate) => existsSync(candidate));
+  return fallback ?? DEFAULT_BIN;
+}
 async function runCli(bin, args, opts) {
-  if (opts.input !== void 0) {
-    return runWithStdin(bin, args, opts.input, opts.timeoutMs);
-  }
   try {
     const { stdout } = await execFileAsync(bin, args, {
       timeout: opts.timeoutMs,
@@ -31696,53 +31702,11 @@ async function runCli(bin, args, opts) {
     throw wrapCliError(err, bin, args);
   }
 }
-function runWithStdin(bin, args, input, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    let child;
-    try {
-      child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
-    } catch (err) {
-      reject(wrapCliError(err, bin, args));
-      return;
-    }
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(
-        new OnchainOsCliError(`onchainos ${args.join(" ")} timed out after ${timeoutMs}ms`, stderr)
-      );
-    }, timeoutMs);
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      reject(wrapCliError(err, bin, args));
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(stdout);
-      else
-        reject(
-          new OnchainOsCliError(
-            `onchainos ${args.join(" ")} exited with code ${code}`,
-            stderr,
-            code
-          )
-        );
-    });
-    child.stdin.end(input);
-  });
-}
 function wrapCliError(err, bin, args) {
   const e7 = err;
   if (e7.code === "ENOENT") {
     return new OnchainOsCliError(
-      `onchainos CLI not found at "${bin}". Install OKX's agentic wallet CLI and ensure it is on PATH, or set XCLAWROUTER_ONCHAINOS_BIN to the binary location.`
+      `onchainos CLI not found at "${bin}". Install OKX's agentic wallet CLI (https://web3.okx.com/onchainos) and ensure it is on PATH, or set XCLAWROUTER_ONCHAINOS_BIN to the binary location.`
     );
   }
   return new OnchainOsCliError(
@@ -31765,13 +31729,26 @@ ${trimmed.slice(0, 500)}`
     );
   }
 }
-var execFileAsync, DEFAULT_BIN, DEFAULT_TIMEOUT_MS, OnchainOsCliError, OnchainOsAdapter, OnchainOsEvmAdapter, OnchainOsSvmAdapter;
+function unwrapData(parsed) {
+  if (parsed && typeof parsed === "object" && "data" in parsed) {
+    const inner = parsed.data;
+    if (inner !== void 0 && inner !== null) return inner;
+  }
+  return parsed;
+}
+var execFileAsync, DEFAULT_BIN, DEFAULT_TIMEOUT_MS, PAYMENT_TIMEOUT_MS, FALLBACK_CANDIDATES, OnchainOsCliError, OnchainOsAdapter;
 var init_onchainos_adapter = __esm({
   "src/onchainos-adapter.ts"() {
     "use strict";
     execFileAsync = promisify(execFile);
     DEFAULT_BIN = "onchainos";
     DEFAULT_TIMEOUT_MS = 3e4;
+    PAYMENT_TIMEOUT_MS = 3e4;
+    FALLBACK_CANDIDATES = [
+      `${homedir3()}/.local/bin/onchainos`,
+      "/opt/homebrew/bin/onchainos",
+      "/usr/local/bin/onchainos"
+    ];
     OnchainOsCliError = class extends Error {
       constructor(message, stderr, exitCode) {
         super(message);
@@ -31781,121 +31758,75 @@ var init_onchainos_adapter = __esm({
       }
     };
     OnchainOsAdapter = class {
-      evm;
-      svm;
       bin;
       timeoutMs;
       constructor(opts = {}) {
-        this.bin = opts.bin ?? process.env.XCLAWROUTER_ONCHAINOS_BIN ?? DEFAULT_BIN;
+        this.bin = resolveOnchainosBin(opts.bin);
         this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-        this.evm = new OnchainOsEvmAdapter(this);
-        if (opts.enableSolana) {
-          this.svm = new OnchainOsSvmAdapter(this);
+      }
+      /** Quick, synchronous probe — does the binary exist and respond to --version? */
+      isInstalled() {
+        try {
+          execFileSync(this.bin, ["--version"], {
+            encoding: "utf-8",
+            stdio: "pipe",
+            timeout: 5e3
+          });
+          return true;
+        } catch {
+          return false;
         }
       }
       async status() {
-        const stdout = await runCli(this.bin, ["wallet", "status", "--json"], {
+        const stdout = await runCli(this.bin, ["wallet", "status"], {
           timeoutMs: this.timeoutMs
         });
-        const raw = parseJson(stdout, "wallet status");
+        const raw = unwrapData(parseJson(stdout, "wallet status"));
+        const loggedIn = Boolean(raw.loggedIn ?? raw.connected);
+        const evmAddress = raw.evmAddress ?? raw.evm;
+        const solanaAddress = raw.solanaAddress ?? raw.solana;
         return {
-          connected: Boolean(raw.connected),
+          loggedIn,
           email: raw.email,
-          evmAddress: raw.evm,
-          solanaAddress: raw.solana
+          evmAddress: evmAddress?.startsWith("0x") ? evmAddress : void 0,
+          solanaAddress
         };
       }
       async login(email) {
         if (!email.includes("@")) {
           throw new Error(`Invalid email address: ${email}`);
         }
-        await runCli(this.bin, ["wallet", "login", email], {
-          // Login involves a confirmation step; allow more time than a signing op.
-          timeoutMs: 5 * 6e4
-        });
+        await runCli(this.bin, ["wallet", "login", email], { timeoutMs: 5 * 6e4 });
       }
       async logout() {
         await runCli(this.bin, ["wallet", "logout"], { timeoutMs: this.timeoutMs });
       }
-      /** Internal: sign EIP-712 typed data via the CLI. */
-      async signTypedDataEvm(args) {
-        const payload = JSON.stringify({
-          domain: args.domain,
-          types: args.types,
-          primaryType: args.primaryType,
-          message: args.message
+      /**
+       * Sign an x402 payment via onchainos. Pass through the full `accepts` array
+       * from the 402 response — onchainos picks the chain/scheme it can satisfy.
+       */
+      async signX402Payment(accepts) {
+        const acceptsJson = JSON.stringify(accepts);
+        const stdout = await runCli(this.bin, ["payment", "x402-pay", "--accepts", acceptsJson], {
+          timeoutMs: PAYMENT_TIMEOUT_MS
         });
-        const stdout = await runCli(
-          this.bin,
-          ["sign", "typed-data", "--chain", args.chain, "--data", "-"],
-          { input: payload, timeoutMs: this.timeoutMs }
-        );
-        const parsed = parseJson(stdout, "sign typed-data");
-        if (!parsed.signature?.startsWith("0x")) {
-          throw new OnchainOsCliError(`onchainos returned an invalid signature: ${parsed.signature}`);
-        }
-        return parsed.signature;
-      }
-      /** Internal: sign a partially-signed Solana transaction via the CLI. */
-      async signSolanaTransaction(transactionBase64) {
-        const stdout = await runCli(this.bin, ["sign", "solana-transaction", "--transaction", "-"], {
-          input: transactionBase64,
-          timeoutMs: this.timeoutMs
-        });
-        const parsed = parseJson(stdout, "sign solana-transaction");
-        if (!parsed.signedTransaction) {
-          throw new OnchainOsCliError("onchainos returned no signedTransaction for Solana signing.");
-        }
-        return parsed.signedTransaction;
-      }
-    };
-    OnchainOsEvmAdapter = class {
-      constructor(parent) {
-        this.parent = parent;
-      }
-      async getAddress() {
-        const s3 = await this.parent.status();
-        if (!s3.evmAddress) {
-          throw new Error("onchainos reports no EVM address. Run `/wallet login <email>` to connect.");
-        }
-        return s3.evmAddress;
-      }
-      async toX402Signer(publicClient) {
-        const address2 = await this.getAddress();
-        const parent = this.parent;
-        const signer = {
-          address: address2,
-          async signTypedData(message) {
-            return parent.signTypedDataEvm({
-              chain: "base",
-              domain: message.domain,
-              types: message.types,
-              primaryType: message.primaryType,
-              message: message.message
-            });
-          },
-          readContract: publicClient?.readContract.bind(publicClient)
-        };
-        return signer;
-      }
-    };
-    OnchainOsSvmAdapter = class {
-      constructor(parent) {
-        this.parent = parent;
-      }
-      async getAddress() {
-        const s3 = await this.parent.status();
-        if (!s3.solanaAddress) {
-          throw new Error(
-            "onchainos reports no Solana address. Either Solana support is not available in this onchainos release, or the wallet is not connected."
+        const parsed = parseJson(stdout, "payment x402-pay");
+        const result = unwrapData(parsed);
+        if (!result.signature || typeof result.signature !== "string") {
+          throw new OnchainOsCliError(
+            `onchainos payment x402-pay returned no signature: ${JSON.stringify(parsed).slice(0, 500)}`
           );
         }
-        return s3.solanaAddress;
-      }
-      async toX402Signer() {
-        throw new Error(
-          "Solana signing via onchainos is not yet implemented. Use Base chain for now, or disable Solana support via CLI (`/chain base`)."
-        );
+        if (!result.authorization || typeof result.authorization !== "object") {
+          throw new OnchainOsCliError(
+            `onchainos payment x402-pay returned no authorization: ${JSON.stringify(parsed).slice(0, 500)}`
+          );
+        }
+        return {
+          signature: result.signature,
+          authorization: result.authorization,
+          sessionCert: typeof result.sessionCert === "string" ? result.sessionCert : void 0
+        };
       }
     };
   }
@@ -31908,25 +31839,29 @@ __export(auth_exports, {
   MNEMONIC_FILE: () => MNEMONIC_FILE,
   WALLET_DIR: () => WALLET_DIR,
   WALLET_FILE: () => WALLET_FILE,
+  detectOnchainosWallet: () => detectOnchainosWallet,
   envKeyAuth: () => envKeyAuth,
   loadPaymentChain: () => loadPaymentChain,
   recoverWalletFromMnemonic: () => recoverWalletFromMnemonic,
   resolveOrGenerateWalletKey: () => resolveOrGenerateWalletKey,
   resolvePaymentChain: () => resolvePaymentChain,
-  resolveWalletAdapter: () => resolveWalletAdapter,
   savePaymentChain: () => savePaymentChain,
   setupSolana: () => setupSolana,
   walletKeyAuth: () => walletKeyAuth
 });
 import { writeFile, mkdir as mkdir2 } from "fs/promises";
 import { join as join6 } from "path";
-import { homedir as homedir3 } from "os";
-function resolveWalletAdapter(opts) {
-  const enableSolana = opts?.enableSolana ?? process.env.XCLAWROUTER_ENABLE_SOLANA === "1";
-  return new OnchainOsAdapter({
-    bin: opts?.bin,
-    enableSolana
-  });
+import { homedir as homedir4 } from "os";
+async function detectOnchainosWallet() {
+  const adapter = new OnchainOsAdapter();
+  if (!adapter.isInstalled()) return void 0;
+  try {
+    const status = await adapter.status();
+    if (!status.loggedIn || !status.evmAddress) return void 0;
+    return { address: status.evmAddress, email: status.email, adapter };
+  } catch {
+    return void 0;
+  }
 }
 async function savePaymentChain(chain3) {
   await mkdir2(WALLET_DIR, { recursive: true });
@@ -32015,6 +31950,15 @@ Refusing to generate a new wallet to protect existing funds.`
   };
 }
 async function resolveOrGenerateWalletKey() {
+  const onchainos = await detectOnchainosWallet();
+  if (onchainos) {
+    return {
+      address: onchainos.address,
+      source: "okx",
+      onchainos: onchainos.adapter,
+      email: onchainos.email
+    };
+  }
   const saved = await loadSavedWallet();
   if (saved) {
     const account = privateKeyToAccount(saved);
@@ -32098,7 +32042,7 @@ var init_auth = __esm({
     init_accounts();
     init_wallet();
     init_onchainos_adapter();
-    WALLET_DIR = join6(homedir3(), ".openclaw", "blockrun");
+    WALLET_DIR = join6(homedir4(), ".openclaw", "blockrun");
     WALLET_FILE = join6(WALLET_DIR, "wallet.key");
     MNEMONIC_FILE = join6(WALLET_DIR, "mnemonic");
     CHAIN_FILE = join6(WALLET_DIR, "payment-chain");
@@ -50333,7 +50277,7 @@ var require_headers = __commonJS({
         }
       }
     };
-    var Headers = class _Headers {
+    var Headers2 = class _Headers {
       #guard;
       /**
        * @type {HeadersList}
@@ -50474,13 +50418,13 @@ var require_headers = __commonJS({
         target.#headersList = list;
       }
     };
-    var { getHeadersGuard, setHeadersGuard, getHeadersList, setHeadersList } = Headers;
-    Reflect.deleteProperty(Headers, "getHeadersGuard");
-    Reflect.deleteProperty(Headers, "setHeadersGuard");
-    Reflect.deleteProperty(Headers, "getHeadersList");
-    Reflect.deleteProperty(Headers, "setHeadersList");
-    iteratorMixin("Headers", Headers, headersListSortAndCombine, 0, 1);
-    Object.defineProperties(Headers.prototype, {
+    var { getHeadersGuard, setHeadersGuard, getHeadersList, setHeadersList } = Headers2;
+    Reflect.deleteProperty(Headers2, "getHeadersGuard");
+    Reflect.deleteProperty(Headers2, "setHeadersGuard");
+    Reflect.deleteProperty(Headers2, "getHeadersList");
+    Reflect.deleteProperty(Headers2, "setHeadersList");
+    iteratorMixin("Headers", Headers2, headersListSortAndCombine, 0, 1);
+    Object.defineProperties(Headers2.prototype, {
       append: kEnumerableProperty,
       delete: kEnumerableProperty,
       get: kEnumerableProperty,
@@ -50498,7 +50442,7 @@ var require_headers = __commonJS({
     webidl.converters.HeadersInit = function(V, prefix, argument) {
       if (webidl.util.Type(V) === webidl.util.Types.OBJECT) {
         const iterator = Reflect.get(V, Symbol.iterator);
-        if (!util2.types.isProxy(V) && iterator === Headers.prototype.entries) {
+        if (!util2.types.isProxy(V) && iterator === Headers2.prototype.entries) {
           try {
             return getHeadersList(V).entriesList;
           } catch {
@@ -50519,7 +50463,7 @@ var require_headers = __commonJS({
       fill,
       // for test.
       compareHeaderName,
-      Headers,
+      Headers: Headers2,
       HeadersList,
       getHeadersGuard,
       setHeadersGuard,
@@ -50533,7 +50477,7 @@ var require_headers = __commonJS({
 var require_response = __commonJS({
   "node_modules/undici/lib/web/fetch/response.js"(exports, module) {
     "use strict";
-    var { Headers, HeadersList, fill, getHeadersGuard, setHeadersGuard, setHeadersList } = require_headers();
+    var { Headers: Headers2, HeadersList, fill, getHeadersGuard, setHeadersGuard, setHeadersList } = require_headers();
     var { extractBody, cloneBody, mixinBody, streamRegistry, bodyUnusable } = require_body();
     var util2 = require_util();
     var nodeUtil = __require("util");
@@ -50609,7 +50553,7 @@ var require_response = __commonJS({
         }
         init = webidl.converters.ResponseInit(init);
         this.#state = makeResponse({});
-        this.#headers = new Headers(kConstruct);
+        this.#headers = new Headers2(kConstruct);
         setHeadersGuard(this.#headers, "response");
         setHeadersList(this.#headers, this.#state.headersList);
         let bodyWithType = null;
@@ -50884,7 +50828,7 @@ var require_response = __commonJS({
     function fromInnerResponse(innerResponse, guard) {
       const response = new Response2(kConstruct);
       setResponseState(response, innerResponse);
-      const headers = new Headers(kConstruct);
+      const headers = new Headers2(kConstruct);
       setResponseHeaders(response, headers);
       setHeadersList(headers, innerResponse.headersList);
       setHeadersGuard(headers, guard);
@@ -50956,7 +50900,7 @@ var require_request2 = __commonJS({
   "node_modules/undici/lib/web/fetch/request.js"(exports, module) {
     "use strict";
     var { extractBody, mixinBody, cloneBody, bodyUnusable } = require_body();
-    var { Headers, fill: fillHeaders, HeadersList, setHeadersGuard, getHeadersGuard, setHeadersList, getHeadersList } = require_headers();
+    var { Headers: Headers2, fill: fillHeaders, HeadersList, setHeadersGuard, getHeadersGuard, setHeadersList, getHeadersList } = require_headers();
     var util2 = require_util();
     var nodeUtil = __require("util");
     var {
@@ -51225,7 +51169,7 @@ var require_request2 = __commonJS({
             requestFinalizer.register(ac, { signal, abort }, abort);
           }
         }
-        this.#headers = new Headers(kConstruct);
+        this.#headers = new Headers2(kConstruct);
         setHeadersList(this.#headers, request.headersList);
         setHeadersGuard(this.#headers, "request");
         if (mode === "no-cors") {
@@ -51566,7 +51510,7 @@ var require_request2 = __commonJS({
       setRequestState(request, innerRequest);
       setRequestDispatcher(request, dispatcher);
       setRequestSignal(request, signal);
-      const headers = new Headers(kConstruct);
+      const headers = new Headers2(kConstruct);
       setRequestHeaders(request, headers);
       setHeadersList(headers, innerRequest.headersList);
       setHeadersGuard(headers, guard);
@@ -53996,8 +53940,8 @@ var require_cookies = __commonJS({
     var { parseSetCookie } = require_parse();
     var { stringify: stringify4 } = require_util4();
     var { webidl } = require_webidl();
-    var { Headers } = require_headers();
-    var brandChecks = webidl.brandCheckMultiple([Headers, globalThis.Headers].filter(Boolean));
+    var { Headers: Headers2 } = require_headers();
+    var brandChecks = webidl.brandCheckMultiple([Headers2, globalThis.Headers].filter(Boolean));
     function getCookies(headers) {
       webidl.argumentLengthCheck(arguments, 1, "getCookies");
       brandChecks(headers);
@@ -54738,7 +54682,7 @@ var require_connection = __commonJS({
     var { parseExtensions, isClosed, isClosing, isEstablished, isConnecting, validateCloseCodeAndReason } = require_util5();
     var { makeRequest } = require_request2();
     var { fetching } = require_fetch();
-    var { Headers, getHeadersList } = require_headers();
+    var { Headers: Headers2, getHeadersList } = require_headers();
     var { getDecodeSplit } = require_util2();
     var { WebsocketFrameSend } = require_frame();
     var assert8 = __require("assert");
@@ -54760,7 +54704,7 @@ var require_connection = __commonJS({
         useURLCredentials: true
       });
       if (options.headers) {
-        const headersList = getHeadersList(new Headers(options.headers));
+        const headersList = getHeadersList(new Headers2(options.headers));
         request.headersList = headersList;
       }
       const keyValue = crypto4.randomBytes(16).toString("base64");
@@ -58223,10 +58167,10 @@ var init_client = __esm({
 import { AsyncLocalStorage } from "async_hooks";
 import { createServer } from "http";
 import { finished } from "stream";
-import { homedir as homedir5 } from "os";
+import { homedir as homedir6 } from "os";
 import { join as join8 } from "path";
 import { mkdir as mkdir3, writeFile as writeFile2, readFile, stat as fsStat } from "fs/promises";
-import { readFileSync as readFileSync2, existsSync } from "fs";
+import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
 
 // node_modules/viem/_esm/utils/getAction.js
 function getAction(client, actionFn, name) {
@@ -75530,6 +75474,90 @@ var BalanceMonitor = class {
 // src/proxy.ts
 init_auth();
 
+// src/okx-x402-fetch.ts
+function createOnchainosPayFetch(baseFetch, onchainos) {
+  return async (input, init) => {
+    const original = new Request(input, init);
+    const bodyBuf = await original.clone().arrayBuffer();
+    const headersSnapshot = new Headers(original.headers);
+    const firstResponse = await baseFetch(original);
+    if (firstResponse.status !== 402) return firstResponse;
+    const paymentRequiredHeader = firstResponse.headers.get("PAYMENT-REQUIRED");
+    let requirement;
+    let isV2 = false;
+    let accepts;
+    if (paymentRequiredHeader) {
+      isV2 = true;
+      requirement = JSON.parse(
+        Buffer.from(paymentRequiredHeader, "base64").toString()
+      );
+      accepts = requirement.accepted ? [requirement.accepted] : requirement.accepts ?? [];
+    } else {
+      const text = await firstResponse.text();
+      try {
+        requirement = JSON.parse(text);
+      } catch {
+        return new Response(text, {
+          status: 402,
+          headers: firstResponse.headers
+        });
+      }
+      accepts = requirement.accepts ?? [];
+    }
+    if (accepts.length === 0) {
+      throw new Error(
+        `x402 402 response had no payment options to satisfy (onchainos cannot sign without an 'accepts' array)`
+      );
+    }
+    const payment = await onchainos.signX402Payment(accepts);
+    const accepted = accepts[0] ?? {};
+    const payload = {
+      signature: payment.signature,
+      authorization: payment.authorization
+    };
+    let headerName;
+    let headerValue;
+    if (isV2) {
+      const acceptedWithCert = { ...accepted };
+      if (accepted.scheme === "aggr_deferred" && payment.sessionCert) {
+        acceptedWithCert.extra = {
+          ...accepted.extra ?? {},
+          sessionCert: payment.sessionCert
+        };
+      }
+      headerName = "PAYMENT-SIGNATURE";
+      headerValue = Buffer.from(
+        JSON.stringify({
+          x402Version: requirement.x402Version ?? 2,
+          resource: requirement.resource ?? { url: original.url },
+          accepted: acceptedWithCert,
+          payload
+        })
+      ).toString("base64");
+    } else {
+      headerName = "X-PAYMENT";
+      headerValue = Buffer.from(
+        JSON.stringify({
+          x402Version: 1,
+          scheme: accepted.scheme,
+          network: accepted.network,
+          payload
+        })
+      ).toString("base64");
+    }
+    const replayHeaders = new Headers(headersSnapshot);
+    replayHeaders.set(headerName, headerValue);
+    const replayInit = {
+      method: original.method,
+      headers: replayHeaders,
+      body: original.method === "GET" || original.method === "HEAD" ? void 0 : bodyBuf,
+      redirect: original.redirect,
+      credentials: original.credentials
+    };
+    return baseFetch(original.url, replayInit);
+  };
+}
+
 // src/compression/types.ts
 var DEFAULT_COMPRESSION_CONFIG = {
   enabled: true,
@@ -76539,8 +76567,8 @@ async function checkForUpdates() {
 // src/exclude-models.ts
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join as join7, dirname as dirname2 } from "path";
-import { homedir as homedir4 } from "os";
-var DEFAULT_FILE_PATH = join7(homedir4(), ".openclaw", "blockrun", "exclude-models.json");
+import { homedir as homedir5 } from "os";
+var DEFAULT_FILE_PATH = join7(homedir5(), ".openclaw", "blockrun", "exclude-models.json");
 function loadExcludeList(filePath = DEFAULT_FILE_PATH) {
   try {
     const raw = readFileSync(filePath, "utf-8");
@@ -76775,9 +76803,9 @@ async function applyUpstreamProxy(proxyUrl) {
 var paymentStore = new AsyncLocalStorage();
 var BLOCKRUN_API = "https://blockrun.ai/api";
 var BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
-var IMAGE_DIR = join8(homedir5(), ".openclaw", "blockrun", "images");
-var AUDIO_DIR = join8(homedir5(), ".openclaw", "blockrun", "audio");
-var VIDEO_DIR = join8(homedir5(), ".openclaw", "blockrun", "videos");
+var IMAGE_DIR = join8(homedir6(), ".openclaw", "blockrun", "images");
+var AUDIO_DIR = join8(homedir6(), ".openclaw", "blockrun", "audio");
+var VIDEO_DIR = join8(homedir6(), ".openclaw", "blockrun", "videos");
 var AUTO_MODEL = "blockrun/auto";
 var ROUTING_PROFILES = /* @__PURE__ */ new Set([
   "blockrun/eco",
@@ -77575,8 +77603,8 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   });
 }
 function readImageFileAsDataUri(filePath) {
-  const resolved = filePath.startsWith("~/") ? join8(homedir5(), filePath.slice(2)) : filePath;
-  if (!existsSync(resolved)) {
+  const resolved = filePath.startsWith("~/") ? join8(homedir6(), filePath.slice(2)) : filePath;
+  if (!existsSync2(resolved)) {
     throw new Error(`Image file not found: ${resolved}`);
   }
   const ext = resolved.split(".").pop()?.toLowerCase() ?? "png";
@@ -77623,8 +77651,17 @@ async function startProxy(options) {
   if (upstreamProxy) {
     console.log(`[XClawRouter] Upstream proxy: ${upstreamProxy}`);
   }
-  const walletKey = typeof options.wallet === "string" ? options.wallet : options.wallet.key;
-  const solanaPrivateKeyBytes = typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
+  const walletObj = typeof options.wallet === "string" ? void 0 : options.wallet;
+  const isOkxWallet = walletObj !== void 0 && "source" in walletObj && walletObj.source === "okx" && walletObj.onchainos !== void 0;
+  const walletKey = typeof options.wallet === "string" ? options.wallet : walletObj?.key;
+  const solanaPrivateKeyBytes = walletObj?.solanaPrivateKeyBytes;
+  const okxAdapter = isOkxWallet ? walletObj?.onchainos : void 0;
+  const okxAddress = isOkxWallet ? walletObj.address : void 0;
+  if (!walletKey && !okxAdapter) {
+    throw new Error(
+      "Wallet config has no signing backend: provide a private key or an OKX onchainos wallet."
+    );
+  }
   const paymentChain = options.paymentChain ?? await resolvePaymentChain();
   const apiBase = options.apiBase ?? (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
   if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
@@ -77641,11 +77678,11 @@ async function startProxy(options) {
   const listenPort = options.port ?? getProxyPort();
   const existingProxy = await checkExistingProxy(listenPort);
   if (existingProxy) {
-    const account2 = privateKeyToAccount(walletKey);
+    const expectedAddress = okxAddress ?? privateKeyToAccount(walletKey).address;
     const baseUrl2 = `http://127.0.0.1:${listenPort}`;
-    if (existingProxy.wallet !== account2.address) {
+    if (existingProxy.wallet !== expectedAddress) {
       console.warn(
-        `[XClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`
+        `[XClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${expectedAddress}. Reusing existing proxy.`
       );
     }
     if (existingProxy.paymentChain) {
@@ -77673,7 +77710,7 @@ async function startProxy(options) {
       const { SolanaBalanceMonitor: SolanaBalanceMonitor2 } = await Promise.resolve().then(() => (init_solana_balance(), solana_balance_exports));
       balanceMonitor2 = new SolanaBalanceMonitor2(reuseSolanaAddress);
     } else {
-      balanceMonitor2 = new BalanceMonitor(account2.address);
+      balanceMonitor2 = new BalanceMonitor(expectedAddress);
     }
     options.onReady?.(listenPort);
     return {
@@ -77686,20 +77723,13 @@ async function startProxy(options) {
       }
     };
   }
-  const useOnchainos = process.env.XCLAWROUTER_USE_ONCHAINOS === "1";
+  const useOnchainos = !!okxAdapter;
   const evmPublicClient = createPublicClient({ chain: base, transport: http() });
   const x402 = new x402Client();
   let account;
-  let walletAdapter;
   if (useOnchainos) {
-    walletAdapter = resolveWalletAdapter({
-      enableSolana: !!solanaPrivateKeyBytes || paymentChain === "solana"
-    });
-    const evmAddress = await walletAdapter.evm.getAddress();
-    account = { address: evmAddress };
-    const evmSigner = await walletAdapter.evm.toX402Signer(evmPublicClient);
-    registerExactEvmScheme(x402, { signer: evmSigner });
-    console.log(`[XClawRouter] Agentic wallet (onchainos) \u2014 EVM ${evmAddress}`);
+    account = { address: okxAddress };
+    console.log(`[XClawRouter] OKX onchainos wallet \u2014 EVM ${okxAddress}`);
   } else {
     const acct = privateKeyToAccount(walletKey);
     account = { address: acct.address };
@@ -77728,7 +77758,7 @@ async function startProxy(options) {
     if (store) store.amountUsd = amountUsd;
     console.log(`[XClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsd.toFixed(6)}`);
   });
-  const payFetch = createPayFetchWithPreAuth(fetch, x402, void 0, {
+  const payFetch = useOnchainos ? createOnchainosPayFetch(fetch, okxAdapter) : createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana"
   });
   let balanceMonitor;
@@ -80555,7 +80585,7 @@ function capitalize(str) {
 import { platform, arch, freemem, totalmem } from "os";
 init_accounts();
 init_auth();
-import { existsSync as existsSync2, readFileSync as readFileSync3 } from "fs";
+import { existsSync as existsSync3, readFileSync as readFileSync3 } from "fs";
 init_wallet();
 function formatBytes(bytes) {
   const gb = bytes / (1024 * 1024 * 1024);
@@ -80845,7 +80875,7 @@ async function analyzeWithAI(diagnostics, userQuestion, model = "sonnet") {
     const paymentChain = diagnostics.wallet.paymentChain;
     if (paymentChain === "solana") {
       try {
-        if (!existsSync2(MNEMONIC_FILE)) {
+        if (!existsSync3(MNEMONIC_FILE)) {
           throw new Error(`mnemonic file missing at ${MNEMONIC_FILE}`);
         }
         const mnemonic = readFileSync3(MNEMONIC_FILE, "utf8").trim();
@@ -81692,11 +81722,11 @@ ClawRouter Partner APIs (v${VERSION})
   if (args.chain) {
     const targetChain = args.chain;
     if (targetChain === "solana") {
-      const { existsSync: existsSync3 } = await import("fs");
+      const { existsSync: existsSync4 } = await import("fs");
       const { MNEMONIC_FILE: MNEMONIC_FILE2, setupSolana: setupSolana2 } = await Promise.resolve().then(() => (init_auth(), auth_exports));
       const { deriveSolanaKeyBytes: deriveSolanaKeyBytes2, getSolanaAddress: getSolanaAddress2 } = await Promise.resolve().then(() => (init_wallet(), wallet_exports));
       let solanaAddr;
-      if (existsSync3(MNEMONIC_FILE2)) {
+      if (existsSync4(MNEMONIC_FILE2)) {
         const { readFileSync: readFileSync4 } = await import("fs");
         const mnemonic = readFileSync4(MNEMONIC_FILE2, "utf8").trim();
         const keyBytes = deriveSolanaKeyBytes2(mnemonic);
@@ -81729,8 +81759,15 @@ ClawRouter Partner APIs (v${VERSION})
     process.exit(0);
   }
   const wallet = await resolveOrGenerateWalletKey();
-  if (wallet.source === "generated") {
+  if (wallet.source === "okx") {
+    console.log(
+      `[XClawRouter] Using OKX onchainos wallet: ${wallet.address}${wallet.email ? ` (${wallet.email})` : ""}`
+    );
+  } else if (wallet.source === "generated") {
     console.log(`[XClawRouter] Generated new wallet: ${wallet.address}`);
+    console.log(
+      `[XClawRouter] Tip: install OKX onchainos to use your OKX wallet \u2014 https://web3.okx.com/onchainos`
+    );
   } else if (wallet.source === "saved") {
     console.log(`[XClawRouter] Using saved wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {

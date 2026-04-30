@@ -480,8 +480,15 @@ async function main(): Promise<void> {
   // Resolve wallet key
   const wallet = await resolveOrGenerateWalletKey();
 
-  if (wallet.source === "generated") {
+  if (wallet.source === "okx") {
+    console.log(
+      `[XClawRouter] Using OKX onchainos wallet: ${wallet.address}${wallet.email ? ` (${wallet.email})` : ""}`,
+    );
+  } else if (wallet.source === "generated") {
     console.log(`[XClawRouter] Generated new wallet: ${wallet.address}`);
+    console.log(
+      `[XClawRouter] Tip: install OKX onchainos to use your OKX wallet — https://web3.okx.com/onchainos`,
+    );
   } else if (wallet.source === "saved") {
     console.log(`[XClawRouter] Using saved wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {

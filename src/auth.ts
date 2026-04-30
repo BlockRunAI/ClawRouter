@@ -1,15 +1,17 @@
 /**
  * XClawRouter wallet resolution.
  *
- * XClawRouter delegates wallet state (keys, login, signing) to OKX's `onchainos`
- * CLI via the OnchainOsAdapter. The legacy BIP-39 helpers below remain during
- * the migration so callers can be moved to the adapter one at a time — new code
- * should use `resolveWalletAdapter()` and not touch the legacy exports.
+ * Wallet identity is resolved in this order:
+ *   1. OKX onchainos CLI (if installed AND user is logged in) — preferred.
+ *      Private keys never enter this process; signing happens via
+ *      `onchainos payment x402-pay`. See onchainos-adapter.ts.
+ *   2. Saved wallet.key file (legacy BIP-39 path)
+ *   3. BLOCKRUN_WALLET_KEY env var (legacy)
+ *   4. Auto-generated BIP-39 wallet (legacy fallback when no OKX wallet)
  *
- * Migration targets (remove once adapter adoption is complete):
- *   - resolveOrGenerateWalletKey / WalletResolution
- *   - recoverWalletFromMnemonic / setupSolana
- *   - WALLET_FILE / MNEMONIC_FILE / walletKeyAuth / envKeyAuth
+ * The legacy BIP-39 path remains so users without onchainos still work, but
+ * fresh installs that have onchainos installed and signed in will use the
+ * OKX wallet identity instead of generating a new local key.
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
@@ -27,27 +29,33 @@ import {
   getSolanaAddress,
 } from "./wallet.js";
 import { OnchainOsAdapter } from "./onchainos-adapter.js";
-import type { WalletAdapter } from "./wallet-adapter.js";
 
 // ---------------------------------------------------------------------------
-// Adapter path (onchainos). New callers should use this.
+// OKX onchainos detection
 // ---------------------------------------------------------------------------
 
 /**
- * Build a WalletAdapter backed by OKX's `onchainos` CLI.
- *
- * Solana support is gated on `XCLAWROUTER_ENABLE_SOLANA=1` — flip the default
- * once OKX confirms onchainos signs Solana transactions end-to-end.
+ * Detect an OKX onchainos wallet. Returns the EVM address if onchainos is
+ * installed AND the user is logged in. Returns undefined otherwise so callers
+ * fall back to the legacy local-key path.
  */
-export function resolveWalletAdapter(opts?: {
-  enableSolana?: boolean;
-  bin?: string;
-}): WalletAdapter {
-  const enableSolana = opts?.enableSolana ?? process.env.XCLAWROUTER_ENABLE_SOLANA === "1";
-  return new OnchainOsAdapter({
-    bin: opts?.bin,
-    enableSolana,
-  });
+export async function detectOnchainosWallet(): Promise<
+  | {
+      address: `0x${string}`;
+      email?: string;
+      adapter: OnchainOsAdapter;
+    }
+  | undefined
+> {
+  const adapter = new OnchainOsAdapter();
+  if (!adapter.isInstalled()) return undefined;
+  try {
+    const status = await adapter.status();
+    if (!status.loggedIn || !status.evmAddress) return undefined;
+    return { address: status.evmAddress, email: status.email, adapter };
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +97,7 @@ export async function resolvePaymentChain(): Promise<"base" | "solana"> {
 }
 
 // ---------------------------------------------------------------------------
-// Legacy BIP-39 path. Remove once all callers use resolveWalletAdapter().
+// Local-key path (used when onchainos is unavailable)
 // ---------------------------------------------------------------------------
 
 async function loadSavedWallet(): Promise<string | undefined> {
@@ -174,16 +182,44 @@ async function generateAndSaveWallet(): Promise<{
   };
 }
 
+/**
+ * Result of wallet resolution.
+ *
+ * - `source: "okx"` — OKX onchainos wallet is connected. `key` is undefined
+ *   because signing is delegated to onchainos (no private key in this process).
+ *   `onchainos` is the adapter the proxy uses to sign x402 payments.
+ * - `source: "saved" | "env" | "config" | "generated"` — local key path.
+ */
 export type WalletResolution = {
-  key: string;
+  key?: string;
   address: string;
-  source: "saved" | "env" | "config" | "generated";
+  source: "saved" | "env" | "config" | "generated" | "okx";
   mnemonic?: string;
   solanaPrivateKeyBytes?: Uint8Array;
+  onchainos?: OnchainOsAdapter;
+  email?: string;
 };
 
-/** @deprecated Legacy BIP-39 path. Use `resolveWalletAdapter()` instead. */
+/**
+ * Resolve the wallet identity, preferring OKX onchainos when available.
+ *
+ * If onchainos is installed and logged in, returns its EVM address as the
+ * wallet identity (no local key). Otherwise falls back to the legacy
+ * local-key flow: saved file → env var → auto-generate.
+ */
 export async function resolveOrGenerateWalletKey(): Promise<WalletResolution> {
+  // 1. Prefer OKX onchainos when installed + logged in.
+  const onchainos = await detectOnchainosWallet();
+  if (onchainos) {
+    return {
+      address: onchainos.address,
+      source: "okx",
+      onchainos: onchainos.adapter,
+      email: onchainos.email,
+    };
+  }
+
+  // 2. Legacy local-key path.
   const saved = await loadSavedWallet();
   if (saved) {
     const account = privateKeyToAccount(saved as `0x${string}`);
@@ -228,7 +264,7 @@ export async function resolveOrGenerateWalletKey(): Promise<WalletResolution> {
   };
 }
 
-/** @deprecated Legacy BIP-39 recovery flow. */
+/** Restore wallet.key from an existing mnemonic file. */
 export async function recoverWalletFromMnemonic(): Promise<void> {
   const mnemonic = await loadMnemonic();
   if (!mnemonic) {
@@ -254,7 +290,7 @@ export async function recoverWalletFromMnemonic(): Promise<void> {
   console.log(`[XClawRouter] ✓ wallet.key restored at ${WALLET_FILE}`);
 }
 
-/** @deprecated Legacy Solana setup flow. */
+/** Set up Solana for an existing local-key wallet. Not used in OKX mode. */
 export async function setupSolana(): Promise<{
   mnemonic: string;
   solanaPrivateKeyBytes: Uint8Array;

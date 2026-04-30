@@ -1,53 +1,62 @@
 /**
- * OnchainOsAdapter — WalletAdapter backed by OKX's `onchainos` CLI.
+ * OnchainOsAdapter — thin wrapper around OKX's `onchainos` CLI.
  *
- * The CLI owns wallet state (email login, key material, auto-topup); this
- * adapter shells out to it whenever the proxy needs an address or signature.
- * No private keys ever live in XClawRouter's process memory.
+ * The CLI owns wallet state (email login, key material, on-chain interaction).
+ * XClawRouter shells out to it for wallet identity and x402 payment signing
+ * so private keys never live in this process.
  *
- * CLI surface (working assumption — verify against OKX docs before shipping):
- *   onchainos wallet status --json
- *     → { connected: bool, email?: string, evm?: "0x…", solana?: "…" }
- *   onchainos wallet login <email>
+ * CLI surface used here (verified against okxclawrouter sample):
+ *   onchainos --version
+ *   onchainos wallet status                → { data: { loggedIn, evmAddress?, email? } }
+ *   onchainos wallet addresses             → { data: { evm?: [...], xlayer?: [...], solana?: [...] } }
+ *   onchainos wallet login <email>         (interactive)
  *   onchainos wallet logout
- *   onchainos sign typed-data --chain <base|solana> --data <json-stdin>
- *     → { signature: "0x…" } for EVM
- *   onchainos sign solana-transaction --transaction <base64-stdin>
- *     → { signedTransaction: "<base64>" } for Solana
+ *   onchainos payment x402-pay --accepts <json>
+ *                                          → { data: { signature, authorization, sessionCert? } }
  *
- * If OKX exposes different commands, change the four wrapper functions
- * (runStatus, runLogin, runLogout, runSign*) — the rest of the codebase
- * depends only on the WalletAdapter interface.
+ * Raw EIP-712 / typed-data signing is NOT exposed by onchainos, so we use
+ * `payment x402-pay` for the entire signing step rather than the @x402/fetch
+ * signer plumbing. See proxy.ts for the call site.
  */
 
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { promisify } from "node:util";
-
-import type { ClientEvmSigner } from "@x402/evm";
-import type { ClientSvmSigner } from "@x402/svm";
-
-import type {
-  EvmWalletAdapter,
-  SvmWalletAdapter,
-  WalletAdapter,
-  WalletStatus,
-} from "./wallet-adapter.js";
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_BIN = "onchainos";
 const DEFAULT_TIMEOUT_MS = 30_000;
+const PAYMENT_TIMEOUT_MS = 30_000;
 
-export interface OnchainOsAdapterOptions {
-  /** Override the CLI binary path (defaults to `onchainos` on PATH). */
-  bin?: string;
-  /** Per-command timeout in ms. Signing should return well under this. */
-  timeoutMs?: number;
-  /** If true, expose the Solana adapter. Gated on onchainos capability. */
-  enableSolana?: boolean;
+const FALLBACK_CANDIDATES = [
+  `${homedir()}/.local/bin/onchainos`,
+  "/opt/homebrew/bin/onchainos",
+  "/usr/local/bin/onchainos",
+];
+
+export interface OnchainOsStatus {
+  loggedIn: boolean;
+  email?: string;
+  evmAddress?: `0x${string}`;
+  solanaAddress?: string;
 }
 
-class OnchainOsCliError extends Error {
+export interface OnchainOsX402Payment {
+  signature: string;
+  authorization: Record<string, unknown>;
+  sessionCert?: string;
+}
+
+export interface OnchainOsAdapterOptions {
+  /** Override the CLI binary path. Defaults to env var, then PATH, then common installs. */
+  bin?: string;
+  /** Per-command timeout in ms. */
+  timeoutMs?: number;
+}
+
+export class OnchainOsCliError extends Error {
   constructor(
     message: string,
     readonly stderr?: string,
@@ -58,14 +67,16 @@ class OnchainOsCliError extends Error {
   }
 }
 
-async function runCli(
-  bin: string,
-  args: string[],
-  opts: { input?: string; timeoutMs: number },
-): Promise<string> {
-  if (opts.input !== undefined) {
-    return runWithStdin(bin, args, opts.input, opts.timeoutMs);
-  }
+/** Resolve the onchainos binary using env var → PATH → common install locations. */
+export function resolveOnchainosBin(override?: string): string {
+  if (override) return override;
+  const env = process.env.XCLAWROUTER_ONCHAINOS_BIN ?? process.env.ONCHAINOS_BIN;
+  if (env) return env;
+  const fallback = FALLBACK_CANDIDATES.find((candidate) => existsSync(candidate));
+  return fallback ?? DEFAULT_BIN;
+}
+
+async function runCli(bin: string, args: string[], opts: { timeoutMs: number }): Promise<string> {
   try {
     const { stdout } = await execFileAsync(bin, args, {
       timeout: opts.timeoutMs,
@@ -77,54 +88,6 @@ async function runCli(
   }
 }
 
-function runWithStdin(
-  bin: string,
-  args: string[],
-  input: string,
-  timeoutMs: number,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let child;
-    try {
-      child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
-    } catch (err) {
-      reject(wrapCliError(err, bin, args));
-      return;
-    }
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(
-        new OnchainOsCliError(`onchainos ${args.join(" ")} timed out after ${timeoutMs}ms`, stderr),
-      );
-    }, timeoutMs);
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      reject(wrapCliError(err, bin, args));
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(stdout);
-      else
-        reject(
-          new OnchainOsCliError(
-            `onchainos ${args.join(" ")} exited with code ${code}`,
-            stderr,
-            code,
-          ),
-        );
-    });
-    child.stdin.end(input);
-  });
-}
-
 function wrapCliError(err: unknown, bin: string, args: string[]): OnchainOsCliError {
   const e = err as NodeJS.ErrnoException & {
     stderr?: string;
@@ -132,8 +95,9 @@ function wrapCliError(err: unknown, bin: string, args: string[]): OnchainOsCliEr
   };
   if (e.code === "ENOENT") {
     return new OnchainOsCliError(
-      `onchainos CLI not found at "${bin}". Install OKX's agentic wallet CLI and ensure it is on PATH, ` +
-        `or set XCLAWROUTER_ONCHAINOS_BIN to the binary location.`,
+      `onchainos CLI not found at "${bin}". Install OKX's agentic wallet CLI ` +
+        `(https://web3.okx.com/onchainos) and ensure it is on PATH, or set ` +
+        `XCLAWROUTER_ONCHAINOS_BIN to the binary location.`,
     );
   }
   return new OnchainOsCliError(
@@ -141,161 +105,6 @@ function wrapCliError(err: unknown, bin: string, args: string[]): OnchainOsCliEr
     e.stderr,
     typeof e.code === "number" ? e.code : null,
   );
-}
-
-interface RawStatus {
-  connected: boolean;
-  email?: string;
-  evm?: string;
-  solana?: string;
-}
-
-export class OnchainOsAdapter implements WalletAdapter {
-  readonly evm: EvmWalletAdapter;
-  readonly svm?: SvmWalletAdapter;
-
-  private readonly bin: string;
-  private readonly timeoutMs: number;
-
-  constructor(opts: OnchainOsAdapterOptions = {}) {
-    this.bin = opts.bin ?? process.env.XCLAWROUTER_ONCHAINOS_BIN ?? DEFAULT_BIN;
-    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.evm = new OnchainOsEvmAdapter(this);
-    if (opts.enableSolana) {
-      this.svm = new OnchainOsSvmAdapter(this);
-    }
-  }
-
-  async status(): Promise<WalletStatus> {
-    const stdout = await runCli(this.bin, ["wallet", "status", "--json"], {
-      timeoutMs: this.timeoutMs,
-    });
-    const raw = parseJson<RawStatus>(stdout, "wallet status");
-    return {
-      connected: Boolean(raw.connected),
-      email: raw.email,
-      evmAddress: raw.evm as `0x${string}` | undefined,
-      solanaAddress: raw.solana,
-    };
-  }
-
-  async login(email: string): Promise<void> {
-    if (!email.includes("@")) {
-      throw new Error(`Invalid email address: ${email}`);
-    }
-    await runCli(this.bin, ["wallet", "login", email], {
-      // Login involves a confirmation step; allow more time than a signing op.
-      timeoutMs: 5 * 60_000,
-    });
-  }
-
-  async logout(): Promise<void> {
-    await runCli(this.bin, ["wallet", "logout"], { timeoutMs: this.timeoutMs });
-  }
-
-  /** Internal: sign EIP-712 typed data via the CLI. */
-  async signTypedDataEvm(args: {
-    chain: "base";
-    domain: Record<string, unknown>;
-    types: Record<string, unknown>;
-    primaryType: string;
-    message: Record<string, unknown>;
-  }): Promise<`0x${string}`> {
-    const payload = JSON.stringify({
-      domain: args.domain,
-      types: args.types,
-      primaryType: args.primaryType,
-      message: args.message,
-    });
-    const stdout = await runCli(
-      this.bin,
-      ["sign", "typed-data", "--chain", args.chain, "--data", "-"],
-      { input: payload, timeoutMs: this.timeoutMs },
-    );
-    const parsed = parseJson<{ signature: string }>(stdout, "sign typed-data");
-    if (!parsed.signature?.startsWith("0x")) {
-      throw new OnchainOsCliError(`onchainos returned an invalid signature: ${parsed.signature}`);
-    }
-    return parsed.signature as `0x${string}`;
-  }
-
-  /** Internal: sign a partially-signed Solana transaction via the CLI. */
-  async signSolanaTransaction(transactionBase64: string): Promise<string> {
-    const stdout = await runCli(this.bin, ["sign", "solana-transaction", "--transaction", "-"], {
-      input: transactionBase64,
-      timeoutMs: this.timeoutMs,
-    });
-    const parsed = parseJson<{ signedTransaction: string }>(stdout, "sign solana-transaction");
-    if (!parsed.signedTransaction) {
-      throw new OnchainOsCliError("onchainos returned no signedTransaction for Solana signing.");
-    }
-    return parsed.signedTransaction;
-  }
-}
-
-class OnchainOsEvmAdapter implements EvmWalletAdapter {
-  constructor(private readonly parent: OnchainOsAdapter) {}
-
-  async getAddress(): Promise<`0x${string}`> {
-    const s = await this.parent.status();
-    if (!s.evmAddress) {
-      throw new Error("onchainos reports no EVM address. Run `/wallet login <email>` to connect.");
-    }
-    return s.evmAddress;
-  }
-
-  async toX402Signer(publicClient?: {
-    readContract(args: {
-      address: `0x${string}`;
-      abi: readonly unknown[];
-      functionName: string;
-      args?: readonly unknown[];
-    }): Promise<unknown>;
-  }): Promise<ClientEvmSigner> {
-    const address = await this.getAddress();
-    const parent = this.parent;
-    const signer: ClientEvmSigner = {
-      address,
-      async signTypedData(message) {
-        return parent.signTypedDataEvm({
-          chain: "base",
-          domain: message.domain,
-          types: message.types,
-          primaryType: message.primaryType,
-          message: message.message,
-        });
-      },
-      readContract: publicClient?.readContract.bind(publicClient),
-    };
-    return signer;
-  }
-}
-
-class OnchainOsSvmAdapter implements SvmWalletAdapter {
-  constructor(private readonly parent: OnchainOsAdapter) {}
-
-  async getAddress(): Promise<string> {
-    const s = await this.parent.status();
-    if (!s.solanaAddress) {
-      throw new Error(
-        "onchainos reports no Solana address. Either Solana support is not available " +
-          "in this onchainos release, or the wallet is not connected.",
-      );
-    }
-    return s.solanaAddress;
-  }
-
-  async toX402Signer(): Promise<ClientSvmSigner> {
-    // @x402/svm's ClientSvmSigner is @solana/kit's TransactionSigner. Building
-    // a TransactionSigner that delegates to an out-of-process CLI is non-trivial:
-    // we need a signer that can partial-sign transactions and return them in the
-    // @solana/kit-native shape. We defer this until OKX confirms onchainos exposes
-    // the primitives we need.
-    throw new Error(
-      "Solana signing via onchainos is not yet implemented. Use Base chain for now, " +
-        "or disable Solana support via CLI (`/chain base`).",
-    );
-  }
 }
 
 function parseJson<T>(stdout: string, label: string): T {
@@ -312,4 +121,103 @@ function parseJson<T>(stdout: string, label: string): T {
   }
 }
 
-export { OnchainOsCliError };
+/**
+ * Many onchainos commands wrap their result in `{ data: ... }`. Some return the
+ * payload directly. Accept both shapes so callers don't have to care.
+ */
+function unwrapData<T>(parsed: unknown): T {
+  if (parsed && typeof parsed === "object" && "data" in parsed) {
+    const inner = (parsed as { data?: unknown }).data;
+    if (inner !== undefined && inner !== null) return inner as T;
+  }
+  return parsed as T;
+}
+
+export class OnchainOsAdapter {
+  private readonly bin: string;
+  private readonly timeoutMs: number;
+
+  constructor(opts: OnchainOsAdapterOptions = {}) {
+    this.bin = resolveOnchainosBin(opts.bin);
+    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
+
+  /** Quick, synchronous probe — does the binary exist and respond to --version? */
+  isInstalled(): boolean {
+    try {
+      execFileSync(this.bin, ["--version"], {
+        encoding: "utf-8",
+        stdio: "pipe",
+        timeout: 5_000,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async status(): Promise<OnchainOsStatus> {
+    const stdout = await runCli(this.bin, ["wallet", "status"], {
+      timeoutMs: this.timeoutMs,
+    });
+    const raw = unwrapData<{
+      loggedIn?: boolean;
+      connected?: boolean;
+      email?: string;
+      evmAddress?: string;
+      evm?: string;
+      solanaAddress?: string;
+      solana?: string;
+    }>(parseJson(stdout, "wallet status"));
+
+    const loggedIn = Boolean(raw.loggedIn ?? raw.connected);
+    const evmAddress = (raw.evmAddress ?? raw.evm) as `0x${string}` | undefined;
+    const solanaAddress = raw.solanaAddress ?? raw.solana;
+    return {
+      loggedIn,
+      email: raw.email,
+      evmAddress: evmAddress?.startsWith("0x") ? evmAddress : undefined,
+      solanaAddress,
+    };
+  }
+
+  async login(email: string): Promise<void> {
+    if (!email.includes("@")) {
+      throw new Error(`Invalid email address: ${email}`);
+    }
+    // Login involves an interactive verification step; allow more time.
+    await runCli(this.bin, ["wallet", "login", email], { timeoutMs: 5 * 60_000 });
+  }
+
+  async logout(): Promise<void> {
+    await runCli(this.bin, ["wallet", "logout"], { timeoutMs: this.timeoutMs });
+  }
+
+  /**
+   * Sign an x402 payment via onchainos. Pass through the full `accepts` array
+   * from the 402 response — onchainos picks the chain/scheme it can satisfy.
+   */
+  async signX402Payment(accepts: unknown[]): Promise<OnchainOsX402Payment> {
+    const acceptsJson = JSON.stringify(accepts);
+    const stdout = await runCli(this.bin, ["payment", "x402-pay", "--accepts", acceptsJson], {
+      timeoutMs: PAYMENT_TIMEOUT_MS,
+    });
+    const parsed = parseJson<unknown>(stdout, "payment x402-pay");
+    const result = unwrapData<Partial<OnchainOsX402Payment>>(parsed);
+    if (!result.signature || typeof result.signature !== "string") {
+      throw new OnchainOsCliError(
+        `onchainos payment x402-pay returned no signature: ${JSON.stringify(parsed).slice(0, 500)}`,
+      );
+    }
+    if (!result.authorization || typeof result.authorization !== "object") {
+      throw new OnchainOsCliError(
+        `onchainos payment x402-pay returned no authorization: ${JSON.stringify(parsed).slice(0, 500)}`,
+      );
+    }
+    return {
+      signature: result.signature,
+      authorization: result.authorization as Record<string, unknown>,
+      sessionCert: typeof result.sessionCert === "string" ? result.sessionCert : undefined,
+    };
+  }
+}

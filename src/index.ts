@@ -722,12 +722,18 @@ async function startProxyInBackground(
   }
 
   // Log wallet source
-  if (wallet.source === "generated") {
+  if (wallet.source === "okx") {
+    api.logger.info(
+      `Using OKX onchainos wallet: ${wallet.address}${wallet.email ? ` (${wallet.email})` : ""}`,
+    );
+  } else if (wallet.source === "generated") {
     api.logger.warn(`════════════════════════════════════════════════`);
     api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
     api.logger.warn(`  Address : ${wallet.address}`);
     api.logger.warn(`  Run /wallet export to get your private key`);
     api.logger.warn(`  Losing this key = losing your USDC funds`);
+    api.logger.warn(`  Or install OKX onchainos to use your OKX wallet:`);
+    api.logger.warn(`     https://web3.okx.com/onchainos`);
     api.logger.warn(`════════════════════════════════════════════════`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
@@ -1692,13 +1698,19 @@ const plugin: OpenClawPluginDefinition = {
         // Generate wallet on first install (even outside gateway mode)
         // This ensures users can see their wallet address immediately after install
         resolveOrGenerateWalletKey()
-          .then(({ address, source }) => {
-            if (source === "generated") {
+          .then(({ address, source, email }) => {
+            if (source === "okx") {
+              api.logger.info(
+                `Using OKX onchainos wallet: ${address}${email ? ` (${email})` : ""}`,
+              );
+            } else if (source === "generated") {
               api.logger.warn(`════════════════════════════════════════════════`);
               api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
               api.logger.warn(`  Address : ${address}`);
               api.logger.warn(`  Run /wallet export to get your private key`);
               api.logger.warn(`  Losing this key = losing your USDC funds`);
+              api.logger.warn(`  Or install OKX onchainos to use your OKX wallet:`);
+              api.logger.warn(`     https://web3.okx.com/onchainos`);
               api.logger.warn(`════════════════════════════════════════════════`);
             } else if (source === "saved") {
               api.logger.info(`Using saved wallet: ${address}`);

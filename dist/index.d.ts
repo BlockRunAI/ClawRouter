@@ -758,6 +758,106 @@ declare class SolanaBalanceMonitor {
 }
 
 /**
+ * OnchainOsAdapter — thin wrapper around OKX's `onchainos` CLI.
+ *
+ * The CLI owns wallet state (email login, key material, on-chain interaction).
+ * XClawRouter shells out to it for wallet identity and x402 payment signing
+ * so private keys never live in this process.
+ *
+ * CLI surface used here (verified against okxclawrouter sample):
+ *   onchainos --version
+ *   onchainos wallet status                → { data: { loggedIn, evmAddress?, email? } }
+ *   onchainos wallet addresses             → { data: { evm?: [...], xlayer?: [...], solana?: [...] } }
+ *   onchainos wallet login <email>         (interactive)
+ *   onchainos wallet logout
+ *   onchainos payment x402-pay --accepts <json>
+ *                                          → { data: { signature, authorization, sessionCert? } }
+ *
+ * Raw EIP-712 / typed-data signing is NOT exposed by onchainos, so we use
+ * `payment x402-pay` for the entire signing step rather than the @x402/fetch
+ * signer plumbing. See proxy.ts for the call site.
+ */
+interface OnchainOsStatus {
+    loggedIn: boolean;
+    email?: string;
+    evmAddress?: `0x${string}`;
+    solanaAddress?: string;
+}
+interface OnchainOsX402Payment {
+    signature: string;
+    authorization: Record<string, unknown>;
+    sessionCert?: string;
+}
+interface OnchainOsAdapterOptions {
+    /** Override the CLI binary path. Defaults to env var, then PATH, then common installs. */
+    bin?: string;
+    /** Per-command timeout in ms. */
+    timeoutMs?: number;
+}
+declare class OnchainOsAdapter {
+    private readonly bin;
+    private readonly timeoutMs;
+    constructor(opts?: OnchainOsAdapterOptions);
+    /** Quick, synchronous probe — does the binary exist and respond to --version? */
+    isInstalled(): boolean;
+    status(): Promise<OnchainOsStatus>;
+    login(email: string): Promise<void>;
+    logout(): Promise<void>;
+    /**
+     * Sign an x402 payment via onchainos. Pass through the full `accepts` array
+     * from the 402 response — onchainos picks the chain/scheme it can satisfy.
+     */
+    signX402Payment(accepts: unknown[]): Promise<OnchainOsX402Payment>;
+}
+
+/**
+ * XClawRouter wallet resolution.
+ *
+ * Wallet identity is resolved in this order:
+ *   1. OKX onchainos CLI (if installed AND user is logged in) — preferred.
+ *      Private keys never enter this process; signing happens via
+ *      `onchainos payment x402-pay`. See onchainos-adapter.ts.
+ *   2. Saved wallet.key file (legacy BIP-39 path)
+ *   3. BLOCKRUN_WALLET_KEY env var (legacy)
+ *   4. Auto-generated BIP-39 wallet (legacy fallback when no OKX wallet)
+ *
+ * The legacy BIP-39 path remains so users without onchainos still work, but
+ * fresh installs that have onchainos installed and signed in will use the
+ * OKX wallet identity instead of generating a new local key.
+ */
+
+declare function savePaymentChain(chain: "base" | "solana"): Promise<void>;
+declare function loadPaymentChain(): Promise<"base" | "solana">;
+/**
+ * Resolve payment chain: env var → persisted file → default "base".
+ * Accepts both XCLAWROUTER_PAYMENT_CHAIN (preferred) and CLAWROUTER_PAYMENT_CHAIN
+ * (legacy, deprecated — will be removed after one release).
+ */
+declare function resolvePaymentChain(): Promise<"base" | "solana">;
+/**
+ * Result of wallet resolution.
+ *
+ * - `source: "okx"` — OKX onchainos wallet is connected. `key` is undefined
+ *   because signing is delegated to onchainos (no private key in this process).
+ *   `onchainos` is the adapter the proxy uses to sign x402 payments.
+ * - `source: "saved" | "env" | "config" | "generated"` — local key path.
+ */
+type WalletResolution = {
+    key?: string;
+    address: string;
+    source: "saved" | "env" | "config" | "generated" | "okx";
+    mnemonic?: string;
+    solanaPrivateKeyBytes?: Uint8Array;
+    onchainos?: OnchainOsAdapter;
+    email?: string;
+};
+/** Set up Solana for an existing local-key wallet. Not used in OKX mode. */
+declare function setupSolana(): Promise<{
+    mnemonic: string;
+    solanaPrivateKeyBytes: Uint8Array;
+}>;
+
+/**
  * Session Persistence Store
  *
  * Tracks model selections per session to prevent model switching mid-task.
@@ -928,10 +1028,17 @@ type InsufficientFundsInfo = {
  * Solana keys. Using the full object prevents callers from accidentally
  * forgetting to forward Solana key bytes.
  */
+/**
+ * Wallet config accepts:
+ *   - string: legacy plain EVM private key
+ *   - { key, ... }: legacy resolution with optional Solana keys
+ *   - { source: "okx", address, onchainos }: OKX onchainos wallet — no
+ *     local key, signing delegated to the onchainos CLI.
+ */
 type WalletConfig = string | {
     key: string;
     solanaPrivateKeyBytes?: Uint8Array;
-};
+} | WalletResolution;
 type PaymentChain = "base" | "solana";
 type ProxyOptions = {
     wallet: WalletConfig;
@@ -1026,41 +1133,6 @@ type ProxyHandle = {
  * Returns a handle with the assigned port, base URL, and a close function.
  */
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
-
-/**
- * XClawRouter wallet resolution.
- *
- * XClawRouter delegates wallet state (keys, login, signing) to OKX's `onchainos`
- * CLI via the OnchainOsAdapter. The legacy BIP-39 helpers below remain during
- * the migration so callers can be moved to the adapter one at a time — new code
- * should use `resolveWalletAdapter()` and not touch the legacy exports.
- *
- * Migration targets (remove once adapter adoption is complete):
- *   - resolveOrGenerateWalletKey / WalletResolution
- *   - recoverWalletFromMnemonic / setupSolana
- *   - WALLET_FILE / MNEMONIC_FILE / walletKeyAuth / envKeyAuth
- */
-
-declare function savePaymentChain(chain: "base" | "solana"): Promise<void>;
-declare function loadPaymentChain(): Promise<"base" | "solana">;
-/**
- * Resolve payment chain: env var → persisted file → default "base".
- * Accepts both XCLAWROUTER_PAYMENT_CHAIN (preferred) and CLAWROUTER_PAYMENT_CHAIN
- * (legacy, deprecated — will be removed after one release).
- */
-declare function resolvePaymentChain(): Promise<"base" | "solana">;
-type WalletResolution = {
-    key: string;
-    address: string;
-    source: "saved" | "env" | "config" | "generated";
-    mnemonic?: string;
-    solanaPrivateKeyBytes?: Uint8Array;
-};
-/** @deprecated Legacy Solana setup flow. */
-declare function setupSolana(): Promise<{
-    mnemonic: string;
-    solanaPrivateKeyBytes: Uint8Array;
-}>;
 
 /**
  * BlockRun ProviderPlugin for OpenClaw

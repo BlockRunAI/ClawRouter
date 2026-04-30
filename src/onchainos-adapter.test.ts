@@ -1,9 +1,7 @@
 /**
- * Unit tests for OnchainOsAdapter.
- *
- * We mock the CLI by pointing `bin` at a small node script that prints the
- * responses we want for each invocation. This avoids depending on the real
- * `onchainos` binary while still exercising the process-spawning code paths.
+ * Unit tests for OnchainOsAdapter against the real onchainos CLI surface
+ * (per the okxclawrouter sample). Uses a fake CLI script so we don't depend
+ * on the actual binary.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -30,18 +28,34 @@ afterAll(async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
 
-describe("OnchainOsAdapter.status", () => {
-  it("parses connected wallet status JSON", async () => {
+describe("OnchainOsAdapter.isInstalled", () => {
+  it("returns true when the binary responds to --version", async () => {
     const bin = await writeFakeCli(
-      "status-ok",
+      "version-ok",
+      `if (process.argv[2] === "--version") { process.stdout.write("onchainos 1.2.3"); process.exit(0); } process.exit(2);`,
+    );
+    expect(new OnchainOsAdapter({ bin }).isInstalled()).toBe(true);
+  });
+
+  it("returns false when the binary is missing", () => {
+    const adapter = new OnchainOsAdapter({ bin: join(tmpDir, "does-not-exist") });
+    expect(adapter.isInstalled()).toBe(false);
+  });
+});
+
+describe("OnchainOsAdapter.status", () => {
+  it("unwraps the .data envelope returned by real onchainos", async () => {
+    const bin = await writeFakeCli(
+      "status-data-envelope",
       `
-      const [,, ...args] = process.argv;
-      if (args.join(" ") === "wallet status --json") {
+      const args = process.argv.slice(2);
+      if (args.join(" ") === "wallet status") {
         process.stdout.write(JSON.stringify({
-          connected: true,
-          email: "vicky.fuyu@gmail.com",
-          evm: "0x1234567890123456789012345678901234567890",
-          solana: "SoLaNa1111111111111111111111111111111111111"
+          data: {
+            loggedIn: true,
+            email: "vicky.fuyu@gmail.com",
+            evmAddress: "0x1234567890123456789012345678901234567890"
+          }
         }));
         process.exit(0);
       }
@@ -50,138 +64,127 @@ describe("OnchainOsAdapter.status", () => {
     );
     const adapter = new OnchainOsAdapter({ bin });
     const status = await adapter.status();
-    expect(status.connected).toBe(true);
+    expect(status.loggedIn).toBe(true);
     expect(status.email).toBe("vicky.fuyu@gmail.com");
     expect(status.evmAddress).toBe("0x1234567890123456789012345678901234567890");
-    expect(status.solanaAddress).toBe("SoLaNa1111111111111111111111111111111111111");
   });
 
-  it("reports disconnected state when CLI returns connected:false", async () => {
+  it("accepts the legacy flat shape (no .data envelope)", async () => {
     const bin = await writeFakeCli(
-      "status-disconnected",
-      `process.stdout.write(JSON.stringify({ connected: false })); process.exit(0);`,
+      "status-flat",
+      `process.stdout.write(JSON.stringify({ loggedIn: true, evmAddress: "0xAbC0000000000000000000000000000000000001" })); process.exit(0);`,
     );
-    const adapter = new OnchainOsAdapter({ bin });
-    const status = await adapter.status();
-    expect(status.connected).toBe(false);
+    const status = await new OnchainOsAdapter({ bin }).status();
+    expect(status.loggedIn).toBe(true);
+    expect(status.evmAddress).toBe("0xAbC0000000000000000000000000000000000001");
+  });
+
+  it("reports loggedIn=false when onchainos says so", async () => {
+    const bin = await writeFakeCli(
+      "status-out",
+      `process.stdout.write(JSON.stringify({ data: { loggedIn: false } })); process.exit(0);`,
+    );
+    const status = await new OnchainOsAdapter({ bin }).status();
+    expect(status.loggedIn).toBe(false);
     expect(status.evmAddress).toBeUndefined();
   });
 
   it("throws OnchainOsCliError when binary is missing", async () => {
-    const adapter = new OnchainOsAdapter({
-      bin: join(tmpDir, "does-not-exist"),
-    });
+    const adapter = new OnchainOsAdapter({ bin: join(tmpDir, "missing") });
     await expect(adapter.status()).rejects.toBeInstanceOf(OnchainOsCliError);
   });
 
   it("throws on invalid JSON output", async () => {
     const bin = await writeFakeCli(
       "status-bad-json",
-      `process.stdout.write("not json at all"); process.exit(0);`,
+      `process.stdout.write("not json"); process.exit(0);`,
     );
-    const adapter = new OnchainOsAdapter({ bin });
-    await expect(adapter.status()).rejects.toMatchObject({
+    await expect(new OnchainOsAdapter({ bin }).status()).rejects.toMatchObject({
       name: "OnchainOsCliError",
     });
   });
 });
 
-describe("OnchainOsAdapter EVM signing", () => {
-  it("produces a ClientEvmSigner that delegates signTypedData to the CLI", async () => {
+describe("OnchainOsAdapter.signX402Payment", () => {
+  it("invokes `payment x402-pay --accepts <json>` and unwraps the result", async () => {
     const bin = await writeFakeCli(
-      "evm-signer",
+      "x402-pay-ok",
       `
-      const [,, ...args] = process.argv;
-      if (args[0] === "wallet" && args[1] === "status") {
+      const args = process.argv.slice(2);
+      if (args[0] === "payment" && args[1] === "x402-pay" && args[2] === "--accepts") {
+        const accepts = JSON.parse(args[3]);
         process.stdout.write(JSON.stringify({
-          connected: true,
-          evm: "0xAbcDef0000000000000000000000000000000001"
+          data: {
+            signature: "0x" + "ab".repeat(65),
+            authorization: { from: "0xPAYER", to: "0xPAYEE", scheme: accepts[0].scheme },
+          }
         }));
         process.exit(0);
-      }
-      if (args[0] === "sign" && args[1] === "typed-data") {
-        let payload = "";
-        process.stdin.on("data", (c) => payload += c);
-        process.stdin.on("end", () => {
-          // Echo back a deterministic 65-byte hex signature.
-          process.stdout.write(JSON.stringify({
-            signature: "0x" + "ab".repeat(65),
-            receivedPrimaryType: JSON.parse(payload).primaryType,
-          }));
-          process.exit(0);
-        });
-        return;
       }
       process.exit(2);
       `,
     );
     const adapter = new OnchainOsAdapter({ bin });
-    const signer = await adapter.evm.toX402Signer();
-    expect(signer.address).toBe("0xAbcDef0000000000000000000000000000000001");
-    const sig = await signer.signTypedData({
-      domain: { name: "USDC", chainId: 8453 },
-      types: { TransferWithAuthorization: [] },
-      primaryType: "TransferWithAuthorization",
-      message: { from: signer.address, value: "1000" },
+    const result = await adapter.signX402Payment([
+      {
+        scheme: "exact",
+        network: "base",
+        maxAmountRequired: "10000",
+      },
+    ]);
+    expect(result.signature).toBe("0x" + "ab".repeat(65));
+    expect(result.authorization).toMatchObject({
+      from: "0xPAYER",
+      to: "0xPAYEE",
+      scheme: "exact",
     });
-    expect(sig).toBe("0x" + "ab".repeat(65));
+    expect(result.sessionCert).toBeUndefined();
   });
 
-  it("rejects invalid signatures from the CLI", async () => {
+  it("preserves sessionCert for aggr_deferred scheme", async () => {
     const bin = await writeFakeCli(
-      "evm-bad-sig",
+      "x402-pay-cert",
       `
-      const [,, ...args] = process.argv;
-      if (args[0] === "wallet") {
-        process.stdout.write(JSON.stringify({
-          connected: true,
-          evm: "0x0000000000000000000000000000000000000001"
-        }));
-        process.exit(0);
-      }
-      process.stdin.on("data", () => {});
-      process.stdin.on("end", () => {
-        process.stdout.write(JSON.stringify({ signature: "not-hex" }));
-        process.exit(0);
-      });
+      process.stdout.write(JSON.stringify({
+        data: {
+          signature: "0xfeedface",
+          authorization: { ok: true },
+          sessionCert: "cert-xyz",
+        }
+      }));
+      process.exit(0);
       `,
     );
-    const adapter = new OnchainOsAdapter({ bin });
-    const signer = await adapter.evm.toX402Signer();
+    const result = await new OnchainOsAdapter({ bin }).signX402Payment([
+      { scheme: "aggr_deferred" },
+    ]);
+    expect(result.sessionCert).toBe("cert-xyz");
+  });
+
+  it("throws when onchainos returns no signature", async () => {
+    const bin = await writeFakeCli(
+      "x402-pay-bad",
+      `process.stdout.write(JSON.stringify({ data: { authorization: {} } })); process.exit(0);`,
+    );
     await expect(
-      signer.signTypedData({
-        domain: {},
-        types: {},
-        primaryType: "X",
-        message: {},
-      }),
+      new OnchainOsAdapter({ bin }).signX402Payment([{ scheme: "exact" }]),
     ).rejects.toBeInstanceOf(OnchainOsCliError);
   });
-});
 
-describe("OnchainOsAdapter SVM gating", () => {
-  it("does not expose svm adapter unless enableSolana is set", () => {
-    const adapter = new OnchainOsAdapter({ bin: "irrelevant" });
-    expect(adapter.svm).toBeUndefined();
-  });
-
-  it("exposes svm adapter when enableSolana is true (signing still TODO)", async () => {
+  it("throws when onchainos returns no authorization", async () => {
     const bin = await writeFakeCli(
-      "svm-status",
-      `process.stdout.write(JSON.stringify({ connected: true, solana: "AbC" })); process.exit(0);`,
+      "x402-pay-bad-auth",
+      `process.stdout.write(JSON.stringify({ data: { signature: "0xabcd" } })); process.exit(0);`,
     );
-    const adapter = new OnchainOsAdapter({ bin, enableSolana: true });
-    expect(adapter.svm).toBeDefined();
-    await expect(adapter.svm!.getAddress()).resolves.toBe("AbC");
-    await expect(adapter.svm!.toX402Signer()).rejects.toThrow(/not yet implemented/);
+    await expect(
+      new OnchainOsAdapter({ bin }).signX402Payment([{ scheme: "exact" }]),
+    ).rejects.toBeInstanceOf(OnchainOsCliError);
   });
 });
 
 describe("OnchainOsAdapter.login validation", () => {
   it("rejects malformed emails before invoking the CLI", async () => {
-    const adapter = new OnchainOsAdapter({
-      bin: join(tmpDir, "unused"),
-    });
+    const adapter = new OnchainOsAdapter({ bin: join(tmpDir, "unused") });
     await expect(adapter.login("not-an-email")).rejects.toThrow(/Invalid email/);
   });
 });
