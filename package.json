@@ -104,6 +104,9 @@
     "typescript-eslint": "^8.58.1",
     "vitest": "^4.1.3"
   },
+  "overrides": {
+    "basic-ftp": "^5.3.1"
+  },
   "engines": {
     "node": ">=20"
   }
