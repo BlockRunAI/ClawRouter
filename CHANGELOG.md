@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.176 — May 2, 2026
+
+- **Picker filter v0.12.175 didn't actually take effect.** Root cause: `src/index.ts` independently writes `cfg.models.providers.blockrun.models` at plugin startup (lines 293, 331, 1582), and it referenced the **unfiltered** `OPENCLAW_MODELS` (~175 entries) — so on every plugin activate it overwrote any pruned array with the full list, completely bypassing the v0.12.175 fix at `buildProviderModels`. Users updating to v0.12.175 still saw 50–58+ entries because `index.ts` re-injected the full set right after my filter ran.
+- **Fix**: `src/index.ts` now imports `VISIBLE_OPENCLAW_MODELS` and writes that to `cfg.models.providers.blockrun.models` at all three injection points (provider config injection, validation refresh, runtime port re-injection). The validation logic also gained a "stale superset" check — if the on-disk array contains IDs NOT in `VISIBLE_OPENCLAW_MODELS`, it triggers a rewrite to actively shrink the array (was previously additive-only). This means existing users with stale 159+ entry arrays get their picker auto-pruned on first plugin activate after upgrading.
+- **No registry, alias, or routing changes.** `OPENCLAW_MODELS` (full set) remains the resolution layer for proxy routing and alias matching; only the picker-advertisement layer (`provider.models` getter + `index.ts` writes) is filtered.
+
+---
+
 ## v0.12.175 — May 2, 2026
 
 - **Picker filter actually works now.** v0.12.173's `top-models.json` trim was supposed to slim the OpenClaw `/model` picker but didn't, because the picker reads from `cfg.models.providers.blockrun.models` — populated by ClawRouter's `provider.models` getter (`src/provider.ts:43`) → `buildProviderModels()` (`src/models.ts:1163`) — which returned the FULL `OPENCLAW_MODELS` array (~175 entries: 68 BLOCKRUN_MODELS + 107 ALIAS_MODELS). `top-models.json` only drove `agents.defaults.models` (a separate allowlist that controls "which models can be set as default", NOT what shows in the picker). Net effect for users on v0.12.173/v0.12.174: their picker still showed 50–58+ entries including long-retired models (`gpt-5.2`, `gpt-4.1`, `o1`, `o1-mini`, `o3-mini`, `nvidia/kimi-k2.5`, `xai/grok-2-vision`, `free/nemotron-ultra-253b`, etc.).

@@ -63,7 +63,7 @@ async function waitForProxyHealth(port: number, timeoutMs = 3000): Promise<boole
   }
   return false;
 }
-import { OPENCLAW_MODELS, resolveModelAlias } from "./models.js";
+import { OPENCLAW_MODELS, VISIBLE_OPENCLAW_MODELS, resolveModelAlias } from "./models.js";
 import {
   writeFileSync,
   existsSync,
@@ -290,7 +290,7 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
       // We use a placeholder since the proxy handles real x402 auth internally.
       apiKey: "x402-proxy-handles-auth",
-      models: OPENCLAW_MODELS,
+      models: VISIBLE_OPENCLAW_MODELS,
     };
     logger.info("Injected BlockRun provider config");
     needsWrite = true;
@@ -314,23 +314,29 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       blockrun.apiKey = "x402-proxy-handles-auth";
       fixed = true;
     }
-    // Always refresh models list (ensures new models/aliases are available)
-    // Check both length AND content - new models may be added without changing count
+    // Refresh models list to the picker-visible subset (TOP_MODELS-filtered).
+    // Compare against VISIBLE_OPENCLAW_MODELS so stale or unfiltered arrays
+    // (e.g. carryover from pre-v0.12.176 that wrote the full ~175-entry list)
+    // get replaced with the trimmed picker set.
     const currentModels = blockrun.models as Array<{ id?: string }>;
-    const currentModelIds = new Set(
-      Array.isArray(currentModels) ? currentModels.map((m) => m?.id).filter(Boolean) : [],
+    const currentModelIds = new Set<string>(
+      Array.isArray(currentModels)
+        ? currentModels.map((m) => m?.id).filter((id): id is string => typeof id === "string")
+        : [],
     );
-    const expectedModelIds = OPENCLAW_MODELS.map((m) => m.id);
+    const expectedModelIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
+    const expectedSet = new Set(expectedModelIds);
     const needsModelUpdate =
       !currentModels ||
       !Array.isArray(currentModels) ||
-      currentModels.length !== OPENCLAW_MODELS.length ||
-      expectedModelIds.some((id) => !currentModelIds.has(id));
+      currentModels.length !== VISIBLE_OPENCLAW_MODELS.length ||
+      expectedModelIds.some((id) => !currentModelIds.has(id)) ||
+      Array.from(currentModelIds).some((id) => !expectedSet.has(id));
 
     if (needsModelUpdate) {
-      blockrun.models = OPENCLAW_MODELS;
+      blockrun.models = VISIBLE_OPENCLAW_MODELS;
       fixed = true;
-      logger.info(`Updated models list (${OPENCLAW_MODELS.length} models)`);
+      logger.info(`Updated models list (${VISIBLE_OPENCLAW_MODELS.length} visible models)`);
     }
 
     if (fixed) {
@@ -1579,7 +1585,7 @@ const plugin: OpenClawPluginDefinition = {
       api: "openai-completions",
       // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
       apiKey: "x402-proxy-handles-auth",
-      models: OPENCLAW_MODELS,
+      models: VISIBLE_OPENCLAW_MODELS,
     };
     if (!api.config.tools) {
       api.config.tools = {};
