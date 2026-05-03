@@ -395,9 +395,20 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
     needsWrite = true;
     logger.info(`Removed ${removedDeprecatedCount} deprecated model entries from allowlist`);
   }
-  // Additive-only: add TOP_MODELS entries if missing, never delete user-defined entries.
-  // Preserves any blockrun/* IDs the user has manually added outside this curated list.
+  // Sync `blockrun/*` entries to TOP_MODELS exactly: add missing, REMOVE stale.
+  // Non-blockrun entries (from other providers like OpenRouter) are preserved.
+  // Active prune mirrors what scripts/update.sh / scripts/reinstall.sh do — needed
+  // for users on path-based plugin installs where the install scripts never run
+  // (otherwise the allowlist accumulates retired models forever).
+  const expectedBlockrunKeys = new Set(TOP_MODELS.map((id) => `blockrun/${id}`));
   let addedCount = 0;
+  let prunedCount = 0;
+  for (const key of Object.keys(allowlist)) {
+    if (key.startsWith("blockrun/") && !expectedBlockrunKeys.has(key)) {
+      delete allowlist[key];
+      prunedCount++;
+    }
+  }
   for (const id of TOP_MODELS) {
     const key = `blockrun/${id}`;
     if (!allowlist[key]) {
@@ -405,9 +416,14 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       addedCount++;
     }
   }
-  if (addedCount > 0) {
+  if (addedCount > 0 || prunedCount > 0) {
     needsWrite = true;
-    logger.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
+    if (prunedCount > 0) {
+      logger.info(`Pruned ${prunedCount} stale blockrun/* entries from allowlist`);
+    }
+    if (addedCount > 0) {
+      logger.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
+    }
   }
 
   // Force web_search onto BlockRun Exa so OpenClaw never silently falls back

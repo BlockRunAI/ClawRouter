@@ -1267,6 +1267,8 @@ type ModelListEntry = {
 /**
  * Build `/v1/models` response entries from the full OpenClaw model registry.
  * This includes alias IDs (e.g., `flash`, `kimi`) so `/model <alias>` works reliably.
+ * The picker visibility filter lives at the openclaw.json allowlist layer, not here —
+ * `/v1/models` stays open for API-level discovery.
  */
 export function buildProxyModelList(
   createdAt: number = Math.floor(Date.now() / 1000),

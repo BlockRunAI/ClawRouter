@@ -4,6 +4,15 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.177 — May 3, 2026
+
+- **Picker actually filtered now via the right layer.** v0.12.175 + v0.12.176 both targeted `cfg.models.providers.blockrun.models`, but per v0.11.8's checked-in design (`src/index.ts:379`), the OpenClaw `/model` picker is whitelisted by `cfg.agents.defaults.models` — that's the canonical filter. The path-based-plugin install case (where users install ClawRouter from a local checkout via `installPath = sourcePath = ...`) never runs `scripts/update.sh` / `scripts/reinstall.sh`, so the install-script prune-and-add never fires. `injectModelsConfig` in `src/index.ts` only added entries — never pruned — so retired models accumulated forever in the allowlist.
+- **Fix**: `injectModelsConfig` now actively syncs `blockrun/*` allowlist entries to TOP_MODELS exactly — adds missing AND removes stale. Mirrors the install-script behavior so plugin-load-only users (no install-script flow) get correct picker visibility on next OpenClaw restart. Non-`blockrun/*` entries (other providers like OpenRouter) are preserved.
+- **`/v1/models` HTTP endpoint deliberately unchanged** — keeps the full ~175-entry list including aliases, so API-level discovery and `/model <alias>` resolution stay open. Filter only applies to picker UI.
+- **v0.12.175 + v0.12.176 changes retained** as defense-in-depth: `buildProviderModels` still returns `VISIBLE_OPENCLAW_MODELS`, and `index.ts` still writes `VISIBLE_OPENCLAW_MODELS` to `cfg.models.providers.blockrun.models`. Even though the picker filter is allowlist-driven, keeping these aligned costs nothing.
+
+---
+
 ## v0.12.176 — May 2, 2026
 
 - **Picker filter v0.12.175 didn't actually take effect.** Root cause: `src/index.ts` independently writes `cfg.models.providers.blockrun.models` at plugin startup (lines 293, 331, 1582), and it referenced the **unfiltered** `OPENCLAW_MODELS` (~175 entries) — so on every plugin activate it overwrote any pruned array with the full list, completely bypassing the v0.12.175 fix at `buildProviderModels`. Users updating to v0.12.175 still saw 50–58+ entries because `index.ts` re-injected the full set right after my filter ran.
