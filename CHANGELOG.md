@@ -4,6 +4,15 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.172 — May 2, 2026
+
+- **Picker decluttered: 12 superseded long-tail models hidden from OpenClaw `/model` UI.** `src/top-models.json` trimmed from 50 → 38 entries. Hidden: `anthropic/claude-opus-4.5`, `openai/gpt-5.3`, `openai/gpt-5-mini`, `openai/gpt-5-nano`, `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o3`, `openai/o4-mini`, `google/gemini-2.5-pro`, `google/gemini-2.5-flash`, `google/gemini-2.5-flash-lite`, `moonshot/kimi-k2.5`. Picker count drops from "55 available" to ~43 once users run `clawrouter update` or reinstall.
+- **No callability regression and no fallback impact.** This is a UX-only change: `BLOCKRUN_MODELS` registry, `MODEL_ALIASES`, and `src/router/config.ts` fallback chains are all untouched. Direct calls (`model: "openai/gpt-4o"`) and aliases (`gpt`, `gpt4`, `mini`, `o3`, `gemini`, `flash`, `kimi-k2.5`, `nvidia/kimi-k2.5`, `anthropic/claude-opus-4-5`, `minimax-m2.5`) continue to resolve and route normally. The `/v1/models` HTTP endpoint still advertises all 175 entries (registry + aliases) for API-level model discovery — only the OpenClaw picker is filtered.
+- **`openai/gpt-5.3-codex` deliberately kept visible.** The codex variant is treated as a distinct developer-targeted entry and stays in the picker.
+- **`minimax/minimax-m2.5` already absent** from `top-models.json` (only `minimax/minimax-m2.7` was listed); no action needed and the `minimax-m2.5` alias still works.
+
+---
+
 ## v0.12.171 — Apr 29, 2026
 
 - **Three new free NVIDIA-hosted models added.** BlockRun refreshed the free catalog on 2026-04-29 with three additions, all wired into ClawRouter as `free/`-prefixed entries:
