@@ -211,7 +211,10 @@ function isGatewayMode(): boolean {
  * grandchildren were leaking). The scrub only removes entries matching the
  * managed shape; user-defined `blockrun` MCP servers are left alone.
  */
-function injectModelsConfig(logger: { info: (msg: string) => void }): void {
+function injectModelsConfig(
+  logger: { info: (msg: string) => void },
+  options: { forceWrite?: boolean } = {},
+): void {
   const configDir = join(homedir(), ".openclaw");
   const configPath = join(configDir, "openclaw.json");
 
@@ -474,7 +477,7 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
   // (gateway mode), where no install transaction is in flight; the same hooks
   // re-run there and writes succeed cleanly.
   if (needsWrite) {
-    if (!isGatewayMode()) {
+    if (!isGatewayMode() && !options.forceWrite) {
       logger.info("Deferring config write to first gateway start (outside gateway mode)");
       return;
     }
@@ -2069,6 +2072,9 @@ export default plugin;
 
 // Re-export for programmatic use
 export { startProxy, getProxyPort } from "./proxy.js";
+
+// Re-export setup helpers for the `clawrouter setup` CLI command
+export { injectModelsConfig, injectAuthProfile };
 export type {
   ProxyOptions,
   ProxyHandle,

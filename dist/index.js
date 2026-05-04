@@ -82065,7 +82065,7 @@ function isGatewayMode() {
   const args = process.argv;
   return args.includes("gateway");
 }
-function injectModelsConfig(logger) {
+function injectModelsConfig(logger, options = {}) {
   const configDir = join10(homedir7(), ".openclaw");
   const configPath = join10(configDir, "openclaw.json");
   let config = {};
@@ -82256,7 +82256,7 @@ function injectModelsConfig(logger) {
     );
   }
   if (needsWrite) {
-    if (!isGatewayMode()) {
+    if (!isGatewayMode() && !options.forceWrite) {
       logger.info("Deferring config write to first gateway start (outside gateway mode)");
       return;
     }
@@ -83515,6 +83515,8 @@ export {
   getSessionId,
   getStats,
   hashRequestContent,
+  injectAuthProfile,
+  injectModelsConfig,
   isAgenticModel,
   isBalanceError,
   isEmptyWalletError,

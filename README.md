@@ -82,14 +82,26 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ### Option A — OpenClaw Agent
 
-[OpenClaw](https://openclaw.ai) is an AI coding agent. If you're using it, ClawRouter installs as a plugin:
+[OpenClaw](https://openclaw.ai) is an AI coding agent. If you're using it, ClawRouter installs as a plugin. **Two paths:**
+
+**A1. Recommended — one-shot install script:**
 
 ```bash
 curl -fsSL https://blockrun.ai/ClawRouter-update | bash
 openclaw gateway restart
 ```
 
-Done. Smart routing (`blockrun/auto`) is now your default model.
+This handles everything: registration, models config, auth profile, wallet setup. Smart routing (`blockrun/auto`) is now your default model.
+
+**A2. If you prefer pure npm:**
+
+```bash
+npm install -g @blockrun/clawrouter
+clawrouter setup            # finishes OpenClaw integration — REQUIRED
+openclaw gateway restart
+```
+
+> ⚠️ **Skipping `clawrouter setup` will leave you broken.** Bare `npm install -g` only puts the package on disk; it does NOT register the plugin with OpenClaw, sync the models allowlist, or write the auth profile. Symptom: `/models` in your bot shows only ~7 entries (OpenClaw's hardcoded defaults) instead of the full ~38 BlockRun models. Run `clawrouter setup` to repair, or use path A1 to begin with.
 
 ### Option B — Standalone (continue.dev, Cursor, VS Code, any OpenAI-compatible client)
 

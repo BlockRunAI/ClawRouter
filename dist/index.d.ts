@@ -1673,6 +1673,36 @@ declare function buildPartnerTools(proxyBaseUrl: string): PartnerToolDefinition[
  *   openclaw models set openai/gpt-5.3
  */
 
+/**
+ * Inject BlockRun models config into OpenClaw config file.
+ * This is required because registerProvider() alone doesn't make models available.
+ *
+ * CRITICAL: This function must be idempotent and handle ALL edge cases:
+ * - Config file doesn't exist (create it)
+ * - Config file exists but is empty/invalid (reinitialize)
+ * - blockrun provider exists but has undefined fields (fix them)
+ * - Config exists but uses old port/models (update them)
+ *
+ * This function is called on EVERY plugin load to ensure config is always correct.
+ *
+ * Also strips any previously managed `mcp.servers.blockrun` entry we wrote in
+ * older releases — ClawRouter no longer bundles the MCP bridge (the npx-spawned
+ * grandchildren were leaking). The scrub only removes entries matching the
+ * managed shape; user-defined `blockrun` MCP servers are left alone.
+ */
+declare function injectModelsConfig(logger: {
+    info: (msg: string) => void;
+}, options?: {
+    forceWrite?: boolean;
+}): void;
+/**
+ * Inject dummy auth profile for BlockRun into agent auth stores.
+ * OpenClaw's agent system looks for auth credentials even if provider has auth: [].
+ * We inject a placeholder so the lookup succeeds (proxy handles real auth internally).
+ */
+declare function injectAuthProfile(logger: {
+    info: (msg: string) => void;
+}): void;
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, isAgenticModel, isBalanceError, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy };

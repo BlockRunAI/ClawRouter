@@ -41,6 +41,7 @@ Usage:
   clawrouter partners [test]
   clawrouter report [daily|weekly|monthly] [--json]
   clawrouter logs [--days <n>]
+  clawrouter setup                     # Finish OpenClaw integration after npm install -g
 
 Options:
   --version, -v     Show version number
@@ -56,6 +57,9 @@ Query Commands (talk to running proxy on localhost:${getProxyPort()}):
   cache             Response cache stats (hit rate, size)
 
 Management Commands:
+  setup             Finish OpenClaw integration (run after npm install -g).
+                    Registers ClawRouter as a plugin, syncs the model allowlist,
+                    and writes the auth profile. Idempotent — safe to re-run.
   doctor            AI-powered diagnostics (default: Sonnet ~$0.003)
   doctor opus       Use Opus for deeper analysis (~$0.01)
   logs              Per-request breakdown: model, cost, latency, status
@@ -204,6 +208,99 @@ async function cmdCache(port: number): Promise<void> {
   }
 }
 
+/**
+ * `clawrouter setup` — finish OpenClaw integration after `npm install -g`.
+ *
+ * Bare `npm install -g @blockrun/clawrouter` puts the package on disk and
+ * adds the `clawrouter` binary to PATH, but performs ZERO OpenClaw plugin
+ * registration: no entry in openclaw.json's `plugins.entries`, no provider
+ * registration, no models allowlist sync, no auth profile. The bot ends up
+ * showing OpenClaw's hardcoded default models (~7 entries) and the user
+ * thinks ClawRouter "doesn't work".
+ *
+ * This command repairs that by running the steps OpenClaw's plugin lifecycle
+ * would have run: `openclaw plugins install --force` (registration), then
+ * directly invoking `injectModelsConfig` and `injectAuthProfile` with
+ * `forceWrite: true` to bypass the install-transaction guard added in
+ * v0.12.184. Result: the user's openclaw.json now has the full ~38-entry
+ * blockrun model allowlist and the `blockrun:default` auth profile.
+ *
+ * Idempotent — safe to run repeatedly. Use this after `npm install -g` to
+ * complete setup, or after a stuck partial install to repair config.
+ */
+async function cmdSetup(): Promise<void> {
+  const { execFileSync, execSync } = await import("node:child_process");
+  const { injectModelsConfig, injectAuthProfile } = await import("./index.js");
+
+  console.log("🦞 ClawRouter setup\n");
+
+  // Step 1: detect OpenClaw on PATH
+  let openclawPath: string;
+  try {
+    openclawPath = execSync("command -v openclaw", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (!openclawPath) throw new Error("not found");
+    console.log(`  ✓ Found openclaw at ${openclawPath}`);
+  } catch {
+    console.error("  ✗ openclaw not found on PATH");
+    console.error("    Install OpenClaw first: npm install -g openclaw");
+    console.error("    Then re-run: clawrouter setup");
+    process.exit(1);
+  }
+
+  // Step 2: register as an OpenClaw plugin (writes plugins.entries.clawrouter).
+  // OpenClaw 2026.5.2 added strict validation that may reject our config writes
+  // during install (e.g. unknown web_search provider blockrun-exa before the
+  // gateway is running). If that happens, OpenClaw rolls back its own install
+  // record but our injectModelsConfig step below will still populate the user's
+  // openclaw.json correctly — they'll just need to re-run `openclaw plugins
+  // install --force @blockrun/clawrouter` after the gateway has started.
+  console.log("\n→ Registering ClawRouter with OpenClaw...");
+  let installOk = false;
+  try {
+    execFileSync(openclawPath, ["plugins", "install", "--force", "@blockrun/clawrouter"], {
+      stdio: "inherit",
+    });
+    installOk = true;
+  } catch (err) {
+    console.warn(
+      `  ⚠ openclaw plugins install reported a problem: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    console.warn(
+      "    Continuing with manual config sync — if validation rejected the install,",
+    );
+    console.warn(
+      "    re-run `openclaw plugins install --force @blockrun/clawrouter` after gateway start.",
+    );
+  }
+
+  // Step 3: sync the models allowlist + provider config + auth profile directly.
+  // forceWrite: true bypasses the gateway-mode guard added in v0.12.184 since
+  // this is an explicit user command, not a plugin-activation hook inside an
+  // install transaction.
+  console.log("\n→ Syncing models allowlist + auth profile...");
+  const setupLogger = {
+    info: (msg: string) => console.log(`  ${msg}`),
+  };
+  try {
+    injectModelsConfig(setupLogger, { forceWrite: true });
+    injectAuthProfile(setupLogger);
+  } catch (err) {
+    console.error(
+      `  ✗ Config sync failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
+
+  if (installOk) {
+    console.log("\n✓ Setup complete.");
+  } else {
+    console.log("\n✓ Models config synced (plugin registration may need a manual retry).");
+  }
+  console.log("\nNext: restart the gateway to load ClawRouter:");
+  console.log("  openclaw gateway restart");
+  console.log("\nThen verify in your bot: /models — you should see ~38 BlockRun models.");
+}
+
 function parseArgs(args: string[]): {
   version: boolean;
   help: boolean;
@@ -225,6 +322,7 @@ function parseArgs(args: string[]): {
   queryStats: boolean;
   queryStatsDays: number;
   queryCache: boolean;
+  setup: boolean;
 } {
   const result = {
     version: false,
@@ -246,6 +344,7 @@ function parseArgs(args: string[]): {
     queryStats: false,
     queryStatsDays: 7,
     queryCache: false,
+    setup: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -313,6 +412,8 @@ function parseArgs(args: string[]): {
     } else if (arg === "--port" && args[i + 1]) {
       result.port = parseInt(args[i + 1], 10);
       i++;
+    } else if (arg === "setup") {
+      result.setup = true;
     }
   }
 
@@ -329,6 +430,11 @@ async function main(): Promise<void> {
 
   if (args.help) {
     printHelp();
+    process.exit(0);
+  }
+
+  if (args.setup) {
+    await cmdSetup();
     process.exit(0);
   }
 
