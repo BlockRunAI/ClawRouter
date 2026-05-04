@@ -4,6 +4,20 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.180 — May 4, 2026
+
+- **Predexon skill catches up to BlockRun's 49-endpoint registry.** BlockRun shipped 10 new prediction-market endpoints on 2026-05-03 (commits `9640528` + `a06c652`, prod revisions `00442-jqf` and `00443-45g`); ClawRouter's `/v1/pm/*` catch-all whitelist already proxied them silently, but `skills/predexon/SKILL.md` documented none — so OpenClaw users and AI agents using the skill couldn't discover them.
+- **New endpoints documented**:
+  - **Cross-venue search** — `markets/search?q=...` ($0.005) — single call across Polymarket, Kalshi, Limitless, Opinion, Predict.Fun
+  - **Other venues markets list** — `limitless/markets`, `opinion/markets`, `predictfun/markets` ($0.001 each) — closes the prior gap where only orderbooks were exposed
+  - **UMA oracle resolution** — `polymarket/uma/markets?state=...` and `polymarket/uma/market/{conditionId}` ($0.001 each) — track proposal/dispute/resolution lifecycle
+  - **Wallet identity & clustering** — `polymarket/wallet/identity?wallet=...`, `polymarket/wallet/identities-batch?wallets=...` (GET, not POST — upstream docs are wrong), `polymarket/wallet/cluster?wallet=...` ($0.005 each)
+  - **Per-token candlesticks** — `polymarket/candlesticks/token/{tokenId}` ($0.001) — OHLCV for a single outcome token (sibling to the existing market-level `candlesticks/{conditionId}`)
+- SKILL.md additions: 4 new section blocks (Search Across All Venues, Other Venues, UMA Oracle Resolution Status, Wallet Identity & Clustering), 5 new example interactions, 10 new rows in the endpoint reference table (36 → 46 documented; 3 long-standing gaps from BlockRun's 49 — `polymarket/activity`, per-market volume, open_interest — deliberately left for a follow-up). Front-matter `description` and 8 new triggers for the new categories (limitless / opinion markets / predict.fun / uma oracle / wallet identity / wallet cluster / cross-venue search).
+- **No code changes.** Proxy whitelist (`src/proxy.ts:2669`) already matches `/v1/pm/*`; no new path needed. Pure docs/skill release.
+
+---
+
 ## v0.12.179 — May 3, 2026
 
 - **Slow image generation no longer silently breaks.** `openai/gpt-image-2` (and any future model whose generation exceeds BlockRun's 30s inline window) returns `202 + { id, poll_url, poll_instructions }` from `POST /v1/images/generations`. ClawRouter previously took that 202 body and replied to the client with `200 OK` + the queued-job stub — no `data` array, no images, no error signal. The client (OpenClaw, SDK callers, curl) saw "success" with nothing usable.
