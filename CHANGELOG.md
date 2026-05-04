@@ -4,6 +4,16 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.183 — May 4, 2026
+
+- **Install/update scripts no longer roll back when the plugin is already installed.** `scripts/update.sh:321` and `scripts/reinstall.sh:422` ran `openclaw plugins install @blockrun/clawrouter` without `--force`. On any machine where the plugin already lives at `~/.openclaw/npm/node_modules/@blockrun/clawrouter` (i.e. every existing user running an upgrade), OpenClaw rejects the install with `plugin already exists: ... (delete it first)` and a non-zero, non-124 exit code. The script's `|| { ... exit $exit_code; }` guard then fires, the EXIT trap rolls back to the prior install (`✗ Reinstall failed. Restoring previous ClawRouter install...`), and the user is silently stranded on the version they had — never reaching the new release.
+- **Fix**: both shell scripts now invoke `openclaw plugins install --force @blockrun/clawrouter`. Per OpenClaw's own error message ("rerun install with `--force` to replace it"), `--force` is the documented and idempotent way to handle both fresh-install and upgrade flows. Applied at all four call sites (timeout-wrapped + non-timeout paths in each script).
+- **PowerShell counterpart `scripts/update.ps1` already uses a different approach** — it manually `npm pack`s + `Remove-Item -Recurse -Force` the plugin dir + extracts (lines 112-129), bypassing `openclaw plugins install` entirely. No bug there, no change needed.
+- **Field reproduction**: a Vultr-hosted user attempted to update to v0.12.182 and saw the rollback banner. Without the manual workaround `openclaw plugins update @blockrun/clawrouter`, they would have stayed on v0.12.181 indefinitely — defeating every prior fix in this session (image polling, predexon SKILL sync, reasoning-aware timeout).
+- **Note for users currently stranded**: this fix lives on npm `@blockrun/clawrouter@0.12.183` but reaches users only via `npm install -g`, `openclaw plugins update`, or the self-hosted `blockrun.ai/clawrouter-install.sh`. The self-hosted install script copy at `blockrun/public/clawrouter-install.sh` should be re-synced from this release before the next user attempts an upgrade — until that sync, a user pulling the install script via curl from blockrun.ai will still hit the broken behavior.
+
+---
+
 ## v0.12.182 — May 4, 2026
 
 - **Reasoning models no longer get aborted before they emit their first token.** `PER_MODEL_TIMEOUT_MS` was hard-coded to 60s for every model. Reasoning/thinking-mode models (o-series, GPT-5 reasoning, Claude opus thinking, Gemini Pro, Grok reasoning, DeepSeek V4 Pro / reasoner, Kimi K2.x, Qwen3-thinking, etc. — 37 IDs total flagged with `reasoning: true` in `BLOCKRUN_MODELS`) routinely take 60–120s to produce the first token on a cold cache. ClawRouter was firing the per-attempt abort right at the moment the model was about to start streaming, so a hard-pinned reasoning model would 100% time out, and `auto`-routed reasoning fallbacks chained more reasoning timeouts back-to-back. End user surfaces this as `LLM request failed: network connection error` from the agent's HTTP client.

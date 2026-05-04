@@ -415,11 +415,16 @@ for stale in "$HOME/.openclaw/extensions/clawrouter.backup."* "$HOME/.openclaw/e
 done
 
 echo "→ Installing ClawRouter..."
+# `--force` is required when the plugin is already installed at the same path.
+# Reinstall.sh covers both fresh and re-install flows; without --force the
+# re-install flow fails with "plugin already exists", our EXIT trap rolls back,
+# and the user is stranded on whatever they had before. --force is idempotent.
+#
 # Run with timeout — openclaw plugins install may hang after printing
 # "Installed plugin: clawrouter" in OpenClaw v2026.4.5 (parallel plugin loading).
 # 120s is enough for slow connections; the install itself completes in ~30s.
 if command -v timeout >/dev/null 2>&1; then
-  timeout 120 openclaw plugins install @blockrun/clawrouter || {
+  timeout 120 openclaw plugins install --force @blockrun/clawrouter || {
     exit_code=$?
     if [ $exit_code -eq 124 ]; then
       echo "  (install command timed out — this is normal with OpenClaw v2026.4.5)"
@@ -429,7 +434,7 @@ if command -v timeout >/dev/null 2>&1; then
     fi
   }
 else
-  openclaw plugins install @blockrun/clawrouter
+  openclaw plugins install --force @blockrun/clawrouter
 fi
 
 # Install is complete — clear the rollback trap immediately.
