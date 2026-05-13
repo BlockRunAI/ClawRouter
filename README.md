@@ -561,6 +561,7 @@ Run Claude Code with 50+ models, no rate limits, no Anthropic account, no phone 
 | [Architecture](docs/architecture.md)                   | Technical deep dive      |
 | [Configuration](docs/configuration.md)                 | Environment variables    |
 | [Troubleshooting](docs/troubleshooting.md)             | Common issues            |
+| [Spending Policies with LetAgentPay](docs/spending-policies-with-letagentpay.md) | Cap agent wallet spend   |
 
 ### Blog
 
