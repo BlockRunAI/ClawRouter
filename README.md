@@ -209,7 +209,7 @@ Request → Weighted Scorer (15 dimensions) → Tier → Best Model → Response
 
 | Tier      | ECO Model                           | AUTO Model                            | PREMIUM Model                |
 | --------- | ----------------------------------- | ------------------------------------- | ---------------------------- |
-| SIMPLE    | nvidia/gpt-oss-120b (**FREE**)      | gemini-2.5-flash ($0.30/$2.50)        | kimi-k2.6                    |
+| SIMPLE    | nvidia/gpt-oss-120b (**FREE**)      | gemini-2.5-flash ($0.30/$2.50)        | kimi-k2.6 ($0.90/$4.00)      |
 | MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50) | kimi-k2.5 ($0.60/$3.00)               | gpt-5.3-codex ($1.75/$14.00) |
 | COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50) | gemini-3.1-pro ($2/$12)               | claude-opus-4.6 ($5/$25)     |
 | REASONING | grok-4-1-fast ($0.20/$0.50)         | grok-4-1-fast-reasoning ($0.20/$0.50) | claude-sonnet-4.6 ($3/$15)   |
