@@ -79221,9 +79221,17 @@ var IMAGE_PRICING = {
 };
 var VIDEO_PRICING = {
   "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 },
-  "bytedance/seedance-1.5-pro": { pricePerSecond: 0.03, defaultDurationSeconds: 5 },
-  "bytedance/seedance-2.0-fast": { pricePerSecond: 0.15, defaultDurationSeconds: 5 },
-  "bytedance/seedance-2.0": { pricePerSecond: 0.3, defaultDurationSeconds: 5 }
+  "bytedance/seedance-1.5-pro": { pricePerSecond: 0.04375, defaultDurationSeconds: 5 },
+  "bytedance/seedance-2.0-fast": {
+    pricePerSecond: 0.11343,
+    pricePerSecondImageInput: 0.06684,
+    defaultDurationSeconds: 5
+  },
+  "bytedance/seedance-2.0": {
+    pricePerSecond: 0.14179,
+    pricePerSecondImageInput: 0.0871,
+    defaultDurationSeconds: 5
+  }
 };
 var PHONE_PRICING = {
   "phone/lookup/fraud": 0.05,
@@ -79250,11 +79258,12 @@ function resolvePhoneTelemetryCost(args) {
   }
   return args.paidAmount;
 }
-function estimateVideoCost(model, durationSeconds) {
+function estimateVideoCost(model, durationSeconds, hasImageInput) {
   const p = VIDEO_PRICING[model];
   if (!p) return 0.4 * 1.05;
   const dur = durationSeconds ?? p.defaultDurationSeconds;
-  return p.pricePerSecond * dur * 1.05;
+  const rate = hasImageInput && p.pricePerSecondImageInput ? p.pricePerSecondImageInput : p.pricePerSecond;
+  return rate * dur * 1.05;
 }
 function estimateImageCost(model, size5, n = 1) {
   const pricing = IMAGE_PRICING[model];
@@ -80128,10 +80137,12 @@ async function startProxy(options) {
         const reqBody = Buffer.concat(chunks);
         let videoModel = "xai/grok-imagine-video";
         let videoDuration;
+        let videoHasImageInput = false;
         try {
           const parsed = JSON.parse(reqBody.toString());
           videoModel = parsed.model || videoModel;
           videoDuration = typeof parsed.duration_seconds === "number" ? parsed.duration_seconds : void 0;
+          videoHasImageInput = typeof parsed.image_url === "string" && parsed.image_url.length > 0;
         } catch {
         }
         try {
@@ -80238,7 +80249,7 @@ async function startProxy(options) {
               }
             }
           }
-          const videoActualCost = paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration);
+          const videoActualCost = paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
           logUsage({
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             model: videoModel,

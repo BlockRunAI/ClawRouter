@@ -129,12 +129,22 @@ POST to `http://localhost:8402/v1/voice/call`:
 
 **Optional:**
 
-| Field          | Default     | Notes                                                                                          |
-| -------------- | ----------- | ---------------------------------------------------------------------------------------------- |
-| `voice`        | `nat`       | Presets: `nat`, `josh`, `maya`, `june`, `paige`, `derek`, `florian`. Or a custom Bland voice ID.  |
-| `max_duration` | `5`         | Maximum minutes (1–30). Price is flat $0.54 regardless of actual duration.                        |
-| `from`         | Bland default | Must be a wallet-owned number from `phone_numbers_list` if specified. Otherwise Bland picks one.   |
-| `language`     | `en-US`     | Any spoken-language ISO code, e.g. `es-ES`, `zh-CN`, `de-DE`.                                  |
+| Field          | Default       | Notes                                                                                          |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------- |
+| `voice`        | `nat`         | Presets: `nat`, `josh`, `maya`, `june`, `paige`, `derek`, `florian`. Or a custom Bland voice ID.  |
+| `max_duration` | `5`           | Maximum minutes (1–30). Price is flat $0.54 regardless of actual duration.                        |
+| `from`         | auto-picked   | Must be a wallet-owned number from `phone_numbers_list`. If omitted, server auto-picks from wallet's active numbers — see auto-pick rules below. |
+| `language`     | `en-US`       | Any spoken-language ISO code, e.g. `es-ES`, `zh-CN`, `de-DE`.                                  |
+
+**`from` auto-pick rules** (server-side, after payment verification):
+
+| Wallet active numbers | Behavior                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| 0                     | `403 no_active_number` — response includes `buy_endpoint` + marketplace URL so caller can provision first |
+| Exactly 1             | Auto-used as caller ID                                                                       |
+| 2+                    | `400 ambiguous_from` — response lists all active numbers; retry with `from` set explicitly   |
+
+If an explicit `from` is supplied but the wallet doesn't own it, the response is `403` with a clear ownership-mismatch message (no charge taken when validation fails).
 
 **Response is fire-and-forget:**
 

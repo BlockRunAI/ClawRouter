@@ -1,6 +1,6 @@
 ---
 name: surf
-description: Use this skill — NOT browser or web_fetch — for ALL Surf crypto-data calls. 84 endpoints at localhost:8402/v1/surf/* covering CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT intelligence, news, project + DeFi metrics, token analytics, unified search, VC fund intelligence. x402-gated via ClawRouter's local wallet — no Surf account or API key required.
+description: Use this skill — NOT browser or web_fetch — for ALL Surf crypto-data calls. 83 endpoints at localhost:8402/v1/surf/* covering CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT intelligence, news, project + DeFi metrics, token analytics, unified search, VC fund intelligence. x402-gated via ClawRouter's local wallet — no Surf account or API key required.
 triggers:
   - "blockrun surf"
   - "surf crypto api"
@@ -24,24 +24,28 @@ license: MIT
 
 # Surf — Unified Crypto Data API (via ClawRouter)
 
-Surf bundles **84 endpoints across 13 domains** into one paid HTTP API. ClawRouter exposes them at `http://127.0.0.1:8402/v1/surf/*`, paid through the same x402 USDC wallet that funds LLM calls. No Surf account, no API key — settlement lands directly in Surf's Base treasury.
+Surf bundles **83 endpoints across 12 domains** into one paid HTTP API. ClawRouter exposes them at `http://127.0.0.1:8402/v1/surf/*`, paid through the same x402 USDC wallet that funds LLM calls. No Surf account, no API key — settlement lands directly in Surf's Base treasury. Upstream lives at `api.asksurf.ai/gateway/v1` — ClawRouter forwards transparently.
 
 **Pricing tiers (per call):**
 
 - **Tier 1 — $0.001** — prices, rankings, lists, news, simple reads
 - **Tier 2 — $0.005** — orderbooks, candles, search, wallet details, social
-- **Tier 3 — $0.020** — on-chain SQL queries, schema introspection, chat completions
+- **Tier 3 — $0.020** — on-chain SQL queries, structured queries, schema introspection
+
+> The legacy **surf-1.5 chat** surface is intentionally NOT exposed yet — it's held until per-token settlement is wired. Trying `/v1/surf/chat/completions` returns 404 ("Unknown Surf endpoint"), no payment is taken.
 
 All requests use GET unless the table below says otherwise. Path parameters that look like `?symbol=` are query params on a GET. POST endpoints take a JSON body. ClawRouter forwards the wallet's x402 payment header transparently.
+
+**Required-param pre-check.** 56 of the 83 endpoints have required query params (e.g. `pair`, `symbol`, `address`, `chain`, `q`, `interval`). The route validates them **before settlement** — call with missing params and you get `400 { missing_params, all_required, docs }` and the wallet is NOT charged. Check each row in the catalog below for the correct param name (e.g. mindshare is `q` + `interval`, not `project` + `window`).
 
 ## When to use this skill
 
 - "What is the current BTC price?" → `/surf/market/price?symbol=BTC` (cheaper + more reliable than scraping)
-- "Who holds the most USDC on Ethereum?" → `/surf/token/holders?address=0xA0b8...`
+- "Who holds the most USDC on Ethereum?" → `/surf/token/holders?address=0xA0b8...&chain=ethereum`
 - "How many Ethereum transactions in the last hour?" → `POST /surf/onchain/sql { sql: 'SELECT count() FROM ethereum.transactions WHERE block_timestamp >= now() - INTERVAL 1 HOUR' }`
 - "Label this list of wallets." → `/surf/wallet/labels/batch?addresses=0xabc,0xdef,...`
-- "Is HYPE mindshare peaking?" → `/surf/social/mindshare?project=hyperliquid&window=30d`
-- "Find the canonical metadata for 'ethena'." → `/surf/search/project?query=ethena`
+- "Is HYPE mindshare peaking?" → `/surf/social/mindshare?q=hyperliquid&interval=30d`
+- "Find the canonical metadata for 'ethena'." → `/surf/search/project?q=ethena`
 
 Always prefer Surf over generic web scraping for these. Use the OpenClaw tool name `blockrun_surf_*` when invoking from an agent; use the HTTP path directly when calling from a script.
 
@@ -49,144 +53,150 @@ Always prefer Surf over generic web scraping for these. Use the OpenClaw tool na
 
 ### Exchange (CEX) — 7 endpoints
 
-| Path | Tier | Params |
-| ---- | ---- | ------ |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
 | `/surf/exchange/markets` | T1 | — |
-| `/surf/exchange/price` | T1 | trading pair |
-| `/surf/exchange/perp` | T1 | — |
-| `/surf/exchange/depth` | T2 | — |
-| `/surf/exchange/klines` | T2 | CEX pair |
-| `/surf/exchange/funding-history` | T2 | perp contract |
-| `/surf/exchange/long-short-ratio` | T2 | — |
+| `/surf/exchange/price` | T1 | `pair` |
+| `/surf/exchange/perp` | T1 | `pair` |
+| `/surf/exchange/depth` | T2 | `pair` |
+| `/surf/exchange/klines` | T2 | `pair` |
+| `/surf/exchange/funding-history` | T2 | `pair` |
+| `/surf/exchange/long-short-ratio` | T2 | `pair` |
 
 ### Market Overview — 11 endpoints
 
-| Path | Tier | Params |
-| ---- | ---- | ------ |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
 | `/surf/market/ranking` | T1 | — |
 | `/surf/market/fear-greed` | T1 | — |
 | `/surf/market/futures` | T1 | — |
-| `/surf/market/price` | T1 | `symbol=BTC` |
-| `/surf/market/etf` | T1 | — |
-| `/surf/market/options` | T1 | — |
+| `/surf/market/price` | T1 | `symbol` |
+| `/surf/market/etf` | T1 | `symbol` |
+| `/surf/market/options` | T1 | `symbol` |
 | `/surf/market/liquidation/exchange-list` | T2 | — |
 | `/surf/market/liquidation/order` | T2 | — |
-| `/surf/market/liquidation/chart` | T2 | — |
-| `/surf/market/onchain-indicator` | T2 | — |
-| `/surf/market/price-indicator` | T2 | — |
+| `/surf/market/liquidation/chart` | T2 | `symbol` |
+| `/surf/market/onchain-indicator` | T2 | `symbol`, `metric` (NUPL, SOPR, MVRV, Puell, NVT) |
+| `/surf/market/price-indicator` | T2 | `indicator` (RSI, MACD, Bollinger, EMA), `symbol` |
 
 ### News — 2 endpoints
 
-| Path | Tier | Params |
-| ---- | ---- | ------ |
-| `/surf/news/feed` | T1 | `limit` |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
+| `/surf/news/feed` | T1 | — (`limit` optional) |
 | `/surf/news/detail` | T1 | `id` |
 
 ### On-Chain — 7 endpoints
 
-| Path | Method | Tier | Params |
-| ---- | ------ | ---- | ------ |
+| Path | Method | Tier | Required |
+| ---- | ------ | ---- | -------- |
 | `/surf/onchain/bridge/ranking` | GET | T1 | — |
 | `/surf/onchain/yield/ranking` | GET | T1 | — |
-| `/surf/onchain/gas-price` | GET | T1 | — |
-| `/surf/onchain/tx` | GET | T1 | `hash` |
+| `/surf/onchain/gas-price` | GET | T1 | `chain` |
+| `/surf/onchain/tx` | GET | T1 | `hash`, `chain` |
 | `/surf/onchain/schema` | GET | T3 | — |
-| `/surf/onchain/query` | **POST** | T3 | typed predicates |
+| `/surf/onchain/query` | **POST** | T3 | typed predicates in body |
 | `/surf/onchain/sql` | **POST** | T3 | `{ sql: "SELECT ..." }` |
 
 **On-Chain SQL workflow.** Call `/surf/onchain/schema` once to get table names + columns (cache it locally — schema is stable). Then POST your SELECT against `/surf/onchain/sql`. Always include `LIMIT` on large scans — billing is per call, but slow queries time out. Multi-statement queries are rejected upstream.
 
 ### Prediction Markets (Polymarket + Kalshi) — 17 endpoints
 
-| Path | Tier |
-| ---- | ---- |
-| `/surf/prediction-market/category-metrics` | T1 |
-| `/surf/prediction-market/polymarket/ranking` | T1 |
-| `/surf/prediction-market/polymarket/trades` | T1 |
-| `/surf/prediction-market/polymarket/markets` | T1 |
-| `/surf/prediction-market/polymarket/events` | T1 |
-| `/surf/prediction-market/polymarket/prices` | T1 |
-| `/surf/prediction-market/polymarket/volumes` | T1 |
-| `/surf/prediction-market/polymarket/open-interest` | T1 |
-| `/surf/prediction-market/polymarket/positions` | T2 |
-| `/surf/prediction-market/polymarket/activity` | T2 |
-| `/surf/prediction-market/kalshi/ranking` | T1 |
-| `/surf/prediction-market/kalshi/markets` | T1 |
-| `/surf/prediction-market/kalshi/events` | T1 |
-| `/surf/prediction-market/kalshi/prices` | T1 |
-| `/surf/prediction-market/kalshi/trades` | T1 |
-| `/surf/prediction-market/kalshi/volumes` | T1 |
-| `/surf/prediction-market/kalshi/open-interest` | T1 |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
+| `/surf/prediction-market/category-metrics` | T1 | — |
+| `/surf/prediction-market/polymarket/ranking` | T1 | — |
+| `/surf/prediction-market/polymarket/trades` | T1 | — |
+| `/surf/prediction-market/polymarket/markets` | T1 | `market_slug` |
+| `/surf/prediction-market/polymarket/events` | T1 | `event_slug` |
+| `/surf/prediction-market/polymarket/prices` | T1 | `condition_id` |
+| `/surf/prediction-market/polymarket/volumes` | T1 | `condition_id` |
+| `/surf/prediction-market/polymarket/open-interest` | T1 | `condition_id` |
+| `/surf/prediction-market/polymarket/positions` | T2 | `address` |
+| `/surf/prediction-market/polymarket/activity` | T2 | `address` |
+| `/surf/prediction-market/kalshi/ranking` | T1 | — |
+| `/surf/prediction-market/kalshi/markets` | T1 | `market_ticker` |
+| `/surf/prediction-market/kalshi/events` | T1 | `event_ticker` |
+| `/surf/prediction-market/kalshi/prices` | T1 | `ticker` |
+| `/surf/prediction-market/kalshi/trades` | T1 | `ticker` |
+| `/surf/prediction-market/kalshi/volumes` | T1 | `ticker` |
+| `/surf/prediction-market/kalshi/open-interest` | T1 | `ticker` |
 
 (For Polymarket smart-money, wallet PnL, UMA oracle resolution, and the other prediction-market venues — Limitless, Opinion, Predict.Fun, dFlow, Binance Futures, cross-venue canonical markets — use the dedicated **Predexon** integration instead; Surf's prediction-market coverage is narrower but cheaper.)
 
 ### Project + DeFi — 3 endpoints
 
-| Path | Tier |
-| ---- | ---- |
-| `/surf/project/detail` | T1 |
-| `/surf/project/defi/metrics` | T1 |
-| `/surf/project/defi/ranking` | T1 |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
+| `/surf/project/detail` | T1 | — |
+| `/surf/project/defi/metrics` | T1 | `metric` |
+| `/surf/project/defi/ranking` | T1 | `metric` |
 
 ### Social / CT Intelligence — 11 endpoints
 
-| Path | Tier | Params |
-| ---- | ---- | ------ |
-| `/surf/social/detail` | T2 | project identifier |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
+| `/surf/social/detail` | T2 | — |
 | `/surf/social/ranking` | T2 | — |
 | `/surf/social/smart-followers/history` | T2 | — |
-| `/surf/social/mindshare` | T2 | `project`, `window` |
-| `/surf/social/tweets` | T1 | `ids=` |
-| `/surf/social/tweet/replies` | T1 | `id=` |
-| `/surf/social/user` | T1 | `username=` |
-| `/surf/social/user/followers` | T1 | `username=` |
-| `/surf/social/user/following` | T1 | `username=` |
-| `/surf/social/user/posts` | T1 | `username=` |
-| `/surf/social/user/replies` | T1 | `username=` |
+| `/surf/social/mindshare` | T2 | `q`, `interval` |
+| `/surf/social/tweets` | T1 | `ids` |
+| `/surf/social/tweet/replies` | T1 | `tweet_id` |
+| `/surf/social/user` | T1 | `handle` |
+| `/surf/social/user/followers` | T1 | `handle` |
+| `/surf/social/user/following` | T1 | `handle` |
+| `/surf/social/user/posts` | T1 | `handle` |
+| `/surf/social/user/replies` | T1 | `handle` |
 
 ### Token Analytics — 4 endpoints
 
-| Path | Tier | Params |
-| ---- | ---- | ------ |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
 | `/surf/token/tokenomics` | T1 | — |
-| `/surf/token/dex-trades` | T2 | `address=` |
-| `/surf/token/holders` | T2 | `address=`, `limit` |
-| `/surf/token/transfers` | T2 | `address=` |
+| `/surf/token/dex-trades` | T2 | `address` |
+| `/surf/token/holders` | T2 | `address`, `chain` |
+| `/surf/token/transfers` | T2 | `address`, `chain` |
 
 ### Unified Search — 11 endpoints (all Tier 2)
 
-`/surf/search/airdrop`, `/surf/search/events`, `/surf/search/kalshi`, `/surf/search/polymarket`, `/surf/search/web`, `/surf/search/project`, `/surf/search/news`, `/surf/search/wallet`, `/surf/search/fund`, `/surf/search/social/people`, `/surf/search/social/posts`. All take `query` and optional `limit`.
+| Path | Required |
+| ---- | -------- |
+| `/surf/search/airdrop` | — |
+| `/surf/search/events` | — |
+| `/surf/search/kalshi` | — |
+| `/surf/search/polymarket` | — |
+| `/surf/search/web` | `q` |
+| `/surf/search/project` | `q` |
+| `/surf/search/news` | `q` |
+| `/surf/search/wallet` | `q` |
+| `/surf/search/fund` | `q` |
+| `/surf/search/social/people` | `q` |
+| `/surf/search/social/posts` | `q` |
 
 ### VC Fund Intelligence — 3 endpoints
 
-| Path | Tier |
-| ---- | ---- |
-| `/surf/fund/detail` | T1 |
-| `/surf/fund/portfolio` | T1 |
-| `/surf/fund/ranking` | T1 |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
+| `/surf/fund/detail` | T1 | — |
+| `/surf/fund/portfolio` | T1 | — |
+| `/surf/fund/ranking` | T1 | `metric` |
 
 ### Wallet Intelligence — 6 endpoints (all Tier 2)
 
-| Path | Params |
-| ---- | ------ |
-| `/surf/wallet/detail` | `address=` |
-| `/surf/wallet/history` | `address=` |
-| `/surf/wallet/net-worth` | `address=` |
-| `/surf/wallet/transfers` | `address=` |
-| `/surf/wallet/protocols` | `address=` |
-| `/surf/wallet/labels/batch` | `addresses=` (comma-separated, ≤200) |
+| Path | Required |
+| ---- | -------- |
+| `/surf/wallet/detail` | `address` |
+| `/surf/wallet/history` | `address` |
+| `/surf/wallet/net-worth` | `address` |
+| `/surf/wallet/transfers` | `address` |
+| `/surf/wallet/protocols` | `address` |
+| `/surf/wallet/labels/batch` | `addresses` (comma-separated, ≤200) |
 
 ### Web — 1 endpoint
 
-| Path | Tier | Params |
-| ---- | ---- | ------ |
-| `/surf/web/fetch` | T2 | `url=` |
-
-### Chat — 1 endpoint
-
-| Path | Method | Tier | Body |
-| ---- | ------ | ---- | ---- |
-| `/surf/chat/completions` | **POST** | T3 ($0.02 flat) | OpenAI-compatible request body |
+| Path | Tier | Required |
+| ---- | ---- | -------- |
+| `/surf/web/fetch` | T2 | `url` |
 
 ## Example flows
 
@@ -223,11 +233,11 @@ Cost: 1 × $0.02 (schema, cached) + 1 × $0.02 (the SQL query) = **$0.04 total**
 **4. "Is project Z trending?"**
 
 ```bash
-# Resolve the canonical slug first
-curl 'http://127.0.0.1:8402/v1/surf/search/project?query=ethena'
+# Resolve the canonical slug first (search uses q, not query)
+curl 'http://127.0.0.1:8402/v1/surf/search/project?q=ethena'
 
-# Then pull mindshare
-curl 'http://127.0.0.1:8402/v1/surf/social/mindshare?project=ethena&window=30d'
+# Then pull mindshare (mindshare uses q + interval)
+curl 'http://127.0.0.1:8402/v1/surf/social/mindshare?q=ethena&interval=30d'
 ```
 
 ## How calls are paid

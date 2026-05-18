@@ -4,6 +4,28 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.194 — May 18, 2026
+
+- **Seedance video pricing aligned with blockrun's token-priced model.** Last week blockrun replaced the flat per-second Seedance pricing with `duration × tokens/sec × $/1M tokens × 1.05 margin` after a verification call against `bytedance/seedance-2.0-fast` measured 10,128 tokens/sec at 480p (token360's default, not the 720p we'd guessed). The old ClawRouter `VIDEO_PRICING` table was both wrong-shaped and ~3–4× off on the high side. Updated `src/proxy.ts`:
+  - `VIDEO_PRICING` now stores base `$/sec` (no margin baked in — `estimateVideoCost` still applies the 5% margin to match server's `MARGIN_PERCENT`). Per-second values are derived from `10128 × $/1M tokens / 1e6`.
+  - New optional `pricePerSecondImageInput` field per model. 2.0 Fast and 2.0 Pro charge ~40% less per token on image-to-video (token360's published image rate); 1.5 Pro stays flat because its audio-generation toggle isn't yet wired to a request param, and undercharging when audio is on by default would be silent loss.
+  - `estimateVideoCost(model, durationSeconds, hasImageInput)` picks the cheaper image rate when the request body has `image_url`. The video route now parses `image_url` presence alongside `model` + `duration_seconds` and threads it into the cost callsite (`src/proxy.ts:2706, 2876`).
+  - **Net effect** on the default 5s call telemetry: 1.5 Pro $0.16 → $0.23, 2.0 Fast $0.79 → $0.60 text / $0.35 image, 2.0 Pro $1.58 → $0.74 text / $0.46 image. Matches blockrun's quoted prices to within rounding. This is telemetry-only — payment is fully server-dictated via x402 (`feedback_telemetry_vs_payment`).
+- **BytePlus RealFace passthrough documented (no code change needed).** blockrun added an optional `real_face_asset_id` body field (format `ta_xxxxxxxx`) on Seedance 2.0 variants for real-person character consistency across frames. The ClawRouter video route already forwards the raw request body to blockrun as-is, so RealFace works transparently — but the README + `skills/clawrouter/SKILL.md` headline didn't mention it. Updated both with usage notes, the per-1M-token pricing model, and the constraint that RealFace + `image_url` are mutually exclusive (both seed the first frame; pick one).
+- **Surf skill refreshed against blockrun's real `/gateway/v1` catalog (83 endpoints).** The first Surf skill (v0.12.193) was drafted in parallel with blockrun's integration and ended up out of sync once blockrun:
+  - Switched to `api.asksurf.ai/gateway/v1` (real public gateway, 82–83 real endpoints) and dropped 15 invented routes the skill had described.
+  - Pre-validates required query params per endpoint **before settling payment** — call with a missing param and you get `400 { missing_params, all_required, docs }` and the wallet isn't charged. 56 of 83 endpoints have required params.
+  - Dropped surf-1.5 chat (`/surf/chat/completions`) again pending per-token billing — calling it now returns 404 without taking payment.
+
+  Updated `skills/surf/SKILL.md`:
+  - Endpoint count 84 → 83, removed the Chat section, added the required-param pre-check note up front.
+  - Fixed param names that the agent would otherwise feed incorrectly and trip the pre-check 400: `social/mindshare` is `q` + `interval` (not `project` + `window`), `search/*` family is `q` (not `query`), `token/holders` + `token/transfers` need `address` AND `chain`, `onchain/gas-price` needs `chain`, `onchain/tx` needs `hash` + `chain`, exchange family universally needs `pair`, market family uses `symbol`, prediction-market endpoints use their specific identifier params (`market_slug`, `event_slug`, `condition_id`, `market_ticker`, `event_ticker`, `ticker`, `address`), and `fund/ranking` + `project/defi/*` need `metric`.
+  - Reworded the example flows that previously used wrong param names (`search/project?query=ethena` → `?q=ethena`, mindshare example fixed).
+- **Phone skill — voice/call `from` is now optional with server-side auto-pick.** blockrun moved `from` from required → optional on `/v1/voice/call`. After payment verification the server picks a caller-ID from the wallet's owned numbers: 0 active → `403 no_active_number` with buy-first hint, exactly 1 → auto-used, 2+ → `400 ambiguous_from` listing all candidates. The prior skill said "Otherwise Bland picks one" — wrong, and would have made agents leave `from` off and confuse users with the 403/400 responses. Updated `skills/phone/SKILL.md` with the actual auto-pick rule table and the ownership-mismatch 403 behavior.
+- **No code change for `real_face_asset_id`, no new partner tools, no proxy whitelist change.** Surf + Phone are both base+skill integrations (per the v0.12.193 rule). All blockrun upstream changes here flow through the existing `proxyPaidApiRequest` path transparently.
+
+---
+
 ## v0.12.193 — May 17, 2026
 
 - **Surf integration — first skill-only marketplace API.** BlockRun launched the Surf unified crypto data API ([blockrun.ai/marketplace/surf](https://blockrun.ai/marketplace/surf)) — 84 endpoints across 13 domains: CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT mindshare, news, project/DeFi metrics, token analytics, unified search, VC fund intelligence. Settles directly to Surf's Base treasury in USDC; no Surf account or API key required.

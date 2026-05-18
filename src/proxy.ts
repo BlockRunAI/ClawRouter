@@ -1486,12 +1486,33 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
   },
 };
 
-// Video pricing (must match server's VIDEO_MODELS in blockrun/src/lib/models.ts)
-const VIDEO_PRICING: Record<string, { pricePerSecond: number; defaultDurationSeconds: number }> = {
+// Video pricing (must match server's VIDEO_MODELS in blockrun/src/lib/models.ts).
+// pricePerSecond is the BASE rate (no margin). estimateVideoCost applies the
+// same 5% margin server-side uses, so values land on blockrun's quote.
+// Seedance is token-priced upstream — base $/sec = 10128 tokens/sec × $/1M tokens.
+// pricePerSecondImageInput, when set, is used if the request body has image_url
+// (image-to-video tokenizes ~40% cheaper on 2.0 variants; 1.5 Pro is flat because
+// its audio-toggle semantics aren't yet wired to a request param).
+const VIDEO_PRICING: Record<
+  string,
+  {
+    pricePerSecond: number;
+    pricePerSecondImageInput?: number;
+    defaultDurationSeconds: number;
+  }
+> = {
   "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 },
-  "bytedance/seedance-1.5-pro": { pricePerSecond: 0.03, defaultDurationSeconds: 5 },
-  "bytedance/seedance-2.0-fast": { pricePerSecond: 0.15, defaultDurationSeconds: 5 },
-  "bytedance/seedance-2.0": { pricePerSecond: 0.3, defaultDurationSeconds: 5 },
+  "bytedance/seedance-1.5-pro": { pricePerSecond: 0.04375, defaultDurationSeconds: 5 },
+  "bytedance/seedance-2.0-fast": {
+    pricePerSecond: 0.11343,
+    pricePerSecondImageInput: 0.06684,
+    defaultDurationSeconds: 5,
+  },
+  "bytedance/seedance-2.0": {
+    pricePerSecond: 0.14179,
+    pricePerSecondImageInput: 0.0871,
+    defaultDurationSeconds: 5,
+  },
 };
 
 // Phone & Voice pricing (must match server's PHONE_PRICING/BLAND_PRICING in
@@ -1555,12 +1576,18 @@ export function resolvePhoneTelemetryCost(args: {
 
 /**
  * Estimate the cost of a video generation request (pricePerSecond × duration + 5% margin).
+ * When hasImageInput=true and the model has a discounted image rate, use that instead.
  */
-function estimateVideoCost(model: string, durationSeconds?: number): number {
+function estimateVideoCost(
+  model: string,
+  durationSeconds?: number,
+  hasImageInput?: boolean,
+): number {
   const p = VIDEO_PRICING[model];
   if (!p) return 0.4 * 1.05; // fallback: ~$0.40/clip + margin
   const dur = durationSeconds ?? p.defaultDurationSeconds;
-  return p.pricePerSecond * dur * 1.05;
+  const rate = hasImageInput && p.pricePerSecondImageInput ? p.pricePerSecondImageInput : p.pricePerSecond;
+  return rate * dur * 1.05;
 }
 
 /**
@@ -2702,11 +2729,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         const reqBody = Buffer.concat(chunks);
         let videoModel = "xai/grok-imagine-video";
         let videoDuration: number | undefined;
+        let videoHasImageInput = false;
         try {
           const parsed = JSON.parse(reqBody.toString());
           videoModel = parsed.model || videoModel;
           videoDuration =
             typeof parsed.duration_seconds === "number" ? parsed.duration_seconds : undefined;
+          videoHasImageInput =
+            typeof parsed.image_url === "string" && parsed.image_url.length > 0;
         } catch {
           /* use defaults */
         }
@@ -2845,7 +2875,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           const videoActualCost =
-            paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration);
+            paymentStore.getStore()?.amountUsd ??
+            estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
           logUsage({
             timestamp: new Date().toISOString(),
             model: videoModel,
