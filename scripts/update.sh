@@ -330,26 +330,48 @@ echo "→ Installing latest ClawRouter..."
 # "plugin already exists" and our EXIT trap rolls back, stranding the user on
 # the previous version. `--force` is idempotent for both fresh + upgrade flows.
 #
+# OpenClaw can also reject its own config rewrite when it would shrink a large
+# user config. Treat that as recoverable: keep the user's restored config and
+# install ClawRouter files directly from npm below.
+OPENCLAW_INSTALL_RECOVERABLE=0
+OPENCLAW_INSTALL_LOG="$(mktemp)"
+#
 # Run with timeout — openclaw plugins install may hang after printing
 # "Installed plugin: clawrouter" in OpenClaw v2026.4.5 (parallel plugin loading).
 # 120s is enough for slow connections; the install itself completes in ~30s.
 if command -v timeout >/dev/null 2>&1; then
-  timeout 120 openclaw plugins install --force @blockrun/clawrouter || {
+  timeout 120 openclaw plugins install --force @blockrun/clawrouter 2>&1 | tee "$OPENCLAW_INSTALL_LOG" || {
     exit_code=$?
     if [ $exit_code -eq 124 ]; then
       echo "  (install command timed out — this is normal with OpenClaw v2026.4.5)"
       echo "  Plugin was installed successfully before the hang."
+    elif grep -q "Config write rejected: .*size-drop:" "$OPENCLAW_INSTALL_LOG"; then
+      echo "  ⚠ OpenClaw rejected a config size-drop during plugin registration."
+      echo "  Continuing with direct npm install while preserving your existing config."
+      OPENCLAW_INSTALL_RECOVERABLE=1
     else
       exit $exit_code
     fi
   }
 else
-  openclaw plugins install --force @blockrun/clawrouter
+  openclaw plugins install --force @blockrun/clawrouter 2>&1 | tee "$OPENCLAW_INSTALL_LOG" || {
+    exit_code=$?
+    if grep -q "Config write rejected: .*size-drop:" "$OPENCLAW_INSTALL_LOG"; then
+      echo "  ⚠ OpenClaw rejected a config size-drop during plugin registration."
+      echo "  Continuing with direct npm install while preserving your existing config."
+      OPENCLAW_INSTALL_RECOVERABLE=1
+    else
+      exit $exit_code
+    fi
+  }
 fi
+rm -f "$OPENCLAW_INSTALL_LOG"
 
 # Install is complete — clear the rollback trap immediately.
 # From this point on, Ctrl+C or errors should NOT roll back the install.
-trap - EXIT INT TERM
+if [ "$OPENCLAW_INSTALL_RECOVERABLE" != "1" ]; then
+  trap - EXIT INT TERM
+fi
 
 # Restore credentials after plugin install (always restore to preserve user's channels)
 if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
@@ -431,6 +453,18 @@ if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
   fi
   INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('?');}" 2>/dev/null || echo "?")
   echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
+elif [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ]; then
+  LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
+  if [ -z "$LATEST_VER" ]; then
+    echo "  ✗ Could not resolve latest ClawRouter version from npm"
+    exit 1
+  fi
+  force_install_from_npm "$LATEST_VER"
+  INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('?');}" 2>/dev/null || echo "?")
+  echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
+fi
+if [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ]; then
+  trap - EXIT INT TERM
 fi
 
 # ── Step 4c: Ensure all dependencies are installed ────────────
