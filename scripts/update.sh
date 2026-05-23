@@ -420,8 +420,13 @@ handle_openclaw_install_failure() {
   local exit_code="$1"
   if [ "$exit_code" -eq 124 ]; then
     echo "  (install command timed out — this is normal with OpenClaw v2026.4.5)"
-    echo "  Plugin was installed successfully before the hang."
-    return 0
+    if [ -f "$PLUGIN_DIR/package.json" ]; then
+      echo "  Plugin package.json is present; treating install as completed before the hang."
+      return 0
+    fi
+    echo "  Plugin package.json is missing after timeout; continuing with direct npm install."
+    OPENCLAW_INSTALL_RECOVERABLE=1
+    return "$exit_code"
   fi
 
   if grep -q "Config write rejected: .*size-drop:" "$OPENCLAW_INSTALL_LOG"; then
@@ -458,12 +463,16 @@ OPENCLAW_INSTALL_LOG="$(mktemp)"
 if command -v timeout >/dev/null 2>&1; then
   timeout 120 openclaw plugins install --force @blockrun/clawrouter 2>&1 | tee "$OPENCLAW_INSTALL_LOG" || {
     exit_code=$?
-    handle_openclaw_install_failure "$exit_code" || exit $exit_code
+    handle_openclaw_install_failure "$exit_code" || {
+      [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ] || exit $exit_code
+    }
   }
 else
   openclaw plugins install --force @blockrun/clawrouter 2>&1 | tee "$OPENCLAW_INSTALL_LOG" || {
     exit_code=$?
-    handle_openclaw_install_failure "$exit_code" || exit $exit_code
+    handle_openclaw_install_failure "$exit_code" || {
+      [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ] || exit $exit_code
+    }
   }
 fi
 rm -f "$OPENCLAW_INSTALL_LOG"
