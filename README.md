@@ -307,16 +307,16 @@ Verify phone numbers and place AI-powered outbound voice calls directly from cha
 
 Calls are **fire-and-forget**: the request returns a `call_id` and `poll_url` immediately. The call itself runs in the cloud for up to 30 minutes. Poll `GET /v1/voice/call/{call_id}` (or `clawrouter share`/transcripts dashboard) to retrieve the transcript and recording when status is `completed`.
 
-| Operation                         | Provider | Price                        |
-| --------------------------------- | -------- | ---------------------------- |
-| Phone lookup (carrier, line type) | Twilio   | $0.01                        |
-| Fraud check (SIM-swap, fwd)       | Twilio   | $0.05                        |
-| Buy phone number (30-day lease)   | Twilio   | $5.00                        |
-| Renew lease (+30 days)            | Twilio   | $5.00                        |
-| List wallet's owned numbers       | Twilio   | $0.001                       |
-| Release a number                  | Twilio   | free                         |
-| **AI voice call (≤30 min)**       | Bland.ai | **$0.54 flat per call**      |
-| Poll call status / transcript     | Bland.ai | free                         |
+| Operation                         | Provider | Price                   |
+| --------------------------------- | -------- | ----------------------- |
+| Phone lookup (carrier, line type) | Twilio   | $0.01                   |
+| Fraud check (SIM-swap, fwd)       | Twilio   | $0.05                   |
+| Buy phone number (30-day lease)   | Twilio   | $5.00                   |
+| Renew lease (+30 days)            | Twilio   | $5.00                   |
+| List wallet's owned numbers       | Twilio   | $0.001                  |
+| Release a number                  | Twilio   | free                    |
+| **AI voice call (≤30 min)**       | Bland.ai | **$0.54 flat per call** |
+| Poll call status / transcript     | Bland.ai | free                    |
 
 **CLI for wallet-owned numbers:**
 
@@ -354,11 +354,11 @@ Surf is BlockRun's unified crypto data API — **84 endpoints across 13 domains*
 
 ClawRouter ships Surf as a **skill, not as typed wrappers**. The proxy whitelists `/v1/surf/*` so any call through the local proxy is paid x402 from the same wallet; the agent reads `skills/surf/SKILL.md` for the endpoint catalog and crafts the HTTP call. No `blockrun_surf_*` tool definitions to maintain; a new Surf endpoint requires zero ClawRouter release.
 
-| Tier | Cost      | Examples                                                      |
-| ---- | --------: | ------------------------------------------------------------- |
-| 1    | **$0.001**| prices, rankings, lists, news                                 |
-| 2    | **$0.005**| orderbooks, candles, search, wallet details, social mindshare |
-| 3    | **$0.020**| on-chain SQL / query / schema, chat completions               |
+| Tier |       Cost | Examples                                                      |
+| ---- | ---------: | ------------------------------------------------------------- |
+| 1    | **$0.001** | prices, rankings, lists, news                                 |
+| 2    | **$0.005** | orderbooks, candles, search, wallet details, social mindshare |
+| 3    | **$0.020** | on-chain SQL / query / schema, chat completions               |
 
 **Usage (HTTP):**
 

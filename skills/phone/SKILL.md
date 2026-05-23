@@ -129,20 +129,20 @@ POST to `http://localhost:8402/v1/voice/call`:
 
 **Optional:**
 
-| Field          | Default       | Notes                                                                                          |
-| -------------- | ------------- | ---------------------------------------------------------------------------------------------- |
-| `voice`        | `nat`         | Presets: `nat`, `josh`, `maya`, `june`, `paige`, `derek`, `florian`. Or a custom Bland voice ID.  |
-| `max_duration` | `5`           | Maximum minutes (1–30). Price is flat $0.54 regardless of actual duration.                        |
-| `from`         | auto-picked   | Must be a wallet-owned number from `phone_numbers_list`. If omitted, server auto-picks from wallet's active numbers — see auto-pick rules below. |
-| `language`     | `en-US`       | Any spoken-language ISO code, e.g. `es-ES`, `zh-CN`, `de-DE`.                                  |
+| Field          | Default     | Notes                                                                                                                                            |
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `voice`        | `nat`       | Presets: `nat`, `josh`, `maya`, `june`, `paige`, `derek`, `florian`. Or a custom Bland voice ID.                                                 |
+| `max_duration` | `5`         | Maximum minutes (1–30). Price is flat $0.54 regardless of actual duration.                                                                       |
+| `from`         | auto-picked | Must be a wallet-owned number from `phone_numbers_list`. If omitted, server auto-picks from wallet's active numbers — see auto-pick rules below. |
+| `language`     | `en-US`     | Any spoken-language ISO code, e.g. `es-ES`, `zh-CN`, `de-DE`.                                                                                    |
 
 **`from` auto-pick rules** (server-side, after payment verification):
 
-| Wallet active numbers | Behavior                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------- |
+| Wallet active numbers | Behavior                                                                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------- |
 | 0                     | `403 no_active_number` — response includes `buy_endpoint` + marketplace URL so caller can provision first |
-| Exactly 1             | Auto-used as caller ID                                                                       |
-| 2+                    | `400 ambiguous_from` — response lists all active numbers; retry with `from` set explicitly   |
+| Exactly 1             | Auto-used as caller ID                                                                                    |
+| 2+                    | `400 ambiguous_from` — response lists all active numbers; retry with `from` set explicitly                |
 
 If an explicit `from` is supplied but the wallet doesn't own it, the response is `403` with a clear ownership-mismatch message (no charge taken when validation fails).
 
@@ -182,14 +182,17 @@ GET `http://localhost:8402/v1/voice/call/{call_id}`. Returns:
 ## Example Agentic Flows
 
 **Verify before texting:**
+
 > User: "Send a verification code to +1 415 555 0123"
 > Agent: First call `blockrun_phone_lookup_fraud({ phoneNumber: "+14155550123" })`. If `sim_swap.last_sim_swap` is within the past 7 days, refuse and ask the user to confirm out-of-band. Otherwise proceed.
 
 **Appointment confirmation:**
+
 > User: "Call my client at +1 415 555 0123 and confirm tomorrow's 3pm meeting"
 > Agent: `blockrun_voice_call({ to: "+14155550123", task: "Call to confirm the 3pm Thursday meeting; if they can't make it, offer to reschedule for Friday morning.", max_duration: 5 })`. Returns `call_id`. Tell the user: "Calling now — I'll have the transcript in a few minutes." Then `blockrun_voice_status({ callId })` every 30s until `completed`, then summarize the transcript.
 
 **Acquire dedicated caller ID:**
+
 > User: "Buy me a San Francisco number for the next 30 days"
 > Agent: `blockrun_phone_numbers_buy({ country: "US", areaCode: "415" })`. Confirm the assigned number to the user and warn them: "Lease expires in 30 days, costs $5 to renew."
 

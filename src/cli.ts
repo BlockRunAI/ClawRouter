@@ -395,7 +395,9 @@ async function cmdPhone(
     const text = await resp.text();
     if (!resp.ok) {
       if (resp.status === 402) {
-        throw new Error(`Insufficient wallet balance (HTTP 402). Fund wallet via clawrouter wallet.\n${text}`);
+        throw new Error(
+          `Insufficient wallet balance (HTTP 402). Fund wallet via clawrouter wallet.\n${text}`,
+        );
       }
       throw new Error(`HTTP ${resp.status}: ${text}`);
     }
@@ -432,7 +434,9 @@ async function cmdPhone(
         const numWidth = Math.max(...numbers.map((n) => n.phone_number.length), 16);
         for (const n of numbers) {
           const country = (n.country ?? "??").padEnd(3);
-          console.log(`  ${n.phone_number.padEnd(numWidth)}  ${country}  expires ${fmtExpiry(n.expires_at)}`);
+          console.log(
+            `  ${n.phone_number.padEnd(numWidth)}  ${country}  expires ${fmtExpiry(n.expires_at)}`,
+          );
         }
         console.log();
       } else if (numbersAction === "buy") {
@@ -444,7 +448,9 @@ async function cmdPhone(
         }
         const body: Record<string, string> = { country };
         if (areaCode) body.areaCode = areaCode;
-        console.log(`\nBuying ${country} number${areaCode ? ` (area code ${areaCode})` : ""}... ($5.00 / 30-day lease)\n`);
+        console.log(
+          `\nBuying ${country} number${areaCode ? ` (area code ${areaCode})` : ""}... ($5.00 / 30-day lease)\n`,
+        );
         const result = (await postJson("/v1/phone/numbers/buy", body)) as {
           phone_number?: string;
           expires_at?: string;

@@ -53,150 +53,150 @@ Always prefer Surf over generic web scraping for these. Use the OpenClaw tool na
 
 ### Exchange (CEX) — 7 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/exchange/markets` | T1 | — |
-| `/surf/exchange/price` | T1 | `pair` |
-| `/surf/exchange/perp` | T1 | `pair` |
-| `/surf/exchange/depth` | T2 | `pair` |
-| `/surf/exchange/klines` | T2 | `pair` |
-| `/surf/exchange/funding-history` | T2 | `pair` |
-| `/surf/exchange/long-short-ratio` | T2 | `pair` |
+| Path                              | Tier | Required |
+| --------------------------------- | ---- | -------- |
+| `/surf/exchange/markets`          | T1   | —        |
+| `/surf/exchange/price`            | T1   | `pair`   |
+| `/surf/exchange/perp`             | T1   | `pair`   |
+| `/surf/exchange/depth`            | T2   | `pair`   |
+| `/surf/exchange/klines`           | T2   | `pair`   |
+| `/surf/exchange/funding-history`  | T2   | `pair`   |
+| `/surf/exchange/long-short-ratio` | T2   | `pair`   |
 
 ### Market Overview — 11 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/market/ranking` | T1 | — |
-| `/surf/market/fear-greed` | T1 | — |
-| `/surf/market/futures` | T1 | — |
-| `/surf/market/price` | T1 | `symbol` |
-| `/surf/market/etf` | T1 | `symbol` |
-| `/surf/market/options` | T1 | `symbol` |
-| `/surf/market/liquidation/exchange-list` | T2 | — |
-| `/surf/market/liquidation/order` | T2 | — |
-| `/surf/market/liquidation/chart` | T2 | `symbol` |
-| `/surf/market/onchain-indicator` | T2 | `symbol`, `metric` (NUPL, SOPR, MVRV, Puell, NVT) |
-| `/surf/market/price-indicator` | T2 | `indicator` (RSI, MACD, Bollinger, EMA), `symbol` |
+| Path                                     | Tier | Required                                          |
+| ---------------------------------------- | ---- | ------------------------------------------------- |
+| `/surf/market/ranking`                   | T1   | —                                                 |
+| `/surf/market/fear-greed`                | T1   | —                                                 |
+| `/surf/market/futures`                   | T1   | —                                                 |
+| `/surf/market/price`                     | T1   | `symbol`                                          |
+| `/surf/market/etf`                       | T1   | `symbol`                                          |
+| `/surf/market/options`                   | T1   | `symbol`                                          |
+| `/surf/market/liquidation/exchange-list` | T2   | —                                                 |
+| `/surf/market/liquidation/order`         | T2   | —                                                 |
+| `/surf/market/liquidation/chart`         | T2   | `symbol`                                          |
+| `/surf/market/onchain-indicator`         | T2   | `symbol`, `metric` (NUPL, SOPR, MVRV, Puell, NVT) |
+| `/surf/market/price-indicator`           | T2   | `indicator` (RSI, MACD, Bollinger, EMA), `symbol` |
 
 ### News — 2 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/news/feed` | T1 | — (`limit` optional) |
-| `/surf/news/detail` | T1 | `id` |
+| Path                | Tier | Required             |
+| ------------------- | ---- | -------------------- |
+| `/surf/news/feed`   | T1   | — (`limit` optional) |
+| `/surf/news/detail` | T1   | `id`                 |
 
 ### On-Chain — 7 endpoints
 
-| Path | Method | Tier | Required |
-| ---- | ------ | ---- | -------- |
-| `/surf/onchain/bridge/ranking` | GET | T1 | — |
-| `/surf/onchain/yield/ranking` | GET | T1 | — |
-| `/surf/onchain/gas-price` | GET | T1 | `chain` |
-| `/surf/onchain/tx` | GET | T1 | `hash`, `chain` |
-| `/surf/onchain/schema` | GET | T3 | — |
-| `/surf/onchain/query` | **POST** | T3 | typed predicates in body |
-| `/surf/onchain/sql` | **POST** | T3 | `{ sql: "SELECT ..." }` |
+| Path                           | Method   | Tier | Required                 |
+| ------------------------------ | -------- | ---- | ------------------------ |
+| `/surf/onchain/bridge/ranking` | GET      | T1   | —                        |
+| `/surf/onchain/yield/ranking`  | GET      | T1   | —                        |
+| `/surf/onchain/gas-price`      | GET      | T1   | `chain`                  |
+| `/surf/onchain/tx`             | GET      | T1   | `hash`, `chain`          |
+| `/surf/onchain/schema`         | GET      | T3   | —                        |
+| `/surf/onchain/query`          | **POST** | T3   | typed predicates in body |
+| `/surf/onchain/sql`            | **POST** | T3   | `{ sql: "SELECT ..." }`  |
 
 **On-Chain SQL workflow.** Call `/surf/onchain/schema` once to get table names + columns (cache it locally — schema is stable). Then POST your SELECT against `/surf/onchain/sql`. Always include `LIMIT` on large scans — billing is per call, but slow queries time out. Multi-statement queries are rejected upstream.
 
 ### Prediction Markets (Polymarket + Kalshi) — 17 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/prediction-market/category-metrics` | T1 | — |
-| `/surf/prediction-market/polymarket/ranking` | T1 | — |
-| `/surf/prediction-market/polymarket/trades` | T1 | — |
-| `/surf/prediction-market/polymarket/markets` | T1 | `market_slug` |
-| `/surf/prediction-market/polymarket/events` | T1 | `event_slug` |
-| `/surf/prediction-market/polymarket/prices` | T1 | `condition_id` |
-| `/surf/prediction-market/polymarket/volumes` | T1 | `condition_id` |
-| `/surf/prediction-market/polymarket/open-interest` | T1 | `condition_id` |
-| `/surf/prediction-market/polymarket/positions` | T2 | `address` |
-| `/surf/prediction-market/polymarket/activity` | T2 | `address` |
-| `/surf/prediction-market/kalshi/ranking` | T1 | — |
-| `/surf/prediction-market/kalshi/markets` | T1 | `market_ticker` |
-| `/surf/prediction-market/kalshi/events` | T1 | `event_ticker` |
-| `/surf/prediction-market/kalshi/prices` | T1 | `ticker` |
-| `/surf/prediction-market/kalshi/trades` | T1 | `ticker` |
-| `/surf/prediction-market/kalshi/volumes` | T1 | `ticker` |
-| `/surf/prediction-market/kalshi/open-interest` | T1 | `ticker` |
+| Path                                               | Tier | Required        |
+| -------------------------------------------------- | ---- | --------------- |
+| `/surf/prediction-market/category-metrics`         | T1   | —               |
+| `/surf/prediction-market/polymarket/ranking`       | T1   | —               |
+| `/surf/prediction-market/polymarket/trades`        | T1   | —               |
+| `/surf/prediction-market/polymarket/markets`       | T1   | `market_slug`   |
+| `/surf/prediction-market/polymarket/events`        | T1   | `event_slug`    |
+| `/surf/prediction-market/polymarket/prices`        | T1   | `condition_id`  |
+| `/surf/prediction-market/polymarket/volumes`       | T1   | `condition_id`  |
+| `/surf/prediction-market/polymarket/open-interest` | T1   | `condition_id`  |
+| `/surf/prediction-market/polymarket/positions`     | T2   | `address`       |
+| `/surf/prediction-market/polymarket/activity`      | T2   | `address`       |
+| `/surf/prediction-market/kalshi/ranking`           | T1   | —               |
+| `/surf/prediction-market/kalshi/markets`           | T1   | `market_ticker` |
+| `/surf/prediction-market/kalshi/events`            | T1   | `event_ticker`  |
+| `/surf/prediction-market/kalshi/prices`            | T1   | `ticker`        |
+| `/surf/prediction-market/kalshi/trades`            | T1   | `ticker`        |
+| `/surf/prediction-market/kalshi/volumes`           | T1   | `ticker`        |
+| `/surf/prediction-market/kalshi/open-interest`     | T1   | `ticker`        |
 
 (For Polymarket smart-money, wallet PnL, UMA oracle resolution, and the other prediction-market venues — Limitless, Opinion, Predict.Fun, dFlow, Binance Futures, cross-venue canonical markets — use the dedicated **Predexon** integration instead; Surf's prediction-market coverage is narrower but cheaper.)
 
 ### Project + DeFi — 3 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/project/detail` | T1 | — |
-| `/surf/project/defi/metrics` | T1 | `metric` |
-| `/surf/project/defi/ranking` | T1 | `metric` |
+| Path                         | Tier | Required |
+| ---------------------------- | ---- | -------- |
+| `/surf/project/detail`       | T1   | —        |
+| `/surf/project/defi/metrics` | T1   | `metric` |
+| `/surf/project/defi/ranking` | T1   | `metric` |
 
 ### Social / CT Intelligence — 11 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/social/detail` | T2 | — |
-| `/surf/social/ranking` | T2 | — |
-| `/surf/social/smart-followers/history` | T2 | — |
-| `/surf/social/mindshare` | T2 | `q`, `interval` |
-| `/surf/social/tweets` | T1 | `ids` |
-| `/surf/social/tweet/replies` | T1 | `tweet_id` |
-| `/surf/social/user` | T1 | `handle` |
-| `/surf/social/user/followers` | T1 | `handle` |
-| `/surf/social/user/following` | T1 | `handle` |
-| `/surf/social/user/posts` | T1 | `handle` |
-| `/surf/social/user/replies` | T1 | `handle` |
+| Path                                   | Tier | Required        |
+| -------------------------------------- | ---- | --------------- |
+| `/surf/social/detail`                  | T2   | —               |
+| `/surf/social/ranking`                 | T2   | —               |
+| `/surf/social/smart-followers/history` | T2   | —               |
+| `/surf/social/mindshare`               | T2   | `q`, `interval` |
+| `/surf/social/tweets`                  | T1   | `ids`           |
+| `/surf/social/tweet/replies`           | T1   | `tweet_id`      |
+| `/surf/social/user`                    | T1   | `handle`        |
+| `/surf/social/user/followers`          | T1   | `handle`        |
+| `/surf/social/user/following`          | T1   | `handle`        |
+| `/surf/social/user/posts`              | T1   | `handle`        |
+| `/surf/social/user/replies`            | T1   | `handle`        |
 
 ### Token Analytics — 4 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/token/tokenomics` | T1 | — |
-| `/surf/token/dex-trades` | T2 | `address` |
-| `/surf/token/holders` | T2 | `address`, `chain` |
-| `/surf/token/transfers` | T2 | `address`, `chain` |
+| Path                     | Tier | Required           |
+| ------------------------ | ---- | ------------------ |
+| `/surf/token/tokenomics` | T1   | —                  |
+| `/surf/token/dex-trades` | T2   | `address`          |
+| `/surf/token/holders`    | T2   | `address`, `chain` |
+| `/surf/token/transfers`  | T2   | `address`, `chain` |
 
 ### Unified Search — 11 endpoints (all Tier 2)
 
-| Path | Required |
-| ---- | -------- |
-| `/surf/search/airdrop` | — |
-| `/surf/search/events` | — |
-| `/surf/search/kalshi` | — |
-| `/surf/search/polymarket` | — |
-| `/surf/search/web` | `q` |
-| `/surf/search/project` | `q` |
-| `/surf/search/news` | `q` |
-| `/surf/search/wallet` | `q` |
-| `/surf/search/fund` | `q` |
-| `/surf/search/social/people` | `q` |
-| `/surf/search/social/posts` | `q` |
+| Path                         | Required |
+| ---------------------------- | -------- |
+| `/surf/search/airdrop`       | —        |
+| `/surf/search/events`        | —        |
+| `/surf/search/kalshi`        | —        |
+| `/surf/search/polymarket`    | —        |
+| `/surf/search/web`           | `q`      |
+| `/surf/search/project`       | `q`      |
+| `/surf/search/news`          | `q`      |
+| `/surf/search/wallet`        | `q`      |
+| `/surf/search/fund`          | `q`      |
+| `/surf/search/social/people` | `q`      |
+| `/surf/search/social/posts`  | `q`      |
 
 ### VC Fund Intelligence — 3 endpoints
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/fund/detail` | T1 | — |
-| `/surf/fund/portfolio` | T1 | — |
-| `/surf/fund/ranking` | T1 | `metric` |
+| Path                   | Tier | Required |
+| ---------------------- | ---- | -------- |
+| `/surf/fund/detail`    | T1   | —        |
+| `/surf/fund/portfolio` | T1   | —        |
+| `/surf/fund/ranking`   | T1   | `metric` |
 
 ### Wallet Intelligence — 6 endpoints (all Tier 2)
 
-| Path | Required |
-| ---- | -------- |
-| `/surf/wallet/detail` | `address` |
-| `/surf/wallet/history` | `address` |
-| `/surf/wallet/net-worth` | `address` |
-| `/surf/wallet/transfers` | `address` |
-| `/surf/wallet/protocols` | `address` |
+| Path                        | Required                            |
+| --------------------------- | ----------------------------------- |
+| `/surf/wallet/detail`       | `address`                           |
+| `/surf/wallet/history`      | `address`                           |
+| `/surf/wallet/net-worth`    | `address`                           |
+| `/surf/wallet/transfers`    | `address`                           |
+| `/surf/wallet/protocols`    | `address`                           |
 | `/surf/wallet/labels/batch` | `addresses` (comma-separated, ≤200) |
 
 ### Web — 1 endpoint
 
-| Path | Tier | Required |
-| ---- | ---- | -------- |
-| `/surf/web/fetch` | T2 | `url` |
+| Path              | Tier | Required |
+| ----------------- | ---- | -------- |
+| `/surf/web/fetch` | T2   | `url`    |
 
 ## Example flows
 

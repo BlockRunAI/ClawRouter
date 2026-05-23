@@ -92,13 +92,8 @@ describe("OpenClaw security scanner", () => {
       }
       if (!scanDirectoryWithSummary) {
         const firstScannerPath = resolve(openclawDist, scannerFiles[0]);
-        const mod = (await import(pathToFileURL(firstScannerPath).href)) as Record<
-          string,
-          unknown
-        >;
-        const fn = Object.values(mod).find((v) => typeof v === "function") as
-          | ScanFn
-          | undefined;
+        const mod = (await import(pathToFileURL(firstScannerPath).href)) as Record<string, unknown>;
+        const fn = Object.values(mod).find((v) => typeof v === "function") as ScanFn | undefined;
         if (fn) {
           scanDirectoryWithSummary = fn;
         } else {

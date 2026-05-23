@@ -156,26 +156,26 @@ Realtime prices and historical OHLC across every asset class. The agent should c
 
 ### Image & Video Generation
 
-| Tool                        | Purpose                                                                     | Price                |
-| --------------------------- | --------------------------------------------------------------------------- | -------------------- |
-| `blockrun_image_generation` | 8 image models — DALL-E 3, Nano Banana / Pro, Flux, Grok Imagine, CogView-4 | $0.015–$0.15 / image |
-| `blockrun_image_edit`       | Edit / inpaint existing image (openai/gpt-image-1)                          | $0.02–$0.04 / image  |
+| Tool                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                  | Price                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| `blockrun_image_generation` | 8 image models — DALL-E 3, Nano Banana / Pro, Flux, Grok Imagine, CogView-4                                                                                                                                                                                                                                                                                                                                              | $0.015–$0.15 / image                              |
+| `blockrun_image_edit`       | Edit / inpaint existing image (openai/gpt-image-1)                                                                                                                                                                                                                                                                                                                                                                       | $0.02–$0.04 / image                               |
 | `blockrun_video_generation` | Grok Imagine + ByteDance Seedance (1.5-pro / 2.0-fast / 2.0) at 720p with synced audio (t2v default), 5–10s. Token-priced upstream (~20,256 tokens/sec at the 720p+audio default — 2× the prior 480p rate). Pass `image_url` for image-to-video (cheaper on 2.0). Seedance 2.0 variants accept optional `real_face_asset_id` (`ta_…`) for BytePlus RealFace character-consistency — mutually exclusive with `image_url`. | $0.05/s (Grok); Seedance ~$0.46–$1.49 per 5s clip |
 
 ### Phone & Voice (Twilio + Bland.ai)
 
 Verify phone numbers and place AI-powered outbound voice calls. **Real-world side effects** — only call `blockrun_voice_call` when the user has explicitly asked to place a call. Server enforces an emergency-number blocklist; ClawRouter does not.
 
-| Tool                              | Purpose                                                                  | Price        |
-| --------------------------------- | ------------------------------------------------------------------------ | ------------ |
-| `blockrun_phone_lookup`           | Carrier + line type (mobile/landline/voip) for any E.164 number          | $0.01        |
-| `blockrun_phone_lookup_fraud`     | SIM-swap + call-forwarding fraud signals (use before SMS-code flows)     | $0.05        |
-| `blockrun_phone_numbers_buy`      | Provision a US/CA number bound to this wallet (30-day lease)             | $5.00        |
-| `blockrun_phone_numbers_renew`    | Extend a wallet-owned number's lease 30 days                             | $5.00        |
-| `blockrun_phone_numbers_list`     | List numbers the wallet currently owns + expiry timestamps               | $0.001       |
-| `blockrun_phone_numbers_release`  | Release a wallet-owned number back to the pool                           | free         |
-| `blockrun_voice_call`             | AI outbound call via Bland.ai — up to 30 min, transcript + recording     | $0.54 flat   |
-| `blockrun_voice_status`           | Poll a call's status / transcript / recording                            | free         |
+| Tool                             | Purpose                                                              | Price      |
+| -------------------------------- | -------------------------------------------------------------------- | ---------- |
+| `blockrun_phone_lookup`          | Carrier + line type (mobile/landline/voip) for any E.164 number      | $0.01      |
+| `blockrun_phone_lookup_fraud`    | SIM-swap + call-forwarding fraud signals (use before SMS-code flows) | $0.05      |
+| `blockrun_phone_numbers_buy`     | Provision a US/CA number bound to this wallet (30-day lease)         | $5.00      |
+| `blockrun_phone_numbers_renew`   | Extend a wallet-owned number's lease 30 days                         | $5.00      |
+| `blockrun_phone_numbers_list`    | List numbers the wallet currently owns + expiry timestamps           | $0.001     |
+| `blockrun_phone_numbers_release` | Release a wallet-owned number back to the pool                       | free       |
+| `blockrun_voice_call`            | AI outbound call via Bland.ai — up to 30 min, transcript + recording | $0.54 flat |
+| `blockrun_voice_status`          | Poll a call's status / transcript / recording                        | free       |
 
 Voice calls are **fire-and-forget**: the POST returns a `call_id` + `poll_url` immediately, the call itself runs in the cloud for up to 30 minutes. Poll `blockrun_voice_status` every 10–30s while in_progress to retrieve the transcript. Slash command: `/cr-call +1<E.164> "<task>" [--voice nat] [--max-duration 5]`. CLI: `clawrouter phone numbers list/buy/renew/release` and `clawrouter phone lookup/fraud <+E.164>`. See the `phone` skill for the full call-flow reference.
 

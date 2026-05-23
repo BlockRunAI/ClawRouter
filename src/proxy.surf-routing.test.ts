@@ -26,9 +26,7 @@ describe("partner path regex — surf", () => {
   });
 
   it("matches /v1/surf/prediction-market/polymarket/markets", () => {
-    expect(
-      PARTNER_PATH_REGEX.test("/v1/surf/prediction-market/polymarket/markets"),
-    ).toBe(true);
+    expect(PARTNER_PATH_REGEX.test("/v1/surf/prediction-market/polymarket/markets")).toBe(true);
   });
 
   it("matches /v1/surf/chat/completions", () => {

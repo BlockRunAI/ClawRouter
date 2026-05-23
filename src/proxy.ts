@@ -1589,7 +1589,8 @@ function estimateVideoCost(
   const p = VIDEO_PRICING[model];
   if (!p) return 0.4 * 1.05; // fallback: ~$0.40/clip + margin
   const dur = durationSeconds ?? p.defaultDurationSeconds;
-  const rate = hasImageInput && p.pricePerSecondImageInput ? p.pricePerSecondImageInput : p.pricePerSecond;
+  const rate =
+    hasImageInput && p.pricePerSecondImageInput ? p.pricePerSecondImageInput : p.pricePerSecond;
   return rate * dur * 1.05;
 }
 
@@ -2738,8 +2739,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           videoModel = parsed.model || videoModel;
           videoDuration =
             typeof parsed.duration_seconds === "number" ? parsed.duration_seconds : undefined;
-          videoHasImageInput =
-            typeof parsed.image_url === "string" && parsed.image_url.length > 0;
+          videoHasImageInput = typeof parsed.image_url === "string" && parsed.image_url.length > 0;
         } catch {
           /* use defaults */
         }

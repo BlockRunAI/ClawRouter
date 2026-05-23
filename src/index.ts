@@ -1008,8 +1008,7 @@ export function parseCallArgs(raw: string): {
     if (spaceMatch) {
       const next = tokens[i + 1];
       if (next !== undefined) {
-        const value =
-          next.startsWith('"') && next.endsWith('"') ? next.slice(1, -1) : next;
+        const value = next.startsWith('"') && next.endsWith('"') ? next.slice(1, -1) : next;
         const key = spaceMatch[1];
         if (key === "voice") voice = value;
         else if (key === "max-duration" || key === "max_duration") max_duration = Number(value);
@@ -1829,9 +1828,7 @@ const plugin: OpenClawPluginDefinition = {
           }
           lines.push("");
         }
-        lines.push(
-          "Tool-call any of these in chat, or use `/cr-imagegen` / `/videogen` directly.",
-        );
+        lines.push("Tool-call any of these in chat, or use `/cr-imagegen` / `/videogen` directly.");
 
         return { text: lines.join("\n") };
       },
@@ -1981,9 +1978,7 @@ const plugin: OpenClawPluginDefinition = {
               ...(parsed.voice ? { voice: parsed.voice } : {}),
               ...(parsed.from ? { from: parsed.from } : {}),
               ...(parsed.language ? { language: parsed.language } : {}),
-              ...(parsed.max_duration !== undefined
-                ? { max_duration: parsed.max_duration }
-                : {}),
+              ...(parsed.max_duration !== undefined ? { max_duration: parsed.max_duration } : {}),
             }),
             signal: AbortSignal.timeout(60_000),
           });
@@ -2002,7 +1997,9 @@ const plugin: OpenClawPluginDefinition = {
             status?: string;
           };
           if (!result.call_id) {
-            return { text: `Voice call accepted but no call_id returned: ${JSON.stringify(result)}` };
+            return {
+              text: `Voice call accepted but no call_id returned: ${JSON.stringify(result)}`,
+            };
           }
           const lines = [
             `📞 Calling **${parsed.to}** (call_id: \`${result.call_id}\`)`,

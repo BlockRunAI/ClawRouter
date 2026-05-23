@@ -65,10 +65,16 @@ at process startup and uses the returned `version` to drive the
 ```typescript
 // blockrun/src/app/api/v1/chat/completions/route.ts
 let latestClawRouterVersion: string | null = process.env.CLAWROUTER_CURRENT_VERSION || null;
-fetch("https://registry.npmjs.org/@blockrun/clawrouter/latest", { signal: AbortSignal.timeout(5000) })
+fetch("https://registry.npmjs.org/@blockrun/clawrouter/latest", {
+  signal: AbortSignal.timeout(5000),
+})
   .then((r) => r.json())
-  .then((data) => { if (data.version) latestClawRouterVersion = data.version; })
-  .catch(() => { /* keep env var fallback */ });
+  .then((data) => {
+    if (data.version) latestClawRouterVersion = data.version;
+  })
+  .catch(() => {
+    /* keep env var fallback */
+  });
 ```
 
 Implications:
@@ -194,11 +200,11 @@ All 5 must match the new version. If any mismatch, fix before declaring the rele
 
 ## Common Mistakes (Never Repeat These)
 
-| Mistake                                                          | Prevention                            |
-| ---------------------------------------------------------------- | ------------------------------------- |
-| Hand-editing `CURRENT_CLAWROUTER_VERSION` (no longer exists)     | Step 4 — server now auto-fetches      |
-| CHANGELOG entry missing or incomplete                            | Step 3 — write it before building     |
-| npm publish before tests pass                                    | Steps 5-6 must precede Step 11        |
-| GitHub release notes empty                                       | Step 10 — extract from CHANGELOG      |
-| Git tag not pushed                                               | Step 9 — push tag separately          |
-| docs not reflecting new features                                 | Update docs in same PR as the feature |
+| Mistake                                                      | Prevention                            |
+| ------------------------------------------------------------ | ------------------------------------- |
+| Hand-editing `CURRENT_CLAWROUTER_VERSION` (no longer exists) | Step 4 — server now auto-fetches      |
+| CHANGELOG entry missing or incomplete                        | Step 3 — write it before building     |
+| npm publish before tests pass                                | Steps 5-6 must precede Step 11        |
+| GitHub release notes empty                                   | Step 10 — extract from CHANGELOG      |
+| Git tag not pushed                                           | Step 9 — push tag separately          |
+| docs not reflecting new features                             | Update docs in same PR as the feature |
