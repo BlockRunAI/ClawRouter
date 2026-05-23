@@ -384,6 +384,15 @@ if (rejectedModels.length < 20 || rejectedModels.length > 100) {
   fail(`unexpected curated model count (${rejectedModels.length})`);
 }
 
+let activeCursor = 0;
+for (const model of rejectedModels) {
+  const id = model?.id;
+  if (typeof id !== 'string' || id.length === 0) fail('rejected model list contains an invalid id');
+  const nextIndex = activeModels.findIndex((candidate, index) => index >= activeCursor && candidate?.id === id);
+  if (nextIndex === -1) fail(`rejected model ${id} is not present in active model list order`);
+  activeCursor = nextIndex + 1;
+}
+
 for (const key of activeTopKeys) {
   if (key === 'models') continue;
   const delta = Math.abs(byteSize(active[key]) - byteSize(rejected[key]));
@@ -554,7 +563,25 @@ force_install_from_npm() {
   return 1
 }
 
-if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
+if [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ]; then
+  LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
+  if [ -z "$LATEST_VER" ]; then
+    echo "  ✗ Could not resolve latest ClawRouter version from npm"
+    exit 1
+  fi
+  force_install_from_npm "$LATEST_VER"
+  if [ ! -f "$PLUGIN_DIR/package.json" ]; then
+    echo "  ✗ ClawRouter package.json missing after npm fallback"
+    exit 1
+  fi
+  INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('');}" 2>/dev/null || echo "")
+  if [ -z "$INSTALLED_VER" ]; then
+    echo "  ✗ Could not verify ClawRouter version after npm fallback"
+    exit 1
+  fi
+  echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
+  trap - EXIT INT TERM
+elif [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
   INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('');}" 2>/dev/null || echo "")
   LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
   if [ -n "$LATEST_VER" ] && [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" != "$LATEST_VER" ]; then
@@ -563,18 +590,6 @@ if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
   fi
   INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('?');}" 2>/dev/null || echo "?")
   echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
-elif [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ]; then
-  LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
-  if [ -z "$LATEST_VER" ]; then
-    echo "  ✗ Could not resolve latest ClawRouter version from npm"
-    exit 1
-  fi
-  force_install_from_npm "$LATEST_VER"
-  INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('?');}" 2>/dev/null || echo "?")
-  echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
-fi
-if [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ]; then
-  trap - EXIT INT TERM
 fi
 
 # ── Step 4c: Ensure all dependencies are installed ────────────
