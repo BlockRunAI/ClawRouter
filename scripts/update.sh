@@ -324,6 +324,122 @@ for stale in "$HOME/.openclaw/extensions/clawrouter.backup."* "$HOME/.openclaw/e
   [ -d "$stale" ] && rm -rf "$stale"
 done
 
+apply_scoped_model_trim() {
+  local rejected_path="$1"
+  if [ -z "$rejected_path" ] || [ ! -f "$rejected_path" ] || [ ! -f "$CONFIG_PATH" ]; then
+    return 1
+  fi
+
+  CONFIG_PATH="$CONFIG_PATH" REJECTED_CONFIG_PATH="$rejected_path" node <<'NODE'
+const fs = require('fs');
+
+const activePath = process.env.CONFIG_PATH;
+const rejectedPath = process.env.REJECTED_CONFIG_PATH;
+
+function fail(message) {
+  console.log(`  Skipped scoped config trim: ${message}`);
+  process.exit(1);
+}
+
+function byteSize(value) {
+  return Buffer.byteLength(JSON.stringify(value ?? null, null, 2));
+}
+
+function objectKeys(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort() : [];
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getBlockrunModels(config) {
+  return config?.models?.providers?.blockrun?.models;
+}
+
+const active = JSON.parse(fs.readFileSync(activePath, 'utf8'));
+const rejected = JSON.parse(fs.readFileSync(rejectedPath, 'utf8'));
+
+const activeTopKeys = objectKeys(active);
+const rejectedTopKeys = objectKeys(rejected);
+if (activeTopKeys.join('\0') !== rejectedTopKeys.join('\0')) {
+  fail('top-level config keys changed');
+}
+
+for (const key of ['auth', 'channels', 'gateway', 'plugins', 'models']) {
+  if (!(key in active) || !(key in rejected)) fail(`missing required ${key} section`);
+}
+
+const activeModels = getBlockrunModels(active);
+const rejectedModels = getBlockrunModels(rejected);
+if (!Array.isArray(activeModels) || !Array.isArray(rejectedModels)) {
+  fail('blockrun model list is missing or invalid');
+}
+
+if (activeModels.length <= rejectedModels.length) {
+  fail(`model count did not shrink (${activeModels.length} -> ${rejectedModels.length})`);
+}
+
+if (rejectedModels.length < 20 || rejectedModels.length > 100) {
+  fail(`unexpected curated model count (${rejectedModels.length})`);
+}
+
+for (const key of activeTopKeys) {
+  if (key === 'models') continue;
+  const delta = Math.abs(byteSize(active[key]) - byteSize(rejected[key]));
+  if (delta > 2048) fail(`non-model section changed too much: ${key}`);
+}
+
+const activeWithoutModelList = clone(active.models);
+const rejectedWithoutModelList = clone(rejected.models);
+activeWithoutModelList.providers.blockrun.models = [];
+rejectedWithoutModelList.providers.blockrun.models = [];
+const residualModelDelta = Math.abs(byteSize(activeWithoutModelList) - byteSize(rejectedWithoutModelList));
+if (residualModelDelta > 4096) {
+  fail('models section changed beyond the blockrun model list');
+}
+
+const totalDrop = byteSize(active) - byteSize(rejected);
+const modelListDrop = byteSize(activeModels) - byteSize(rejectedModels);
+if (totalDrop <= 0 || modelListDrop / totalDrop < 0.65) {
+  fail('size drop is not primarily from the blockrun model list');
+}
+
+active.models.providers.blockrun.models = rejectedModels;
+const tmpPath = `${activePath}.tmp.${process.pid}`;
+fs.writeFileSync(tmpPath, JSON.stringify(active, null, 2));
+fs.renameSync(tmpPath, activePath);
+
+console.log(
+  `  ✓ Applied scoped BlockRun model-list trim (${activeModels.length} -> ${rejectedModels.length})`,
+);
+NODE
+}
+
+handle_openclaw_install_failure() {
+  local exit_code="$1"
+  if [ "$exit_code" -eq 124 ]; then
+    echo "  (install command timed out — this is normal with OpenClaw v2026.4.5)"
+    echo "  Plugin was installed successfully before the hang."
+    return 0
+  fi
+
+  if grep -q "Config write rejected: .*size-drop:" "$OPENCLAW_INSTALL_LOG"; then
+    local rejected_path
+    rejected_path=$(node -e "const fs=require('fs'); const text=fs.readFileSync(process.argv[1],'utf8'); const m=text.match(/Rejected payload saved to ([^\\s]+)\\./); if (m) console.log(m[1]);" "$OPENCLAW_INSTALL_LOG")
+    echo "  ⚠ OpenClaw rejected a config size-drop during plugin registration."
+    if apply_scoped_model_trim "$rejected_path"; then
+      echo "  Continuing with direct npm install after the scoped config update."
+    else
+      echo "  Continuing with direct npm install while preserving your existing config."
+    fi
+    OPENCLAW_INSTALL_RECOVERABLE=1
+    return 0
+  fi
+
+  return "$exit_code"
+}
+
 echo "→ Installing latest ClawRouter..."
 # `--force` is required when the plugin is already installed at the same path
 # (which is always true on update). Without it, OpenClaw exits non-zero with
@@ -342,27 +458,12 @@ OPENCLAW_INSTALL_LOG="$(mktemp)"
 if command -v timeout >/dev/null 2>&1; then
   timeout 120 openclaw plugins install --force @blockrun/clawrouter 2>&1 | tee "$OPENCLAW_INSTALL_LOG" || {
     exit_code=$?
-    if [ $exit_code -eq 124 ]; then
-      echo "  (install command timed out — this is normal with OpenClaw v2026.4.5)"
-      echo "  Plugin was installed successfully before the hang."
-    elif grep -q "Config write rejected: .*size-drop:" "$OPENCLAW_INSTALL_LOG"; then
-      echo "  ⚠ OpenClaw rejected a config size-drop during plugin registration."
-      echo "  Continuing with direct npm install while preserving your existing config."
-      OPENCLAW_INSTALL_RECOVERABLE=1
-    else
-      exit $exit_code
-    fi
+    handle_openclaw_install_failure "$exit_code" || exit $exit_code
   }
 else
   openclaw plugins install --force @blockrun/clawrouter 2>&1 | tee "$OPENCLAW_INSTALL_LOG" || {
     exit_code=$?
-    if grep -q "Config write rejected: .*size-drop:" "$OPENCLAW_INSTALL_LOG"; then
-      echo "  ⚠ OpenClaw rejected a config size-drop during plugin registration."
-      echo "  Continuing with direct npm install while preserving your existing config."
-      OPENCLAW_INSTALL_RECOVERABLE=1
-    else
-      exit $exit_code
-    fi
+    handle_openclaw_install_failure "$exit_code" || exit $exit_code
   }
 fi
 rm -f "$OPENCLAW_INSTALL_LOG"
