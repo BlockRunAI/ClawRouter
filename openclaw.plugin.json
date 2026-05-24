@@ -3,6 +3,42 @@
   "name": "ClawRouter",
   "description": "Smart LLM router — 55+ models, x402 micropayments, 92% cost savings. Phone lookup + AI voice calls (Twilio + Bland.ai). Surf crypto-data API (84 endpoints, on-chain SQL, 100M+ labeled wallets) via skill.",
   "skills": ["./skills"],
+  "activation": {
+    "onStartup": true
+  },
+  "enabledByDefault": true,
+  "providers": ["blockrun"],
+  "contracts": {
+    "tools": [
+      "blockrun_predexon_events",
+      "blockrun_predexon_leaderboard",
+      "blockrun_predexon_markets",
+      "blockrun_predexon_smart_money",
+      "blockrun_predexon_smart_activity",
+      "blockrun_predexon_wallet",
+      "blockrun_predexon_wallet_pnl",
+      "blockrun_predexon_matching_markets",
+      "blockrun_predexon_endpoint_call",
+      "blockrun_stock_price",
+      "blockrun_stock_history",
+      "blockrun_stock_list",
+      "blockrun_crypto_price",
+      "blockrun_fx_price",
+      "blockrun_commodity_price",
+      "blockrun_image_generation",
+      "blockrun_image_edit",
+      "blockrun_video_generation",
+      "blockrun_phone_lookup",
+      "blockrun_phone_lookup_fraud",
+      "blockrun_phone_numbers_buy",
+      "blockrun_phone_numbers_renew",
+      "blockrun_phone_numbers_list",
+      "blockrun_phone_numbers_release",
+      "blockrun_voice_call",
+      "blockrun_voice_status"
+    ],
+    "webSearchProviders": ["blockrun-exa"]
+  },
   "configSchema": {
     "type": "object",
     "properties": {
