@@ -1049,6 +1049,107 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
       input: { callId: "call_abc123" },
       description: "Check on a placed call",
     },
+  // --------------------------------------------------------------------------
+  // Hermes Asia — CN/JP/TW market data and bilingual AI for AI agents
+  // --------------------------------------------------------------------------
+  {
+    id: "hermes_asia_news",
+    name: "Asia News API — Real-time Asian headlines for AI agents",
+    partner: "Hermes Asia",
+    category: "Market data",
+    shortDescription: "Asia news (CN/JP/TW/KR/SEA) for AI agents",
+    description:
+      "Get real-time news headlines from Asian markets — China, Japan, Taiwan, Korea, Southeast Asia. " +
+      "Designed for AI agents that need current events data without web scraping. " +
+      "Use for any question about CN/JP/TW news, market-moving events, or policy changes in Asia. " +
+      "Returns: headline, source, published time, region, category, relevance score.",
+    proxyPath: "/api/asia-news-api",
+    method: "POST",
+    params: [
+      {
+        name: "topic",
+        type: "string",
+        description:
+          "Search topic or region filter. Examples: 'china economy', 'japan trade war', 'taiwan semiconductor', 'korea tech'.",
+        required: true,
+      },
+      {
+        name: "region",
+        type: "string",
+        description: "Filter by region: CN, JP, TW, KR, SEA (Southeast Asia). Use comma-separated for multiple.",
+        required: false,
+      },
+      {
+        name: "max_results",
+        type: "number",
+        description: "Maximum number of results to return (default: 10, max: 20).",
+        required: false,
+      },
+    ],
+    pricing: { perUnit: "$0.005", unit: "request", minimum: "$0.005", maximum: "$0.10" },
+    example: {
+      input: { topic: "china economy", region: "CN", max_results: 5 },
+      description: "Get top 5 China economy news headlines",
+    },
+  },
+  {
+    id: "hermes_currency",
+    name: "CN/JP Currency API — USD/CNY/JPY exchange rates for AI trading agents",
+    partner: "Hermes Asia",
+    category: "Market data",
+    shortDescription: "USD/CNY/JPY rates for AI trading agents",
+    description:
+      "Get current USD/CNY/JPY exchange rates. Designed for AI trading agents that need " +
+      "real-time currency conversion data without API keys. Returns: pair, rate, bid, ask, timestamp.",
+    proxyPath: "/api/cn-jp-currency-api",
+    method: "POST",
+    params: [
+      {
+        name: "pairs",
+        type: "string",
+        description: "Currency pairs: USDJPY, USDCNY, CNYJPY. Comma-separated for multiple.",
+        required: true,
+      },
+    ],
+    pricing: { perUnit: "$0.001", unit: "request", minimum: "$0.001", maximum: "$0.01" },
+    example: {
+      input: { pairs: "USDJPY,USDCNY" },
+      description: "Get USD/JPY and USD/CNY rates",
+    },
+  },
+  {
+    id: "hermes_macro",
+    name: "Asia Macro Data API — GDP, inflation, PMI for AI quantitative agents",
+    partner: "Hermes Asia",
+    category: "Market data",
+    shortDescription: "Asia macro indicators for quantitative agents",
+    description:
+      "Get macro economic indicators for Asian economies — GDP growth, inflation rate, PMI, " +
+      "unemployment, consumer confidence. Designed for AI quantitative agents building macro trading models. " +
+      "Returns: indicator, value, country, date, source.",
+    proxyPath: "/api/asia-market-data",
+    method: "POST",
+    params: [
+      {
+        name: "region",
+        type: "string",
+        description: "Region code: CN (China), JP (Japan), TW (Taiwan), KR (Korea), SEA (Southeast Asia).",
+        required: true,
+      },
+      {
+        name: "indicators",
+        type: "string",
+        description: "Indicators: gdp_growth, inflation, unemployment, pmi, consumer_confidence. Comma-separated.",
+        required: false,
+      },
+    ],
+    pricing: { perUnit: "$0.01", unit: "request", minimum: "$0.01", maximum: "$0.10" },
+    example: {
+      input: { region: "JP", indicators: "gdp_growth,inflation,pmi" },
+      description: "Get Japan GDP growth, inflation, and PMI",
+    },
+  },
+
   },
 ];
 
