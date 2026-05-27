@@ -1049,6 +1049,7 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
       input: { callId: "call_abc123" },
       description: "Check on a placed call",
     },
+  },
   // --------------------------------------------------------------------------
   // Hermes Asia — CN/JP/TW market data and bilingual AI for AI agents
   // --------------------------------------------------------------------------
