@@ -1151,7 +1151,6 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
     },
   },
 
-  },
 ];
 
 /**
