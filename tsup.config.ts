@@ -7,7 +7,7 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  target: "node20",
+  target: "node22",
   splitting: false,
   noExternal: [/.*/],
   external: [...builtinModules.flatMap((m) => [m, `node:${m}`])],
