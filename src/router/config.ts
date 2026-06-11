@@ -1158,13 +1158,14 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       ],
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4.8", // Best quality for complex tasks — newest flagship, same $5/$25 as 4.7
+      primary: "anthropic/claude-fable-5", // Best quality for complex tasks — Mythos-class flagship above Opus ($10/$50, 1M ctx, always-on thinking)
       // Fallback chain de-Gemini'd 2026-04-22: when Anthropic 503s, Gemini is
       // also prone to "high demand" 503s (correlated failure — everyone falls
       // back to Google at the same time). Prefer xAI Grok → Moonshot → OpenAI
       // flagship → DeepSeek → NVIDIA free instead.
       fallback: [
-        "anthropic/claude-opus-4.7", // in-family hot swap first (identical cost)
+        "anthropic/claude-opus-4.8", // in-family hot swap first (half the price, 1M ctx + adaptive thinking)
+        "anthropic/claude-opus-4.7", // in-family hot swap (identical cost to 4.8)
         "anthropic/claude-opus-4.6", // in-family hot swap
         "anthropic/claude-sonnet-4.6",
         "xai/grok-4-0709", // 503-resistant flagship
