@@ -906,6 +906,98 @@ try {
 } catch (e) { console.log('  Skipped: ' + e.message); }
 "
 
+# OpenClaw 2026.6 migrates the legacy plugin install index into shared SQLite.
+# If the old JSON index still contains a stale ClawRouter record, OpenClaw keeps
+# warning about conflicting install metadata on every doctor/restart. Clean only
+# ClawRouter's legacy record after this updater has verified the current install.
+echo "→ Cleaning stale ClawRouter install metadata..."
+node -e "
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const home = os.homedir();
+const legacyPath = path.join(home, '.openclaw', 'plugins', 'installs.json');
+
+function currentPackageCandidates() {
+  const candidates = [
+    path.join(home, '.openclaw', 'extensions', 'clawrouter', 'package.json'),
+    path.join(home, '.openclaw', 'npm', 'node_modules', '@blockrun', 'clawrouter', 'package.json'),
+  ];
+  const projectsDir = path.join(home, '.openclaw', 'npm', 'projects');
+  try {
+    for (const name of fs.readdirSync(projectsDir)) {
+      candidates.push(path.join(projectsDir, name, 'node_modules', '@blockrun', 'clawrouter', 'package.json'));
+    }
+  } catch {}
+  return candidates;
+}
+
+function newestCurrentPackage() {
+  let best = null;
+  for (const packagePath of currentPackageCandidates()) {
+    try {
+      const stat = fs.statSync(packagePath);
+      const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+      if (pkg?.name !== '@blockrun/clawrouter') continue;
+      if (!best || stat.mtimeMs > best.mtimeMs) {
+        best = { packagePath, pkg, mtimeMs: stat.mtimeMs };
+      }
+    } catch {}
+  }
+  return best;
+}
+
+function atomicWrite(filePath, data) {
+  const tmp = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, filePath);
+}
+
+try {
+  if (!fs.existsSync(legacyPath)) {
+    console.log('  ✓ No legacy install index found');
+    process.exit(0);
+  }
+  const current = newestCurrentPackage();
+  if (!current) {
+    console.log('  Skipped: current ClawRouter package.json not found');
+    process.exit(0);
+  }
+
+  const index = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+  const currentPkg = current.pkg;
+  const legacyRecord = index?.installRecords?.clawrouter;
+
+  if (!legacyRecord) {
+    console.log('  ✓ Legacy install index has no ClawRouter record');
+    process.exit(0);
+  }
+
+  const currentVersion = String(currentPkg.version || '');
+  const legacyVersion = String(legacyRecord.version || legacyRecord.resolvedVersion || '');
+  const legacyPathValue = String(legacyRecord.installPath || '');
+  const currentPath = path.dirname(current.packagePath);
+  const stale = legacyVersion !== currentVersion || path.resolve(legacyPathValue) !== path.resolve(currentPath);
+
+  if (!stale) {
+    console.log('  ✓ Legacy ClawRouter install metadata already matches current install');
+    process.exit(0);
+  }
+
+  delete index.installRecords.clawrouter;
+  if (Array.isArray(index.plugins)) {
+    index.plugins = index.plugins.filter((plugin) => plugin?.pluginId !== 'clawrouter');
+  }
+  index.refreshReason = 'clawrouter-stale-metadata-cleanup';
+  index.generatedAtMs = Date.now();
+  atomicWrite(legacyPath, JSON.stringify(index, null, 2));
+  console.log('  ✓ Removed stale legacy ClawRouter install metadata (' + (legacyVersion || 'unknown') + ' -> ' + currentVersion + ')');
+} catch (e) {
+  console.log('  Skipped: ' + e.message);
+}
+"
+
 # ── Summary ─────────────────────────────────────────────────────
 echo ""
 echo "✓ ClawRouter updated successfully!"
