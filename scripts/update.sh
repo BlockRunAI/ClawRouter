@@ -921,27 +921,56 @@ const legacyPath = path.join(home, '.openclaw', 'plugins', 'installs.json');
 
 function currentPackageCandidates() {
   const candidates = [
-    path.join(home, '.openclaw', 'extensions', 'clawrouter', 'package.json'),
-    path.join(home, '.openclaw', 'npm', 'node_modules', '@blockrun', 'clawrouter', 'package.json'),
+    { packagePath: path.join(home, '.openclaw', 'extensions', 'clawrouter', 'package.json'), priority: 0 },
+    {
+      packagePath: path.join(home, '.openclaw', 'npm', 'node_modules', '@blockrun', 'clawrouter', 'package.json'),
+      priority: 2,
+    },
   ];
   const projectsDir = path.join(home, '.openclaw', 'npm', 'projects');
   try {
     for (const name of fs.readdirSync(projectsDir)) {
-      candidates.push(path.join(projectsDir, name, 'node_modules', '@blockrun', 'clawrouter', 'package.json'));
+      candidates.push({
+        packagePath: path.join(projectsDir, name, 'node_modules', '@blockrun', 'clawrouter', 'package.json'),
+        priority: 1,
+      });
     }
   } catch {}
   return candidates;
 }
 
+function versionParts(version) {
+  return String(version || '')
+    .split(/[.-]/)
+    .slice(0, 3)
+    .map((part) => Number.parseInt(part, 10) || 0);
+}
+
+function compareVersions(a, b) {
+  const left = versionParts(a);
+  const right = versionParts(b);
+  for (let i = 0; i < 3; i++) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+  return 0;
+}
+
 function newestCurrentPackage() {
   let best = null;
-  for (const packagePath of currentPackageCandidates()) {
+  for (const candidate of currentPackageCandidates()) {
     try {
+      const { packagePath, priority } = candidate;
       const stat = fs.statSync(packagePath);
       const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
       if (pkg?.name !== '@blockrun/clawrouter') continue;
-      if (!best || stat.mtimeMs > best.mtimeMs) {
-        best = { packagePath, pkg, mtimeMs: stat.mtimeMs };
+      const versionOrder = best ? compareVersions(pkg.version, best.pkg.version) : 1;
+      if (
+        !best ||
+        versionOrder > 0 ||
+        (versionOrder === 0 &&
+          (priority < best.priority || (priority === best.priority && stat.mtimeMs > best.mtimeMs)))
+      ) {
+        best = { packagePath, pkg, mtimeMs: stat.mtimeMs, priority };
       }
     } catch {}
   }

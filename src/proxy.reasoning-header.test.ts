@@ -51,7 +51,9 @@ describe("sanitizeHeaderValue", () => {
     const result = classifyByRules(prompt, undefined, 64, DEFAULT_ROUTING_CONFIG.scoring);
     const reasoning = `score=${result.score.toFixed(2)} | ${result.signals.join(", ")}`;
     // Precondition: the repro really does produce non-ASCII reasoning
-    expect(reasoning).toMatch(/[^\x00-\x7F]/);
+    expect(
+      Array.from(reasoning).some((ch) => (ch.codePointAt(0) ?? 0) > 0x7f),
+    ).toBe(true);
     expect(() => validateHeaderValue("x-clawrouter-reasoning", reasoning)).toThrow();
 
     const sanitized = sanitizeHeaderValue(reasoning);
