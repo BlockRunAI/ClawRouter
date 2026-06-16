@@ -18,7 +18,9 @@ describe("applyUpstreamProxy", () => {
   it("uses BLOCKRUN_UPSTREAM_PROXY when set", async () => {
     const setDispatcher = vi.fn();
     const env = { BLOCKRUN_UPSTREAM_PROXY: "http://127.0.0.1:8080" };
-    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe("http://127.0.0.1:8080");
+    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe(
+      "http://127.0.0.1:8080",
+    );
     expect(setDispatcher).toHaveBeenCalledTimes(1);
     expect(setDispatcher.mock.calls[0][0]).toBeInstanceOf(ProxyAgent);
   });
@@ -29,28 +31,36 @@ describe("applyUpstreamProxy", () => {
       BLOCKRUN_UPSTREAM_PROXY: "http://127.0.0.1:8080",
       HTTPS_PROXY: "http://127.0.0.1:7890",
     };
-    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe("http://127.0.0.1:8080");
+    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe(
+      "http://127.0.0.1:8080",
+    );
     expect(setDispatcher.mock.calls[0][0]).toBeInstanceOf(ProxyAgent);
   });
 
   it("falls back to HTTPS_PROXY when BLOCKRUN_UPSTREAM_PROXY is unset", async () => {
     const setDispatcher = vi.fn();
     const env = { HTTPS_PROXY: "http://127.0.0.1:7890" };
-    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe("http://127.0.0.1:7890");
+    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe(
+      "http://127.0.0.1:7890",
+    );
     expect(setDispatcher.mock.calls[0][0]).toBeInstanceOf(EnvHttpProxyAgent);
   });
 
   it("falls back to lowercase https_proxy", async () => {
     const setDispatcher = vi.fn();
     const env = { https_proxy: "http://127.0.0.1:7890" };
-    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe("http://127.0.0.1:7890");
+    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe(
+      "http://127.0.0.1:7890",
+    );
     expect(setDispatcher.mock.calls[0][0]).toBeInstanceOf(EnvHttpProxyAgent);
   });
 
   it("falls back to ALL_PROXY when no scheme-specific vars are set", async () => {
     const setDispatcher = vi.fn();
     const env = { ALL_PROXY: "http://127.0.0.1:7890" };
-    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe("http://127.0.0.1:7890");
+    expect(await applyUpstreamProxy(undefined, { env, setDispatcher })).toBe(
+      "http://127.0.0.1:7890",
+    );
     expect(setDispatcher.mock.calls[0][0]).toBeInstanceOf(EnvHttpProxyAgent);
   });
 

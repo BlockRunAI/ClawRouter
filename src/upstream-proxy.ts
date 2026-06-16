@@ -90,7 +90,15 @@ async function applyEnvProxyFallback(
   env: Record<string, string | undefined>,
   overrides?: UpstreamProxyOverrides,
 ): Promise<string | undefined> {
-  const url = firstEnv(env, "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy");
+  const url = firstEnv(
+    env,
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+  );
   if (!url) return undefined;
 
   let parsed: URL;

@@ -18,15 +18,15 @@ Complete reference for ClawRouter configuration options.
 
 ## Environment Variables
 
-| Variable                    | Default                               | Description                                                              |
-| --------------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
-| `BLOCKRUN_WALLET_KEY`       | -                                     | Ethereum private key (hex, 0x-prefixed). Used if no saved wallet exists. |
-| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Port for the local x402 proxy server.                                    |
-| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                             |
-| `CLAWROUTER_DISABLED`       | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).    |
-| `CLAWROUTER_WORKER`         | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).   |
+| Variable                    | Default                               | Description                                                                       |
+| --------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
+| `BLOCKRUN_WALLET_KEY`       | -                                     | Ethereum private key (hex, 0x-prefixed). Used if no saved wallet exists.          |
+| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Port for the local x402 proxy server.                                             |
+| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                                      |
+| `CLAWROUTER_DISABLED`       | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).             |
+| `CLAWROUTER_WORKER`         | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).            |
 | `CLAWROUTER_DEBUG_HEADERS`  | (on)                                  | Set to `off`/`false`/`0` to suppress the `x-clawrouter-*` debug response headers. |
-| `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration. |
+| `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.          |
 
 ### BLOCKRUN_WALLET_KEY
 

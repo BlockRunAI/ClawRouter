@@ -519,13 +519,13 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 
 For basic usage, no configuration needed. For advanced options:
 
-| Variable                    | Default                               | Description             |
-| --------------------------- | ------------------------------------- | ----------------------- |
-| `BLOCKRUN_WALLET_KEY`       | auto-generated                        | Your wallet private key |
-| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Local proxy port        |
-| `CLAWROUTER_DISABLED`       | `false`                               | Disable smart routing   |
+| Variable                    | Default                               | Description                                                      |
+| --------------------------- | ------------------------------------- | ---------------------------------------------------------------- |
+| `BLOCKRUN_WALLET_KEY`       | auto-generated                        | Your wallet private key                                          |
+| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Local proxy port                                                 |
+| `CLAWROUTER_DISABLED`       | `false`                               | Disable smart routing                                            |
 | `CLAWROUTER_DEBUG_HEADERS`  | `on`                                  | Set to `off` to suppress `x-clawrouter-*` debug response headers |
-| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint     |
+| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint                                              |
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 

@@ -64,9 +64,12 @@ describe("debugHeadersEnabledFromEnv", () => {
     expect(debugHeadersEnabledFromEnv({})).toBe(true);
   });
 
-  it.each(["0", "false", "off", "FALSE", "Off"])("is disabled by CLAWROUTER_DEBUG_HEADERS=%s", (v) => {
-    expect(debugHeadersEnabledFromEnv({ CLAWROUTER_DEBUG_HEADERS: v })).toBe(false);
-  });
+  it.each(["0", "false", "off", "FALSE", "Off"])(
+    "is disabled by CLAWROUTER_DEBUG_HEADERS=%s",
+    (v) => {
+      expect(debugHeadersEnabledFromEnv({ CLAWROUTER_DEBUG_HEADERS: v })).toBe(false);
+    },
+  );
 
   it("treats other values as enabled", () => {
     expect(debugHeadersEnabledFromEnv({ CLAWROUTER_DEBUG_HEADERS: "1" })).toBe(true);
