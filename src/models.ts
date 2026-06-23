@@ -1127,8 +1127,17 @@ function toOpenClawModel(m: BlockRunModel): ModelDefinitionConfig {
 /**
  * Alias models that map to real models.
  * These allow users to use friendly names like "free" or "gpt-120b".
+ *
+ * Only friendly short names are advertised. Full `provider/model` keys in
+ * MODEL_ALIASES are backward-compat / delisted redirects whose target is a real
+ * model that is already listed — surfacing them as their own entries is wrong
+ * (e.g. `free/deepseek-v4-pro` was delisted 2026-04-30 and redirects to
+ * `free/deepseek-v4-flash`, yet showed up as a listable "V4 Pro" model). They
+ * stay fully callable via resolveModelAlias(); they just must not appear in
+ * `/v1/models` or any picker.
  */
 const ALIAS_MODELS: ModelDefinitionConfig[] = Object.entries(MODEL_ALIASES)
+  .filter(([alias]) => !alias.includes("/"))
   .map(([alias, targetId]) => {
     const target = BLOCKRUN_MODELS.find((m) => m.id === targetId);
     if (!target) return null;
