@@ -2024,6 +2024,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   const payFetch = createPayFetchWithPreAuth(fetch, x402, undefined, {
     skipPreAuth: paymentChain === "solana",
+    // Per-request cost estimate so pre-auth is only reused when the cached
+    // payment still covers the (possibly larger) request — BlockRun prices per
+    // token, so one model can cost different amounts across requests.
+    estimateAmount,
   });
 
   // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
