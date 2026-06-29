@@ -97,6 +97,81 @@ describe("extractTextualToolCalls", () => {
     });
   });
 
+  describe('Gemini [Called function "NAME" with args: {...}] transcript format', () => {
+    it("extracts a single tool call (issue #189 repro)", () => {
+      const content = '[Called function "terminal" with args: {"command":"whoami"}]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({ command: "whoami" });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("extracts a call with multiple args", () => {
+      const content =
+        '[Called function "search_files" with args: {"pattern":"*","target":"files"}]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("search_files");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        pattern: "*",
+        target: "files",
+      });
+    });
+
+    it("extracts an empty-args call", () => {
+      const content = '[Called function "list" with args: {}]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("list");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({});
+    });
+
+    it("handles nested JSON objects and brackets in args without truncating", () => {
+      const content =
+        '[Called function "write" with args: {"path":"a]b","data":{"k":[1,2,{"x":"}"}]}}]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        path: "a]b",
+        data: { k: [1, 2, { x: "}" }] },
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("extracts multiple transcripts and strips surrounding prose", () => {
+      const content =
+        'Let me check.\n[Called function "a" with args: {"q":1}]\nThen:\n[Called function "b" with args: {"q":2}]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls.map((c) => c.function.name)).toEqual(["a", "b"]);
+      expect(result.cleanedContent).not.toContain("Called function");
+      expect(result.cleanedContent).toContain("Let me check.");
+      expect(result.cleanedContent).toContain("Then:");
+    });
+
+    it("generates OpenAI-shaped ids", () => {
+      const content = '[Called function "x" with args: {"q":1}]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls[0]?.id).toMatch(/^call_[A-Za-z0-9_-]+$/);
+      expect(result.toolCalls[0]?.type).toBe("function");
+    });
+
+    it("does NOT mis-fire without a closing bracket", () => {
+      const content = '[Called function "x" with args: {"q":1}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("does NOT mis-fire when args is not a JSON object", () => {
+      const content = '[Called function "x" with args: "whoami"]';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+  });
+
   describe("Negative cases (must NOT mis-fire)", () => {
     it("returns empty toolCalls when no tool-call XML present", () => {
       const result = extractTextualToolCalls("Just a normal sentence.");

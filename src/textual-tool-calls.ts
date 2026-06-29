@@ -16,6 +16,13 @@
  *    tag is unique enough that prose mis-fires are very rare, so zero
  *    parameters are still recognized inside this shape.
  *
+ * 3. **Gemini-style transcript** — `[Called function "NAME" with args: {JSON}]`
+ *    Observed from Gemini 3.5 Flash through the OpenAI-compatible path (issue
+ *    #189): instead of structured `tool_calls`, the model sometimes narrates
+ *    the call as a plain-text transcript. To avoid mis-firing on prose that
+ *    merely quotes this format, the args must parse as a JSON object and the
+ *    block must be terminated by a closing `]`.
+ *
  * Values are best-effort coerced via `JSON.parse` (so `"5"` → `5`, `"true"` →
  * `true`); strings that don't parse as JSON stay as strings.
  */
@@ -42,6 +49,11 @@ const OPENCLAW_ARG_RE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<
 const ANTHROPIC_BLOCK_RE = /<function_calls\b[^>]*>([\s\S]*?)<\/function_calls\s*>/g;
 const ANTHROPIC_INVOKE_RE = /<invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/invoke\s*>/g;
 const ANTHROPIC_PARAM_RE = /<parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/parameter\s*>/g;
+
+// Locates the `[Called function "NAME" with args: ` prefix; the JSON args object
+// and closing `]` are validated separately by a balanced-brace scan so commas,
+// braces, and brackets inside the JSON cannot truncate the match.
+const GEMINI_PREFIX_RE = /\[Called function\s+["']([^"']+)["']\s+with args:\s*/g;
 
 function generateId(): string {
   // OpenAI-shaped: "call_" + base64url chars. Length comparable to real OpenAI ids.
@@ -143,6 +155,78 @@ function extractAnthropicCalls(content: string): {
   return { calls, matches };
 }
 
+/**
+ * Scans `content` from `start` (which must be `{`) for the matching closing
+ * `}`, honoring string literals and escapes so braces inside strings don't
+ * unbalance the count. Returns the index just past the closing brace, or -1 if
+ * the object is never closed.
+ */
+function scanJsonObject(content: string, start: number): number {
+  if (content[start] !== "{") return -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+function extractGeminiCalls(content: string): {
+  calls: ExtractedToolCall[];
+  matches: Range[];
+} {
+  const calls: ExtractedToolCall[] = [];
+  const matches: Range[] = [];
+
+  GEMINI_PREFIX_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = GEMINI_PREFIX_RE.exec(content)) !== null) {
+    const name = match[1]?.trim();
+    const jsonStart = match.index + match[0].length;
+    if (!name || content[jsonStart] !== "{") continue;
+
+    const jsonEnd = scanJsonObject(content, jsonStart);
+    if (jsonEnd === -1) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content.slice(jsonStart, jsonEnd));
+    } catch {
+      continue;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+
+    // Require a closing `]` (after optional whitespace) so a bare transcript-like
+    // sentence without the bracket terminator does not mis-fire.
+    let close = jsonEnd;
+    while (close < content.length && /\s/.test(content[close]!)) close++;
+    if (content[close] !== "]") continue;
+
+    calls.push({
+      id: generateId(),
+      type: "function",
+      function: { name, arguments: JSON.stringify(parsed) },
+    });
+    matches.push({ start: match.index, end: close + 1 });
+    GEMINI_PREFIX_RE.lastIndex = close + 1;
+  }
+
+  return { calls, matches };
+}
+
 function stripRanges(content: string, ranges: Range[]): string {
   if (ranges.length === 0) return content;
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
@@ -165,12 +249,17 @@ export function extractTextualToolCalls(content: string): ExtractionResult {
 
   const openClaw = extractOpenClawCalls(content);
   const anthropic = extractAnthropicCalls(content);
+  const gemini = extractGeminiCalls(content);
 
-  const toolCalls = [...openClaw.calls, ...anthropic.calls];
+  const toolCalls = [...openClaw.calls, ...anthropic.calls, ...gemini.calls];
   if (toolCalls.length === 0) {
     return { toolCalls: [], cleanedContent: content };
   }
 
-  const cleanedContent = stripRanges(content, [...openClaw.matches, ...anthropic.matches]);
+  const cleanedContent = stripRanges(content, [
+    ...openClaw.matches,
+    ...anthropic.matches,
+    ...gemini.matches,
+  ]);
   return { toolCalls, cleanedContent };
 }
