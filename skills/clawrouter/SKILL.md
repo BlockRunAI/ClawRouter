@@ -131,7 +131,7 @@ ClawRouter classifies each request into one of four tiers:
 - **COMPLEX** (20%) — code generation, multi-step analysis → Claude Opus ($75/M, best quality)
 - **REASONING** (10%) — proofs, formal logic, multi-step math → o3 ($8/M, 89% savings)
 
-Rules handle ~80% of requests in <1ms. Only ambiguous queries hit the LLM classifier (~$0.00003 per classification).
+Rules handle ~~80% of requests in <1ms. Only ambiguous queries hit the LLM classifier (~~$0.00003 per classification).
 
 ## Available Models
 
