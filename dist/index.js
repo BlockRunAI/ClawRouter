@@ -1040,7 +1040,7 @@ var version2;
 var init_version2 = __esm({
   "node_modules/viem/_esm/errors/version.js"() {
     "use strict";
-    version2 = "2.48.11";
+    version2 = "2.53.1";
   }
 });
 
@@ -3677,6 +3677,18 @@ var init_transaction = __esm({
 });
 
 // node_modules/viem/_esm/errors/utils.js
+function getAbortError(signal) {
+  if (signal?.reason)
+    return signal.reason;
+  if (typeof DOMException === "function")
+    return new DOMException("This operation was aborted", "AbortError");
+  const error = new Error("This operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+function isAbortError(error) {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
 var getContractAddress, getUrl;
 var init_utils3 = __esm({
   "node_modules/viem/_esm/errors/utils.js"() {
@@ -7704,24 +7716,46 @@ var init_assertRequest = __esm({
   }
 });
 
+// node_modules/viem/_esm/utils/block/formatBlockParameter.js
+function formatBlockParameter(parameters) {
+  const { blockHash, blockNumber, blockTag, requireCanonical } = parameters;
+  if (requireCanonical !== void 0 && !blockHash)
+    throw new BaseError2("`requireCanonical` can only be provided when `blockHash` is set.");
+  if (blockHash)
+    return requireCanonical ? { blockHash, requireCanonical } : { blockHash };
+  if (typeof blockNumber === "bigint")
+    return numberToHex(blockNumber);
+  return blockTag ?? "latest";
+}
+var init_formatBlockParameter = __esm({
+  "node_modules/viem/_esm/utils/block/formatBlockParameter.js"() {
+    "use strict";
+    init_base();
+    init_toHex();
+  }
+});
+
 // node_modules/viem/_esm/actions/public/getTransactionCount.js
-async function getTransactionCount(client, { address: address2, blockTag = "latest", blockNumber }) {
+async function getTransactionCount(client, { address: address2, blockHash, blockNumber, blockTag = "latest", requireCanonical }) {
+  const block = formatBlockParameter({
+    blockHash,
+    blockNumber,
+    blockTag,
+    requireCanonical
+  });
   const count = await client.request({
     method: "eth_getTransactionCount",
-    params: [
-      address2,
-      typeof blockNumber === "bigint" ? numberToHex(blockNumber) : blockTag
-    ]
+    params: [address2, block]
   }, {
-    dedupe: Boolean(blockNumber)
+    dedupe: typeof blockNumber === "bigint" || blockHash !== void 0
   });
   return hexToNumber(count);
 }
 var init_getTransactionCount = __esm({
   "node_modules/viem/_esm/actions/public/getTransactionCount.js"() {
     "use strict";
+    init_formatBlockParameter();
     init_fromHex();
-    init_toHex();
   }
 });
 
@@ -9985,7 +10019,7 @@ __export(ccip_exports, {
   offchainLookupAbiItem: () => offchainLookupAbiItem,
   offchainLookupSignature: () => offchainLookupSignature
 });
-async function offchainLookup(client, { blockNumber, blockTag, data, to }) {
+async function offchainLookup(client, { blockNumber, blockTag, data, requestOptions, to }) {
   const { args } = decodeErrorResult({
     data,
     abi: [offchainLookupAbiItem]
@@ -9998,8 +10032,8 @@ async function offchainLookup(client, { blockNumber, blockTag, data, to }) {
       throw new OffchainLookupSenderMismatchError({ sender, to });
     const result = urls.includes(localBatchGatewayUrl) ? await localBatchGatewayRequest({
       data: callData,
-      ccipRequest: ccipRequest_
-    }) : await ccipRequest_({ data: callData, sender, urls });
+      ccipRequest: (parameters) => ccipRequest_({ ...parameters, requestOptions })
+    }) : await ccipRequest_({ data: callData, requestOptions, sender, urls });
     const { data: data_ } = await call(client, {
       blockNumber,
       blockTag,
@@ -10007,10 +10041,15 @@ async function offchainLookup(client, { blockNumber, blockTag, data, to }) {
         callbackSelector,
         encodeAbiParameters([{ type: "bytes" }, { type: "bytes" }], [result, extraData])
       ]),
+      requestOptions,
       to
     });
     return data_;
   } catch (err) {
+    if (requestOptions?.signal?.aborted)
+      throw getAbortError(requestOptions.signal);
+    if (isAbortError(err))
+      throw err;
     throw new OffchainLookupError({
       callbackSelector,
       cause: err,
@@ -10021,9 +10060,11 @@ async function offchainLookup(client, { blockNumber, blockTag, data, to }) {
     });
   }
 }
-async function ccipRequest({ data, sender, urls }) {
+async function ccipRequest({ data, requestOptions, sender, urls }) {
   let error = new Error("An unknown error occurred.");
   for (let i = 0; i < urls.length; i++) {
+    if (requestOptions?.signal?.aborted)
+      throw getAbortError(requestOptions.signal);
     const url = urls[i];
     const method = url.includes("{data}") ? "GET" : "POST";
     const body = method === "POST" ? { data, sender } : void 0;
@@ -10032,7 +10073,8 @@ async function ccipRequest({ data, sender, urls }) {
       const response = await fetch(url.replace("{sender}", sender.toLowerCase()).replace("{data}", data), {
         body: JSON.stringify(body),
         headers,
-        method
+        method,
+        ...requestOptions?.signal ? { signal: requestOptions.signal } : {}
       });
       let result;
       if (response.headers.get("Content-Type")?.startsWith("application/json")) {
@@ -10059,6 +10101,10 @@ async function ccipRequest({ data, sender, urls }) {
       }
       return result;
     } catch (err) {
+      if (requestOptions?.signal?.aborted)
+        throw getAbortError(requestOptions.signal);
+      if (isAbortError(err))
+        throw err;
       error = new HttpRequestError({
         body,
         details: err.message,
@@ -10075,6 +10121,7 @@ var init_ccip2 = __esm({
     init_call();
     init_ccip();
     init_request();
+    init_utils3();
     init_decodeErrorResult();
     init_encodeAbiParameters();
     init_isAddressEqual();
@@ -10114,7 +10161,7 @@ var init_ccip2 = __esm({
 
 // node_modules/viem/_esm/actions/public/call.js
 async function call(client, args) {
-  const { account: account_ = client.account, authorizationList, batch = Boolean(client.batch?.multicall), blockNumber, blockTag = client.experimental_blockTag ?? "latest", accessList, blobs, blockOverrides, code, data: data_, factory, factoryData, gas, gasPrice, maxFeePerBlobGas, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value, stateOverride, ...rest } = args;
+  const { account: account_ = client.account, authorizationList, batch = Boolean(client.batch?.multicall), blockHash, blockNumber, blockTag = client.experimental_blockTag ?? "latest", requireCanonical, accessList, blobs, blockOverrides, code, data: data_, factory, factoryData, gas, gasPrice, maxFeePerBlobGas, maxFeePerGas, maxPriorityFeePerGas, nonce, requestOptions, to, value, stateOverride, ...rest } = args;
   const account = account_ ? parseAccount(account_) : void 0;
   if (code && (factory || factoryData))
     throw new BaseError2("Cannot provide both `code` & `factory`/`factoryData` as parameters.");
@@ -10140,8 +10187,12 @@ async function call(client, args) {
   })();
   try {
     assertRequest(args);
-    const blockNumberHex = typeof blockNumber === "bigint" ? numberToHex(blockNumber) : void 0;
-    const block = blockNumberHex || blockTag;
+    const block = formatBlockParameter({
+      blockHash,
+      blockNumber,
+      blockTag,
+      requireCanonical
+    });
     const rpcBlockOverrides = blockOverrides ? toRpc2(blockOverrides) : void 0;
     const rpcStateOverride = serializeStateOverride(stateOverride);
     const chainFormat = client.chain?.formatters?.transactionRequest?.format;
@@ -10163,13 +10214,24 @@ async function call(client, args) {
       to: deploylessCall ? void 0 : to,
       value
     }, "call");
-    if (batch && shouldPerformMulticall({ request }) && !rpcStateOverride && !rpcBlockOverrides) {
+    if (batch && shouldPerformMulticall({ request }) && !rpcBlockOverrides && blockHash === void 0) {
       try {
-        return await scheduleMulticall(client, {
-          ...request,
+        const { deployless = false } = typeof client.batch?.multicall === "object" ? client.batch.multicall : {};
+        const multicallAddress = getMulticallAddress(client, {
           blockNumber,
-          blockTag
+          deployless
         });
+        if (!multicallAddress || !hasStateOverrideForAddress(rpcStateOverride, multicallAddress))
+          return await scheduleMulticall(client, {
+            ...request,
+            blockHash,
+            blockNumber,
+            blockTag,
+            multicallAddress,
+            requestOptions,
+            requireCanonical,
+            rpcStateOverride
+          });
       } catch (err) {
         if (!(err instanceof ClientChainNotConfiguredError) && !(err instanceof ChainDoesNotSupportContract))
           throw err;
@@ -10191,15 +10253,21 @@ async function call(client, args) {
     const response = await client.request({
       method: "eth_call",
       params
-    });
+    }, requestOptions);
     if (response === "0x")
       return { data: void 0 };
     return { data: response };
   } catch (err) {
+    if (requestOptions?.signal?.aborted)
+      throw getAbortError(requestOptions.signal);
+    if (isAbortError(err))
+      throw err;
     const data2 = getRevertErrorData(err);
     const { offchainLookup: offchainLookup2, offchainLookupSignature: offchainLookupSignature2 } = await Promise.resolve().then(() => (init_ccip2(), ccip_exports));
     if (client.ccipRead !== false && data2?.slice(0, 10) === offchainLookupSignature2 && to)
-      return { data: await offchainLookup2(client, { data: data2, to }) };
+      return {
+        data: await offchainLookup2(client, { data: data2, requestOptions, to })
+      };
     if (deploylessCall && data2?.slice(0, 10) === "0x101bb98d")
       throw new CounterfactualDeploymentFailedError({ factory });
     throw getCallError(err, {
@@ -10221,27 +10289,33 @@ function shouldPerformMulticall({ request }) {
     return false;
   return true;
 }
+function getRequestOptionsId(requestOptions) {
+  if (!requestOptions)
+    return "default";
+  const id = requestOptionsIds.get(requestOptions);
+  if (id !== void 0)
+    return id;
+  const nextId = requestOptionsId++;
+  requestOptionsIds.set(requestOptions, nextId);
+  return nextId;
+}
 async function scheduleMulticall(client, args) {
   const { batchSize = 1024, deployless = false, wait: wait2 = 0 } = typeof client.batch?.multicall === "object" ? client.batch.multicall : {};
-  const { blockNumber, blockTag = client.experimental_blockTag ?? "latest", data, to } = args;
-  const multicallAddress = (() => {
-    if (deployless)
-      return null;
-    if (args.multicallAddress)
-      return args.multicallAddress;
-    if (client.chain) {
-      return getChainContractAddress({
-        blockNumber,
-        chain: client.chain,
-        contract: "multicall3"
-      });
-    }
-    throw new ClientChainNotConfiguredError();
-  })();
-  const blockNumberHex = typeof blockNumber === "bigint" ? numberToHex(blockNumber) : void 0;
-  const block = blockNumberHex || blockTag;
+  const { blockHash, blockNumber, blockTag = client.experimental_blockTag ?? "latest", requireCanonical, data, multicallAddress: multicallAddress_, requestOptions, rpcStateOverride, to } = args;
+  const multicallAddress = multicallAddress_ !== void 0 ? multicallAddress_ : getMulticallAddress(client, {
+    blockNumber,
+    deployless
+  });
+  const block = formatBlockParameter({
+    blockHash,
+    blockNumber,
+    blockTag,
+    requireCanonical
+  });
+  const blockId = typeof block === "string" ? block : JSON.stringify(block);
+  const stateOverrideKey = rpcStateOverride ? `.${JSON.stringify(rpcStateOverride)}` : "";
   const { schedule } = createBatchScheduler({
-    id: `${client.uid}.${block}`,
+    id: `${client.uid}.${blockId}.${getRequestOptionsId(requestOptions)}${stateOverrideKey}`,
     wait: wait2,
     shouldSplitBatch(args2) {
       const size5 = args2.reduce((size6, { data: data2 }) => size6 + (data2.length - 2), 0);
@@ -10258,20 +10332,18 @@ async function scheduleMulticall(client, args) {
         args: [calls],
         functionName: "aggregate3"
       });
+      const multicallRequest = {
+        ...multicallAddress === null ? {
+          data: toDeploylessCallViaBytecodeData({
+            code: multicall3Bytecode,
+            data: calldata
+          })
+        } : { to: multicallAddress, data: calldata }
+      };
       const data2 = await client.request({
         method: "eth_call",
-        params: [
-          {
-            ...multicallAddress === null ? {
-              data: toDeploylessCallViaBytecodeData({
-                code: multicall3Bytecode,
-                data: calldata
-              })
-            } : { to: multicallAddress, data: calldata }
-          },
-          block
-        ]
-      });
+        params: rpcStateOverride ? [multicallRequest, block, rpcStateOverride] : [multicallRequest, block]
+      }, requestOptions);
       return decodeFunctionResult({
         abi: multicall3Abi,
         args: [calls],
@@ -10286,6 +10358,23 @@ async function scheduleMulticall(client, args) {
   if (returnData === "0x")
     return { data: void 0 };
   return { data: returnData };
+}
+function getMulticallAddress(client, parameters) {
+  const { blockNumber, deployless } = parameters;
+  if (deployless)
+    return null;
+  if (client.chain)
+    return getChainContractAddress({
+      blockNumber,
+      chain: client.chain,
+      contract: "multicall3"
+    });
+  throw new ClientChainNotConfiguredError();
+}
+function hasStateOverrideForAddress(rpcStateOverride, address2) {
+  if (!rpcStateOverride)
+    return false;
+  return Object.keys(rpcStateOverride).some((stateOverrideAddress) => isAddressEqual(stateOverrideAddress, address2));
 }
 function toDeploylessCallViaBytecodeData(parameters) {
   const { code, data } = parameters;
@@ -10309,6 +10398,7 @@ function getRevertErrorData(err) {
   const error = err.walk();
   return typeof error?.data === "object" ? error.data?.data : error.data;
 }
+var requestOptionsId, requestOptionsIds;
 var init_call = __esm({
   "node_modules/viem/_esm/actions/public/call.js"() {
     "use strict";
@@ -10321,17 +10411,21 @@ var init_call = __esm({
     init_base();
     init_chain();
     init_contract();
+    init_utils3();
     init_decodeFunctionResult();
     init_encodeDeployData();
     init_encodeFunctionData();
+    init_isAddressEqual();
+    init_formatBlockParameter();
     init_getChainContractAddress();
-    init_toHex();
     init_getCallError();
     init_extract();
     init_transactionRequest();
     init_createBatchScheduler();
     init_stateOverride2();
     init_assertRequest();
+    requestOptionsId = 0;
+    requestOptionsIds = /* @__PURE__ */ new WeakMap();
   }
 });
 
@@ -14362,7 +14456,7 @@ var init_accounts = __esm({
   }
 });
 
-// node_modules/@x402/core/dist/esm/chunk-4BKQ2IT7.mjs
+// node_modules/@x402/core/dist/esm/chunk-ABS7D6VX.mjs
 function safeBase64Encode(data) {
   if (typeof globalThis !== "undefined" && typeof globalThis.btoa === "function") {
     const bytes = new TextEncoder().encode(data);
@@ -14383,17 +14477,23 @@ function safeBase64Decode(data) {
   }
   return Buffer.from(data, "base64").toString("utf-8");
 }
-var findSchemesByNetwork, findByNetworkAndScheme, Base64EncodedRegex;
-var init_chunk_4BKQ2IT7 = __esm({
-  "node_modules/@x402/core/dist/esm/chunk-4BKQ2IT7.mjs"() {
+var escapeRegExp, networkPatternToRegExp, networkMatchesPattern, findSchemesByNetwork, findByNetworkAndScheme, Base64EncodedRegex;
+var init_chunk_ABS7D6VX = __esm({
+  "node_modules/@x402/core/dist/esm/chunk-ABS7D6VX.mjs"() {
     "use strict";
+    escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    networkPatternToRegExp = (pattern) => {
+      const source = escapeRegExp(pattern).replace(/\\\*/g, ".*");
+      return new RegExp(`^${source}$`);
+    };
+    networkMatchesPattern = (pattern, network) => {
+      return networkPatternToRegExp(pattern).test(network);
+    };
     findSchemesByNetwork = (map, network) => {
       let implementationsByScheme = map.get(network);
       if (!implementationsByScheme) {
         for (const [registeredNetworkPattern, implementations] of map.entries()) {
-          const pattern = registeredNetworkPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
-          const regex = new RegExp(`^${pattern}$`);
-          if (regex.test(network)) {
+          if (networkMatchesPattern(registeredNetworkPattern, network)) {
             implementationsByScheme = implementations;
             break;
           }
@@ -26766,6 +26866,10 @@ var require_receiver = __commonJS({
        *     extensions
        * @param {Boolean} [options.isServer=false] Specifies whether to operate in
        *     client or server mode
+       * @param {Number} [options.maxBufferedChunks=0] The maximum number of
+       *     buffered data chunks
+       * @param {Number} [options.maxFragments=0] The maximum number of message
+       *     fragments
        * @param {Number} [options.maxPayload=0] The maximum allowed message length
        * @param {Boolean} [options.skipUTF8Validation=false] Specifies whether or
        *     not to skip UTF-8 validation for text and close messages
@@ -26776,6 +26880,8 @@ var require_receiver = __commonJS({
         this._binaryType = options.binaryType || BINARY_TYPES[0];
         this._extensions = options.extensions || {};
         this._isServer = !!options.isServer;
+        this._maxBufferedChunks = options.maxBufferedChunks | 0;
+        this._maxFragments = options.maxFragments | 0;
         this._maxPayload = options.maxPayload | 0;
         this._skipUTF8Validation = !!options.skipUTF8Validation;
         this[kWebSocket] = void 0;
@@ -26805,6 +26911,18 @@ var require_receiver = __commonJS({
        */
       _write(chunk, encoding, cb) {
         if (this._opcode === 8 && this._state == GET_INFO) return cb();
+        if (this._maxBufferedChunks > 0 && this._buffers.length >= this._maxBufferedChunks) {
+          cb(
+            this.createError(
+              RangeError,
+              "Too many buffered chunks",
+              false,
+              1008,
+              "WS_ERR_TOO_MANY_BUFFERED_PARTS"
+            )
+          );
+          return;
+        }
         this._bufferedBytes += chunk.length;
         this._buffers.push(chunk);
         this.startLoop(cb);
@@ -27134,6 +27252,17 @@ var require_receiver = __commonJS({
           return;
         }
         if (data.length) {
+          if (this._maxFragments > 0 && this._fragments.length >= this._maxFragments) {
+            const error = this.createError(
+              RangeError,
+              "Too many message fragments",
+              false,
+              1008,
+              "WS_ERR_TOO_MANY_BUFFERED_PARTS"
+            );
+            cb(error);
+            return;
+          }
           this._messageLength = this._totalPayloadLength;
           this._fragments.push(data);
         }
@@ -27159,6 +27288,17 @@ var require_receiver = __commonJS({
                 false,
                 1009,
                 "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH"
+              );
+              cb(error);
+              return;
+            }
+            if (this._maxFragments > 0 && this._fragments.length >= this._maxFragments) {
+              const error = this.createError(
+                RangeError,
+                "Too many message fragments",
+                false,
+                1008,
+                "WS_ERR_TOO_MANY_BUFFERED_PARTS"
               );
               cb(error);
               return;
@@ -27329,6 +27469,9 @@ var require_sender = __commonJS({
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
+    var {
+      types: { isUint8Array }
+    } = __require("util");
     var PerMessageDeflate2 = require_permessage_deflate();
     var { EMPTY_BUFFER, kWebSocket, NOOP } = require_constants();
     var { isBlob, isValidStatusCode } = require_validation();
@@ -27482,8 +27625,10 @@ var require_sender = __commonJS({
           buf.writeUInt16BE(code, 0);
           if (typeof data === "string") {
             buf.write(data, 2);
-          } else {
+          } else if (isUint8Array(data)) {
             buf.set(data, 2);
+          } else {
+            throw new TypeError("Second argument must be a string or a Uint8Array");
           }
         }
         const options = {
@@ -28364,6 +28509,10 @@ var require_websocket = __commonJS({
        *     multiple times in the same tick
        * @param {Function} [options.generateMask] The function used to generate the
        *     masking key
+       * @param {Number} [options.maxBufferedChunks=0] The maximum number of
+       *     buffered data chunks
+       * @param {Number} [options.maxFragments=0] The maximum number of message
+       *     fragments
        * @param {Number} [options.maxPayload=0] The maximum allowed message size
        * @param {Boolean} [options.skipUTF8Validation=false] Specifies whether or
        *     not to skip UTF-8 validation for text and close messages
@@ -28375,6 +28524,8 @@ var require_websocket = __commonJS({
           binaryType: this.binaryType,
           extensions: this._extensions,
           isServer: this._isServer,
+          maxBufferedChunks: options.maxBufferedChunks,
+          maxFragments: options.maxFragments,
           maxPayload: options.maxPayload,
           skipUTF8Validation: options.skipUTF8Validation
         });
@@ -28674,6 +28825,8 @@ var require_websocket = __commonJS({
         autoPong: true,
         closeTimeout: CLOSE_TIMEOUT,
         protocolVersion: protocolVersions[1],
+        maxBufferedChunks: 1024 * 1024,
+        maxFragments: 128 * 1024,
         maxPayload: 100 * 1024 * 1024,
         skipUTF8Validation: false,
         perMessageDeflate: true,
@@ -28916,6 +29069,8 @@ var require_websocket = __commonJS({
         websocket.setSocket(socket, head, {
           allowSynchronousEvents: opts.allowSynchronousEvents,
           generateMask: opts.generateMask,
+          maxBufferedChunks: opts.maxBufferedChunks,
+          maxFragments: opts.maxFragments,
           maxPayload: opts.maxPayload,
           skipUTF8Validation: opts.skipUTF8Validation
         });
@@ -29258,6 +29413,10 @@ var require_websocket_server = __commonJS({
        *     called
        * @param {Function} [options.handleProtocols] A hook to handle protocols
        * @param {String} [options.host] The hostname where to bind the server
+       * @param {Number} [options.maxBufferedChunks=1048576] The maximum number of
+       *     buffered data chunks
+       * @param {Number} [options.maxFragments=131072] The maximum number of message
+       *     fragments
        * @param {Number} [options.maxPayload=104857600] The maximum allowed message
        *     size
        * @param {Boolean} [options.noServer=false] Enable no server mode
@@ -29279,6 +29438,8 @@ var require_websocket_server = __commonJS({
         options = {
           allowSynchronousEvents: true,
           autoPong: true,
+          maxBufferedChunks: 1024 * 1024,
+          maxFragments: 128 * 1024,
           maxPayload: 100 * 1024 * 1024,
           skipUTF8Validation: false,
           perMessageDeflate: false,
@@ -29558,6 +29719,8 @@ var require_websocket_server = __commonJS({
         socket.removeListener("error", socketOnError);
         ws.setSocket(socket, head, {
           allowSynchronousEvents: this.options.allowSynchronousEvents,
+          maxBufferedChunks: this.options.maxBufferedChunks,
+          maxFragments: this.options.maxFragments,
           maxPayload: this.options.maxPayload,
           skipUTF8Validation: this.options.skipUTF8Validation
         });
@@ -57260,66 +57423,6 @@ var init_solana_balance = __esm({
   }
 });
 
-// node_modules/@solana-program/token/dist/src/index.mjs
-var TOKEN_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_ERROR__INVALID_OWNER, associatedTokenErrorMessages, TOKEN_ERROR__NOT_RENT_EXEMPT, TOKEN_ERROR__INSUFFICIENT_FUNDS, TOKEN_ERROR__INVALID_MINT, TOKEN_ERROR__MINT_MISMATCH, TOKEN_ERROR__OWNER_MISMATCH, TOKEN_ERROR__FIXED_SUPPLY, TOKEN_ERROR__ALREADY_IN_USE, TOKEN_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS, TOKEN_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS, TOKEN_ERROR__UNINITIALIZED_STATE, TOKEN_ERROR__NATIVE_NOT_SUPPORTED, TOKEN_ERROR__NON_NATIVE_HAS_BALANCE, TOKEN_ERROR__INVALID_INSTRUCTION, TOKEN_ERROR__INVALID_STATE, TOKEN_ERROR__OVERFLOW, TOKEN_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED, TOKEN_ERROR__MINT_CANNOT_FREEZE, TOKEN_ERROR__ACCOUNT_FROZEN, TOKEN_ERROR__MINT_DECIMALS_MISMATCH, TOKEN_ERROR__NON_NATIVE_NOT_SUPPORTED, tokenErrorMessages;
-var init_src = __esm({
-  "node_modules/@solana-program/token/dist/src/index.mjs"() {
-    "use strict";
-    TOKEN_PROGRAM_ADDRESS = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-    ASSOCIATED_TOKEN_ERROR__INVALID_OWNER = 0;
-    if (process.env.NODE_ENV !== "production") {
-      associatedTokenErrorMessages = {
-        [ASSOCIATED_TOKEN_ERROR__INVALID_OWNER]: `Associated token account owner does not match address derivation`
-      };
-    }
-    TOKEN_ERROR__NOT_RENT_EXEMPT = 0;
-    TOKEN_ERROR__INSUFFICIENT_FUNDS = 1;
-    TOKEN_ERROR__INVALID_MINT = 2;
-    TOKEN_ERROR__MINT_MISMATCH = 3;
-    TOKEN_ERROR__OWNER_MISMATCH = 4;
-    TOKEN_ERROR__FIXED_SUPPLY = 5;
-    TOKEN_ERROR__ALREADY_IN_USE = 6;
-    TOKEN_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS = 7;
-    TOKEN_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS = 8;
-    TOKEN_ERROR__UNINITIALIZED_STATE = 9;
-    TOKEN_ERROR__NATIVE_NOT_SUPPORTED = 10;
-    TOKEN_ERROR__NON_NATIVE_HAS_BALANCE = 11;
-    TOKEN_ERROR__INVALID_INSTRUCTION = 12;
-    TOKEN_ERROR__INVALID_STATE = 13;
-    TOKEN_ERROR__OVERFLOW = 14;
-    TOKEN_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED = 15;
-    TOKEN_ERROR__MINT_CANNOT_FREEZE = 16;
-    TOKEN_ERROR__ACCOUNT_FROZEN = 17;
-    TOKEN_ERROR__MINT_DECIMALS_MISMATCH = 18;
-    TOKEN_ERROR__NON_NATIVE_NOT_SUPPORTED = 19;
-    if (process.env.NODE_ENV !== "production") {
-      tokenErrorMessages = {
-        [TOKEN_ERROR__ACCOUNT_FROZEN]: `Account is frozen`,
-        [TOKEN_ERROR__ALREADY_IN_USE]: `Already in use`,
-        [TOKEN_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED]: `Account does not support specified authority type`,
-        [TOKEN_ERROR__FIXED_SUPPLY]: `Fixed supply`,
-        [TOKEN_ERROR__INSUFFICIENT_FUNDS]: `Insufficient funds`,
-        [TOKEN_ERROR__INVALID_INSTRUCTION]: `Invalid instruction`,
-        [TOKEN_ERROR__INVALID_MINT]: `Invalid Mint`,
-        [TOKEN_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS]: `Invalid number of provided signers`,
-        [TOKEN_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS]: `Invalid number of required signers`,
-        [TOKEN_ERROR__INVALID_STATE]: `State is invalid for requested operation`,
-        [TOKEN_ERROR__MINT_CANNOT_FREEZE]: `This token mint cannot freeze accounts`,
-        [TOKEN_ERROR__MINT_DECIMALS_MISMATCH]: `The provided decimals value different from the Mint decimals`,
-        [TOKEN_ERROR__MINT_MISMATCH]: `Account not associated with this Mint`,
-        [TOKEN_ERROR__NATIVE_NOT_SUPPORTED]: `Instruction does not support native tokens`,
-        [TOKEN_ERROR__NON_NATIVE_HAS_BALANCE]: `Non-native account can only be closed if its balance is zero`,
-        [TOKEN_ERROR__NON_NATIVE_NOT_SUPPORTED]: `Instruction does not support non-native tokens`,
-        [TOKEN_ERROR__NOT_RENT_EXEMPT]: `Lamport balance below rent-exempt threshold`,
-        [TOKEN_ERROR__OVERFLOW]: `Operation overflowed`,
-        [TOKEN_ERROR__OWNER_MISMATCH]: `Owner does not match`,
-        [TOKEN_ERROR__UNINITIALIZED_STATE]: `State is unititialized`
-      };
-    }
-    if (process.env.NODE_ENV !== "production") ;
-  }
-});
-
 // node_modules/@solana-program/token-2022/dist/src/index.mjs
 function getAccountStateDecoder() {
   return getEnumDecoder(AccountState);
@@ -57795,8 +57898,8 @@ function getTransferCheckedInstruction(input, config) {
     programAddress
   });
 }
-var AccountState, TOKEN_2022_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_ERROR__INVALID_OWNER2, associatedTokenErrorMessages2, TOKEN_2022_ERROR__NOT_RENT_EXEMPT, TOKEN_2022_ERROR__INSUFFICIENT_FUNDS, TOKEN_2022_ERROR__INVALID_MINT, TOKEN_2022_ERROR__MINT_MISMATCH, TOKEN_2022_ERROR__OWNER_MISMATCH, TOKEN_2022_ERROR__FIXED_SUPPLY, TOKEN_2022_ERROR__ALREADY_IN_USE, TOKEN_2022_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS, TOKEN_2022_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS, TOKEN_2022_ERROR__UNINITIALIZED_STATE, TOKEN_2022_ERROR__NATIVE_NOT_SUPPORTED, TOKEN_2022_ERROR__NON_NATIVE_HAS_BALANCE, TOKEN_2022_ERROR__INVALID_INSTRUCTION, TOKEN_2022_ERROR__INVALID_STATE, TOKEN_2022_ERROR__OVERFLOW, TOKEN_2022_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED, TOKEN_2022_ERROR__MINT_CANNOT_FREEZE, TOKEN_2022_ERROR__ACCOUNT_FROZEN, TOKEN_2022_ERROR__MINT_DECIMALS_MISMATCH, TOKEN_2022_ERROR__NON_NATIVE_NOT_SUPPORTED, token2022ErrorMessages, EMIT_TOKEN_METADATA_DISCRIMINATOR, INITIALIZE_TOKEN_GROUP_DISCRIMINATOR, INITIALIZE_TOKEN_GROUP_MEMBER_DISCRIMINATOR, INITIALIZE_TOKEN_METADATA_DISCRIMINATOR, REMOVE_TOKEN_METADATA_KEY_DISCRIMINATOR, TRANSFER_CHECKED_DISCRIMINATOR, UPDATE_TOKEN_GROUP_MAX_SIZE_DISCRIMINATOR, UPDATE_TOKEN_GROUP_UPDATE_AUTHORITY_DISCRIMINATOR, UPDATE_TOKEN_METADATA_FIELD_DISCRIMINATOR, UPDATE_TOKEN_METADATA_UPDATE_AUTHORITY_DISCRIMINATOR, SECONDS_PER_YEAR;
-var init_src2 = __esm({
+var AccountState, TOKEN_2022_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_ERROR__INVALID_OWNER, associatedTokenErrorMessages, TOKEN_2022_ERROR__NOT_RENT_EXEMPT, TOKEN_2022_ERROR__INSUFFICIENT_FUNDS, TOKEN_2022_ERROR__INVALID_MINT, TOKEN_2022_ERROR__MINT_MISMATCH, TOKEN_2022_ERROR__OWNER_MISMATCH, TOKEN_2022_ERROR__FIXED_SUPPLY, TOKEN_2022_ERROR__ALREADY_IN_USE, TOKEN_2022_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS, TOKEN_2022_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS, TOKEN_2022_ERROR__UNINITIALIZED_STATE, TOKEN_2022_ERROR__NATIVE_NOT_SUPPORTED, TOKEN_2022_ERROR__NON_NATIVE_HAS_BALANCE, TOKEN_2022_ERROR__INVALID_INSTRUCTION, TOKEN_2022_ERROR__INVALID_STATE, TOKEN_2022_ERROR__OVERFLOW, TOKEN_2022_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED, TOKEN_2022_ERROR__MINT_CANNOT_FREEZE, TOKEN_2022_ERROR__ACCOUNT_FROZEN, TOKEN_2022_ERROR__MINT_DECIMALS_MISMATCH, TOKEN_2022_ERROR__NON_NATIVE_NOT_SUPPORTED, token2022ErrorMessages, EMIT_TOKEN_METADATA_DISCRIMINATOR, INITIALIZE_TOKEN_GROUP_DISCRIMINATOR, INITIALIZE_TOKEN_GROUP_MEMBER_DISCRIMINATOR, INITIALIZE_TOKEN_METADATA_DISCRIMINATOR, REMOVE_TOKEN_METADATA_KEY_DISCRIMINATOR, TRANSFER_CHECKED_DISCRIMINATOR, UPDATE_TOKEN_GROUP_MAX_SIZE_DISCRIMINATOR, UPDATE_TOKEN_GROUP_UPDATE_AUTHORITY_DISCRIMINATOR, UPDATE_TOKEN_METADATA_FIELD_DISCRIMINATOR, UPDATE_TOKEN_METADATA_UPDATE_AUTHORITY_DISCRIMINATOR, SECONDS_PER_YEAR;
+var init_src = __esm({
   "node_modules/@solana-program/token-2022/dist/src/index.mjs"() {
     "use strict";
     init_index_node37();
@@ -57807,10 +57910,10 @@ var init_src2 = __esm({
       return AccountState2;
     })(AccountState || {});
     TOKEN_2022_PROGRAM_ADDRESS = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-    ASSOCIATED_TOKEN_ERROR__INVALID_OWNER2 = 0;
+    ASSOCIATED_TOKEN_ERROR__INVALID_OWNER = 0;
     if (process.env.NODE_ENV !== "production") {
-      associatedTokenErrorMessages2 = {
-        [ASSOCIATED_TOKEN_ERROR__INVALID_OWNER2]: `Associated token account owner does not match address derivation`
+      associatedTokenErrorMessages = {
+        [ASSOCIATED_TOKEN_ERROR__INVALID_OWNER]: `Associated token account owner does not match address derivation`
       };
     }
     TOKEN_2022_ERROR__NOT_RENT_EXEMPT = 0;
@@ -57936,16 +58039,103 @@ var init_src2 = __esm({
   }
 });
 
+// node_modules/@x402/svm/dist/esm/chunk-WIPN332D.mjs
+async function getCachedMintMetadata(rpc, network, asset, cache2) {
+  const key = `${network}:${asset}`;
+  let metadata = cache2.get(key);
+  if (!metadata) {
+    metadata = fetchMint(rpc, asset).then((mint) => ({
+      decimals: mint.data.decimals,
+      programAddress: mint.programAddress
+    }));
+    cache2.set(key, metadata);
+  }
+  try {
+    return await metadata;
+  } catch (error) {
+    if (cache2.get(key) === metadata) {
+      cache2.delete(key);
+    }
+    throw error;
+  }
+}
+var init_chunk_WIPN332D = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-WIPN332D.mjs"() {
+    "use strict";
+    init_src();
+  }
+});
+
+// node_modules/@solana-program/token/dist/src/index.mjs
+var TOKEN_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_ERROR__INVALID_OWNER2, associatedTokenErrorMessages2, TOKEN_ERROR__NOT_RENT_EXEMPT, TOKEN_ERROR__INSUFFICIENT_FUNDS, TOKEN_ERROR__INVALID_MINT, TOKEN_ERROR__MINT_MISMATCH, TOKEN_ERROR__OWNER_MISMATCH, TOKEN_ERROR__FIXED_SUPPLY, TOKEN_ERROR__ALREADY_IN_USE, TOKEN_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS, TOKEN_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS, TOKEN_ERROR__UNINITIALIZED_STATE, TOKEN_ERROR__NATIVE_NOT_SUPPORTED, TOKEN_ERROR__NON_NATIVE_HAS_BALANCE, TOKEN_ERROR__INVALID_INSTRUCTION, TOKEN_ERROR__INVALID_STATE, TOKEN_ERROR__OVERFLOW, TOKEN_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED, TOKEN_ERROR__MINT_CANNOT_FREEZE, TOKEN_ERROR__ACCOUNT_FROZEN, TOKEN_ERROR__MINT_DECIMALS_MISMATCH, TOKEN_ERROR__NON_NATIVE_NOT_SUPPORTED, tokenErrorMessages;
+var init_src2 = __esm({
+  "node_modules/@solana-program/token/dist/src/index.mjs"() {
+    "use strict";
+    TOKEN_PROGRAM_ADDRESS = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+    ASSOCIATED_TOKEN_ERROR__INVALID_OWNER2 = 0;
+    if (process.env.NODE_ENV !== "production") {
+      associatedTokenErrorMessages2 = {
+        [ASSOCIATED_TOKEN_ERROR__INVALID_OWNER2]: `Associated token account owner does not match address derivation`
+      };
+    }
+    TOKEN_ERROR__NOT_RENT_EXEMPT = 0;
+    TOKEN_ERROR__INSUFFICIENT_FUNDS = 1;
+    TOKEN_ERROR__INVALID_MINT = 2;
+    TOKEN_ERROR__MINT_MISMATCH = 3;
+    TOKEN_ERROR__OWNER_MISMATCH = 4;
+    TOKEN_ERROR__FIXED_SUPPLY = 5;
+    TOKEN_ERROR__ALREADY_IN_USE = 6;
+    TOKEN_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS = 7;
+    TOKEN_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS = 8;
+    TOKEN_ERROR__UNINITIALIZED_STATE = 9;
+    TOKEN_ERROR__NATIVE_NOT_SUPPORTED = 10;
+    TOKEN_ERROR__NON_NATIVE_HAS_BALANCE = 11;
+    TOKEN_ERROR__INVALID_INSTRUCTION = 12;
+    TOKEN_ERROR__INVALID_STATE = 13;
+    TOKEN_ERROR__OVERFLOW = 14;
+    TOKEN_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED = 15;
+    TOKEN_ERROR__MINT_CANNOT_FREEZE = 16;
+    TOKEN_ERROR__ACCOUNT_FROZEN = 17;
+    TOKEN_ERROR__MINT_DECIMALS_MISMATCH = 18;
+    TOKEN_ERROR__NON_NATIVE_NOT_SUPPORTED = 19;
+    if (process.env.NODE_ENV !== "production") {
+      tokenErrorMessages = {
+        [TOKEN_ERROR__ACCOUNT_FROZEN]: `Account is frozen`,
+        [TOKEN_ERROR__ALREADY_IN_USE]: `Already in use`,
+        [TOKEN_ERROR__AUTHORITY_TYPE_NOT_SUPPORTED]: `Account does not support specified authority type`,
+        [TOKEN_ERROR__FIXED_SUPPLY]: `Fixed supply`,
+        [TOKEN_ERROR__INSUFFICIENT_FUNDS]: `Insufficient funds`,
+        [TOKEN_ERROR__INVALID_INSTRUCTION]: `Invalid instruction`,
+        [TOKEN_ERROR__INVALID_MINT]: `Invalid Mint`,
+        [TOKEN_ERROR__INVALID_NUMBER_OF_PROVIDED_SIGNERS]: `Invalid number of provided signers`,
+        [TOKEN_ERROR__INVALID_NUMBER_OF_REQUIRED_SIGNERS]: `Invalid number of required signers`,
+        [TOKEN_ERROR__INVALID_STATE]: `State is invalid for requested operation`,
+        [TOKEN_ERROR__MINT_CANNOT_FREEZE]: `This token mint cannot freeze accounts`,
+        [TOKEN_ERROR__MINT_DECIMALS_MISMATCH]: `The provided decimals value different from the Mint decimals`,
+        [TOKEN_ERROR__MINT_MISMATCH]: `Account not associated with this Mint`,
+        [TOKEN_ERROR__NATIVE_NOT_SUPPORTED]: `Instruction does not support native tokens`,
+        [TOKEN_ERROR__NON_NATIVE_HAS_BALANCE]: `Non-native account can only be closed if its balance is zero`,
+        [TOKEN_ERROR__NON_NATIVE_NOT_SUPPORTED]: `Instruction does not support non-native tokens`,
+        [TOKEN_ERROR__NOT_RENT_EXEMPT]: `Lamport balance below rent-exempt threshold`,
+        [TOKEN_ERROR__OVERFLOW]: `Operation overflowed`,
+        [TOKEN_ERROR__OWNER_MISMATCH]: `Owner does not match`,
+        [TOKEN_ERROR__UNINITIALIZED_STATE]: `State is unititialized`
+      };
+    }
+    if (process.env.NODE_ENV !== "production") ;
+  }
+});
+
 // node_modules/@x402/core/dist/esm/utils/index.mjs
 var init_utils9 = __esm({
   "node_modules/@x402/core/dist/esm/utils/index.mjs"() {
     "use strict";
-    init_chunk_4BKQ2IT7();
+    init_chunk_ABS7D6VX();
     init_chunk_BJTO5JO5();
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-6JPFBIJG.mjs
+// node_modules/@x402/svm/dist/esm/chunk-GHP74CT3.mjs
 function normalizeNetwork(network) {
   if (network.includes(":")) {
     const supported = [SOLANA_MAINNET_CAIP2, SOLANA_DEVNET_CAIP2, SOLANA_TESTNET_CAIP2];
@@ -57980,8 +58170,8 @@ function createRpcClient(network, customRpcUrl) {
   }
 }
 var MEMO_PROGRAM_ADDRESS, DEVNET_RPC_URL, TESTNET_RPC_URL, MAINNET_RPC_URL, DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS, DEFAULT_COMPUTE_UNIT_LIMIT, MAX_MEMO_BYTES, SOLANA_MAINNET_CAIP2, SOLANA_DEVNET_CAIP2, SOLANA_TESTNET_CAIP2, V1_TO_V2_NETWORK_MAP;
-var init_chunk_6JPFBIJG = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-6JPFBIJG.mjs"() {
+var init_chunk_GHP74CT3 = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-GHP74CT3.mjs"() {
     "use strict";
     init_index_node37();
     init_utils9();
@@ -58065,15 +58255,16 @@ var init_src3 = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-MPB7KQPX.mjs
+// node_modules/@x402/svm/dist/esm/chunk-FM5TUAUN.mjs
 var ExactSvmScheme;
-var init_chunk_MPB7KQPX = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-MPB7KQPX.mjs"() {
+var init_chunk_FM5TUAUN = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-FM5TUAUN.mjs"() {
     "use strict";
-    init_chunk_6JPFBIJG();
+    init_chunk_WIPN332D();
+    init_chunk_GHP74CT3();
     init_src3();
-    init_src();
     init_src2();
+    init_src();
     init_index_node37();
     ExactSvmScheme = class {
       /**
@@ -58087,6 +58278,7 @@ var init_chunk_MPB7KQPX = __esm({
         this.signer = signer;
         this.config = config;
         this.scheme = "exact";
+        this.mintCache = /* @__PURE__ */ new Map();
       }
       /**
        * Creates a payment payload for the Exact scheme.
@@ -58097,8 +58289,13 @@ var init_chunk_MPB7KQPX = __esm({
        */
       async createPaymentPayload(x402Version2, paymentRequirements) {
         const rpc = createRpcClient(paymentRequirements.network, this.config?.rpcUrl);
-        const tokenMint = await fetchMint(rpc, paymentRequirements.asset);
-        const tokenProgramAddress = tokenMint.programAddress;
+        const mintMetadata = await getCachedMintMetadata(
+          rpc,
+          paymentRequirements.network,
+          paymentRequirements.asset,
+          this.mintCache
+        );
+        const tokenProgramAddress = mintMetadata.programAddress;
         if (tokenProgramAddress.toString() !== TOKEN_PROGRAM_ADDRESS.toString() && tokenProgramAddress.toString() !== TOKEN_2022_PROGRAM_ADDRESS.toString()) {
           throw new Error("Asset was not created by a known token program");
         }
@@ -58119,7 +58316,7 @@ var init_chunk_MPB7KQPX = __esm({
             destination: destinationATA,
             authority: this.signer,
             amount: BigInt(paymentRequirements.amount),
-            decimals: tokenMint.data.decimals
+            decimals: mintMetadata.decimals
           },
           { programAddress: tokenProgramAddress }
         );
@@ -58180,15 +58377,16 @@ var init_chunk_WWACQNRQ = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-TOJMXN7W.mjs
+// node_modules/@x402/svm/dist/esm/chunk-IMFQUJY6.mjs
 var ExactSvmSchemeV1;
-var init_chunk_TOJMXN7W = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-TOJMXN7W.mjs"() {
+var init_chunk_IMFQUJY6 = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-IMFQUJY6.mjs"() {
     "use strict";
-    init_chunk_6JPFBIJG();
+    init_chunk_WIPN332D();
+    init_chunk_GHP74CT3();
     init_src3();
-    init_src();
     init_src2();
+    init_src();
     init_index_node37();
     ExactSvmSchemeV1 = class {
       /**
@@ -58202,6 +58400,7 @@ var init_chunk_TOJMXN7W = __esm({
         this.signer = signer;
         this.config = config;
         this.scheme = "exact";
+        this.mintCache = /* @__PURE__ */ new Map();
       }
       /**
        * Creates a payment payload for the Exact scheme (V1).
@@ -58213,8 +58412,13 @@ var init_chunk_TOJMXN7W = __esm({
       async createPaymentPayload(x402Version2, paymentRequirements) {
         const selectedV1 = paymentRequirements;
         const rpc = createRpcClient(selectedV1.network, this.config?.rpcUrl);
-        const tokenMint = await fetchMint(rpc, selectedV1.asset);
-        const tokenProgramAddress = tokenMint.programAddress;
+        const mintMetadata = await getCachedMintMetadata(
+          rpc,
+          selectedV1.network,
+          selectedV1.asset,
+          this.mintCache
+        );
+        const tokenProgramAddress = mintMetadata.programAddress;
         if (tokenProgramAddress.toString() !== TOKEN_PROGRAM_ADDRESS.toString() && tokenProgramAddress.toString() !== TOKEN_2022_PROGRAM_ADDRESS.toString()) {
           throw new Error("Asset was not created by a known token program");
         }
@@ -58235,7 +58439,7 @@ var init_chunk_TOJMXN7W = __esm({
             destination: destinationATA,
             authority: this.signer,
             amount: BigInt(selectedV1.maxAmountRequired),
-            decimals: tokenMint.data.decimals
+            decimals: mintMetadata.decimals
           },
           { programAddress: tokenProgramAddress }
         );
@@ -58289,20 +58493,20 @@ var init_chunk_TOJMXN7W = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-BTZ3CTLR.mjs
-var init_chunk_BTZ3CTLR = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-BTZ3CTLR.mjs"() {
+// node_modules/@x402/svm/dist/esm/chunk-TVOTRXZH.mjs
+var init_chunk_TVOTRXZH = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-TVOTRXZH.mjs"() {
     "use strict";
-    init_chunk_6JPFBIJG();
+    init_chunk_GHP74CT3();
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-BC643GBZ.mjs
-var init_chunk_BC643GBZ = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-BC643GBZ.mjs"() {
+// node_modules/@x402/svm/dist/esm/chunk-7XUBVWNH.mjs
+var init_chunk_7XUBVWNH = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-7XUBVWNH.mjs"() {
     "use strict";
-    init_chunk_BTZ3CTLR();
-    init_chunk_6JPFBIJG();
+    init_chunk_TVOTRXZH();
+    init_chunk_GHP74CT3();
   }
 });
 
@@ -58333,12 +58537,13 @@ function registerExactSvmScheme(client, config) {
 var init_client = __esm({
   "node_modules/@x402/svm/dist/esm/exact/client/index.mjs"() {
     "use strict";
-    init_chunk_MPB7KQPX();
+    init_chunk_FM5TUAUN();
     init_chunk_WWACQNRQ();
-    init_chunk_TOJMXN7W();
-    init_chunk_BC643GBZ();
-    init_chunk_BTZ3CTLR();
-    init_chunk_6JPFBIJG();
+    init_chunk_IMFQUJY6();
+    init_chunk_WIPN332D();
+    init_chunk_7XUBVWNH();
+    init_chunk_TVOTRXZH();
+    init_chunk_GHP74CT3();
   }
 });
 
@@ -59793,8 +59998,6 @@ function encodeEventTopics(parameters) {
   }
   if (abiItem.type !== "event")
     throw new AbiEventNotFoundError(void 0, { docsPath });
-  const definition = formatAbiItem2(abiItem);
-  const signature2 = toEventSelector(definition);
   let topics = [];
   if (args && "inputs" in abiItem) {
     const indexedInputs = abiItem.inputs?.filter((param) => "indexed" in param && param.indexed);
@@ -59807,6 +60010,10 @@ function encodeEventTopics(parameters) {
       }) ?? [];
     }
   }
+  if (abiItem.anonymous)
+    return topics;
+  const definition = formatAbiItem2(abiItem);
+  const signature2 = toEventSelector(definition);
   return [signature2, ...topics];
 }
 function encodeArg({ param, value }) {
@@ -60496,6 +60703,7 @@ async function prepareTransactionRequest(client, args) {
   }
   if (prepareTransactionRequest2?.fn && prepareTransactionRequest2.runAt?.includes("beforeFillTransaction")) {
     request = await prepareTransactionRequest2.fn({ ...request, chain: chain3 }, {
+      client,
       phase: "beforeFillTransaction"
     });
     nonce ??= request.nonce;
@@ -60565,6 +60773,7 @@ async function prepareTransactionRequest(client, args) {
   const { blobs, gas, kzg, type } = request;
   if (prepareTransactionRequest2?.fn && prepareTransactionRequest2.runAt?.includes("beforeFillParameters")) {
     request = await prepareTransactionRequest2.fn({ ...request, chain: chain3 }, {
+      client,
       phase: "beforeFillParameters"
     });
   }
@@ -60654,6 +60863,7 @@ async function prepareTransactionRequest(client, args) {
     });
   if (prepareTransactionRequest2?.fn && prepareTransactionRequest2.runAt?.includes("afterFillParameters"))
     request = await prepareTransactionRequest2.fn({ ...request, chain: chain3 }, {
+      client,
       phase: "afterFillParameters"
     });
   assertRequest(request);
@@ -61140,7 +61350,13 @@ function observe(observerId, callbacks, fn) {
   const getListeners = () => listenersCache.get(observerId) || [];
   const unsubscribe = () => {
     const listeners2 = getListeners();
-    listenersCache.set(observerId, listeners2.filter((cb) => cb.id !== callbackId));
+    const nextListeners = listeners2.filter((cb) => cb.id !== callbackId);
+    if (nextListeners.length === 0) {
+      listenersCache.delete(observerId);
+      cleanupCache.delete(observerId);
+      return;
+    }
+    listenersCache.set(observerId, nextListeners);
   };
   const unwatch = () => {
     const listeners2 = getListeners();
@@ -61179,8 +61395,25 @@ function observe(observerId, callbacks, fn) {
 }
 
 // node_modules/viem/_esm/utils/wait.js
-async function wait(time) {
-  return new Promise((res) => setTimeout(res, time));
+init_utils3();
+async function wait(time, { signal } = {}) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(getAbortError(signal));
+      return;
+    }
+    const cleanup = () => signal?.removeEventListener("abort", onAbort);
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, time);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      cleanup();
+      reject(getAbortError(signal));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 // node_modules/viem/_esm/utils/poll.js
@@ -61472,19 +61705,38 @@ async function sendRawTransaction(client, { serializedTransaction }) {
 }
 
 // node_modules/viem/_esm/utils/promise/withRetry.js
-function withRetry(fn, { delay: delay_ = 100, retryCount = 2, shouldRetry: shouldRetry2 = () => true } = {}) {
+init_utils3();
+function withRetry(fn, { delay: delay_ = 100, retryCount = 2, shouldRetry: shouldRetry2 = () => true, signal } = {}) {
   return new Promise((resolve, reject) => {
     const attemptRetry = async ({ count = 0 } = {}) => {
+      if (signal?.aborted) {
+        reject(getAbortError(signal));
+        return;
+      }
       const retry = async ({ error }) => {
         const delay = typeof delay_ === "function" ? delay_({ count, error }) : delay_;
-        if (delay)
-          await wait(delay);
+        if (delay) {
+          try {
+            await wait(delay, { signal });
+          } catch (err) {
+            reject(err);
+            return;
+          }
+        }
         attemptRetry({ count: count + 1 });
       };
       try {
         const data = await fn();
         resolve(data);
       } catch (err) {
+        if (signal?.aborted) {
+          reject(getAbortError(signal));
+          return;
+        }
+        if (isAbortError(err)) {
+          reject(err);
+          return;
+        }
         if (count < retryCount && await shouldRetry2({ count, error: err }))
           return retry({ error: err });
         reject(err);
@@ -61588,7 +61840,9 @@ function createClient(parameters) {
 init_abis();
 init_decodeFunctionResult();
 init_encodeFunctionData();
+init_getAddress();
 init_getChainContractAddress();
+init_size();
 init_trim();
 init_toHex();
 
@@ -61739,12 +61993,7 @@ async function getEnsAddress(client, parameters) {
     const res = await readContractAction(readContractParameters);
     if (res[0] === "0x")
       return null;
-    const address2 = decodeFunctionResult({
-      abi: addressResolverAbi,
-      args,
-      functionName: "addr",
-      data: res[0]
-    });
+    const address2 = decodeAddress2({ coinType, data: res[0], args });
     if (address2 === "0x")
       return null;
     if (trim(address2) === "0x00")
@@ -61755,6 +62004,23 @@ async function getEnsAddress(client, parameters) {
       throw err;
     if (isNullUniversalResolverError(err))
       return null;
+    throw err;
+  }
+}
+function decodeAddress2({ coinType, data, args }) {
+  try {
+    return decodeFunctionResult({
+      abi: addressResolverAbi,
+      args,
+      functionName: "addr",
+      data
+    });
+  } catch (err) {
+    if (coinType == null)
+      throw err;
+    const address2 = trim(data);
+    if (size(address2) === 20)
+      return getAddress(address2);
     throw err;
   }
 }
@@ -62162,6 +62428,7 @@ init_call();
 
 // node_modules/viem/_esm/actions/public/createAccessList.js
 init_parseAccount();
+init_base();
 init_toHex();
 init_getCallError();
 init_extract();
@@ -62194,6 +62461,8 @@ async function createAccessList(client, args) {
       method: "eth_createAccessList",
       params: [request, block]
     });
+    if (response.error)
+      throw new BaseError2(response.error, { details: response.error });
     return {
       accessList: response.accessList,
       gasUsed: BigInt(response.gasUsed)
@@ -62275,9 +62544,15 @@ async function createPendingTransactionFilter(client) {
 init_abis();
 init_decodeFunctionResult();
 init_encodeFunctionData();
-init_toHex();
+init_formatBlockParameter();
 init_call();
-async function getBalance(client, { address: address2, blockNumber, blockTag = client.experimental_blockTag ?? "latest" }) {
+async function getBalance(client, { address: address2, blockHash, blockNumber, blockTag = client.experimental_blockTag ?? "latest", requireCanonical }) {
+  const block = formatBlockParameter({
+    blockHash,
+    blockNumber,
+    blockTag,
+    requireCanonical
+  });
   if (client.batch?.multicall && client.chain?.contracts?.multicall3) {
     const multicall3Address = client.chain.contracts.multicall3.address;
     const calldata = encodeFunctionData({
@@ -62288,8 +62563,10 @@ async function getBalance(client, { address: address2, blockNumber, blockTag = c
     const { data } = await getAction(client, call, "call")({
       to: multicall3Address,
       data: calldata,
+      blockHash,
       blockNumber,
-      blockTag
+      blockTag,
+      requireCanonical
     });
     return decodeFunctionResult({
       abi: multicall3Abi,
@@ -62298,10 +62575,9 @@ async function getBalance(client, { address: address2, blockNumber, blockTag = c
       data: data || "0x"
     });
   }
-  const blockNumberHex = typeof blockNumber === "bigint" ? numberToHex(blockNumber) : void 0;
   const balance = await client.request({
     method: "eth_getBalance",
-    params: [address2, blockNumberHex || blockTag]
+    params: [address2, block]
   });
   return BigInt(balance);
 }
@@ -62312,6 +62588,20 @@ async function getBlobBaseFee(client) {
     method: "eth_blobBaseFee"
   });
   return BigInt(baseFee);
+}
+
+// node_modules/viem/_esm/actions/public/getBlockReceipts.js
+init_toHex();
+async function getBlockReceipts(client, { blockHash, blockNumber, blockTag = client.experimental_blockTag ?? "latest" } = {}) {
+  const blockNumberHex = blockNumber !== void 0 ? numberToHex(blockNumber) : void 0;
+  const receipts = await client.request({
+    method: "eth_getBlockReceipts",
+    params: [blockHash || blockNumberHex || blockTag]
+  }, { dedupe: Boolean(blockHash || blockNumberHex) });
+  if (!receipts)
+    throw new BlockNotFoundError({ blockHash, blockNumber });
+  const format = client.chain?.formatters?.transactionReceipt?.format || formatTransactionReceipt;
+  return receipts.map((receipt) => format(receipt, "getBlockReceipts"));
 }
 
 // node_modules/viem/_esm/actions/public/getBlockTransactionCount.js
@@ -62335,13 +62625,20 @@ async function getBlockTransactionCount(client, { blockHash, blockNumber, blockT
 }
 
 // node_modules/viem/_esm/actions/public/getCode.js
-init_toHex();
-async function getCode(client, { address: address2, blockNumber, blockTag = "latest" }) {
-  const blockNumberHex = blockNumber !== void 0 ? numberToHex(blockNumber) : void 0;
+init_formatBlockParameter();
+async function getCode(client, { address: address2, blockHash, blockNumber, blockTag = "latest", requireCanonical }) {
+  const block = formatBlockParameter({
+    blockHash,
+    blockNumber,
+    blockTag,
+    requireCanonical
+  });
   const hex = await client.request({
     method: "eth_getCode",
-    params: [address2, blockNumberHex || blockTag]
-  }, { dedupe: Boolean(blockNumberHex) });
+    params: [address2, block]
+  }, {
+    dedupe: typeof blockNumber === "bigint" || blockHash !== void 0
+  });
   if (hex === "0x")
     return void 0;
   return hex;
@@ -62474,7 +62771,7 @@ async function getFilterLogs(_client, { filter }) {
 }
 
 // node_modules/viem/_esm/actions/public/getProof.js
-init_toHex();
+init_formatBlockParameter();
 
 // node_modules/viem/_esm/utils/authorization/verifyAuthorization.js
 init_getAddress();
@@ -62490,6 +62787,7 @@ async function verifyAuthorization({ address: address2, authorization, signature
 init_base();
 init_request();
 init_rpc();
+init_utils3();
 
 // node_modules/viem/_esm/utils/promise/withDedupe.js
 init_lru();
@@ -62508,7 +62806,7 @@ function withDedupe(fn, { enabled = true, id }) {
 init_stringify();
 function buildRequest(request, options = {}) {
   return async (args, overrideOptions = {}) => {
-    const { dedupe = false, methods, retryDelay = 150, retryCount = 3, uid: uid2 } = {
+    const { dedupe = false, methods, retryDelay = 150, retryCount = 3, signal, uid: uid2 } = {
       ...options,
       ...overrideOptions
     };
@@ -62521,11 +62819,17 @@ function buildRequest(request, options = {}) {
       throw new MethodNotSupportedRpcError(new Error("method not supported"), {
         method
       });
+    if (signal?.aborted)
+      throw getAbortError(signal);
     const requestId = dedupe ? hashString(`${uid2}.${stringify(args)}`) : void 0;
     return withDedupe(() => withRetry(async () => {
       try {
-        return await request(args);
+        return await request(args, signal ? { signal } : void 0);
       } catch (err_) {
+        if (signal?.aborted)
+          throw getAbortError(signal);
+        if (isAbortError(err_))
+          throw err_;
         const err = err_;
         switch (err.code) {
           // -32700
@@ -62629,11 +62933,14 @@ function buildRequest(request, options = {}) {
         return ~~(1 << count) * retryDelay;
       },
       retryCount,
+      signal,
       shouldRetry: ({ error }) => shouldRetry(error)
     }), { enabled: dedupe, id: requestId });
   };
 }
 function shouldRetry(error) {
+  if (isAbortError(error))
+    return false;
   if ("code" in error && typeof error.code === "number") {
     if (error.code === -1)
       return true;
@@ -62706,15 +63013,17 @@ init_fromHex();
 
 // node_modules/viem/_esm/utils/rpc/http.js
 init_request();
+init_utils3();
 
 // node_modules/viem/_esm/utils/promise/withTimeout.js
+init_utils3();
 function withTimeout(fn, { errorInstance = new Error("timed out"), timeout, signal }) {
   return new Promise((resolve, reject) => {
     ;
     (async () => {
       let timeoutId;
+      const controller = new AbortController();
       try {
-        const controller = new AbortController();
         if (timeout > 0) {
           timeoutId = setTimeout(() => {
             if (signal) {
@@ -62726,8 +63035,10 @@ function withTimeout(fn, { errorInstance = new Error("timed out"), timeout, sign
         }
         resolve(await fn({ signal: controller?.signal || null }));
       } catch (err) {
-        if (err?.name === "AbortError")
+        if (controller?.signal.aborted && isAbortError(err)) {
           reject(errorInstance);
+          return;
+        }
         reject(err);
       } finally {
         clearTimeout(timeoutId);
@@ -62822,6 +63133,10 @@ function getHttpRpcClient(url_, options = {}) {
         }
         return data;
       } catch (err) {
+        if (signal_?.aborted)
+          throw getAbortError(signal_);
+        if (isAbortError(err))
+          throw err;
         if (err instanceof HttpRequestError)
           throw err;
         if (err instanceof TimeoutError)
@@ -63938,7 +64253,7 @@ function decodeParameter2(cursor, param, options) {
       staticPosition
     });
   if (param.type === "address")
-    return decodeAddress2(cursor, { checksum: checksumAddress2 });
+    return decodeAddress3(cursor, { checksum: checksumAddress2 });
   if (param.type === "bool")
     return decodeBool2(cursor);
   if (param.type.startsWith("bytes"))
@@ -63951,7 +64266,7 @@ function decodeParameter2(cursor, param, options) {
 }
 var sizeOfLength2 = 32;
 var sizeOfOffset2 = 32;
-function decodeAddress2(cursor, options = {}) {
+function decodeAddress3(cursor, options = {}) {
   const { checksum: checksum5 = false } = options;
   const value = cursor.readBytes(32);
   const wrap3 = (address2) => checksum5 ? checksum2(address2) : address2;
@@ -66628,23 +66943,32 @@ function formatProof(proof) {
 }
 
 // node_modules/viem/_esm/actions/public/getProof.js
-async function getProof(client, { address: address2, blockNumber, blockTag: blockTag_, storageKeys }) {
-  const blockTag = blockTag_ ?? "latest";
-  const blockNumberHex = blockNumber !== void 0 ? numberToHex(blockNumber) : void 0;
+async function getProof(client, { address: address2, blockHash, blockNumber, blockTag = "latest", requireCanonical, storageKeys }) {
+  const block = formatBlockParameter({
+    blockHash,
+    blockNumber,
+    blockTag,
+    requireCanonical
+  });
   const proof = await client.request({
     method: "eth_getProof",
-    params: [address2, storageKeys, blockNumberHex || blockTag]
+    params: [address2, storageKeys, block]
   });
   return formatProof(proof);
 }
 
 // node_modules/viem/_esm/actions/public/getStorageAt.js
-init_toHex();
-async function getStorageAt(client, { address: address2, blockNumber, blockTag = "latest", slot }) {
-  const blockNumberHex = blockNumber !== void 0 ? numberToHex(blockNumber) : void 0;
+init_formatBlockParameter();
+async function getStorageAt(client, { address: address2, blockHash, blockNumber, blockTag = "latest", requireCanonical, slot }) {
+  const block = formatBlockParameter({
+    blockHash,
+    blockNumber,
+    blockTag,
+    requireCanonical
+  });
   const data = await client.request({
     method: "eth_getStorageAt",
-    params: [address2, slot, blockNumberHex || blockTag]
+    params: [address2, slot, block]
   });
   return data;
 }
@@ -66727,7 +67051,7 @@ init_decodeFunctionResult();
 init_encodeFunctionData();
 init_getChainContractAddress();
 async function multicall(client, parameters) {
-  const { account, authorizationList, allowFailure = true, blockNumber, blockOverrides, blockTag, stateOverride } = parameters;
+  const { account, authorizationList, allowFailure = true, blockHash, blockNumber, blockOverrides, blockTag, requireCanonical, stateOverride } = parameters;
   const contracts2 = parameters.contracts;
   const { batchSize = parameters.batchSize ?? 1024, deployless = parameters.deployless ?? false } = typeof client.batch?.multicall === "object" ? client.batch.multicall : {};
   const multicallAddress = (() => {
@@ -66797,10 +67121,12 @@ async function multicall(client, parameters) {
     account,
     args: [calls],
     authorizationList,
+    blockHash,
     blockNumber,
     blockOverrides,
     blockTag,
     functionName: "aggregate3",
+    requireCanonical,
     stateOverride
   })));
   const results = [];
@@ -68502,6 +68828,7 @@ function publicActions(client) {
     getBlobBaseFee: () => getBlobBaseFee(client),
     getBlock: (args) => getBlock(client, args),
     getBlockNumber: (args) => getBlockNumber(client, args),
+    getBlockReceipts: (args) => getBlockReceipts(client, args),
     getBlockTransactionCount: (args) => getBlockTransactionCount(client, args),
     getBytecode: (args) => getCode(client, args),
     getChainId: () => getChainId(client),
@@ -68598,6 +68925,18 @@ var UrlRequiredError = class extends BaseError2 {
 
 // node_modules/viem/_esm/clients/transports/http.js
 init_createBatchScheduler();
+var signalId = 0;
+var signalIds = /* @__PURE__ */ new WeakMap();
+function getSignalId(signal) {
+  if (!signal)
+    return "default";
+  const id = signalIds.get(signal);
+  if (id !== void 0)
+    return id;
+  const nextId = signalId++;
+  signalIds.set(signal, nextId);
+  return nextId;
+}
 function http(url, config = {}) {
   const { batch, fetchFn, fetchOptions, key = "http", methods, name = "HTTP JSON-RPC", onFetchRequest, onFetchResponse, retryDelay, raw } = config;
   return ({ chain: chain3, retryCount: retryCount_, timeout: timeout_ }) => {
@@ -68618,22 +68957,25 @@ function http(url, config = {}) {
       key,
       methods,
       name,
-      async request({ method, params }) {
+      async request({ method, params }, options) {
         const body = { method, params };
+        const fetchOptions2 = options?.signal ? { signal: options.signal } : void 0;
         const { schedule } = createBatchScheduler({
-          id: url_,
+          id: `${url_}.${getSignalId(options?.signal)}`,
           wait: wait2,
           shouldSplitBatch(requests) {
             return requests.length > batchSize;
           },
           fn: (body2) => rpcClient.request({
-            body: body2
+            body: body2,
+            fetchOptions: fetchOptions2
           }),
           sort: (a, b) => a.id - b.id
         });
         const fn = async (body2) => batch ? schedule(body2) : [
           await rpcClient.request({
-            body: body2
+            body: body2,
+            fetchOptions: fetchOptions2
           })
         ];
         const [{ error, result }] = await fn(body);
@@ -68663,7 +69005,9 @@ init_abis();
 init_number();
 init_encodeFunctionData();
 init_getAddress();
+init_toBytes();
 init_toHex();
+init_keccak256();
 
 // node_modules/viem/_esm/op-stack/contracts.js
 var contracts = {
@@ -72886,7 +73230,7 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// node_modules/@x402/core/dist/esm/chunk-KMQH4MQI.mjs
+// node_modules/@x402/core/dist/esm/chunk-FPXAE3OS.mjs
 var NonEmptyString = external_exports.string().min(1);
 var Any = external_exports.record(external_exports.unknown());
 var OptionalAny = external_exports.record(external_exports.unknown()).optional().nullable();
@@ -72895,10 +73239,14 @@ var NetworkSchemaV2 = external_exports.string().min(3).refine((val) => val.inclu
   message: "Network must be in CAIP-2 format (e.g., 'eip155:84532')"
 });
 var NetworkSchema = external_exports.union([NetworkSchemaV1, NetworkSchemaV2]);
+var PRINTABLE_ASCII_REGEX = /^[\x20-\x7e]+$/;
 var ResourceInfoSchema = external_exports.object({
   url: NonEmptyString,
   description: external_exports.string().optional(),
-  mimeType: external_exports.string().optional()
+  mimeType: external_exports.string().optional(),
+  serviceName: external_exports.string().min(1).max(32).regex(PRINTABLE_ASCII_REGEX).optional(),
+  tags: external_exports.array(external_exports.string().min(1).max(32).regex(PRINTABLE_ASCII_REGEX)).max(5).optional(),
+  iconUrl: external_exports.string().max(2048).optional()
 });
 var PaymentRequirementsV1Schema = external_exports.object({
   scheme: NonEmptyString,
@@ -72964,15 +73312,16 @@ var PaymentPayloadSchema = external_exports.discriminatedUnion("x402Version", [
 // node_modules/@x402/core/dist/esm/chunk-VE37GDG2.mjs
 var x402Version = 2;
 
-// node_modules/@x402/core/dist/esm/chunk-G3XJUKWR.mjs
-init_chunk_4BKQ2IT7();
+// node_modules/@x402/core/dist/esm/chunk-YEYZQZNL.mjs
+init_chunk_ABS7D6VX();
 init_chunk_BJTO5JO5();
 var verifyResponseSchema = external_exports.object({
   isValid: external_exports.boolean(),
   invalidReason: external_exports.string().nullish().transform((v) => v ?? void 0),
   invalidMessage: external_exports.string().nullish().transform((v) => v ?? void 0),
   payer: external_exports.string().nullish().transform((v) => v ?? void 0),
-  extensions: external_exports.record(external_exports.string(), external_exports.unknown()).nullish().transform((v) => v ?? void 0)
+  extensions: external_exports.record(external_exports.string(), external_exports.unknown()).nullish().transform((v) => v ?? void 0),
+  extra: external_exports.record(external_exports.string(), external_exports.unknown()).nullish().transform((v) => v ?? void 0)
 });
 var settleResponseSchema = external_exports.object({
   success: external_exports.boolean(),
@@ -72981,7 +73330,9 @@ var settleResponseSchema = external_exports.object({
   payer: external_exports.string().nullish().transform((v) => v ?? void 0),
   transaction: external_exports.string(),
   network: external_exports.custom((value) => typeof value === "string"),
-  extensions: external_exports.record(external_exports.string(), external_exports.unknown()).nullish().transform((v) => v ?? void 0)
+  amount: external_exports.string().nullish().transform((v) => v ?? void 0),
+  extensions: external_exports.record(external_exports.string(), external_exports.unknown()).nullish().transform((v) => v ?? void 0),
+  extra: external_exports.record(external_exports.string(), external_exports.unknown()).nullish().transform((v) => v ?? void 0)
 });
 var supportedKindSchema = external_exports.object({
   x402Version: external_exports.number(),
@@ -73024,7 +73375,7 @@ var x402HTTPClient = class {
    * @returns Headers to use for retry, or null to proceed to payment
    */
   async handlePaymentRequired(paymentRequired) {
-    for (const hook of this.paymentRequiredHooks) {
+    for (const hook of this.getPaymentRequiredHooks(paymentRequired)) {
       const result = await hook({ paymentRequired });
       if (result?.headers) {
         return result.headers;
@@ -73098,6 +73449,111 @@ var x402HTTPClient = class {
   async createPaymentPayload(paymentRequired) {
     return this.client.createPaymentPayload(paymentRequired);
   }
+  /**
+   * Parses response headers into protocol types, fires payment response hooks (v2 only),
+   * and returns whether a hook signaled recovery.
+   *
+   * Called by transport wrappers (fetch, axios) after the paid request completes.
+   *
+   * @param paymentPayload - The payload that was sent with the request
+   * @param getHeader - Function to retrieve a response header by name
+   * @param status - The HTTP status code of the response
+   * @returns Whether a hook recovered and the parsed settle response (if any)
+   */
+  async processPaymentResult(paymentPayload, getHeader, status) {
+    let settleResponse;
+    try {
+      settleResponse = this.getPaymentSettleResponse(getHeader);
+    } catch {
+    }
+    if (paymentPayload.x402Version === 1) {
+      return { recovered: false, settleResponse };
+    }
+    let paymentRequired;
+    if (!settleResponse && status === 402) {
+      try {
+        paymentRequired = this.getPaymentRequiredResponse(getHeader);
+      } catch {
+      }
+    }
+    const requirements = paymentPayload.accepted;
+    if (!requirements) {
+      throw new Error("Invalid x402 v2 payment payload: missing `accepted`");
+    }
+    const ctx = {
+      paymentPayload,
+      requirements,
+      ...settleResponse ? { settleResponse } : {},
+      ...paymentRequired ? { paymentRequired } : {}
+    };
+    const result = await this.client.handlePaymentResponse(ctx);
+    return { recovered: result?.recovered === true, settleResponse };
+  }
+  /**
+   * Parses HTTP status, headers, and body into an `HTTPResourceResponse`.
+   *
+   * Decodes the x402 payment header into `header`: the `PAYMENT-RESPONSE`
+   * settlement if present, otherwise the `PAYMENT-REQUIRED` declaration on
+   * 402 responses (whose `error` field carries the server's failure reason).
+   *
+   * @param args - Normalized response inputs from any HTTP transport
+   * @param args.status - HTTP response status code
+   * @param args.getHeader - Callback to read response headers by name
+   * @param args.body - Response body payload
+   * @returns The parsed status, body, and decoded payment header
+   */
+  parsePaymentResult(args) {
+    const { status, getHeader, body } = args;
+    let header;
+    try {
+      header = this.getPaymentSettleResponse(getHeader);
+    } catch {
+      if (status === 402) {
+        try {
+          header = this.getPaymentRequiredResponse(getHeader, body);
+        } catch {
+        }
+      }
+    }
+    let paymentStatus = "none";
+    if (header && !("success" in header)) {
+      paymentStatus = "payment_required";
+    }
+    if (header && "success" in header) {
+      paymentStatus = header.success ? "settled" : "settle_failed";
+    }
+    return { status, paymentStatus, body, header };
+  }
+  /**
+   * Parses a fetch Response into an `HTTPResourceResponse` for app-level convenience.
+   *
+   * @param response - The fetch Response to process
+   * @returns The parsed status, body, and decoded payment header
+   */
+  async processResponse(response) {
+    const getHeader = (name) => response.headers.get(name);
+    const contentType = response.headers.get("content-type") ?? "";
+    const body = contentType.includes("application/json") ? await response.json() : await response.text();
+    return this.parsePaymentResult({ status: response.status, getHeader, body });
+  }
+  /**
+   * Manual HTTP hooks run before extension hooks scoped to the 402 response.
+   *
+   * @param paymentRequired - The payment required response from the server
+   * @returns Hooks in invocation order
+   */
+  getPaymentRequiredHooks(paymentRequired) {
+    const hooks = [...this.paymentRequiredHooks];
+    const declaredExtensions = paymentRequired.extensions;
+    if (!declaredExtensions) return hooks;
+    for (const extension2 of this.client.getExtensions()) {
+      const httpExtension = extension2;
+      const hook = httpExtension.transportHooks?.http?.onPaymentRequired;
+      if (!hook || !(extension2.key in declaredExtensions)) continue;
+      hooks.push((context) => hook(declaredExtensions[extension2.key], context));
+    }
+    return hooks;
+  }
 };
 function encodePaymentSignatureHeader(paymentPayload) {
   return safeBase64Encode(JSON.stringify(paymentPayload));
@@ -73116,7 +73572,7 @@ function decodePaymentResponseHeader(paymentResponseHeader) {
 }
 
 // node_modules/@x402/core/dist/esm/client/index.mjs
-init_chunk_4BKQ2IT7();
+init_chunk_ABS7D6VX();
 init_chunk_BJTO5JO5();
 var x402Client = class _x402Client {
   /**
@@ -73126,11 +73582,13 @@ var x402Client = class _x402Client {
    */
   constructor(paymentRequirementsSelector) {
     this.registeredClientSchemes = /* @__PURE__ */ new Map();
+    this.schemeClientHookAdapters = /* @__PURE__ */ new Map();
     this.policies = [];
     this.registeredExtensions = /* @__PURE__ */ new Map();
     this.beforePaymentCreationHooks = [];
     this.afterPaymentCreationHooks = [];
     this.onPaymentCreationFailureHooks = [];
+    this.paymentResponseHooks = [];
     this.paymentRequirementsSelector = paymentRequirementsSelector || ((x402Version2, accepts) => accepts[0]);
   }
   /**
@@ -73215,6 +73673,14 @@ var x402Client = class _x402Client {
     return this;
   }
   /**
+   * Get all registered client extensions.
+   *
+   * @returns Array of registered extensions
+   */
+  getExtensions() {
+    return Array.from(this.registeredExtensions.values());
+  }
+  /**
    * Register a hook to execute before payment payload creation.
    * Can abort creation by returning { abort: true, reason: string }
    *
@@ -73247,6 +73713,38 @@ var x402Client = class _x402Client {
     return this;
   }
   /**
+   * Register a hook to execute after a paid request completes.
+   * Can signal recovery by returning { recovered: true }, causing the transport to retry.
+   *
+   * @param hook - The hook function to register
+   * @returns The x402Client instance for chaining
+   */
+  onPaymentResponse(hook) {
+    this.paymentResponseHooks.push(hook);
+    return this;
+  }
+  /**
+   * Fires all registered payment response hooks in order.
+   * Returns `{ recovered: true }` if any hook signals recovery (first wins).
+   *
+   * @param ctx - The payment response context
+   * @returns Recovery signal or undefined
+   */
+  async handlePaymentResponse(ctx) {
+    for (const hook of this.getLabeledHooks(
+      "onPaymentResponse",
+      ctx.paymentPayload.x402Version,
+      ctx.requirements,
+      ctx.paymentRequired?.extensions ?? ctx.paymentPayload.extensions
+    )) {
+      const result = await hook(ctx);
+      if (result && "recovered" in result && result.recovered) {
+        return { recovered: true };
+      }
+    }
+    return void 0;
+  }
+  /**
    * Creates a payment payload based on a PaymentRequired response.
    *
    * Automatically extracts x402Version, resource, and extensions from the PaymentRequired
@@ -73265,7 +73763,12 @@ var x402Client = class _x402Client {
       paymentRequired,
       selectedRequirements: requirements
     };
-    for (const hook of this.beforePaymentCreationHooks) {
+    for (const hook of this.getLabeledHooks(
+      "beforePaymentCreation",
+      paymentRequired.x402Version,
+      requirements,
+      paymentRequired.extensions
+    )) {
       const result = await hook(context);
       if (result && "abort" in result && result.abort) {
         throw new Error(`Payment creation aborted: ${result.reason}`);
@@ -73302,7 +73805,12 @@ var x402Client = class _x402Client {
         ...context,
         paymentPayload
       };
-      for (const hook of this.afterPaymentCreationHooks) {
+      for (const hook of this.getLabeledHooks(
+        "afterPaymentCreation",
+        paymentRequired.x402Version,
+        requirements,
+        paymentRequired.extensions
+      )) {
         await hook(createdContext);
       }
       return paymentPayload;
@@ -73311,7 +73819,12 @@ var x402Client = class _x402Client {
         ...context,
         error
       };
-      for (const hook of this.onPaymentCreationFailureHooks) {
+      for (const hook of this.getLabeledHooks(
+        "onPaymentCreationFailure",
+        paymentRequired.x402Version,
+        requirements,
+        paymentRequired.extensions
+      )) {
         const result = await hook(failureContext);
         if (result && "recovered" in result && result.recovered) {
           return result.payload;
@@ -73321,25 +73834,45 @@ var x402Client = class _x402Client {
     }
   }
   /**
-   * Merges server-declared extensions with scheme-provided extensions.
-   * Scheme extensions overlay on top of server extensions at each key,
-   * preserving server-provided schema while overlaying scheme-provided info.
+   * Merges server-declared extensions with client extension echoes.
+   * Client extension data may add fields, but server-declared fields remain intact.
    *
    * @param serverExtensions - Extensions declared by the server in the 402 response
-   * @param schemeExtensions - Extensions provided by the scheme client (e.g. EIP-2612)
+   * @param clientExtensions - Extensions provided by the client or scheme
    * @returns The merged extensions object, or undefined if both inputs are undefined
    */
-  mergeExtensions(serverExtensions, schemeExtensions) {
-    if (!schemeExtensions) return serverExtensions;
-    if (!serverExtensions) return schemeExtensions;
+  mergeExtensions(serverExtensions, clientExtensions) {
+    if (!clientExtensions) return serverExtensions;
+    if (!serverExtensions) return clientExtensions;
     const merged = { ...serverExtensions };
-    for (const [key, schemeValue] of Object.entries(schemeExtensions)) {
+    for (const [key, clientValue] of Object.entries(clientExtensions)) {
       const serverValue = merged[key];
-      if (serverValue && typeof serverValue === "object" && schemeValue && typeof schemeValue === "object") {
-        merged[key] = { ...serverValue, ...schemeValue };
-      } else {
-        merged[key] = schemeValue;
+      if (serverValue === null || typeof serverValue !== "object" || Array.isArray(serverValue) || clientValue === null || typeof clientValue !== "object" || Array.isArray(clientValue)) {
+        merged[key] = clientValue;
+        continue;
       }
+      const serverRecord = serverValue;
+      const clientRecord = clientValue;
+      const extensionValue = { ...serverRecord };
+      const pending = [{ target: extensionValue, source: clientRecord }];
+      for (const item of pending) {
+        for (const [fieldKey, clientFieldValue] of Object.entries(item.source)) {
+          const serverFieldValue = item.target[fieldKey];
+          if (serverFieldValue !== null && typeof serverFieldValue === "object" && !Array.isArray(serverFieldValue) && clientFieldValue !== null && typeof clientFieldValue === "object" && !Array.isArray(clientFieldValue)) {
+            const nestedValue = { ...serverFieldValue };
+            item.target[fieldKey] = nestedValue;
+            pending.push({
+              target: nestedValue,
+              source: clientFieldValue
+            });
+            continue;
+          }
+          if (!Object.prototype.hasOwnProperty.call(item.target, fieldKey)) {
+            item.target[fieldKey] = clientFieldValue;
+          }
+        }
+      }
+      merged[key] = extensionValue;
     }
     return merged;
   }
@@ -73362,7 +73895,10 @@ var x402Client = class _x402Client {
         enriched = await extension2.enrichPaymentPayload(enriched, paymentRequired);
       }
     }
-    return enriched;
+    return {
+      ...enriched,
+      extensions: this.mergeExtensions(paymentRequired.extensions, enriched.extensions)
+    };
   }
   /**
    * Selects appropriate payment requirements based on registered clients and policies.
@@ -73423,15 +73959,108 @@ var x402Client = class _x402Client {
       clientSchemesByNetwork.set(network, /* @__PURE__ */ new Map());
     }
     const clientByScheme = clientSchemesByNetwork.get(network);
-    if (!clientByScheme.has(client.scheme)) {
-      clientByScheme.set(client.scheme, client);
+    clientByScheme.set(client.scheme, client);
+    if (!this.schemeClientHookAdapters.has(x402Version2)) {
+      this.schemeClientHookAdapters.set(x402Version2, /* @__PURE__ */ new Map());
+    }
+    const adaptersByNetwork = this.schemeClientHookAdapters.get(x402Version2);
+    if (!adaptersByNetwork.has(network)) {
+      adaptersByNetwork.set(network, /* @__PURE__ */ new Map());
+    }
+    const adaptersByScheme = adaptersByNetwork.get(network);
+    const hooks = client.schemeHooks;
+    if (!hooks) {
+      adaptersByScheme.delete(client.scheme);
+      return this;
+    }
+    const handles = {};
+    if (hooks.onBeforePaymentCreation) {
+      handles.beforePaymentCreation = hooks.onBeforePaymentCreation;
+    }
+    if (hooks.onAfterPaymentCreation) {
+      handles.afterPaymentCreation = hooks.onAfterPaymentCreation;
+    }
+    if (hooks.onPaymentCreationFailure) {
+      handles.onPaymentCreationFailure = hooks.onPaymentCreationFailure;
+    }
+    if (hooks.onPaymentResponse) {
+      handles.onPaymentResponse = hooks.onPaymentResponse;
+    }
+    if (Object.keys(handles).length > 0) {
+      adaptersByScheme.set(client.scheme, handles);
+    } else {
+      adaptersByScheme.delete(client.scheme);
     }
     return this;
+  }
+  /**
+   * Returns manual hooks followed by the selected scheme hook and declared extension hooks.
+   *
+   * @param phase - Hook slot to collect
+   * @param x402Version - Protocol version for the selected requirement
+   * @param requirements - Selected payment requirement
+   * @param declaredExtensions - Extension declarations that scope extension hooks
+   * @returns Hooks in invocation order
+   */
+  getLabeledHooks(phase, x402Version2, requirements, declaredExtensions) {
+    let manual;
+    switch (phase) {
+      case "beforePaymentCreation":
+        manual = this.beforePaymentCreationHooks;
+        break;
+      case "afterPaymentCreation":
+        manual = this.afterPaymentCreationHooks;
+        break;
+      case "onPaymentCreationFailure":
+        manual = this.onPaymentCreationFailureHooks;
+        break;
+      case "onPaymentResponse":
+        manual = this.paymentResponseHooks;
+        break;
+    }
+    const out = [...manual];
+    const adaptersByNetwork = this.schemeClientHookAdapters.get(x402Version2);
+    const schemeAdapter = adaptersByNetwork ? findByNetworkAndScheme(adaptersByNetwork, requirements.scheme, requirements.network) : void 0;
+    const hook = schemeAdapter?.[phase];
+    if (hook !== void 0) {
+      out.push(hook);
+    }
+    if (!declaredExtensions) {
+      return out;
+    }
+    const extensionHookKey = this.getClientExtensionHookKey(phase);
+    for (const [extensionKey, extension2] of this.registeredExtensions) {
+      if (!(extensionKey in declaredExtensions)) continue;
+      const extensionHook = extension2.hooks?.[extensionHookKey];
+      if (!extensionHook) continue;
+      out.push((async (ctx) => {
+        return extensionHook(declaredExtensions[extensionKey], ctx);
+      }));
+    }
+    return out;
+  }
+  /**
+   * Maps internal hook phases to extension hook names.
+   *
+   * @param phase - Internal hook phase
+   * @returns Extension hook key for the phase
+   */
+  getClientExtensionHookKey(phase) {
+    switch (phase) {
+      case "beforePaymentCreation":
+        return "onBeforePaymentCreation";
+      case "afterPaymentCreation":
+        return "onAfterPaymentCreation";
+      case "onPaymentCreationFailure":
+        return "onPaymentCreationFailure";
+      case "onPaymentResponse":
+        return "onPaymentResponse";
+    }
   }
 };
 
 // node_modules/@x402/core/dist/esm/http/index.mjs
-init_chunk_4BKQ2IT7();
+init_chunk_ABS7D6VX();
 init_chunk_BJTO5JO5();
 
 // src/payment-preauth.ts
@@ -73519,7 +74148,7 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
   };
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-C4ZQMS77.mjs
+// node_modules/@x402/evm/dist/esm/chunk-MACPBXCT.mjs
 var authorizationTypes = {
   TransferWithAuthorization: [
     { name: "from", type: "address" },
@@ -73594,6 +74223,8 @@ var DEFAULT_MAX_FEE_PER_GAS = 1000000000n;
 var DEFAULT_MAX_PRIORITY_FEE_PER_GAS = 100000000n;
 var PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 var x402ExactPermit2ProxyAddress = "0x402085c248EeA27D92E8b30b2C58ed07f9E20001";
+
+// node_modules/@x402/evm/dist/esm/chunk-TW7Z65AO.mjs
 function getEvmChainId(network) {
   if (network.startsWith("eip155:")) {
     const idStr = network.split(":")[1];
@@ -73620,183 +74251,10 @@ function createPermit2Nonce() {
   return BigInt(toHex(randomBytes8)).toString();
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-EVC7K4OP.mjs
-var ExactEvmSchemeV1 = class {
-  /**
-   * Creates a new ExactEvmClientV1 instance.
-   *
-   * @param signer - The EVM signer for client operations
-   */
-  constructor(signer) {
-    this.signer = signer;
-    this.scheme = "exact";
-  }
-  /**
-   * Creates a payment payload for the Exact scheme (V1).
-   *
-   * @param x402Version - The x402 protocol version
-   * @param paymentRequirements - The payment requirements
-   * @returns Promise resolving to a payment payload
-   */
-  async createPaymentPayload(x402Version2, paymentRequirements) {
-    const selectedV1 = paymentRequirements;
-    const nonce = createNonce();
-    const now = Math.floor(Date.now() / 1e3);
-    const authorization = {
-      from: this.signer.address,
-      to: getAddress(selectedV1.payTo),
-      value: selectedV1.maxAmountRequired,
-      validAfter: (now - 600).toString(),
-      // 10 minutes before
-      validBefore: (now + selectedV1.maxTimeoutSeconds).toString(),
-      nonce
-    };
-    const signature2 = await this.signAuthorization(authorization, selectedV1);
-    const payload = {
-      authorization,
-      signature: signature2
-    };
-    return {
-      x402Version: x402Version2,
-      scheme: selectedV1.scheme,
-      network: selectedV1.network,
-      payload
-    };
-  }
-  /**
-   * Sign the EIP-3009 authorization using EIP-712
-   *
-   * @param authorization - The authorization to sign
-   * @param requirements - The payment requirements
-   * @returns Promise resolving to the signature
-   */
-  async signAuthorization(authorization, requirements) {
-    const chainId = getEvmChainIdV1(requirements.network);
-    if (!requirements.extra?.name || !requirements.extra?.version) {
-      throw new Error(
-        `EIP-712 domain parameters (name, version) are required in payment requirements for asset ${requirements.asset}`
-      );
-    }
-    const { name, version: version4 } = requirements.extra;
-    const domain = {
-      name,
-      version: version4,
-      chainId,
-      verifyingContract: getAddress(requirements.asset)
-    };
-    const message = {
-      from: getAddress(authorization.from),
-      to: getAddress(authorization.to),
-      value: BigInt(authorization.value),
-      validAfter: BigInt(authorization.validAfter),
-      validBefore: BigInt(authorization.validBefore),
-      nonce: authorization.nonce
-    };
-    return await this.signer.signTypedData({
-      domain,
-      types: authorizationTypes,
-      primaryType: "TransferWithAuthorization",
-      message
-    });
-  }
-};
-var EVM_NETWORK_CHAIN_ID_MAP = {
-  ethereum: 1,
-  sepolia: 11155111,
-  abstract: 2741,
-  "abstract-testnet": 11124,
-  "base-sepolia": 84532,
-  base: 8453,
-  "avalanche-fuji": 43113,
-  avalanche: 43114,
-  iotex: 4689,
-  sei: 1329,
-  "sei-testnet": 1328,
-  polygon: 137,
-  "polygon-amoy": 80002,
-  peaq: 3338,
-  story: 1514,
-  educhain: 41923,
-  "skale-base-sepolia": 324705682,
-  megaeth: 4326,
-  monad: 143,
-  stable: 988,
-  "stable-testnet": 2201
-};
-var NETWORKS = Object.keys(EVM_NETWORK_CHAIN_ID_MAP);
-function getEvmChainIdV1(network) {
-  const chainId = EVM_NETWORK_CHAIN_ID_MAP[network];
-  if (!chainId) {
-    throw new Error(`Unsupported v1 network: ${network}`);
-  }
-  return chainId;
-}
-
-// node_modules/@x402/evm/dist/esm/chunk-CRT6YNY5.mjs
+// node_modules/@x402/evm/dist/esm/chunk-27MWX225.mjs
 var EIP2612_GAS_SPONSORING_KEY = "eip2612GasSponsoring";
 var ERC20_APPROVAL_GAS_SPONSORING_KEY = "erc20ApprovalGasSponsoring";
 var ERC20_APPROVAL_GAS_SPONSORING_VERSION = "1";
-async function createPermit2PayloadForProxy(proxyAddress, signer, x402Version2, paymentRequirements) {
-  const now = Math.floor(Date.now() / 1e3);
-  const nonce = createPermit2Nonce();
-  const validAfter = (now - 600).toString();
-  const deadline = (now + paymentRequirements.maxTimeoutSeconds).toString();
-  const permit2Authorization = {
-    from: signer.address,
-    permitted: {
-      token: getAddress(paymentRequirements.asset),
-      amount: paymentRequirements.amount
-    },
-    spender: proxyAddress,
-    nonce,
-    deadline,
-    witness: {
-      to: getAddress(paymentRequirements.payTo),
-      validAfter
-    }
-  };
-  const signature2 = await signPermit2Authorization(
-    signer,
-    permit2Authorization,
-    paymentRequirements
-  );
-  return {
-    x402Version: x402Version2,
-    payload: { signature: signature2, permit2Authorization }
-  };
-}
-async function signPermit2Authorization(signer, permit2Authorization, requirements) {
-  const chainId = getEvmChainId(requirements.network);
-  return await signer.signTypedData({
-    domain: { name: "Permit2", chainId, verifyingContract: PERMIT2_ADDRESS },
-    types: permit2WitnessTypes,
-    primaryType: "PermitWitnessTransferFrom",
-    message: {
-      permitted: {
-        token: getAddress(permit2Authorization.permitted.token),
-        amount: BigInt(permit2Authorization.permitted.amount)
-      },
-      spender: getAddress(permit2Authorization.spender),
-      nonce: BigInt(permit2Authorization.nonce),
-      deadline: BigInt(permit2Authorization.deadline),
-      witness: {
-        to: getAddress(permit2Authorization.witness.to),
-        validAfter: BigInt(permit2Authorization.witness.validAfter)
-      }
-    }
-  });
-}
-
-// node_modules/@x402/evm/dist/esm/chunk-WKBC5YMI.mjs
-var MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-async function createPermit2Payload(signer, x402Version2, paymentRequirements) {
-  return createPermit2PayloadForProxy(
-    x402ExactPermit2ProxyAddress,
-    signer,
-    x402Version2,
-    paymentRequirements
-  );
-}
 async function signEip2612Permit(signer, tokenAddress, tokenName, tokenVersion, chainId, deadline, permittedAmount) {
   const owner = signer.address;
   const spender = getAddress(PERMIT2_ADDRESS);
@@ -73931,7 +74389,7 @@ function resolveExtensionRpcCapabilities(network, signer, options) {
   }
   return capabilities;
 }
-async function trySignEip2612PermitExtension(signer, options, requirements, result, context) {
+async function trySignEip2612PermitExtension(signer, options, requirements, result, context, approvalAmount) {
   const capabilities = resolveExtensionRpcCapabilities(requirements.network, signer, options);
   if (!capabilities.readContract) {
     return void 0;
@@ -73946,6 +74404,7 @@ async function trySignEip2612PermitExtension(signer, options, requirements, resu
   }
   const chainId = getEvmChainId(requirements.network);
   const tokenAddress = getAddress(requirements.asset);
+  const requiredAllowance = approvalAmount ?? requirements.amount;
   try {
     const allowance = await capabilities.readContract({
       address: tokenAddress,
@@ -73953,7 +74412,7 @@ async function trySignEip2612PermitExtension(signer, options, requirements, resu
       functionName: "allowance",
       args: [signer.address, PERMIT2_ADDRESS]
     });
-    if (allowance >= BigInt(requirements.amount)) {
+    if (allowance >= BigInt(requiredAllowance)) {
       return void 0;
     }
   } catch {
@@ -73971,13 +74430,13 @@ async function trySignEip2612PermitExtension(signer, options, requirements, resu
     tokenVersion,
     chainId,
     deadline,
-    requirements.amount
+    requiredAllowance
   );
   return {
     [EIP2612_GAS_SPONSORING_KEY]: { info }
   };
 }
-async function trySignErc20ApprovalExtension(signer, options, requirements, context) {
+async function trySignErc20ApprovalExtension(signer, options, requirements, context, approvalAmount) {
   const capabilities = resolveExtensionRpcCapabilities(requirements.network, signer, options);
   if (!capabilities.readContract) {
     return void 0;
@@ -73990,6 +74449,7 @@ async function trySignErc20ApprovalExtension(signer, options, requirements, cont
   }
   const chainId = getEvmChainId(requirements.network);
   const tokenAddress = getAddress(requirements.asset);
+  const requiredAllowance = approvalAmount ?? requirements.amount;
   try {
     const allowance = await capabilities.readContract({
       address: tokenAddress,
@@ -73997,7 +74457,7 @@ async function trySignErc20ApprovalExtension(signer, options, requirements, cont
       functionName: "allowance",
       args: [signer.address, PERMIT2_ADDRESS]
     });
-    if (allowance >= BigInt(requirements.amount)) {
+    if (allowance >= BigInt(requiredAllowance)) {
       return void 0;
     }
   } catch {
@@ -74017,7 +74477,182 @@ async function trySignErc20ApprovalExtension(signer, options, requirements, cont
   };
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-664BKEHK.mjs
+// node_modules/@x402/evm/dist/esm/chunk-2GHXG5WB.mjs
+var ExactEvmSchemeV1 = class {
+  /**
+   * Creates a new ExactEvmClientV1 instance.
+   *
+   * @param signer - The EVM signer for client operations
+   */
+  constructor(signer) {
+    this.signer = signer;
+    this.scheme = "exact";
+  }
+  /**
+   * Creates a payment payload for the Exact scheme (V1).
+   *
+   * @param x402Version - The x402 protocol version
+   * @param paymentRequirements - The payment requirements
+   * @returns Promise resolving to a payment payload
+   */
+  async createPaymentPayload(x402Version2, paymentRequirements) {
+    const selectedV1 = paymentRequirements;
+    const nonce = createNonce();
+    const now = Math.floor(Date.now() / 1e3);
+    const authorization = {
+      from: this.signer.address,
+      to: getAddress(selectedV1.payTo),
+      value: selectedV1.maxAmountRequired,
+      validAfter: (now - 600).toString(),
+      // 10 minutes before
+      validBefore: (now + selectedV1.maxTimeoutSeconds).toString(),
+      nonce
+    };
+    const signature2 = await this.signAuthorization(authorization, selectedV1);
+    const payload = {
+      authorization,
+      signature: signature2
+    };
+    return {
+      x402Version: x402Version2,
+      scheme: selectedV1.scheme,
+      network: selectedV1.network,
+      payload
+    };
+  }
+  /**
+   * Sign the EIP-3009 authorization using EIP-712
+   *
+   * @param authorization - The authorization to sign
+   * @param requirements - The payment requirements
+   * @returns Promise resolving to the signature
+   */
+  async signAuthorization(authorization, requirements) {
+    const chainId = getEvmChainIdV1(requirements.network);
+    if (!requirements.extra?.name || !requirements.extra?.version) {
+      throw new Error(
+        `EIP-712 domain parameters (name, version) are required in payment requirements for asset ${requirements.asset}`
+      );
+    }
+    const { name, version: version4 } = requirements.extra;
+    const domain = {
+      name,
+      version: version4,
+      chainId,
+      verifyingContract: getAddress(requirements.asset)
+    };
+    const message = {
+      from: getAddress(authorization.from),
+      to: getAddress(authorization.to),
+      value: BigInt(authorization.value),
+      validAfter: BigInt(authorization.validAfter),
+      validBefore: BigInt(authorization.validBefore),
+      nonce: authorization.nonce
+    };
+    return await this.signer.signTypedData({
+      domain,
+      types: authorizationTypes,
+      primaryType: "TransferWithAuthorization",
+      message
+    });
+  }
+};
+var EVM_NETWORK_CHAIN_ID_MAP = {
+  ethereum: 1,
+  sepolia: 11155111,
+  abstract: 2741,
+  "abstract-testnet": 11124,
+  "base-sepolia": 84532,
+  base: 8453,
+  "avalanche-fuji": 43113,
+  avalanche: 43114,
+  iotex: 4689,
+  sei: 1329,
+  "sei-testnet": 1328,
+  polygon: 137,
+  "polygon-amoy": 80002,
+  peaq: 3338,
+  story: 1514,
+  educhain: 41923,
+  "skale-base-sepolia": 324705682,
+  megaeth: 4326,
+  monad: 143,
+  stable: 988,
+  "stable-testnet": 2201
+};
+var NETWORKS = Object.keys(EVM_NETWORK_CHAIN_ID_MAP);
+function getEvmChainIdV1(network) {
+  const chainId = EVM_NETWORK_CHAIN_ID_MAP[network];
+  if (!chainId) {
+    throw new Error(`Unsupported v1 network: ${network}`);
+  }
+  return chainId;
+}
+
+// node_modules/@x402/evm/dist/esm/chunk-4NBQRJBB.mjs
+async function createPermit2PayloadForProxy(proxyAddress, signer, x402Version2, paymentRequirements) {
+  const now = Math.floor(Date.now() / 1e3);
+  const nonce = createPermit2Nonce();
+  const validAfter = "0";
+  const deadline = (now + paymentRequirements.maxTimeoutSeconds).toString();
+  const permit2Authorization = {
+    from: signer.address,
+    permitted: {
+      token: getAddress(paymentRequirements.asset),
+      amount: paymentRequirements.amount
+    },
+    spender: proxyAddress,
+    nonce,
+    deadline,
+    witness: {
+      to: getAddress(paymentRequirements.payTo),
+      validAfter
+    }
+  };
+  const signature2 = await signPermit2Authorization(
+    signer,
+    permit2Authorization,
+    paymentRequirements
+  );
+  return {
+    x402Version: x402Version2,
+    payload: { signature: signature2, permit2Authorization }
+  };
+}
+async function signPermit2Authorization(signer, permit2Authorization, requirements) {
+  const chainId = getEvmChainId(requirements.network);
+  return await signer.signTypedData({
+    domain: { name: "Permit2", chainId, verifyingContract: PERMIT2_ADDRESS },
+    types: permit2WitnessTypes,
+    primaryType: "PermitWitnessTransferFrom",
+    message: {
+      permitted: {
+        token: getAddress(permit2Authorization.permitted.token),
+        amount: BigInt(permit2Authorization.permitted.amount)
+      },
+      spender: getAddress(permit2Authorization.spender),
+      nonce: BigInt(permit2Authorization.nonce),
+      deadline: BigInt(permit2Authorization.deadline),
+      witness: {
+        to: getAddress(permit2Authorization.witness.to),
+        validAfter: BigInt(permit2Authorization.witness.validAfter)
+      }
+    }
+  });
+}
+
+// node_modules/@x402/evm/dist/esm/chunk-UUEZJ3RH.mjs
+var MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+async function createPermit2Payload(signer, x402Version2, paymentRequirements) {
+  return createPermit2PayloadForProxy(
+    x402ExactPermit2ProxyAddress,
+    signer,
+    x402Version2,
+    paymentRequirements
+  );
+}
+
+// node_modules/@x402/evm/dist/esm/chunk-VFVBY5MG.mjs
 async function createEIP3009Payload(signer, x402Version2, paymentRequirements) {
   const nonce = createNonce();
   const now = Math.floor(Date.now() / 1e3);
@@ -74025,7 +74660,7 @@ async function createEIP3009Payload(signer, x402Version2, paymentRequirements) {
     from: signer.address,
     to: getAddress(paymentRequirements.payTo),
     value: paymentRequirements.amount,
-    validAfter: (now - 600).toString(),
+    validAfter: "0",
     validBefore: (now + paymentRequirements.maxTimeoutSeconds).toString(),
     nonce
   };
@@ -74149,6 +74784,20 @@ function registerExactEvmScheme(client, config) {
   }
   return client;
 }
+
+// node_modules/@x402/evm/dist/esm/chunk-7KTOBWB2.mjs
+var PAYMENT_INFO_TYPEHASH = keccak256(
+  new TextEncoder().encode(
+    "PaymentInfo(address operator,address payer,address receiver,address token,uint120 maxAmount,uint48 preApprovalExpiry,uint48 authorizationExpiry,uint48 refundExpiry,uint16 minFeeBps,uint16 maxFeeBps,address feeReceiver,uint256 salt)"
+  )
+);
+
+// node_modules/@x402/evm/dist/esm/chunk-BQS2RW2S.mjs
+var CHANNEL_CONFIG_TYPEHASH = keccak256(
+  toBytes(
+    "ChannelConfig(address payer,address payerAuthorizer,address receiver,address receiverAuthorizer,address token,uint40 withdrawDelay,bytes32 salt)"
+  )
+);
 
 // node_modules/@x402/evm/dist/esm/index.mjs
 function toClientEvmSigner(signer, publicClient) {
@@ -78446,6 +79095,100 @@ function extractGeminiCalls(content) {
   }
   return { calls, matches };
 }
+var GPT_CALL_SYNTAX_RE = /^([A-Za-z_]\w*)\(\s*parameters\s*=\s*/;
+var GPT_TERMINAL_BLOCK_RE = /^\s*terminal\s*\n([\s\S]*?)\n?\[\/terminal\]\s*$/;
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeGptArgs(params) {
+  const args = { ...params };
+  if ("cmd" in args && !("command" in args)) {
+    args.command = args.cmd;
+  }
+  return args;
+}
+function makeCall(name, args) {
+  return {
+    id: generateId(),
+    type: "function",
+    function: { name, arguments: JSON.stringify(args) }
+  };
+}
+function callFromGptObject(parsed) {
+  if (!isPlainObject(parsed)) return null;
+  const name = parsed.name;
+  if (typeof name !== "string" || name.trim() === "") return null;
+  if (parsed.type !== void 0 && parsed.type !== "function") return null;
+  const params = parsed.parameters;
+  if (!isPlainObject(params)) return null;
+  return { name: name.trim(), args: normalizeGptArgs(params) };
+}
+function findTrailingJsonObject(content) {
+  let end = content.length;
+  while (end > 0 && /\s/.test(content[end - 1])) end--;
+  if (end === 0 || content[end - 1] !== "}") return null;
+  for (let i = 0; i < end; i++) {
+    if (content[i] !== "{") continue;
+    const objEnd = scanJsonObject(content, i);
+    if (objEnd === -1) continue;
+    if (objEnd === end) {
+      try {
+        return { start: i, end, parsed: JSON.parse(content.slice(i, end)) };
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+function extractGptCalls(content) {
+  const termMatch = GPT_TERMINAL_BLOCK_RE.exec(content);
+  if (termMatch) {
+    const command = (termMatch[1] ?? "").trim();
+    if (command) {
+      return {
+        calls: [makeCall("terminal", { command })],
+        matches: [{ start: 0, end: content.length }]
+      };
+    }
+  }
+  const trimmed = content.trim();
+  const syntaxMatch = GPT_CALL_SYNTAX_RE.exec(trimmed);
+  if (syntaxMatch) {
+    const name = syntaxMatch[1];
+    const jsonStart = syntaxMatch[0].length;
+    if (trimmed[jsonStart] === "{") {
+      const jsonEnd = scanJsonObject(trimmed, jsonStart);
+      if (jsonEnd !== -1 && trimmed.slice(jsonEnd).trim() === ")") {
+        try {
+          const params = JSON.parse(trimmed.slice(jsonStart, jsonEnd));
+          if (isPlainObject(params)) {
+            return {
+              calls: [makeCall(name, normalizeGptArgs(params))],
+              matches: [{ start: 0, end: content.length }]
+            };
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  const trailing = findTrailingJsonObject(content);
+  if (trailing) {
+    const built = callFromGptObject(trailing.parsed);
+    if (built) {
+      const hasProseBefore = content.slice(0, trailing.start).trim() !== "";
+      const typeIsFunction = trailing.parsed.type === "function";
+      if (!hasProseBefore || typeIsFunction) {
+        return {
+          calls: [makeCall(built.name, built.args)],
+          matches: [{ start: hasProseBefore ? trailing.start : 0, end: content.length }]
+        };
+      }
+    }
+  }
+  return { calls: [], matches: [] };
+}
 function stripRanges(content, ranges) {
   if (ranges.length === 0) return content;
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
@@ -78467,14 +79210,16 @@ function extractTextualToolCalls(content) {
   const openClaw = extractOpenClawCalls(content);
   const anthropic = extractAnthropicCalls(content);
   const gemini = extractGeminiCalls(content);
-  const toolCalls = [...openClaw.calls, ...anthropic.calls, ...gemini.calls];
+  const gpt = openClaw.calls.length + anthropic.calls.length + gemini.calls.length === 0 ? extractGptCalls(content) : { calls: [], matches: [] };
+  const toolCalls = [...openClaw.calls, ...anthropic.calls, ...gemini.calls, ...gpt.calls];
   if (toolCalls.length === 0) {
     return { toolCalls: [], cleanedContent: content };
   }
   const cleanedContent = stripRanges(content, [
     ...openClaw.matches,
     ...anthropic.matches,
-    ...gemini.matches
+    ...gemini.matches,
+    ...gpt.matches
   ]);
   return { toolCalls, cleanedContent };
 }

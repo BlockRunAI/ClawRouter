@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.215 — June 30, 2026
+
+Recover tool calls that GPT 5.4 emits as plain JSON / function-call-looking text instead of structured `tool_calls` ([#193](https://github.com/BlockRunAI/ClawRouter/issues/193), thanks [@0xCheetah1](https://github.com/0xCheetah1)).
+
+### GPT-5.4 plain-text tool calls now become real tool calls
+
+- **Symptom:** through the OpenAI-compatible path, GPT 5.4 sometimes emits a tool call as assistant text instead of structured `tool_calls` — e.g. `{"type":"function","name":"terminal","parameters":{"cmd":"ls -alh /home/Blockrun"}}`, `{"name":"session_search","parameters":{…}}`, `read_file(parameters={"path":"…"})`, or a `terminal\nCOMMAND\n[/terminal]` block. Downstream chat surfaces (seen in Chermes/Telegram) then **displayed the raw text** to the user instead of dispatching the tool — the same class of failure as the Gemini #189/#190 fix, but with GPT-specific shapes.
+- **Fix:** added a fourth recognizer to `src/textual-tool-calls.ts` (which already synthesizes structured calls from OpenClaw `<tool_call>`, Anthropic `<function_calls>`, and Gemini `[Called function …]` text shapes). The GPT extractor recovers: whole-content `{"name":…,"parameters":…}`, whole-content `{"type":"function",…}` (incl. pretty-printed), whole-content `NAME(parameters={…})`, a trailing JSON object after prose **only when `"type":"function"` is explicit**, and the `terminal\n…\n[/terminal]` block. Guardrails: prose JSON examples only fire when the whole content is a call; an incomplete terminal block or a non-`function` `type` (e.g. a JSON schema `"type":"object"`) is rejected; the terminal `cmd` arg is mirrored to `command` (preserving `cmd`) for OpenClaw's terminal tool. It runs only when the tag-based extractors find nothing, so it can't interfere with tagged content. Both call sites — streaming and non-streaming in `proxy.ts` — share this function.
+- **Tests:** 14 new cases in `src/textual-tool-calls.test.ts` (all five shapes plus no-mis-fire on prose examples, missing `parameters`, incomplete terminal block, non-`function` type, and `cmd`→`command` normalization). Full suite **645 passed**, lint + typecheck + prettier + build clean.
+
+---
+
 ## v0.12.214 — June 28, 2026
 
 Recover tool calls that Gemini 3.5 Flash emits as plain-text transcripts instead of structured `tool_calls` ([#189](https://github.com/BlockRunAI/ClawRouter/issues/189)).

@@ -172,6 +172,135 @@ describe("extractTextualToolCalls", () => {
     });
   });
 
+  describe("GPT plain-text tool-call shapes (issue #193)", () => {
+    it('extracts a standalone {"name":..,"parameters":..} object', () => {
+      const content = '{"name":"session_search","parameters":{"query":"\\"Ronaldo\\""}}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("session_search");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        query: '"Ronaldo"',
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it('extracts a standalone {"type":"function","name":..,"parameters":..} object', () => {
+      const content =
+        '{"type":"function","name":"terminal","parameters":{"cmd":"ls -alh /home/Blockrun"}}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        cmd: "ls -alh /home/Blockrun",
+        command: "ls -alh /home/Blockrun",
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("extracts a pretty-printed multi-line function object (issue repro)", () => {
+      const content =
+        '{\n  "type": "function",\n  "name": "terminal",\n  "parameters": {\n    "cmd": "ls -alh /home/Blockrun"\n  }\n}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      const args = JSON.parse(result.toolCalls[0]!.function.arguments) as Record<string, unknown>;
+      expect(args.cmd).toBe("ls -alh /home/Blockrun");
+      expect(args.command).toBe("ls -alh /home/Blockrun");
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("extracts whole-content NAME(parameters={...}) syntax", () => {
+      const content = 'read_file(parameters={"path":"/home/Blockrun"})';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("read_file");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        path: "/home/Blockrun",
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("extracts a trailing function object after prose (type:function explicit)", () => {
+      const content =
+        'Let me run that for you.\n{"type":"function","name":"terminal","parameters":{"cmd":"ls"}}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      const args = JSON.parse(result.toolCalls[0]!.function.arguments) as Record<string, unknown>;
+      expect(args.command).toBe("ls");
+      expect(result.cleanedContent.trim()).toBe("Let me run that for you.");
+    });
+
+    it("does NOT fire on a trailing JSON object after prose without type:function", () => {
+      const content = 'Here is an example: {"name":"x","parameters":{"q":1}}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("extracts a whole-content terminal block", () => {
+      const content = "terminal\nls -alh /home/Blockrun\n[/terminal]";
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        command: "ls -alh /home/Blockrun",
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("does NOT fire on an incomplete terminal block (no [/terminal])", () => {
+      const content = "terminal\nls -alh /home/Blockrun";
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("normalizes cmd to command while preserving cmd", () => {
+      const content = '{"name":"terminal","parameters":{"cmd":"whoami"}}';
+      const result = extractTextualToolCalls(content);
+      const args = JSON.parse(result.toolCalls[0]!.function.arguments) as Record<string, unknown>;
+      expect(args.cmd).toBe("whoami");
+      expect(args.command).toBe("whoami");
+    });
+
+    it("does NOT overwrite an existing command when cmd is also present", () => {
+      const content = '{"name":"terminal","parameters":{"cmd":"a","command":"b"}}';
+      const result = extractTextualToolCalls(content);
+      const args = JSON.parse(result.toolCalls[0]!.function.arguments) as Record<string, unknown>;
+      expect(args.command).toBe("b");
+      expect(args.cmd).toBe("a");
+    });
+
+    it("does NOT fire on a whole-content object missing parameters", () => {
+      const content = '{"name":"x"}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("does NOT fire on a JSON example embedded mid-prose", () => {
+      const content = 'Use {"name":"x","parameters":{}} to call the tool.';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("does NOT fire on a whole-content object whose type is not function", () => {
+      const content = '{"type":"object","name":"x","parameters":{}}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("generates OpenAI-shaped ids for GPT shapes", () => {
+      const content = '{"name":"x","parameters":{}}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls[0]?.id).toMatch(/^call_[A-Za-z0-9_-]+$/);
+      expect(result.toolCalls[0]?.type).toBe("function");
+    });
+  });
+
   describe("Negative cases (must NOT mis-fire)", () => {
     it("returns empty toolCalls when no tool-call XML present", () => {
       const result = extractTextualToolCalls("Just a normal sentence.");

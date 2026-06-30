@@ -23,6 +23,19 @@
  *    merely quotes this format, the args must parse as a JSON object and the
  *    block must be terminated by a closing `]`.
  *
+ * 4. **GPT plain-text shapes** — observed from GPT 5.4 through the
+ *    OpenAI-compatible path (issue #193). The model sometimes emits the call as
+ *    JSON or function-call-looking text in `content` instead of structured
+ *    `tool_calls`. Recognized variants:
+ *      - whole-content `{"name":"NAME","parameters":{...}}`
+ *      - whole-content `{"type":"function","name":"NAME","parameters":{...}}`
+ *      - whole-content `NAME(parameters={...})`
+ *      - a trailing JSON object after prose, but only when `"type":"function"`
+ *        is explicit (so prose that merely quotes a JSON shape does not fire)
+ *      - whole-content `terminal\nCOMMAND\n[/terminal]`
+ *    The terminal `cmd` argument is normalized to `command` (preserving `cmd`)
+ *    so OpenClaw's terminal tool, which expects `command`, can dispatch it.
+ *
  * Values are best-effort coerced via `JSON.parse` (so `"5"` → `5`, `"true"` →
  * `true`); strings that don't parse as JSON stay as strings.
  */
@@ -227,6 +240,140 @@ function extractGeminiCalls(content: string): {
   return { calls, matches };
 }
 
+// Whole-content `NAME(parameters={...})`. Anchored at the start of the trimmed
+// content; the `{...}` object and closing `)` are validated separately.
+const GPT_CALL_SYNTAX_RE = /^([A-Za-z_]\w*)\(\s*parameters\s*=\s*/;
+
+// Whole-content `terminal\nCOMMAND\n[/terminal]`. The closing `[/terminal]` is
+// required so an incomplete block (just `terminal\nCOMMAND`) does not fire.
+const GPT_TERMINAL_BLOCK_RE = /^\s*terminal\s*\n([\s\S]*?)\n?\[\/terminal\]\s*$/;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// OpenClaw's terminal tool expects a `command` argument; GPT often emits `cmd`.
+// Mirror `cmd` into `command` (without clobbering an existing `command`) while
+// preserving the original `cmd` key.
+function normalizeGptArgs(params: Record<string, unknown>): Record<string, unknown> {
+  const args: Record<string, unknown> = { ...params };
+  if ("cmd" in args && !("command" in args)) {
+    args.command = args.cmd;
+  }
+  return args;
+}
+
+function makeCall(name: string, args: Record<string, unknown>): ExtractedToolCall {
+  return {
+    id: generateId(),
+    type: "function",
+    function: { name, arguments: JSON.stringify(args) },
+  };
+}
+
+// Validates a parsed object as a GPT-style call: a non-empty string `name`, an
+// object `parameters`, and either no `type` or `type:"function"` (anything else,
+// e.g. a JSON schema with `type:"object"`, is rejected).
+function callFromGptObject(
+  parsed: unknown,
+): { name: string; args: Record<string, unknown> } | null {
+  if (!isPlainObject(parsed)) return null;
+  const name = parsed.name;
+  if (typeof name !== "string" || name.trim() === "") return null;
+  if (parsed.type !== undefined && parsed.type !== "function") return null;
+  const params = parsed.parameters;
+  if (!isPlainObject(params)) return null;
+  return { name: name.trim(), args: normalizeGptArgs(params) };
+}
+
+// Locates the JSON object (if any) that ends at the end of `content` (ignoring
+// trailing whitespace). Returns its byte range and parsed value, or null.
+function findTrailingJsonObject(
+  content: string,
+): { start: number; end: number; parsed: unknown } | null {
+  let end = content.length;
+  while (end > 0 && /\s/.test(content[end - 1]!)) end--;
+  if (end === 0 || content[end - 1] !== "}") return null;
+
+  for (let i = 0; i < end; i++) {
+    if (content[i] !== "{") continue;
+    const objEnd = scanJsonObject(content, i);
+    if (objEnd === -1) continue;
+    // The first `{` whose balanced object closes exactly at `end` is the
+    // outermost trailing object; earlier `{`s close before `end` (skip them).
+    if (objEnd === end) {
+      try {
+        return { start: i, end, parsed: JSON.parse(content.slice(i, end)) };
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function extractGptCalls(content: string): {
+  calls: ExtractedToolCall[];
+  matches: Range[];
+} {
+  // Shape A — whole-content terminal block: `terminal\nCOMMAND\n[/terminal]`.
+  const termMatch = GPT_TERMINAL_BLOCK_RE.exec(content);
+  if (termMatch) {
+    const command = (termMatch[1] ?? "").trim();
+    if (command) {
+      return {
+        calls: [makeCall("terminal", { command })],
+        matches: [{ start: 0, end: content.length }],
+      };
+    }
+  }
+
+  // Shape B — whole-content `NAME(parameters={...})`.
+  const trimmed = content.trim();
+  const syntaxMatch = GPT_CALL_SYNTAX_RE.exec(trimmed);
+  if (syntaxMatch) {
+    const name = syntaxMatch[1]!;
+    const jsonStart = syntaxMatch[0].length;
+    if (trimmed[jsonStart] === "{") {
+      const jsonEnd = scanJsonObject(trimmed, jsonStart);
+      // The only thing allowed after the params object is the closing `)`.
+      if (jsonEnd !== -1 && trimmed.slice(jsonEnd).trim() === ")") {
+        try {
+          const params = JSON.parse(trimmed.slice(jsonStart, jsonEnd));
+          if (isPlainObject(params)) {
+            return {
+              calls: [makeCall(name, normalizeGptArgs(params))],
+              matches: [{ start: 0, end: content.length }],
+            };
+          }
+        } catch {
+          // fall through to the trailing-object check
+        }
+      }
+    }
+  }
+
+  // Shapes C/D — a JSON object that ends at the end of content. When it spans
+  // the whole content it may omit `type`; when prose precedes it, `type` must be
+  // exactly `"function"` so a quoted JSON example in prose does not fire.
+  const trailing = findTrailingJsonObject(content);
+  if (trailing) {
+    const built = callFromGptObject(trailing.parsed);
+    if (built) {
+      const hasProseBefore = content.slice(0, trailing.start).trim() !== "";
+      const typeIsFunction = (trailing.parsed as Record<string, unknown>).type === "function";
+      if (!hasProseBefore || typeIsFunction) {
+        return {
+          calls: [makeCall(built.name, built.args)],
+          matches: [{ start: hasProseBefore ? trailing.start : 0, end: content.length }],
+        };
+      }
+    }
+  }
+
+  return { calls: [], matches: [] };
+}
+
 function stripRanges(content: string, ranges: Range[]): string {
   if (ranges.length === 0) return content;
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
@@ -250,8 +397,15 @@ export function extractTextualToolCalls(content: string): ExtractionResult {
   const openClaw = extractOpenClawCalls(content);
   const anthropic = extractAnthropicCalls(content);
   const gemini = extractGeminiCalls(content);
+  // GPT plain-text shapes (issue #193) operate on whole-content / trailing
+  // semantics, so only consider them when the tag-based extractors above found
+  // nothing — otherwise their strict checks would not match the tagged content.
+  const gpt =
+    openClaw.calls.length + anthropic.calls.length + gemini.calls.length === 0
+      ? extractGptCalls(content)
+      : { calls: [], matches: [] };
 
-  const toolCalls = [...openClaw.calls, ...anthropic.calls, ...gemini.calls];
+  const toolCalls = [...openClaw.calls, ...anthropic.calls, ...gemini.calls, ...gpt.calls];
   if (toolCalls.length === 0) {
     return { toolCalls: [], cleanedContent: content };
   }
@@ -260,6 +414,7 @@ export function extractTextualToolCalls(content: string): ExtractionResult {
     ...openClaw.matches,
     ...anthropic.matches,
     ...gemini.matches,
+    ...gpt.matches,
   ]);
   return { toolCalls, cleanedContent };
 }
