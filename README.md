@@ -334,6 +334,9 @@ clawrouter phone fraud +14155552671                        # SIM-swap + fwd sign
 
 ```bash
 # Place a call
+
+[![Listed on TakoAPI](https://img.shields.io/badge/Listed%20on-TakoAPI-7c3aed)](https://takoapi.com/agents/blockrunai-clawrouter)
+
 curl -X POST http://localhost:8402/v1/voice/call \
   -H "Content-Type: application/json" \
   -d '{"to":"+14155552671","task":"Confirm the 3pm Thursday meeting.","max_duration":5}'
