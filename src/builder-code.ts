@@ -22,8 +22,7 @@ export function withBuilderCodeServiceCode(
   extensions?: Record<string, unknown>,
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...(extensions ?? {}) };
-  const existing =
-    (merged["builder-code"] as { info?: Record<string, unknown> } | undefined) ?? {};
+  const existing = (merged["builder-code"] as { info?: Record<string, unknown> } | undefined) ?? {};
   merged["builder-code"] = {
     ...existing,
     info: { ...(existing.info ?? {}), s: [BLOCKRUN_SERVICE_CODE] },
