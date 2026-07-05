@@ -9,8 +9,12 @@
  * See https://docs.cdp.coinbase.com/x402/core-concepts/builder-codes
  */
 
-/** BlockRun's builder code (must match `^[a-z0-9_]{1,32}$`). */
-export const BLOCKRUN_SERVICE_CODE = "blockrun";
+/**
+ * BlockRun's CDP-registered builder code (must match `^[a-z0-9_]{1,32}$`).
+ * Registered at https://portal.cdp.coinbase.com — this exact value is what the
+ * facilitator credits on-chain, so it is the real builder code, not a label.
+ */
+export const BLOCKRUN_SERVICE_CODE = "bc_5hucoh0l";
 
 /**
  * Merge BlockRun's service code (`s`) into a payment payload's `builder-code`
