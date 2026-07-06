@@ -27,10 +27,9 @@ export function withBuilderCodeServiceCode(
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...(extensions ?? {}) };
   const existing = (merged["builder-code"] as { info?: Record<string, unknown> } | undefined) ?? {};
-  const existingServiceCodes =
-    Array.isArray(existing.info?.s) && existing.info.s.every((code) => typeof code === "string")
-      ? existing.info.s
-      : [];
+  const existingServiceCodes = Array.isArray(existing.info?.s)
+    ? existing.info.s.filter((code): code is string => typeof code === "string")
+    : [];
   merged["builder-code"] = {
     ...existing,
     info: {

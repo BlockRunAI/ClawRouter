@@ -32,6 +32,17 @@ describe("withBuilderCodeServiceCode", () => {
     expect(serviceCodes).toEqual(["bc_existing"]);
   });
 
+  it("preserves valid service codes from a partially malformed array", () => {
+    const ext = withBuilderCodeServiceCode({
+      "builder-code": { info: { s: ["bc_existing", 42, null] } },
+    });
+
+    expect((ext["builder-code"] as BuilderCodeExtension).info.s).toEqual([
+      "bc_existing",
+      BLOCKRUN_SERVICE_CODE,
+    ]);
+  });
+
   it("does not duplicate an existing BlockRun service code", () => {
     const ext = withBuilderCodeServiceCode({
       "builder-code": { info: { s: ["bc_existing", BLOCKRUN_SERVICE_CODE] } },
