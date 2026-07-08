@@ -6,6 +6,7 @@ import {
   VISIBLE_OPENCLAW_MODELS,
   resolveModelAlias,
 } from "./models.js";
+import { TOP_MODELS } from "./top-models.js";
 
 describe("resolveModelAlias", () => {
   it("maps Claude aliases to current flagship versions", () => {
@@ -85,5 +86,9 @@ describe("OPENCLAW_MODELS integrity", () => {
     // The `free` alias resolves to gpt-oss-120b; the picker label must agree
     // (the retired "Nemotron Ultra 253B" label shadowed it until v0.12.206).
     expect(freeEntries[0]!.name).toContain("GPT-OSS 120B");
+  });
+
+  it("advertises visible models in top-models order", () => {
+    expect(VISIBLE_OPENCLAW_MODELS.map((m) => m.id)).toEqual(TOP_MODELS);
   });
 });

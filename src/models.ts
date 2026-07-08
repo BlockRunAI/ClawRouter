@@ -1444,10 +1444,11 @@ export const OPENCLAW_MODELS: ModelDefinitionConfig[] = [
  * driven by `src/top-models.json`. Hidden entries remain callable via direct
  * ID and via aliases; they just don't clutter the picker.
  */
-const TOP_MODELS_SET = new Set(TOP_MODELS);
-export const VISIBLE_OPENCLAW_MODELS: ModelDefinitionConfig[] = OPENCLAW_MODELS.filter((m) =>
-  TOP_MODELS_SET.has(m.id),
-);
+const OPENCLAW_MODEL_BY_ID = new Map(OPENCLAW_MODELS.map((m) => [m.id, m]));
+export const VISIBLE_OPENCLAW_MODELS: ModelDefinitionConfig[] = TOP_MODELS.flatMap((id) => {
+  const model = OPENCLAW_MODEL_BY_ID.get(id);
+  return model ? [model] : [];
+});
 
 /**
  * Build a ModelProviderConfig for BlockRun.
