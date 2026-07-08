@@ -14,7 +14,10 @@ export type PartnerServiceParam = {
 };
 
 export type PartnerCategory =
-  "Prediction markets" | "Market data" | "Image & Video" | "Communications";
+  | "Prediction markets"
+  | "Market data"
+  | "Image & Video"
+  | "Communications";
 
 export type PartnerServiceDefinition = {
   /** Unique service ID used in tool names: blockrun_{id} */
