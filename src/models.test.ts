@@ -89,6 +89,7 @@ describe("OPENCLAW_MODELS integrity", () => {
   });
 
   it("advertises visible models in top-models order", () => {
+    expect(VISIBLE_OPENCLAW_MODELS).toHaveLength(TOP_MODELS.length);
     expect(VISIBLE_OPENCLAW_MODELS.map((m) => m.id)).toEqual(TOP_MODELS);
   });
 });
