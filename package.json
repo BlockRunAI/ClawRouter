@@ -95,10 +95,14 @@
     "viem": "^2.39.3"
   },
   "peerDependencies": {
-    "openclaw": ">=2025.1.0"
+    "openclaw": ">=2025.1.0",
+    "twzrd-x402-gate": ">=0.5.4"
   },
   "peerDependenciesMeta": {
     "openclaw": {
+      "optional": true
+    },
+    "twzrd-x402-gate": {
       "optional": true
     }
   },

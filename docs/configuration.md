@@ -27,6 +27,8 @@ Complete reference for ClawRouter configuration options.
 | `CLAWROUTER_WORKER`         | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).            |
 | `CLAWROUTER_DEBUG_HEADERS`  | (on)                                  | Set to `off`/`false`/`0` to suppress the `x-clawrouter-*` debug response headers. |
 | `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.          |
+| `CLAWROUTER_TWZRD`          | (off)                                 | Set to `1`/`true` to enable TWZRD pre-sign gate on the x402 client (optional peer `twzrd-x402-gate`). |
+| `CLAWROUTER_TWZRD_GATE_ON_CAN_SPEND` | (off)                         | With TWZRD on: also block when free preflight `can_spend=false` (strict). Default is decision-only + wash refuse. |
 
 ### BLOCKRUN_WALLET_KEY
 
@@ -111,6 +113,40 @@ Per-request alternative: send `x-clawrouter-debug: false` on the request.
 > header. On v0.12.207 and earlier, non-English prompts could crash response
 > delivery with `Invalid character in header content ["x-clawrouter-reasoning"]`
 > — upgrade rather than relying on this switch.
+
+### CLAWROUTER_TWZRD (optional pre-sign trust gate)
+
+Opt-in buyer-side firewall on the **same** x402 client ClawRouter uses for
+USDC payments. When set, ClawRouter dynamic-imports
+[`twzrd-x402-gate`](https://www.npmjs.com/package/twzrd-x402-gate) and registers
+`onBeforePaymentCreation` so each spend is scored against the **exact**
+selected payment requirement after the client chooses it and **before** wallet
+signing.
+
+```bash
+npm i twzrd-x402-gate          # optional peer (not required for default path)
+export CLAWROUTER_TWZRD=1
+openclaw gateway restart
+```
+
+**Defaults when enabled**
+
+| Behavior | Default |
+| -------- | ------- |
+| Decision-only (`decision=block` aborts) | on |
+| Merchant-card wash refuse (`wash_flagged`) | on |
+| Strict `can_spend=false` block | off — set `CLAWROUTER_TWZRD_GATE_ON_CAN_SPEND=1` |
+| Package missing while env is set | log warning, continue without gate |
+
+**Why not a preflight-then-call wrapper?** A separate probe can score challenge A
+while the real payment path signs challenge B (TOCTOU / challenge-swap). Lifecycle
+hooks bind the decision to the same `selectedRequirements` the client will sign.
+See [x402 lifecycle hooks](https://docs.x402.org/advanced-concepts/lifecycle-hooks)
+and [TWZRD intel](https://intel.twzrd.xyz).
+
+Related env (passed through to the gate package): `TWZRD_INTEL_BASE`,
+`TWZRD_FAIL_OPEN`, `TWZRD_REFUSE_WASH_FLAGGED`, `TWZRD_ATTRIBUTION_INTEGRATION`,
+`TWZRD_ATTRIBUTION_RUN_ID`, `CLAWROUTER_TWZRD_RUN_ID`.
 
 ### CLAWROUTER_SOLANA_RPC_URL
 

@@ -479,6 +479,16 @@ Request → 402 (price: $0.003) → wallet signs USDC → retry → response
 
 USDC stays in your wallet until spent — non-custodial. Price is visible in the 402 header before signing.
 
+**Optional pre-sign trust gate (TWZRD):** score the exact x402 `selectedRequirements` *before* the wallet signs — opt-in only.
+
+```bash
+npm i twzrd-x402-gate          # optional peer
+export CLAWROUTER_TWZRD=1      # decision=block + wash refuse; default off
+# export CLAWROUTER_TWZRD_GATE_ON_CAN_SPEND=1   # stricter: also block can_spend=false
+```
+
+Uses the official client lifecycle hook (`onBeforePaymentCreation`), not a separate probe that can diverge from the signed challenge. Details: [docs/configuration.md](docs/configuration.md#clawrouter_twzrd-optional-pre-sign-trust-gate).
+
 **Dual-chain support:** Pay with **USDC** on **Base (EVM)** or **USDC on Solana**. Both wallets are derived from a single BIP-39 mnemonic on first run.
 
 ```bash

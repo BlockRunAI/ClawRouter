@@ -2006,6 +2006,16 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
   }
 
+  // Optional TWZRD pre-sign gate (opt-in via CLAWROUTER_TWZRD=1).
+  // Registers onBeforePaymentCreation on this same x402 client so policy runs
+  // on the exact selectedRequirements after scheme selection and before payload
+  // construction / wallet signing — not a probe-then-pay TOCTOU wrapper.
+  // Peer optional: twzrd-x402-gate. Default ClawRouter path is unchanged.
+  {
+    const { maybeInstallTwzrdPaymentGate } = await import("./twzrd-payment-gate.js");
+    await maybeInstallTwzrdPaymentGate(x402);
+  }
+
   // Stamp BlockRun's builder-code service code (`s`) onto every signed EVM
   // payment for on-chain attribution. Mirrors @x402/extensions'
   // BuilderCodeClientExtension but fires without the server having to advertise
