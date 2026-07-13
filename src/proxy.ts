@@ -1308,7 +1308,46 @@ export type ProxyOptions = {
    * Example: "socks5://127.0.0.1:1080"
    */
   upstreamProxy?: string;
+  /**
+   * Pre-sign payment hook. Fires after ClawRouter selects a payment
+   * requirement, BEFORE the transaction is built and signed.
+   *
+   * Return `{ abort: true, reason }` to refuse the payment — the wallet
+   * never signs, the request never reaches the merchant. Return `void` or
+   * `{ abort: false }` to proceed.
+   *
+   * No vendor dependency. Wire any policy you own — allowlist, spend cap,
+   * trust preflight, compliance check. The hook receives the exact
+   * selectedRequirements (payTo, network, amount, asset, resource) the
+   * x402 client is about to sign.
+   *
+   * Async-safe: the hook may be async (e.g. to call an external policy
+   * service). An unhandled throw aborts the payment (fail-closed).
+   */
+  beforePayment?: (
+    ctx: BeforePaymentCreationContext,
+  ) => Promise<BeforePaymentCreationResult> | BeforePaymentCreationResult;
 };
+
+/** Context passed to beforePayment hook (subset of @x402/fetch hook context). */
+export interface BeforePaymentCreationContext {
+  selectedRequirements: {
+    scheme: string;
+    network: string;
+    amount: string;
+    asset: string;
+    payTo: string;
+    maxTimeoutSeconds?: number;
+    extra?: Record<string, unknown>;
+  };
+  resourceUrl: string;
+}
+
+/** Decision returned by a beforePayment hook. */
+export type BeforePaymentCreationResult =
+  | { abort: true; reason?: string }
+  | { abort?: false }
+  | void;
 
 export type ProxyHandle = {
   port: number;
@@ -2004,6 +2043,32 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     solanaAddress = solanaSigner.address;
     registerExactSvmScheme(x402, { signer: solanaSigner });
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
+  }
+
+  // Register user-provided pre-sign payment hook (vendor-neutral seam).
+  // Fires after requirement selection, before transaction build + signing.
+  // No dependency — caller wires their own policy (allowlist, spend cap,
+  // trust preflight, etc.). Return { abort: true } to refuse the payment.
+  if (options.beforePayment) {
+    x402.onBeforePaymentCreation(async (ctx) => {
+      const decision = await options.beforePayment!({
+        selectedRequirements: {
+          scheme: ctx.selectedRequirements.scheme,
+          network: ctx.selectedRequirements.network,
+          amount: ctx.selectedRequirements.amount,
+          asset: ctx.selectedRequirements.asset,
+          payTo: ctx.selectedRequirements.payTo,
+          maxTimeoutSeconds: ctx.selectedRequirements.maxTimeoutSeconds,
+          extra: ctx.selectedRequirements.extra,
+        },
+        resourceUrl: ctx.resourceUrl,
+      });
+      if (decision && decision.abort === true) {
+        throw new Error(
+          `[ClawRouter] payment aborted by beforePayment hook: ${decision.reason ?? "refused"}`,
+        );
+      }
+    });
   }
 
   // Stamp BlockRun's builder-code service code (`s`) onto every signed EVM
