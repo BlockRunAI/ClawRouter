@@ -96,7 +96,7 @@
   },
   "peerDependencies": {
     "openclaw": ">=2025.1.0",
-    "twzrd-x402-gate": ">=0.5.4"
+    "twzrd-x402-gate": ">=0.7.1"
   },
   "peerDependenciesMeta": {
     "openclaw": {
