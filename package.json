@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "postinstall": "node scripts/postinstall.mjs",
+    "postinstall": "node -e \"const s='./scripts/postinstall.mjs';require('fs').existsSync(s)&&import(s)\"",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
