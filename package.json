@@ -34,6 +34,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "postinstall": "node scripts/postinstall.mjs",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",

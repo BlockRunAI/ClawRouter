@@ -79,6 +79,22 @@ describe("resolveModelAlias", () => {
     expect(BLOCKRUN_MODELS.some((m) => m.id === "anthropic/claude-sonnet-4.5")).toBe(true);
     expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
   });
+
+  it("maps Gemini Pro aliases to the current Gemini Pro model", () => {
+    expect(resolveModelAlias("gemini-pro")).toBe("google/gemini-3.1-pro");
+    expect(resolveModelAlias("gemini-3-pro")).toBe("google/gemini-3.1-pro");
+    expect(resolveModelAlias("gemini-3.1-pro")).toBe("google/gemini-3.1-pro");
+  });
+
+  it("does not advertise Gemini aliases as duplicate picker models", () => {
+    const ids = OPENCLAW_MODELS.map((m) => m.id);
+
+    expect(ids).toContain("google/gemini-3.1-pro");
+    expect(ids).not.toContain("gemini-pro");
+    expect(ids).not.toContain("gemini-3-pro");
+    expect(ids).not.toContain("gemini-3.1-pro");
+    expect(ids).not.toContain("google/gemini-3-pro-preview");
+  });
 });
 
 describe("OPENCLAW_MODELS integrity", () => {

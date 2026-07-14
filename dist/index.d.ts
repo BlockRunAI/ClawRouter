@@ -1143,16 +1143,6 @@ type BlockRunModel = {
     flatPrice?: number;
 };
 declare const BLOCKRUN_MODELS: BlockRunModel[];
-/**
- * All BlockRun models in OpenClaw format (including aliases).
- * Used for proxy-side resolution (alias → target ID), tool routing, etc.
- *
- * Catalog entries shadowed by an identically-keyed alias are excluded:
- * resolveModelAlias checks MODEL_ALIASES first, so those catalog entries are
- * unreachable and their metadata (name/pricing) would misadvertise what
- * callers actually get. The alias-derived entry carries the redirect
- * target's real metadata instead.
- */
 declare const OPENCLAW_MODELS: ModelDefinitionConfig[];
 /**
  * Build a ModelProviderConfig for BlockRun.

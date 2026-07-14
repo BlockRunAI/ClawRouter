@@ -344,19 +344,12 @@ function injectModelsConfig(
     // (e.g. carryover from pre-v0.12.176 that wrote the full ~175-entry list)
     // get replaced with the trimmed picker set.
     const currentModels = blockrun.models as Array<{ id?: string }>;
-    const currentModelIds = new Set<string>(
-      Array.isArray(currentModels)
-        ? currentModels.map((m) => m?.id).filter((id): id is string => typeof id === "string")
-        : [],
-    );
     const expectedModelIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
-    const expectedSet = new Set(expectedModelIds);
     const needsModelUpdate =
       !currentModels ||
       !Array.isArray(currentModels) ||
       currentModels.length !== VISIBLE_OPENCLAW_MODELS.length ||
-      expectedModelIds.some((id) => !currentModelIds.has(id)) ||
-      Array.from(currentModelIds).some((id) => !expectedSet.has(id));
+      currentModels.some((m, index) => m?.id !== expectedModelIds[index]);
 
     if (needsModelUpdate) {
       blockrun.models = VISIBLE_OPENCLAW_MODELS;
@@ -425,29 +418,47 @@ function injectModelsConfig(
   // Active prune mirrors what scripts/update.sh / scripts/reinstall.sh do — needed
   // for users on path-based plugin installs where the install scripts never run
   // (otherwise the allowlist accumulates retired models forever).
-  const expectedBlockrunKeys = new Set(TOP_MODELS.map((id) => `blockrun/${id}`));
+  const expectedBlockrunKeys = TOP_MODELS.map((id) => `blockrun/${id}`);
+  const expectedBlockrunKeySet = new Set(expectedBlockrunKeys);
+  const existingNonBlockrunAllowlist = Object.fromEntries(
+    Object.entries(allowlist).filter(([key]) => !key.startsWith("blockrun/")),
+  );
   let addedCount = 0;
   let prunedCount = 0;
   for (const key of Object.keys(allowlist)) {
-    if (key.startsWith("blockrun/") && !expectedBlockrunKeys.has(key)) {
+    if (key.startsWith("blockrun/") && !expectedBlockrunKeySet.has(key)) {
       delete allowlist[key];
       prunedCount++;
     }
   }
-  for (const id of TOP_MODELS) {
-    const key = `blockrun/${id}`;
+  const currentBlockrunKeys = Object.keys(allowlist).filter((key) => key.startsWith("blockrun/"));
+  const needsAllowlistOrderUpdate = expectedBlockrunKeys.some(
+    (key, index) => currentBlockrunKeys[index] !== key,
+  );
+  for (const key of expectedBlockrunKeys) {
     if (!allowlist[key]) {
       allowlist[key] = {};
       addedCount++;
     }
   }
-  if (addedCount > 0 || prunedCount > 0) {
+  if (addedCount > 0 || prunedCount > 0 || needsAllowlistOrderUpdate) {
+    for (const key of Object.keys(allowlist)) {
+      delete allowlist[key];
+    }
+    Object.assign(
+      allowlist,
+      Object.fromEntries(expectedBlockrunKeys.map((key) => [key, {}])),
+      existingNonBlockrunAllowlist,
+    );
     needsWrite = true;
     if (prunedCount > 0) {
       logger.info(`Pruned ${prunedCount} stale blockrun/* entries from allowlist`);
     }
     if (addedCount > 0) {
       logger.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
+    }
+    if (needsAllowlistOrderUpdate) {
+      logger.info(`Reordered ${TOP_MODELS.length} blockrun/* allowlist entries`);
     }
   }
 

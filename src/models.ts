@@ -120,6 +120,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   // Google
   // gemini-3-pro-preview delisted by Google 2026-06-06 — mirror the gateway
   // redirect to its successor so pinned callers land on 3.1-pro, not an error.
+  "gemini-pro": "google/gemini-3.1-pro",
+  "gemini-3-pro": "google/gemini-3.1-pro",
+  "gemini-3.1-pro": "google/gemini-3.1-pro",
   "google/gemini-3-pro-preview": "google/gemini-3.1-pro",
   "gemini-3-pro-preview": "google/gemini-3.1-pro",
   gemini: "google/gemini-2.5-pro",
@@ -1482,39 +1485,26 @@ function toOpenClawModel(m: BlockRunModel): ModelDefinitionConfig {
 }
 
 /**
- * Alias models that map to real models.
- * These allow users to use friendly names like "free" or "gpt-120b".
+ * All advertised BlockRun models in OpenClaw format.
  *
- * Only friendly short names are advertised. Full `provider/model` keys in
- * MODEL_ALIASES are backward-compat / delisted redirects whose target is a real
- * model that is already listed — surfacing them as their own entries is wrong
- * (e.g. `free/deepseek-v4-pro` was delisted 2026-04-30 and redirects to
- * `free/deepseek-v4-flash`, yet showed up as a listable "V4 Pro" model). They
- * stay fully callable via resolveModelAlias(); they just must not appear in
- * `/v1/models` or any picker.
+ * Alias redirects stay callable through resolveModelAlias(), but neither the
+ * alias nor shadowed/delisted catalog entry is advertised as an independent
+ * model. Otherwise pickers show duplicate tail rows like `gemini-3.1-pro` or
+ * `google/gemini-3-pro-preview` after the canonical `google/gemini-3.1-pro`.
  */
-const ALIAS_MODELS: ModelDefinitionConfig[] = Object.entries(MODEL_ALIASES)
-  .filter(([alias]) => !alias.includes("/"))
-  .map(([alias, targetId]) => {
-    const target = BLOCKRUN_MODELS.find((m) => m.id === targetId);
-    if (!target) return null;
-    return toOpenClawModel({ ...target, id: alias, name: `${alias} → ${target.name}` });
-  })
-  .filter((m): m is ModelDefinitionConfig => m !== null);
+const ALL_OPENCLAW_MODELS: ModelDefinitionConfig[] = BLOCKRUN_MODELS.filter(
+  (m) => !(m.id.includes("/") && m.id in MODEL_ALIASES),
+).map(toOpenClawModel);
 
-/**
- * All BlockRun models in OpenClaw format (including aliases).
- * Used for proxy-side resolution (alias → target ID), tool routing, etc.
- *
- * Catalog entries shadowed by an identically-keyed alias are excluded:
- * resolveModelAlias checks MODEL_ALIASES first, so those catalog entries are
- * unreachable and their metadata (name/pricing) would misadvertise what
- * callers actually get. The alias-derived entry carries the redirect
- * target's real metadata instead.
- */
+const TOP_MODEL_IDS = new Set(TOP_MODELS);
+const ALL_OPENCLAW_MODEL_BY_ID = new Map(ALL_OPENCLAW_MODELS.map((m) => [m.id, m]));
+
 export const OPENCLAW_MODELS: ModelDefinitionConfig[] = [
-  ...BLOCKRUN_MODELS.filter((m) => !(m.id in MODEL_ALIASES)).map(toOpenClawModel),
-  ...ALIAS_MODELS,
+  ...TOP_MODELS.flatMap((id) => {
+    const model = ALL_OPENCLAW_MODEL_BY_ID.get(id);
+    return model ? [model] : [];
+  }),
+  ...ALL_OPENCLAW_MODELS.filter((m) => !TOP_MODEL_IDS.has(m.id)),
 ];
 
 /**

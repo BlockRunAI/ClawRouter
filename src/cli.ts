@@ -539,17 +539,51 @@ async function cmdCache(port: number): Promise<void> {
  */
 async function cmdSetup(): Promise<void> {
   const { execFileSync, execSync } = await import("node:child_process");
+  const { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } =
+    await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { homedir } = await import("node:os");
   const { injectModelsConfig, injectAuthProfile } = await import("./index.js");
+  const { VISIBLE_OPENCLAW_MODELS } = await import("./models.js");
 
   console.log("🦞 ClawRouter setup\n");
 
   // Step 1: detect OpenClaw on PATH
   let openclawPath: string;
   try {
-    openclawPath = execSync("command -v openclaw", {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    const candidates: string[] = [];
+
+    try {
+      const pathOpenClaw = execSync("command -v openclaw", {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      if (pathOpenClaw) candidates.push(pathOpenClaw);
+    } catch {
+      // npm install scripts often run with a stripped PATH.
+    }
+
+    if (process.env.npm_config_prefix) {
+      candidates.push(join(process.env.npm_config_prefix, "bin", "openclaw"));
+    }
+
+    try {
+      const npmRoot = execSync("npm root -g", {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      if (npmRoot) candidates.push(join(dirname(dirname(npmRoot)), "bin", "openclaw"));
+    } catch {
+      // npm may be unavailable in embedded runtimes.
+    }
+
+    candidates.push(
+      join(homedir(), ".npm-global", "bin", "openclaw"),
+      join(homedir(), ".local", "bin", "openclaw"),
+      "/usr/local/bin/openclaw",
+    );
+
+    openclawPath = candidates.find((candidate) => existsSync(candidate)) ?? "";
     if (!openclawPath) throw new Error("not found");
     console.log(`  ✓ Found openclaw at ${openclawPath}`);
   } catch {
@@ -594,6 +628,81 @@ async function cmdSetup(): Promise<void> {
   try {
     injectModelsConfig(setupLogger, { forceWrite: true });
     injectAuthProfile(setupLogger);
+    const modelCachePath = join(homedir(), ".openclaw", "agents", "main", "agent", "models.json");
+    if (existsSync(modelCachePath)) {
+      try {
+        const modelCache = JSON.parse(readFileSync(modelCachePath, "utf8"));
+        if (modelCache && typeof modelCache === "object" && !Array.isArray(modelCache)) {
+          const cacheRecord = modelCache as { providers?: Record<string, unknown> };
+          const existingProviders = cacheRecord.providers ?? {};
+          cacheRecord.providers = {
+            blockrun: {
+              ...(existingProviders.blockrun &&
+              typeof existingProviders.blockrun === "object" &&
+              !Array.isArray(existingProviders.blockrun)
+                ? existingProviders.blockrun
+                : {}),
+              models: VISIBLE_OPENCLAW_MODELS,
+            },
+            ...Object.fromEntries(
+              Object.entries(existingProviders).filter(([provider]) => provider !== "blockrun"),
+            ),
+          };
+          writeFileSync(modelCachePath, JSON.stringify(modelCache, null, 2));
+          setupLogger.info("Updated OpenClaw agent model cache for BlockRun");
+        }
+      } catch (err) {
+        setupLogger.info(
+          `Skipped OpenClaw model cache sync: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    const openclawRealPath = realpathSync(openclawPath);
+    const openclawDist = join(dirname(openclawRealPath), "dist");
+    if (existsSync(openclawDist)) {
+      for (const file of readdirSync(openclawDist)) {
+        if (!file.endsWith(".js")) continue;
+        const filePath = join(openclawDist, file);
+        let source = readFileSync(filePath, "utf8");
+        const patchedMessages: string[] = [];
+        const original = source;
+
+        if (source.includes("const models = [...modelSet].toSorted")) {
+          source = source.replace(
+            "const models = [...modelSet].toSorted((left, right) => left.localeCompare(right));",
+            "const models = [...modelSet];",
+          );
+          if (source !== original) patchedMessages.push("Telegram model ordering");
+        }
+
+        if (source.includes("async function buildModelsProviderData")) {
+          const blockrunSeed =
+            'const configuredModelRefs = Object.keys(cfg.agents?.defaults?.models ?? {});\n\tfor (const raw of configuredModelRefs) {\n\t\tconst normalizedRaw = typeof raw === "string" ? raw.trim() : "";\n\t\tif (normalizedRaw.startsWith("blockrun/")) add("blockrun", normalizedRaw.slice("blockrun/".length));\n\t\telse addRawModelRef(raw);\n\t}';
+          source = source.replace(
+            /(?:\t?for \(const raw of Object\.keys\(cfg\.agents\?\.defaults\?\.models \?\? \{\}\)\) addRawModelRef\(raw\);\n)+\tfor \(const entry of visibleCatalog\) if \(normalizeProviderId\(entry\.provider\) !== "blockrun"\) add\(entry\.provider, entry\.id\);/,
+            `${blockrunSeed}\n\tfor (const entry of visibleCatalog) if (normalizeProviderId(entry.provider) !== "blockrun") add(entry.provider, entry.id);`,
+          );
+          source = source.replace(
+            "for (const entry of visibleCatalog) add(entry.provider, entry.id);",
+            `${blockrunSeed}\n\tfor (const entry of visibleCatalog) if (normalizeProviderId(entry.provider) !== "blockrun") add(entry.provider, entry.id);`,
+          );
+          source = source.replace(
+            "for (const entry of catalog) if (usesUnfilteredCatalogModels(entry.provider, cliRuntimeProviders) && await hasAuth(entry.provider)) add(entry.provider, entry.id);",
+            'for (const entry of catalog) if (normalizeProviderId(entry.provider) !== "blockrun" && usesUnfilteredCatalogModels(entry.provider, cliRuntimeProviders) && await hasAuth(entry.provider)) add(entry.provider, entry.id);',
+          );
+          source = source.replace(
+            "const providers = [...byProvider.keys()].toSorted();",
+            "const configuredProviderOrder = Object.keys(cfg.models?.providers ?? {}).map((provider) => normalizeProviderId(provider));\n\tconst providers = [...byProvider.keys()].sort((a, b) => {\n\t\tconst ai = configuredProviderOrder.indexOf(a);\n\t\tconst bi = configuredProviderOrder.indexOf(b);\n\t\tif (ai !== -1 || bi !== -1) return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);\n\t\treturn a.localeCompare(b);\n\t});",
+          );
+          if (source !== original) patchedMessages.push("model picker ordering");
+        }
+
+        if (source !== original) {
+          writeFileSync(filePath, source);
+          setupLogger.info(`Patched OpenClaw ${patchedMessages.join(" + ")} (${file})`);
+        }
+      }
+    }
   } catch (err) {
     console.error(`  ✗ Config sync failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

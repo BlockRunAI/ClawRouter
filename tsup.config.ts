@@ -12,6 +12,6 @@ export default defineConfig({
   noExternal: [/.*/],
   external: [...builtinModules.flatMap((m) => [m, `node:${m}`])],
   banner: {
-    js: `import { createRequire as __cjs_createRequire } from 'node:module'; const require = __cjs_createRequire(import.meta.url);`,
+    js: `import { createRequire as __blockrun_createRequire } from 'node:module'; const require = __blockrun_createRequire(import.meta.url);`,
   },
 });
