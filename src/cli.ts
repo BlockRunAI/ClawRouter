@@ -657,51 +657,57 @@ async function cmdSetup(): Promise<void> {
         );
       }
     }
-    const openclawRealPath = realpathSync(openclawPath);
-    const openclawDist = join(dirname(openclawRealPath), "dist");
-    if (existsSync(openclawDist)) {
-      for (const file of readdirSync(openclawDist)) {
-        if (!file.endsWith(".js")) continue;
-        const filePath = join(openclawDist, file);
-        let source = readFileSync(filePath, "utf8");
-        const patchedMessages: string[] = [];
-        const original = source;
+    try {
+      const openclawRealPath = realpathSync(openclawPath);
+      const openclawDist = join(dirname(openclawRealPath), "dist");
+      if (existsSync(openclawDist)) {
+        for (const file of readdirSync(openclawDist)) {
+          if (!file.endsWith(".js")) continue;
+          const filePath = join(openclawDist, file);
+          let source = readFileSync(filePath, "utf8");
+          const patchedMessages: string[] = [];
+          const original = source;
 
-        if (source.includes("const models = [...modelSet].toSorted")) {
-          source = source.replace(
-            "const models = [...modelSet].toSorted((left, right) => left.localeCompare(right));",
-            "const models = [...modelSet];",
-          );
-          if (source !== original) patchedMessages.push("Telegram model ordering");
-        }
+          if (source.includes("const models = [...modelSet].toSorted")) {
+            source = source.replace(
+              "const models = [...modelSet].toSorted((left, right) => left.localeCompare(right));",
+              "const models = [...modelSet];",
+            );
+            if (source !== original) patchedMessages.push("Telegram model ordering");
+          }
 
-        if (source.includes("async function buildModelsProviderData")) {
-          const blockrunSeed =
-            'const configuredModelRefs = Object.keys(cfg.agents?.defaults?.models ?? {});\n\tfor (const raw of configuredModelRefs) {\n\t\tconst normalizedRaw = typeof raw === "string" ? raw.trim() : "";\n\t\tif (normalizedRaw.startsWith("blockrun/")) add("blockrun", normalizedRaw.slice("blockrun/".length));\n\t\telse addRawModelRef(raw);\n\t}';
-          source = source.replace(
-            /(?:\t?for \(const raw of Object\.keys\(cfg\.agents\?\.defaults\?\.models \?\? \{\}\)\) addRawModelRef\(raw\);\n)+\tfor \(const entry of visibleCatalog\) if \(normalizeProviderId\(entry\.provider\) !== "blockrun"\) add\(entry\.provider, entry\.id\);/,
-            `${blockrunSeed}\n\tfor (const entry of visibleCatalog) if (normalizeProviderId(entry.provider) !== "blockrun") add(entry.provider, entry.id);`,
-          );
-          source = source.replace(
-            "for (const entry of visibleCatalog) add(entry.provider, entry.id);",
-            `${blockrunSeed}\n\tfor (const entry of visibleCatalog) if (normalizeProviderId(entry.provider) !== "blockrun") add(entry.provider, entry.id);`,
-          );
-          source = source.replace(
-            "for (const entry of catalog) if (usesUnfilteredCatalogModels(entry.provider, cliRuntimeProviders) && await hasAuth(entry.provider)) add(entry.provider, entry.id);",
-            'for (const entry of catalog) if (normalizeProviderId(entry.provider) !== "blockrun" && usesUnfilteredCatalogModels(entry.provider, cliRuntimeProviders) && await hasAuth(entry.provider)) add(entry.provider, entry.id);',
-          );
-          source = source.replace(
-            "const providers = [...byProvider.keys()].toSorted();",
-            "const configuredProviderOrder = Object.keys(cfg.models?.providers ?? {}).map((provider) => normalizeProviderId(provider));\n\tconst providers = [...byProvider.keys()].sort((a, b) => {\n\t\tconst ai = configuredProviderOrder.indexOf(a);\n\t\tconst bi = configuredProviderOrder.indexOf(b);\n\t\tif (ai !== -1 || bi !== -1) return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);\n\t\treturn a.localeCompare(b);\n\t});",
-          );
-          if (source !== original) patchedMessages.push("model picker ordering");
-        }
+          if (source.includes("async function buildModelsProviderData")) {
+            const blockrunSeed =
+              'const configuredModelRefs = Object.keys(cfg.agents?.defaults?.models ?? {});\n\tfor (const raw of configuredModelRefs) {\n\t\tconst normalizedRaw = typeof raw === "string" ? raw.trim() : "";\n\t\tif (normalizedRaw.startsWith("blockrun/")) add("blockrun", normalizedRaw.slice("blockrun/".length));\n\t\telse addRawModelRef(raw);\n\t}';
+            source = source.replace(
+              /(?:\t?for \(const raw of Object\.keys\(cfg\.agents\?\.defaults\?\.models \?\? \{\}\)\) addRawModelRef\(raw\);\n)+\tfor \(const entry of visibleCatalog\) if \(normalizeProviderId\(entry\.provider\) !== "blockrun"\) add\(entry\.provider, entry\.id\);/,
+              `${blockrunSeed}\n\tfor (const entry of visibleCatalog) if (normalizeProviderId(entry.provider) !== "blockrun") add(entry.provider, entry.id);`,
+            );
+            source = source.replace(
+              "for (const entry of visibleCatalog) add(entry.provider, entry.id);",
+              `${blockrunSeed}\n\tfor (const entry of visibleCatalog) if (normalizeProviderId(entry.provider) !== "blockrun") add(entry.provider, entry.id);`,
+            );
+            source = source.replace(
+              "for (const entry of catalog) if (usesUnfilteredCatalogModels(entry.provider, cliRuntimeProviders) && await hasAuth(entry.provider)) add(entry.provider, entry.id);",
+              'for (const entry of catalog) if (normalizeProviderId(entry.provider) !== "blockrun" && usesUnfilteredCatalogModels(entry.provider, cliRuntimeProviders) && await hasAuth(entry.provider)) add(entry.provider, entry.id);',
+            );
+            source = source.replace(
+              "const providers = [...byProvider.keys()].toSorted();",
+              "const configuredProviderOrder = Object.keys(cfg.models?.providers ?? {}).map((provider) => normalizeProviderId(provider));\n\tconst providers = [...byProvider.keys()].sort((a, b) => {\n\t\tconst ai = configuredProviderOrder.indexOf(a);\n\t\tconst bi = configuredProviderOrder.indexOf(b);\n\t\tif (ai !== -1 || bi !== -1) return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai) - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi);\n\t\treturn a.localeCompare(b);\n\t});",
+            );
+            if (source !== original) patchedMessages.push("model picker ordering");
+          }
 
-        if (source !== original) {
-          writeFileSync(filePath, source);
-          setupLogger.info(`Patched OpenClaw ${patchedMessages.join(" + ")} (${file})`);
+          if (source !== original) {
+            writeFileSync(filePath, source);
+            setupLogger.info(`Patched OpenClaw ${patchedMessages.join(" + ")} (${file})`);
+          }
         }
       }
+    } catch (err) {
+      console.warn(
+        `  ⚠ OpenClaw bundle patch skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   } catch (err) {
     console.error(`  ✗ Config sync failed: ${err instanceof Error ? err.message : String(err)}`);
