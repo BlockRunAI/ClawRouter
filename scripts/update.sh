@@ -223,13 +223,25 @@ try {
     if (installs?.[key]) { delete installs[key]; changed = true; console.log('  Removed plugins.installs.' + key); }
   }
 
-  // Clean plugins.allow — remove only ClawRouter entries; preserve every other
-  // plugin the user has allowed, including bare local/custom plugin IDs.
+  // Clean plugins.allow — remove clawrouter (re-added later) and any stale bare
+  // single-word entries that aren't bundled OpenClaw plugins (e.g. "wallet" added
+  // by an AI agent — shows a warning on every gateway start).
   if (Array.isArray(config?.plugins?.allow)) {
+    const BUNDLED = [
+      'http','mcp','computer-use','browser','code','image','voice',
+      'search','memory','calendar','email','slack','discord','telegram',
+      'whatsapp','matrix','teams','notion','github','jira','linear',
+      'comfyui',
+    ];
     const before = config.plugins.allow.length;
-    config.plugins.allow = config.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
+    config.plugins.allow = config.plugins.allow.filter(p => {
+      if (p === 'clawrouter' || p === '@blockrun/clawrouter') return false;
+      if (BUNDLED.includes(p)) return true;
+      if (p.startsWith('@') || p.includes('/')) return true;
+      return false;
+    });
     const removed = before - config.plugins.allow.length;
-    if (removed > 0) { changed = true; console.log('  Removed ClawRouter from plugins.allow (re-added after install)'); }
+    if (removed > 0) { changed = true; console.log('  Removed ' + removed + ' stale plugins.allow entry(ies)'); }
   }
 
   // OpenClaw 2026.5.2+ validates tools.web.search.provider at config-load
