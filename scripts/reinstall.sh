@@ -214,7 +214,7 @@ for (const key of ['clawrouter', 'ClawRouter', '@blockrun/clawrouter']) {
 // plugin the user has allowed, including bare local/custom plugin IDs.
 if (Array.isArray(c.plugins?.allow)) {
   const before = c.plugins.allow.length;
-  c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== '@blockrun/clawrouter');
+  c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== 'ClawRouter' && p !== '@blockrun/clawrouter');
   const removed = before - c.plugins.allow.length;
   if (removed > 0) console.log('  Removed ClawRouter from plugins.allow (re-added after install)');
 }
