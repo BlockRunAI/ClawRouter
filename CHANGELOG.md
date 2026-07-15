@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.224 — July 14, 2026
+
+**Two thirds of what we published was sourcemaps.** No behaviour change.
+
+### Changed — stop shipping sourcemaps to npm
+
+- The tarball carried `dist/index.js.map` and `dist/cli.js.map` at ~17MB each: **34MB of a 50MB install, 68% of the package**, downloaded by everyone who has ever run `npx @blockrun/clawrouter` or installed anything that depends on us. Excluded via `"!dist/**/*.map"` in package.json `files`. **50.0MB → 16.6MB unpacked** (3.4MB packed).
+- `sourcemap: true` stays in `tsup.config.ts` — maps are still generated for local debugging and CI, they just no longer ship. The bundles keep their `//# sourceMappingURL=` comment; a missing map is silently ignored at runtime. Verified the published tarball runs both normally and under `node --enable-source-maps`.
+- Context: this only became visible while auditing why `@blockrun/mcp` was paying ~50MB (≈15% of its install tree) for a router it never called. See `@blockrun/llm@3.6.0`, which stops installing us for consumers that don't route.
+
+---
+
 ## v0.12.223 — July 14, 2026
 
 **Hotfix again: v0.12.222 could not be installed as an OpenClaw plugin.** Plus a repair for the model list that kept showing retired models.
