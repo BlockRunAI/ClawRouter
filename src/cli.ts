@@ -539,7 +539,8 @@ async function cmdCache(port: number): Promise<void> {
  */
 async function cmdSetup(): Promise<void> {
   const { execFileSync, execSync } = await import("node:child_process");
-  const { injectModelsConfig, injectAuthProfile } = await import("./index.js");
+  const { injectModelsConfig, injectAuthProfile, syncAgentModelCache, VISIBLE_OPENCLAW_MODELS } =
+    await import("./index.js");
 
   console.log("🦞 ClawRouter setup\n");
 
@@ -593,6 +594,7 @@ async function cmdSetup(): Promise<void> {
   };
   try {
     injectModelsConfig(setupLogger, { forceWrite: true });
+    syncAgentModelCache(setupLogger, { forceWrite: true });
     injectAuthProfile(setupLogger);
   } catch (err) {
     console.error(`  ✗ Config sync failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -606,7 +608,9 @@ async function cmdSetup(): Promise<void> {
   }
   console.log("\nNext: restart the gateway to load ClawRouter:");
   console.log("  openclaw gateway restart");
-  console.log("\nThen verify in your bot: /models — you should see ~38 BlockRun models.");
+  console.log(
+    `\nThen verify in your bot: /models — you should see ${VISIBLE_OPENCLAW_MODELS.length} BlockRun models.`,
+  );
 }
 
 function parseArgs(args: string[]): {

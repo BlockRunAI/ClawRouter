@@ -1154,6 +1154,7 @@ declare const BLOCKRUN_MODELS: BlockRunModel[];
  * target's real metadata instead.
  */
 declare const OPENCLAW_MODELS: ModelDefinitionConfig[];
+declare const VISIBLE_OPENCLAW_MODELS: ModelDefinitionConfig[];
 /**
  * Build a ModelProviderConfig for BlockRun.
  *
@@ -1698,6 +1699,32 @@ declare function injectModelsConfig(logger: {
     forceWrite?: boolean;
 }): void;
 /**
+ * Repair the per-agent model cache OpenClaw keeps at
+ * `~/.openclaw/agents/<agent>/agent/models.json`.
+ *
+ * This is a THIRD model-list plane, distinct from the two in `openclaw.json`
+ * (`models.providers.blockrun.models` = the picker, `agents.defaults.models` =
+ * the allowlist). Nothing synced it, so it rotted independently: a machine whose
+ * openclaw.json `injectModelsConfig` had just repaired to the current 47 still
+ * had 155 entries here — 127 long-retired models (gpt-5.2, gpt-4.1, o1 …) plus
+ * duplicate `free` / `moonshot/kimi-k2.5` rows, and none of the current
+ * flagships. That is what surfaces as stale and duplicated rows in the picker.
+ *
+ * Only rewrites when the cache already has a `blockrun` provider — we repair our
+ * own entry, never introduce one — and leaves every other provider and each
+ * provider's non-`models` fields (baseUrl/api/apiKey) untouched.
+ *
+ * Gated like `injectModelsConfig`: outside gateway mode this is a no-op unless
+ * forced. `openclaw plugins install` runs activation hooks inside a transaction,
+ * and writing OpenClaw's own state from under it is what stranded users before
+ * (see the baseHash note on the config write above).
+ */
+declare function syncAgentModelCache(logger: {
+    info: (msg: string) => void;
+}, options?: {
+    forceWrite?: boolean;
+}): void;
+/**
  * Inject dummy auth profile for BlockRun into agent auth stores.
  * OpenClaw's agent system looks for auth credentials even if provider has auth: [].
  * We inject a placeholder so the lookup succeeds (proxy handles real auth internally).
@@ -1725,4 +1752,4 @@ declare function parseCallArgs(raw: string): {
 };
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };

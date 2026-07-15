@@ -4,6 +4,31 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.223 — July 14, 2026
+
+**Hotfix again: v0.12.222 could not be installed as an OpenClaw plugin.** Plus a repair for the model list that kept showing retired models.
+
+### Fixed — v0.12.222 was uninstallable as a plugin (P0, self-inflicted)
+
+- `openclaw plugins install @blockrun/clawrouter` failed outright on v0.12.222:
+  `Plugin "clawrouter" installation blocked: dangerous code patterns detected: Shell command execution detected (child_process) (scripts/smoke-dist.mjs:65)`.
+  The dist smoke check added in v0.12.221 is a **build-time** gate, but `scripts` is in package.json `files`, so it shipped — and OpenClaw scans a plugin's loose script files and blocks the whole install over a `child_process` import. Excluded via `"!scripts/smoke-dist.mjs"`. (`dist/` is exempt from that scan; the proxy legitimately spawns processes.)
+- The smoke check now asserts on the **real `npm pack` file list** that no shipped `scripts/*.mjs` imports `child_process`, so this cannot recur. Verified it fails the build when the exclusion is removed.
+
+### Fixed — the picker kept listing retired models
+
+- OpenClaw keeps a **third** model-list plane at `~/.openclaw/agents/<agent>/agent/models.json`, separate from the two in `openclaw.json` (`models.providers.blockrun.models` = picker, `agents.defaults.models` = allowlist). Nothing ever synced it, so it rotted independently and kept serving long-dead models.
+- Measured on a real machine: after `clawrouter setup` had already repaired `openclaw.json` to the correct 47, this cache still held **155 entries — 127 retired** (`gpt-5.2`, `gpt-4.1`, `o1`, `gpt-5-mini` …), duplicate `free` and `moonshot/kimi-k2.5` rows, and **none** of the current flagships. That is the stale/duplicate rows people were seeing.
+- `setup` (and gateway start) now repairs it: 155 → 47, correct order, dupes gone. It only touches an existing `blockrun` provider, never creates one, and preserves other providers plus `baseUrl`/`api`/`apiKey`. Ordering is compared positionally, since order is what the picker renders.
+- `setup`'s closing hint said "you should see ~38 BlockRun models" — hardcoded and wrong since v0.12.184. Now derived from the actual list.
+
+### Known issue — OpenClaw rejects the repair through its own writer
+
+- `openclaw plugins install` still ends in `Config write rejected: openclaw.json (size-drop:76642->25200)`. OpenClaw guards against large config shrinks, and pruning 155 stale models → 47 _is_ a large shrink, so it rejects the write and rolls the install back — restoring the stale list. `clawrouter setup` is unaffected (it writes directly and is the supported repair path), and the plugin itself registers fine (provider, 26 tools, all commands).
+- This is OpenClaw-side, so ClawRouter does not work around it: reaching into OpenClaw's internals to force it is what we deliberately are not doing. **Run `clawrouter setup` to repair the list.**
+
+---
+
 ## v0.12.222 — July 14, 2026
 
 **Hotfix: v0.12.220 was unusable and v0.12.221 was only half-fixed — upgrade to this one.** Plus Claude Fable 5 and Grok 4.5.

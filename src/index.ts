@@ -533,6 +533,88 @@ function injectModelsConfig(
 }
 
 /**
+ * Repair the per-agent model cache OpenClaw keeps at
+ * `~/.openclaw/agents/<agent>/agent/models.json`.
+ *
+ * This is a THIRD model-list plane, distinct from the two in `openclaw.json`
+ * (`models.providers.blockrun.models` = the picker, `agents.defaults.models` =
+ * the allowlist). Nothing synced it, so it rotted independently: a machine whose
+ * openclaw.json `injectModelsConfig` had just repaired to the current 47 still
+ * had 155 entries here — 127 long-retired models (gpt-5.2, gpt-4.1, o1 …) plus
+ * duplicate `free` / `moonshot/kimi-k2.5` rows, and none of the current
+ * flagships. That is what surfaces as stale and duplicated rows in the picker.
+ *
+ * Only rewrites when the cache already has a `blockrun` provider — we repair our
+ * own entry, never introduce one — and leaves every other provider and each
+ * provider's non-`models` fields (baseUrl/api/apiKey) untouched.
+ *
+ * Gated like `injectModelsConfig`: outside gateway mode this is a no-op unless
+ * forced. `openclaw plugins install` runs activation hooks inside a transaction,
+ * and writing OpenClaw's own state from under it is what stranded users before
+ * (see the baseHash note on the config write above).
+ */
+function syncAgentModelCache(
+  logger: { info: (msg: string) => void },
+  options: { forceWrite?: boolean } = {},
+): void {
+  if (!isGatewayMode() && !options.forceWrite) return;
+
+  const agentsDir = join(homedir(), ".openclaw", "agents");
+  if (!existsSync(agentsDir)) return;
+
+  let agentDirs: string[];
+  try {
+    agentDirs = readdirSync(agentsDir);
+  } catch {
+    return;
+  }
+
+  const expectedIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
+
+  for (const agent of agentDirs) {
+    const cachePath = join(agentsDir, agent, "agent", "models.json");
+    if (!existsSync(cachePath)) continue;
+
+    try {
+      const raw = readTextFileSync(cachePath).trim();
+      if (!raw) continue;
+      const cache = JSON.parse(raw) as {
+        providers?: Record<string, { models?: Array<{ id?: string }> } | unknown>;
+      };
+      if (!cache || typeof cache !== "object" || Array.isArray(cache)) continue;
+
+      const blockrun = cache.providers?.blockrun;
+      if (!blockrun || typeof blockrun !== "object" || Array.isArray(blockrun)) continue;
+
+      const entry = blockrun as { models?: Array<{ id?: string }> };
+      const current = entry.models;
+      // Positional compare: order is what the picker renders, so a set-equal but
+      // reordered list still needs the rewrite.
+      const upToDate =
+        Array.isArray(current) &&
+        current.length === expectedIds.length &&
+        current.every((m, i) => m?.id === expectedIds[i]);
+      if (upToDate) continue;
+
+      const staleCount = Array.isArray(current) ? current.length : 0;
+      entry.models = VISIBLE_OPENCLAW_MODELS;
+
+      const tmpPath = `${cachePath}.tmp.${process.pid}`;
+      writeFileSync(tmpPath, JSON.stringify(cache, null, 2));
+      renameSync(tmpPath, cachePath);
+      logger.info(
+        `Repaired ${agent} model cache: ${staleCount} → ${expectedIds.length} BlockRun models`,
+      );
+    } catch (err) {
+      // A corrupt or unreadable cache is OpenClaw's to regenerate — never fail setup over it.
+      logger.info(
+        `Skipped ${agent} model cache: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+}
+
+/**
  * Inject dummy auth profile for BlockRun into agent auth stores.
  * OpenClaw's agent system looks for auth credentials even if provider has auth: [].
  * We inject a placeholder so the lookup succeeds (proxy handles real auth internally).
@@ -1715,6 +1797,10 @@ const plugin: OpenClawPluginDefinition = {
     // This persists the config so models are recognized on restart
     injectModelsConfig(api.logger);
 
+    // Repair OpenClaw's separate per-agent model cache, which openclaw.json's
+    // two planes do not feed and which otherwise keeps serving retired models.
+    syncAgentModelCache(api.logger);
+
     // Inject dummy auth profiles into agent auth stores
     // OpenClaw's agent system looks for auth even if provider has auth: []
     injectAuthProfile(api.logger);
@@ -2281,7 +2367,7 @@ export default plugin;
 export { startProxy, getProxyPort } from "./proxy.js";
 
 // Re-export setup helpers for the `clawrouter setup` CLI command
-export { injectModelsConfig, injectAuthProfile, isBlockrunWebSearchDisabled };
+export { injectModelsConfig, injectAuthProfile, syncAgentModelCache, isBlockrunWebSearchDisabled };
 export type {
   ProxyOptions,
   ProxyHandle,
@@ -2295,6 +2381,7 @@ export { blockrunProvider } from "./provider.js";
 export {
   OPENCLAW_MODELS,
   BLOCKRUN_MODELS,
+  VISIBLE_OPENCLAW_MODELS,
   buildProviderModels,
   MODEL_ALIASES,
   resolveModelAlias,

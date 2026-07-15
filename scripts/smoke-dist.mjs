@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 // Loads the freshly-built bundles and fails the build if they cannot be executed.
 //
+// MUST NOT SHIP: package.json `files` excludes this via "!scripts/smoke-dist.mjs".
+// It uses child_process, and OpenClaw's plugin scanner blocks the install of any
+// package containing "dangerous code patterns" — shipping it in v0.12.222 made the
+// plugin uninstallable ("installation blocked: Shell command execution detected").
+// This is a build-time-only gate; it has no business in the published tarball.
+//
 // This exists because v0.12.220 shipped to npm with a dead CLI: the tsup banner's
 // `__cjs_createRequire` collided with an identically-named import emitted by a
 // bundled dependency, so every entrypoint threw a load-time SyntaxError. Nothing in
@@ -59,6 +65,37 @@ try {
   }
 } catch (err) {
   failures.push(`dist/index.js failed to load: ${err.message}`);
+}
+
+// OpenClaw scans a plugin's loose script files for "dangerous code patterns" and
+// blocks the ENTIRE install when it finds one — v0.12.222 shipped this very file,
+// whose child_process import made the plugin uninstallable for every user
+// ("installation blocked: Shell command execution detected"). dist/ is exempt from
+// that scan (the proxy legitimately spawns processes), so this only guards the
+// loose scripts/ files we publish. Assert on the real pack list, not on intent.
+try {
+  const packed = JSON.parse(
+    execFileSync("npm", ["pack", "--dry-run", "--json"], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 120_000,
+    }).toString(),
+  );
+  const shipped = (packed[0]?.files ?? []).map((f) => f.path);
+  const scanned = shipped.filter((p) => /^scripts\/.*\.(mjs|js|cjs)$/.test(p));
+  for (const rel of scanned) {
+    const source = readFileSync(resolve(root, rel), "utf8");
+    if (/child_process/.test(source)) {
+      failures.push(
+        `${rel} ships in the npm tarball and imports child_process — OpenClaw's plugin ` +
+          `scanner will block the install. Exclude it via package.json "files" ` +
+          `(e.g. "!${rel}") or drop the child_process use.`,
+      );
+    }
+  }
+} catch (err) {
+  // Never fail the build because `npm pack` itself misbehaved (offline, etc).
+  console.warn(`  ! could not verify pack contents: ${err.message}`);
 }
 
 try {
