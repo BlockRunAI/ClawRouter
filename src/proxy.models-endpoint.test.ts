@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveModelAlias } from "./models.js";
 import { buildProxyModelList } from "./proxy.js";
 
 describe("buildProxyModelList", () => {
@@ -20,11 +21,16 @@ describe("buildProxyModelList", () => {
     expect(ids.has("anthropic/claude-opus-4.8")).toBe(true);
   });
 
-  it("redirects delisted fable-5 and new free flagships to their resolved targets", () => {
+  it("lists relisted fable-5 and new free flagships as resolvable targets", () => {
     const list = buildProxyModelList(1234567890);
     const ids = new Set(list.map((model) => model.id));
-    // fable-5 delisted by Anthropic 2026-06-13 — alias remains but resolves to opus-4.8
+    // fable-5 relisted by Anthropic 2026-07-06 — alias resolves to the real model again
     expect(ids.has("fable")).toBe(true);
+    expect(ids.has("anthropic/claude-fable-5")).toBe(true);
+    expect(resolveModelAlias("fable")).toBe("anthropic/claude-fable-5");
+    // grok-4.5 added upstream 2026-07-13
+    expect(ids.has("xai/grok-4.5")).toBe(true);
+    expect(resolveModelAlias("grok-4.5")).toBe("xai/grok-4.5");
     // new blockrun-featured free flagships (2026-06-14 sweep)
     expect(ids.has("free/mistral-large-3-675b")).toBe(true);
     expect(ids.has("free/qwen3.5-122b-a10b")).toBe(true);

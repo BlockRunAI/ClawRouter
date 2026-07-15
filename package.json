@@ -1,6 +1,6 @@
 {
   "name": "@blockrun/clawrouter",
-  "version": "0.12.220",
+  "version": "0.12.221",
   "description": "Smart LLM router — save 85% on inference costs. 55+ models (8 free), one wallet, x402 micropayments.",
   "type": "module",
   "main": "dist/index.js",
@@ -34,6 +34,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "postbuild": "node scripts/smoke-dist.mjs",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",

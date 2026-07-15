@@ -1166,18 +1166,20 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       ],
     },
     COMPLEX: {
-      // fable-5 was promoted here 2026-06-11, then DELISTED by Anthropic 2026-06-13
-      // (offer withdrawn upstream). Reverted to opus-4.8 — BlockRun redirects fable → opus-4.8.
-      primary: "anthropic/claude-opus-4.8", // flagship Opus — 1M ctx, 128K out, adaptive thinking ($5/$25)
+      // fable-5 was promoted here 2026-06-11, force-reverted 2026-06-13 when Anthropic
+      // withdrew the offer, and restored 2026-07-14 now that BlockRun has relisted it.
+      primary: "anthropic/claude-fable-5", // Best quality for complex tasks — Mythos-class flagship above Opus ($10/$50, 1M ctx, always-on thinking)
       // Fallback chain de-Gemini'd 2026-04-22: when Anthropic 503s, Gemini is
       // also prone to "high demand" 503s (correlated failure — everyone falls
       // back to Google at the same time). Prefer xAI Grok → Moonshot → OpenAI
       // flagship → DeepSeek → NVIDIA free instead.
       fallback: [
+        "anthropic/claude-opus-4.8", // in-family hot swap first (half the price, 1M ctx + adaptive thinking)
         "anthropic/claude-opus-4.7", // in-family hot swap (identical cost to 4.8)
         "anthropic/claude-opus-4.6", // in-family hot swap
         "anthropic/claude-sonnet-5", // Sonnet-tier drop-down, near-Opus quality
         "anthropic/claude-sonnet-4.6",
+        "xai/grok-4.5", // xAI flagship — 503-resistant, direct-xAI SKU (added 2026-07-14)
         "xai/grok-4-0709", // 503-resistant flagship
         "moonshot/kimi-k2.7", // Moonshot flagship, independent infra
         "moonshot/kimi-k2.6",

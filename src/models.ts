@@ -32,13 +32,14 @@ export const MODEL_ALIASES: Record<string, string> = {
   "sonnet-4.5": "anthropic/claude-sonnet-4.5",
   "sonnet-4-5": "anthropic/claude-sonnet-4.5",
   "anthropic/claude-sonnet-4-5": "anthropic/claude-sonnet-4.5",
-  // claude-fable-5 DELISTED by Anthropic 2026-06-13 (offer withdrawn upstream —
-  // no longer served on direct Anthropic or Bedrock). BlockRun removed the
-  // catalog entry and redirects fable → opus-4.8 (route.ts MODEL_REDIRECTS).
-  // Mirror that here so pinned callers silently land on opus-4.8.
-  fable: "anthropic/claude-opus-4.8",
-  "fable-5": "anthropic/claude-opus-4.8",
-  "fable-5.0": "anthropic/claude-opus-4.8",
+  // claude-fable-5 RE-ENABLED 2026-07-06 — Anthropic restored the offer upstream
+  // (delisted 2026-06-13, both direct-Anthropic and Bedrock re-probed HTTP 200).
+  // BlockRun relisted it, so the fable → opus-4.8 redirect is retired and these
+  // land on the real model again. Note: `anthropic/claude-fable-5` must NOT be an
+  // alias key — it is a live catalog id, and alias keys shadow catalog entries.
+  fable: "anthropic/claude-fable-5",
+  "fable-5": "anthropic/claude-fable-5",
+  "fable-5.0": "anthropic/claude-fable-5",
   opus: "anthropic/claude-opus-4.8",
   "opus-4": "anthropic/claude-opus-4.8",
   "opus-4.8": "anthropic/claude-opus-4.8",
@@ -50,10 +51,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   haiku: "anthropic/claude-haiku-4.5",
   // Claude - provider/shortname patterns (common in agent frameworks)
   "anthropic/sonnet": "anthropic/claude-sonnet-4.6",
-  // fable-5 delisted 2026-06-13 → opus-4.8 (see note above)
-  "anthropic/fable": "anthropic/claude-opus-4.8",
-  "anthropic/claude-fable-5": "anthropic/claude-opus-4.8",
-  "anthropic/claude-fable-5.0": "anthropic/claude-opus-4.8",
+  // fable-5 relisted 2026-07-06 (see note above)
+  "anthropic/fable": "anthropic/claude-fable-5",
+  "anthropic/claude-fable-5.0": "anthropic/claude-fable-5",
   "anthropic/opus": "anthropic/claude-opus-4.8",
   "anthropic/haiku": "anthropic/claude-haiku-4.5",
   "anthropic/claude": "anthropic/claude-sonnet-4.6",
@@ -133,7 +133,13 @@ export const MODEL_ALIASES: Record<string, string> = {
   // xAI — grok-4.3 is the public flagship since 2026-06-04 (grok-3 and the
   // 4-fast/4-1-fast families are hidden in the backend catalog; direct full
   // IDs still resolve for pinned users).
+  // grok-4.5 (added upstream 2026-07-13) is xAI's flagship, but the generic `grok`
+  // shorthand stays on 4.3 for now: 4.5 costs $2.50/$9.00 vs 4.3's $1.50/$4.00 and
+  // re-prices the whole request at 2x above 200K prompt tokens. Promotion needs
+  // benchmarks we don't have — explicit pins let callers opt in today.
   grok: "xai/grok-4.3",
+  "grok-4.5": "xai/grok-4.5",
+  "grok-4-5": "xai/grok-4.5",
   "grok-4.3": "xai/grok-4.3",
   "grok-fast": "xai/grok-4-fast-reasoning",
   "grok-build": "xai/grok-build-0.1",
@@ -789,9 +795,22 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     agentic: true,
     toolCalling: true,
   },
-  // claude-fable-5 DELISTED by Anthropic 2026-06-13 (offer withdrawn upstream;
-  // BlockRun removed its catalog entry and redirects → opus-4.8). Catalog entry
-  // removed here; fable aliases now resolve to opus-4.8. Re-add if access returns.
+  // claude-fable-5 relisted 2026-07-06 after Anthropic restored the offer
+  // (delisted 2026-06-13). Mythos-class tier above Opus; thinking is always on
+  // upstream, so there is no non-reasoning mode to model here.
+  {
+    id: "anthropic/claude-fable-5",
+    name: "Claude Fable 5",
+    version: "5",
+    inputPrice: 10.0,
+    outputPrice: 50.0,
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
   {
     id: "anthropic/claude-opus-4.7",
     name: "Claude Opus 4.7",
@@ -1139,6 +1158,25 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 2000000,
     maxOutput: 16384,
     reasoning: true,
+    toolCalling: true,
+  },
+
+  // xAI flagship (added upstream 2026-07-13). Direct-xAI SKU, so Live Search works.
+  // inputPrice/outputPrice are the base rates only: upstream re-prices the WHOLE
+  // request at $5.00/$18.00 once prompt tokens reach 200K, which this registry has
+  // no field to express. That skews `logUsage` telemetry on long-context calls, not
+  // the charge — payment is server-dictated via 402.
+  {
+    id: "xai/grok-4.5",
+    name: "Grok 4.5",
+    version: "4.5",
+    inputPrice: 2.5,
+    outputPrice: 9.0,
+    contextWindow: 500000,
+    maxOutput: 16384,
+    reasoning: true,
+    vision: true,
+    agentic: true,
     toolCalling: true,
   },
 

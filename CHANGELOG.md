@@ -4,6 +4,34 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.221 — July 14, 2026
+
+**Hotfix: v0.12.220 was unusable — upgrade immediately.** Plus Claude Fable 5 and Grok 4.5.
+
+### Fixed — v0.12.220 shipped a dead CLI (P0)
+
+- Every entrypoint in v0.12.220 threw `SyntaxError: Identifier '__cjs_createRequire' has already been declared` at load time: the tsup banner injected `__cjs_createRequire`, and a bundled dependency emits its own import under the exact same name into the same ESM scope. `clawrouter` would not start and `import "@blockrun/clawrouter"` would not load. Renamed the banner identifier to `__blockrun_createRequire` (thanks @0xCheetah1, spotted in #206).
+- **Why CI published it anyway**: the release pipeline runs `build && typecheck && test`, and none of those ever load `dist/`. Added `scripts/smoke-dist.mjs`, wired as `postbuild`, which imports `dist/index.js` and runs `dist/cli.js --version`. It fails the build (exit 1) on the broken bundle, so this class of defect can no longer reach npm.
+
+### Added — Claude Fable 5 (relisted upstream)
+
+- `anthropic/claude-fable-5` is back: Anthropic restored the offer on 2026-07-06 after the 2026-06-13 delisting, and BlockRun relisted it. Mythos-class tier above Opus — $10/$50, 1M context, 128K output, always-on thinking.
+- `fable` / `fable-5` / `fable-5.0` / `anthropic/fable` now resolve to the real model again instead of redirecting to `opus-4.8`.
+- Restored as the **premium** COMPLEX primary, reverting the forced 2026-06-13 downgrade (`opus-4.8` moves back to first fallback). The `auto` profile is untouched — its COMPLEX primary stays `google/gemini-3.1-pro`, so default routing costs nothing extra.
+
+### Added — Grok 4.5
+
+- `xai/grok-4.5`, xAI's flagship (added upstream 2026-07-13). $2.50/$9.00 base, 500K context, vision, Live Search capable. Picker-visible; added to the premium COMPLEX fallback chain as a 503-resistant flagship.
+- Reachable via explicit `grok-4.5` / `grok-4-5` pins. The generic `grok` shorthand **stays on `grok-4.3`** — 4.5 costs ~1.7x more and re-prices the entire request at 2x above 200K prompt tokens, so promotion waits on benchmarks.
+- Local pricing records the base rate only; the registry has no field for the long-context tier. This skews `logUsage` telemetry on >200K calls, never the charge — payments are server-dictated via 402.
+
+### Verified
+
+- Both models exercised end-to-end through the built proxy with real x402 payments settled on Base, including alias resolution (`fable` → `anthropic/claude-fable-5`, `grok-4.5` → `xai/grok-4.5`).
+- `/v1/models` advertises 205 entries (was 201): +2 catalog, +2 aliases, with all 118 friendly aliases intact.
+
+---
+
 ## v0.12.220 — July 10, 2026
 
 Direct Polymarket **betting** — ported from blockrun-mcp v0.30.0's `blockrun_polymarket` tool. ClawRouter could already read prediction-market odds (`blockrun_predexon_*`); now it can place, manage, and redeem **real-money** bets on Polymarket (CLOB V2, Polygon), signed locally by the same wallet that pays for LLM calls.
