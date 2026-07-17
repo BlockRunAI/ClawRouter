@@ -132,16 +132,15 @@ const ROUTING_PROFILES = new Set([
 // flagships (mistral-large-3-675b, qwen3.5-122b). deepseek-v4-flash dropped from
 // auto-pick (BlockRun hid it) but stays catalog-routable for direct calls.
 // Auto-pick cascade (order = priority for pickFreeModel) + free cost-classification
-// set. Refreshed 2026-06-16 for BlockRun's 2026-06-14 free-tier sweep: gpt-oss stays
-// head (heavy-user red line), qwen3-coder-480b dropped (NVIDIA EOL → redirects to
-// seed-oss-36b server-side), live probe-verified models added behind the flagships.
+// set. Refreshed 2026-07-17 for blockrun's live re-probe (PR #257): gpt-oss stays
+// head (heavy-user red line); qwen3.5-122b, qwen3-next-80b and llama-4-maverick
+// dropped (all hidden + server-redirected to gpt-oss-120b upstream, so keeping
+// them here would silently defeat /exclude); deepseek-v4-flash recovered.
 const FREE_MODELS = new Set([
   "free/gpt-oss-120b",
   "free/gpt-oss-20b",
   "free/mistral-large-3-675b", // 675B general flagship (re-featured 2026-06-14)
-  "free/qwen3.5-122b-a10b", // newest-gen Qwen, strong general
-  "free/qwen3-next-80b-a3b-instruct", // 262K ctx, strong reasoning + coding
-  "free/llama-4-maverick", // BlockRun's primary free fallback
+  "free/deepseek-v4-flash", // 1M ctx, recovered 2026-07-17 (3.2s probe)
   "free/seed-oss-36b", // live coder (successor to retired qwen3-coder-480b)
   "free/mistral-nemotron", // strong instruction following
   "free/step-3.7-flash", // reasoning-focused
@@ -1511,6 +1510,12 @@ function estimateAmount(
       (estimatedInputTokens / 1_000_000) * model.inputPrice +
       (estimatedOutputTokens / 1_000_000) * model.outputPrice;
   }
+
+  // blockrun charges a flat $0.002 per-transaction fee on every PAID product
+  // (2026-07-14, covers gas; included in the server's 402 quote). Mirror it so
+  // balance pre-checks and usage logs track what the gateway actually charges.
+  // Free models ($0 estimate) never pay it.
+  if (costUsd > 0) costUsd += 0.002;
 
   // Convert to USDC 6-decimal integer, add 20% buffer for estimation error
   // Minimum 1000 ($0.001) to match CDP Facilitator's enforced minimum payment

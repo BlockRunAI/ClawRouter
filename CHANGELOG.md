@@ -4,6 +4,29 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.228 — July 17, 2026
+
+Catches up with blockrun's **2026-07-17 live free-model re-probe** (blockrun PR #257, landed hours before v0.12.227 was cut against the older 07-11 map) and the **flat $0.002/tx settlement fee** introduced upstream on 2026-07-14.
+
+### Changed — free tier follows the 07-17 re-probe
+
+- **`free/deepseek-v4-flash` recovered** (3.2s on both probe passes) — un-hidden upstream and back in the advertised free 8. Added to `top-models.json` (picker + allowlist), the eco SIMPLE fallback chain, the `FREE_MODELS` auto-pick cascade, and the README/SKILL free lists. At 1M context it's the largest-context free model.
+- **`free/qwen3-next-80b-a3b-instruct` died** (">60s / DEGRADED", both passes) — dropped from the picker and docs. The registry entry and explicit pins (`qwen3-next`, `qwen3-next-80b`) stay routable; the gateway redirects them to `gpt-oss-120b`.
+- **`FREE_MODELS` auto-pick cascade pruned**: `free/qwen3.5-122b-a10b`, `free/qwen3-next-80b-a3b-instruct`, and `free/llama-4-maverick` removed — all three are hidden + server-redirected to `gpt-oss-120b`, so keeping them in the cascade would silently serve gpt-oss to users who had `/exclude`d it. Cascade is now the two gpt-oss defaults + the live 8.
+
+### Changed — aliases mirror blockrun's current redirect map
+
+- Dead-model redirect targets moved off dead models: everything that pointed at `free/llama-4-maverick` (itself dead now) or diverged from the server map is re-aimed — `nemotron-ultra`/`-253b`/`-super`/`-49b`/`-120b`, `llama-free`, `devstral-2-123b` → `free/gpt-oss-120b` (the server's universal live target); `mistral-free` → `free/mistral-large-3-675b`; `mistral-small` → `free/mistral-nemotron`; bare `nemotron` → `free/nemotron-3-nano-omni-30b-a3b-reasoning` (strongest live Nemotron); `qwen-thinking` → `free/gpt-oss-120b` (no live free Qwen remains).
+- `nvidia/mistral-small-4-119b`'s local redirect is **removed** — it recovered in the re-probe and blockrun dropped its server redirect, so pinned callers reach the real model again. Same for the two hidden-but-routable nemotron supers: pins now pass through instead of being rewritten to a dead model.
+- `nvidia/glm-4.7` now pins to `free/glm-4.7` (gateway redirects) instead of being locally rewritten to seed-oss-36b.
+
+### Changed — pricing mirrors the upstream $0.002/tx settlement fee
+
+- blockrun now adds a flat **$0.002 per-transaction fee on every paid product** (covers gas; included in the 402 quote). `estimateAmount()` mirrors it so balance pre-checks and usage logs track the real charge; free models never pay it. Payments themselves were always server-quoted — this only fixes the local estimate.
+- README pricing intro updated: headline switches from "starting at $0.0002/request" (no longer true with the fee) to the free tier, and the fee is documented next to the per-request cost note.
+
+---
+
 ## v0.12.227 — July 17, 2026
 
 **The picker and every user-facing surface now match the advertised blockrun.ai catalog** (verified against the live `/v1/models` on 2026-07-17, mirroring the same alignment shipped in hermes-plugin-clawrouter 0.3.10).

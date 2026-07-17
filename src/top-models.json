@@ -36,7 +36,7 @@
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",
   "free/mistral-large-3-675b",
-  "free/qwen3-next-80b-a3b-instruct",
+  "free/deepseek-v4-flash",
   "free/seed-oss-36b",
   "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "free/mistral-nemotron",

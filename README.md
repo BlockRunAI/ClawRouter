@@ -382,16 +382,16 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Models & Pricing
 
-55+ models across 9 providers, one wallet. **Starting at $0.0002/request.**
+55+ models across 9 providers, one wallet. **8 models are $0 — paid models start at fractions of a cent.**
 
-> **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens).
+> **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.002/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
 ### Budget Models (under $0.001/request)
 
 | Model                                         | Input $/M | Output $/M | ~$/request | Context | Features                                     |
 | --------------------------------------------- | --------: | ---------: | ---------: | ------- | -------------------------------------------- |
 | free/mistral-large-3-675b                     |  **FREE** |   **FREE** |     **$0** | 131K    | 675B general flagship, default free model    |
-| free/qwen3-next-80b-a3b-instruct              |  **FREE** |   **FREE** |     **$0** | 262K    | reasoning + coding                           |
+| free/deepseek-v4-flash                        |  **FREE** |   **FREE** |     **$0** | 1M      | reasoning + coding, huge context             |
 | free/seed-oss-36b                             |  **FREE** |   **FREE** |     **$0** | 131K    | coding                                       |
 | free/nemotron-3-nano-omni-30b-a3b-reasoning   |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
 | free/mistral-nemotron                         |  **FREE** |   **FREE** |     **$0** | 131K    | instruction following                        |
@@ -461,7 +461,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | openai/gpt-5.2-pro          |    $21.00 |    $168.00 |    $0.0945 | 400K    | reasoning, tools                  |
 | openai/gpt-5.4-pro          |    $30.00 |    $180.00 |    $0.1050 | 400K    | reasoning, tools                  |
 
-> **Free tier:** several NVIDIA-hosted models cost nothing — `/model free` smart-routes across them, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model qwen3-next` for 262K reasoning, `/model seed-oss` for coding, `/model mistral-large` for the 675B flagship).
+> **Free tier:** several NVIDIA-hosted models cost nothing — `/model free` smart-routes across them, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model v4-flash` for 1M-context reasoning, `/model seed-oss` for coding, `/model mistral-large` for the 675B flagship).
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
 
 ---
@@ -720,7 +720,7 @@ ClawRouter works with any tool that makes OpenAI-compatible API calls — point 
 
 ### Is ClawRouter free?
 
-ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`mistral-large-3-675b`, `qwen3-next-80b-a3b-instruct`, `seed-oss-36b`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `mistral-nemotron`, `step-3.7-flash`, `nemotron-nano-9b-v2`, `nemotron-nano-12b-v2-vl`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
+ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`mistral-large-3-675b`, `deepseek-v4-flash`, `seed-oss-36b`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `mistral-nemotron`, `step-3.7-flash`, `nemotron-nano-9b-v2`, `nemotron-nano-12b-v2-vl`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
 
 ---
 

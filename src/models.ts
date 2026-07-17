@@ -166,10 +166,12 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-20b": "free/gpt-oss-20b",
   "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
   "nvidia/gpt-oss-20b": "free/gpt-oss-20b",
-  "nvidia/deepseek-v3.2": "free/deepseek-v4-flash", // v3.2 → v4-flash (v4-pro NVIDIA hung 2026-04-30)
-  "free/deepseek-v3.2": "free/deepseek-v4-flash", // local pin redirect
-  "nvidia/deepseek-v4-pro": "free/deepseek-v4-flash", // V4 Pro NVIDIA hung 2026-04-30
-  "free/deepseek-v4-pro": "free/deepseek-v4-flash", // V4 Pro delisted — redirect pinned callers
+  // deepseek family → v4-flash, matching blockrun's 2026-07-17 redirect map
+  // (v4-flash recovered in the live re-probe; v3.2/v4-pro stay dead upstream).
+  "nvidia/deepseek-v3.2": "free/deepseek-v4-flash",
+  "free/deepseek-v3.2": "free/deepseek-v4-flash",
+  "nvidia/deepseek-v4-pro": "free/deepseek-v4-flash",
+  "free/deepseek-v4-pro": "free/deepseek-v4-flash",
   "nvidia/deepseek-v4-flash": "free/deepseek-v4-flash",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   // qwen3-coder-480b retired (NVIDIA EOL 2026-06-14) → redirects to seed-oss-36b
@@ -177,51 +179,53 @@ export const MODEL_ALIASES: Record<string, string> = {
   // resolves them), but point the generic coding shorthands at the live successor.
   "nvidia/qwen3-coder-480b": "free/qwen3-coder-480b",
   "qwen/qwen3-coder-480b-a35b-instruct": "free/qwen3-coder-480b",
-  "nvidia/glm-4.7": "free/seed-oss-36b",
+  // glm-4.7 pin keeps the real id — blockrun redirects it server-side (→ gpt-oss-120b).
+  "nvidia/glm-4.7": "free/glm-4.7",
   "nvidia/llama-4-maverick": "free/llama-4-maverick",
-  // qwen3-next thinking variant retired; live sibling is the instruct model
+  // qwen3-next: both variants died in the 2026-07-17 re-probe; pins keep the id
+  // (blockrun redirects them server-side to gpt-oss-120b).
   "nvidia/qwen3-next-80b-a3b-thinking": "free/qwen3-next-80b-a3b-instruct",
-  // New live free models from the 2026-06-14 BlockRun free-tier refresh
   "nvidia/qwen3-next-80b-a3b-instruct": "free/qwen3-next-80b-a3b-instruct",
   "nvidia/seed-oss-36b": "free/seed-oss-36b",
   "nvidia/mistral-nemotron": "free/mistral-nemotron",
   "nvidia/step-3.7-flash": "free/step-3.7-flash",
   "nvidia/nemotron-nano-9b-v2": "free/nemotron-nano-9b-v2",
   "nvidia/nemotron-nano-12b-v2-vl": "free/nemotron-nano-12b-v2-vl",
-  "nvidia/mistral-small-4-119b": "free/llama-4-maverick", // NVIDIA upstream timing out — hidden + redirected server-side 2026-06-08
-  // Retired free IDs → successors (mirror server-side redirects)
-  "nvidia/nemotron-ultra-253b": "free/llama-4-maverick",
-  "nvidia/nemotron-3-super-120b": "free/llama-4-maverick",
-  "nvidia/nemotron-super-49b": "free/llama-4-maverick",
+  // nvidia/mistral-small-4-119b: no local redirect — recovered in the 2026-07-17
+  // re-probe and blockrun removed its server redirect, so pinned callers reach the
+  // real model again (upstream fallbackModel + health gate cover a relapse).
+  // Retired free IDs → successors (mirror blockrun's 2026-07-17 redirect map:
+  // ultra-253b redirects to gpt-oss-120b; the two supers have NO server redirect —
+  // they stay hidden-but-routable, so their pins pass through to the real ids).
+  "nvidia/nemotron-ultra-253b": "free/gpt-oss-120b",
   // mistral-large-3-675b un-retired 2026-06-14: BlockRun re-featured it (available,
   // NVIDIA upstream recovered) so it's a real free catalog entry again.
   "nvidia/mistral-large-3-675b": "free/mistral-large-3-675b",
   "nvidia/qwen3.5-122b-a10b": "free/qwen3.5-122b-a10b",
-  "nvidia/devstral-2-123b": "free/seed-oss-36b",
-  "free/nemotron-ultra-253b": "free/llama-4-maverick",
-  "free/nemotron-3-super-120b": "free/llama-4-maverick",
-  "free/nemotron-super-49b": "free/llama-4-maverick",
-  "free/devstral-2-123b": "free/seed-oss-36b",
+  // devstral-2-123b died upstream; blockrun redirects it to gpt-oss-120b (2026-07-17 map)
+  "nvidia/devstral-2-123b": "free/gpt-oss-120b",
+  "free/nemotron-ultra-253b": "free/gpt-oss-120b",
+  "free/devstral-2-123b": "free/gpt-oss-120b",
   // New blockrun-featured free models (2026-06-14 catalog sweep)
   "mistral-large": "free/mistral-large-3-675b",
   "mistral-large-3-675b": "free/mistral-large-3-675b",
   "qwen3.5-122b": "free/qwen3.5-122b-a10b",
   "qwen3-122b": "free/qwen3.5-122b-a10b",
-  // Free model shorthand aliases
-  "deepseek-free": "free/deepseek-v4-flash", // V4 Pro NVIDIA hung 2026-04-30 → flash
-  "deepseek-v4-pro": "free/deepseek-v4-flash", // free shorthand → flash (pro hung)
+  // Free model shorthand aliases (v4-flash recovered 2026-07-17 — live again)
+  "deepseek-free": "free/deepseek-v4-flash",
+  "deepseek-v4-pro": "free/deepseek-v4-flash", // free shorthand → flash (pro still hung)
   "deepseek-v4-flash": "free/deepseek-v4-flash",
   "v4-pro": "free/deepseek-v4-flash", // V4 Pro NVIDIA hung → flash
   "v4-flash": "free/deepseek-v4-flash",
-  "mistral-free": "free/llama-4-maverick",
+  "mistral-free": "free/mistral-large-3-675b", // was llama-4-maverick (died 2026-07) — live Mistral flagship
   "glm-free": "free/seed-oss-36b", // qwen3-coder retired → live coder successor
-  "llama-free": "free/llama-4-maverick",
+  "llama-free": "free/gpt-oss-120b", // no live free Llama left (maverick died 2026-07)
   "qwen-coder": "free/seed-oss-36b", // qwen3-coder-480b retired → seed-oss-36b
   "qwen-coder-free": "free/seed-oss-36b",
-  "qwen-thinking": "free/qwen3-next-80b-a3b-instruct",
-  "qwen3-next": "free/qwen3-next-80b-a3b-instruct", // now a live model (instruct)
+  "qwen-thinking": "free/gpt-oss-120b", // qwen3-next died 2026-07-17; no live free Qwen left
+  "qwen3-next": "free/qwen3-next-80b-a3b-instruct", // explicit-ish pin — gateway redirects
   "qwen3-next-80b": "free/qwen3-next-80b-a3b-instruct",
-  "mistral-small": "free/llama-4-maverick",
+  "mistral-small": "free/mistral-nemotron", // closest live Mistral-family free model
   // New live free models (2026-06-14 BlockRun free-tier refresh)
   "seed-oss": "free/seed-oss-36b",
   "seed-oss-36b": "free/seed-oss-36b",
@@ -237,16 +241,17 @@ export const MODEL_ALIASES: Record<string, string> = {
   "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
-  // Retired shorthand aliases redirect to successors
-  nemotron: "free/llama-4-maverick",
-  "nemotron-ultra": "free/llama-4-maverick",
-  "nemotron-253b": "free/llama-4-maverick",
-  "nemotron-super": "free/llama-4-maverick",
-  "nemotron-49b": "free/llama-4-maverick",
-  "nemotron-120b": "free/llama-4-maverick",
+  // Retired shorthand aliases redirect to live successors (2026-07-17 map:
+  // llama-4-maverick died, so the old catch-all target moved to gpt-oss-120b)
+  nemotron: "free/nemotron-3-nano-omni-30b-a3b-reasoning", // strongest live Nemotron
+  "nemotron-ultra": "free/gpt-oss-120b",
+  "nemotron-253b": "free/gpt-oss-120b",
+  "nemotron-super": "free/gpt-oss-120b",
+  "nemotron-49b": "free/gpt-oss-120b",
+  "nemotron-120b": "free/gpt-oss-120b",
   devstral: "free/seed-oss-36b",
   "devstral-2": "free/seed-oss-36b",
-  maverick: "free/llama-4-maverick",
+  maverick: "free/llama-4-maverick", // explicit-ish pin — gateway redirects
   free: "free/gpt-oss-120b",
 
   // MiniMax (minimax → current flagship: M3)
@@ -1292,6 +1297,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     // V4 Flash: 284B / 13B active MoE, 1M context. ~5x faster than V4 Pro.
     // Strong on chat/summarization (MMLU-Pro 86.2). Caveat: weaker factual
     // recall (SimpleQA 34% vs Pro's 58%) — pick V4 Pro for fact-heavy loops.
+    // Recovered in blockrun's 2026-07-17 live re-probe (3.2s both passes) —
+    // un-hidden upstream and back in the advertised free 8.
     id: "free/deepseek-v4-flash",
     name: "[Free] DeepSeek V4 Flash",
     version: "v4-flash",
@@ -1372,10 +1379,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   // 2026-06-16: BlockRun's 2026-06-14 free-tier refresh (self-healing health gate
   // + probe-verified lineup, blockrun commit 5817ecd) added these live NVIDIA free
-  // models. qwen3-coder-480b was retired (NVIDIA EOL 2026-06-14) and now redirects
-  // server-side to seed-oss-36b; deepseek-v4-flash/glm-4.7 stay catalog-only.
+  // models. Status per blockrun's 2026-07-17 live re-probe: qwen3-coder-480b and
+  // glm-4.7 stay dead (server-redirected); deepseek-v4-flash recovered (see above).
   {
-    // Qwen3-Next 80B (A3B active MoE): 262K context, strong reasoning + coding.
+    // Qwen3-Next 80B (A3B active MoE): 262K context. DIED in the 2026-07-17
+    // re-probe (">60s / DEGRADED") — hidden upstream, gateway redirects pinned
+    // callers to gpt-oss-120b. Entry kept so pins stay routable; off the picker.
     id: "free/qwen3-next-80b-a3b-instruct",
     name: "[Free] Qwen3-Next 80B Instruct",
     version: "next-80b-a3b",
