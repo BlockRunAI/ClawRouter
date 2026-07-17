@@ -1521,10 +1521,6 @@ function estimateAmount(
 // Image pricing table (must match server's IMAGE_MODELS in blockrun/src/lib/models.ts)
 // Server applies 5% margin on top of these prices.
 const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, number> }> = {
-  "openai/dall-e-3": {
-    default: 0.04,
-    sizes: { "1024x1024": 0.04, "1792x1024": 0.08, "1024x1792": 0.08 },
-  },
   "openai/gpt-image-1": {
     default: 0.02,
     sizes: { "1024x1024": 0.02, "1536x1024": 0.04, "1024x1536": 0.04 },
@@ -1533,7 +1529,10 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
     default: 0.06,
     sizes: { "1024x1024": 0.06, "1536x1024": 0.12, "1024x1536": 0.12 },
   },
-  "black-forest/flux-1.1-pro": { default: 0.04 },
+  "bytedance/seedream-5-pro": {
+    default: 0.045,
+    sizes: { "1024x1024": 0.045, "2048x1024": 0.045, "2048x2048": 0.09 },
+  },
   "google/nano-banana": { default: 0.05 },
   "google/nano-banana-pro": {
     default: 0.1,
@@ -2435,7 +2434,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         let imgCost = 0;
         try {
           const parsed = JSON.parse(reqBody.toString());
-          imgModel = parsed.model || "openai/dall-e-3";
+          imgModel = parsed.model || "google/nano-banana";
           const n = parsed.n || 1;
           imgCost = estimateImageCost(imgModel, parsed.size, n);
         } catch {
@@ -3795,17 +3794,22 @@ async function proxyRequest(
           const raw = modelMatch[1];
           // Resolve shorthand aliases
           const IMAGE_MODEL_ALIASES: Record<string, string> = {
-            "dall-e-3": "openai/dall-e-3",
-            dalle3: "openai/dall-e-3",
-            dalle: "openai/dall-e-3",
+            // dall-e-3 delisted upstream 2026-05-25 — legacy aliases route to
+            // the OpenAI successor instead of a guaranteed 400.
+            "dall-e-3": "openai/gpt-image-2",
+            dalle3: "openai/gpt-image-2",
+            dalle: "openai/gpt-image-2",
             "gpt-image": "openai/gpt-image-1",
             "gpt-image-1": "openai/gpt-image-1",
-            flux: "black-forest/flux-1.1-pro",
-            "flux-pro": "black-forest/flux-1.1-pro",
+            "gpt-image-2": "openai/gpt-image-2",
+            seedream: "bytedance/seedream-5-pro",
             banana: "google/nano-banana",
             "nano-banana": "google/nano-banana",
             "banana-pro": "google/nano-banana-pro",
             "nano-banana-pro": "google/nano-banana-pro",
+            "grok-imagine": "xai/grok-imagine-image",
+            "grok-imagine-pro": "xai/grok-imagine-image-pro",
+            cogview: "zai/cogview-4",
           };
           imageModel = IMAGE_MODEL_ALIASES[raw] ?? raw;
           imagePrompt = imagePrompt.replace(/--model\s+\S+/, "").trim();
@@ -3829,13 +3833,15 @@ async function proxyRequest(
             "Models:",
             "  nano-banana       Google Gemini Flash — $0.05/image",
             "  banana-pro        Google Gemini Pro — $0.10/image (up to 4K)",
-            "  dall-e-3          OpenAI DALL-E 3 — $0.04/image",
             "  gpt-image         OpenAI GPT Image 1 — $0.02/image",
-            "  flux              Black Forest Flux 1.1 Pro — $0.04/image",
+            "  gpt-image-2       OpenAI GPT Image 2 — $0.06/image",
+            "  seedream          ByteDance Seedream 5 Pro — $0.045/image",
+            "  grok-imagine      xAI Grok Imagine — $0.02/image",
+            "  cogview           Zhipu CogView-4 — $0.015/image",
             "",
             "Examples:",
             "  /cr-imagegen a cat wearing sunglasses",
-            "  /cr-imagegen --model dall-e-3 a futuristic city at sunset",
+            "  /cr-imagegen --model gpt-image-2 a futuristic city at sunset",
             "  /cr-imagegen --model banana-pro --size 2048x2048 mountain landscape",
             "",
             "Note: `/imagegen` is still accepted in chat for backward compatibility.",

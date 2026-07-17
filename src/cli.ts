@@ -531,7 +531,7 @@ async function cmdCache(port: number): Promise<void> {
  * would have run: `openclaw plugins install --force` (registration), then
  * directly invoking `injectModelsConfig` and `injectAuthProfile` with
  * `forceWrite: true` to bypass the install-transaction guard added in
- * v0.12.184. Result: the user's openclaw.json now has the full ~38-entry
+ * v0.12.184. Result: the user's openclaw.json now has the full ~44-entry
  * blockrun model allowlist and the `blockrun:default` auth profile.
  *
  * Idempotent — safe to run repeatedly. Use this after `npm install -g` to

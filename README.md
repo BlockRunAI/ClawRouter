@@ -46,7 +46,7 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — 8 NVIDIA models are free forever (incl. 675B Mistral Large 3, Qwen3.5 122B + a vision-capable Nemotron Omni)
+- **Starts at $0** — 8 NVIDIA models are free forever (incl. 675B Mistral Large 3, 262K-context Qwen3-Next 80B + a vision-capable Nemotron Omni)
 - **No accounts** — a wallet is generated locally, no signup
 - **No API keys** — your wallet signature IS authentication
 - **No model selection** — 15-dimension scoring picks the right model automatically
@@ -78,7 +78,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ## Quick Start
 
-> **No wallet? 8 models work free out of the box.** Install, run, and pin `nvidia/gpt-oss-120b` (or any of the 8) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+> **No wallet? 8 models work free out of the box.** Install, run, and pin `free/mistral-large-3-675b` (or any of the 8) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
 ### Option A — OpenClaw Agent
 
@@ -101,7 +101,7 @@ clawrouter setup            # finishes OpenClaw integration — REQUIRED
 openclaw gateway restart
 ```
 
-> ⚠️ **Skipping `clawrouter setup` will leave you broken.** Bare `npm install -g` only puts the package on disk; it does NOT register the plugin with OpenClaw, sync the models allowlist, or write the auth profile. Symptom: `/models` in your bot shows only ~7 entries (OpenClaw's hardcoded defaults) instead of the full ~38 BlockRun models. Run `clawrouter setup` to repair, or use path A1 to begin with.
+> ⚠️ **Skipping `clawrouter setup` will leave you broken.** Bare `npm install -g` only puts the package on disk; it does NOT register the plugin with OpenClaw, sync the models allowlist, or write the auth profile. Symptom: `/models` in your bot shows only ~7 entries (OpenClaw's hardcoded defaults) instead of the full ~44 BlockRun models. Run `clawrouter setup` to repair, or use path A1 to begin with.
 
 ### Option B — Standalone (continue.dev, Cursor, VS Code, any OpenAI-compatible client)
 
@@ -118,7 +118,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the 8 free models (e.g. `nvidia/gpt-oss-120b`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the 8 free models (e.g. `free/mistral-large-3-675b`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -140,7 +140,7 @@ models:
       - apply
 ```
 
-To pin a specific model, replace `blockrun/auto` with any model from [blockrun.ai/models](https://blockrun.ai/models), e.g. `anthropic/claude-opus-4.8`, `xai/grok-4-0709`.
+To pin a specific model, replace `blockrun/auto` with any model from [blockrun.ai/models](https://blockrun.ai/models), e.g. `anthropic/claude-opus-4.8`, `xai/grok-4.5`.
 
 Both `provider: openai` and `provider: clawrouter` work — just make sure `apiBase` ends with `/v1/`.
 
@@ -209,10 +209,10 @@ Request → Weighted Scorer (15 dimensions) → Tier → Best Model → Response
 
 | Tier      | ECO Model                             | AUTO Model                            | PREMIUM Model                |
 | --------- | ------------------------------------- | ------------------------------------- | ---------------------------- |
-| SIMPLE    | nvidia/gpt-oss-120b (**FREE**)        | gemini-2.5-flash ($0.30/$2.50)        | kimi-k2.6 ($0.95/$4.00)      |
-| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)   | kimi-k2.6 ($0.95/$4.00)               | gpt-5.3-codex ($1.75/$14.00) |
+| SIMPLE    | free/mistral-large-3-675b (**FREE**)  | gemini-2.5-flash ($0.30/$2.50)        | kimi-k2.7 ($0.95/$4.00)      |
+| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)   | kimi-k2.7 ($0.95/$4.00)               | gpt-5.3-codex ($1.75/$14.00) |
 | COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)   | gemini-3.1-pro ($2/$12)               | claude-opus-4.8 ($5/$25)     |
-| REASONING | grok-4-1-fast-reasoning ($0.20/$0.50) | grok-4-1-fast-reasoning ($0.20/$0.50) | claude-sonnet-4.6 ($3/$15)   |
+| REASONING | deepseek-reasoner ($0.20/$0.40)       | deepseek-reasoner ($0.20/$0.40)       | claude-sonnet-4.6 ($3/$15)   |
 
 **Blended average: $2.05/M** vs $25/M for Claude Opus = **92% savings**
 
@@ -224,7 +224,7 @@ Generate images directly from chat with `/cr-imagegen`:
 
 ```
 /cr-imagegen a dog dancing on the beach
-/cr-imagegen --model dall-e-3 a futuristic city at sunset
+/cr-imagegen --model gpt-image-2 a futuristic city at sunset
 /cr-imagegen --model banana-pro --size 2048x2048 mountain landscape
 ```
 
@@ -234,9 +234,9 @@ Generate images directly from chat with `/cr-imagegen`:
 | ---------------------------- | --------------------- | ------------ | --------- |
 | `nano-banana`                | Google Gemini Flash   | $0.05/image  | 1024x1024 |
 | `banana-pro`                 | Google Gemini Pro     | $0.10/image  | 4096x4096 |
-| `dall-e-3`                   | OpenAI DALL-E 3       | $0.04/image  | 1792x1024 |
 | `gpt-image`                  | OpenAI GPT Image 1    | $0.02/image  | 1536x1024 |
-| `flux`                       | Black Forest Flux 1.1 | $0.04/image  | 1024x1024 |
+| `gpt-image-2`                | OpenAI GPT Image 2    | $0.06/image  | 1536x1024 |
+| `seedream`                   | ByteDance Seedream 5  | $0.045/image | 2848x1600 |
 | `xai/grok-imagine-image`     | xAI Grok Imagine      | $0.02/image  | 1024x1024 |
 | `xai/grok-imagine-image-pro` | xAI Grok Imagine Pro  | $0.07/image  | 1024x1024 |
 | `zai/cogview-4`              | Zhipu CogView-4       | $0.015/image | 1440x1440 |
@@ -390,14 +390,14 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 | Model                                         | Input $/M | Output $/M | ~$/request | Context | Features                                     |
 | --------------------------------------------- | --------: | ---------: | ---------: | ------- | -------------------------------------------- |
-| nvidia/gpt-oss-120b                           |  **FREE** |   **FREE** |     **$0** | 128K    | default free model                           |
-| nvidia/gpt-oss-20b                            |  **FREE** |   **FREE** |     **$0** | 128K    | smaller, faster                              |
-| nvidia/mistral-large-3-675b                   |  **FREE** |   **FREE** |     **$0** | 131K    | 675B general flagship                        |
-| nvidia/qwen3.5-122b-a10b                      |  **FREE** |   **FREE** |     **$0** | 131K    | newest-gen Qwen, strong general              |
-| nvidia/qwen3-next-80b-a3b-instruct            |  **FREE** |   **FREE** |     **$0** | 262K    | reasoning + coding                           |
-| nvidia/llama-4-maverick                       |  **FREE** |   **FREE** |     **$0** | 131K    | reasoning                                    |
-| nvidia/seed-oss-36b                           |  **FREE** |   **FREE** |     **$0** | 131K    | coding                                       |
-| nvidia/nemotron-3-nano-omni-30b-a3b-reasoning |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
+| free/mistral-large-3-675b                     |  **FREE** |   **FREE** |     **$0** | 131K    | 675B general flagship, default free model    |
+| free/qwen3-next-80b-a3b-instruct              |  **FREE** |   **FREE** |     **$0** | 262K    | reasoning + coding                           |
+| free/seed-oss-36b                             |  **FREE** |   **FREE** |     **$0** | 131K    | coding                                       |
+| free/nemotron-3-nano-omni-30b-a3b-reasoning   |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
+| free/mistral-nemotron                         |  **FREE** |   **FREE** |     **$0** | 131K    | instruction following                        |
+| free/step-3.7-flash                           |  **FREE** |   **FREE** |     **$0** | 131K    | reasoning                                    |
+| free/nemotron-nano-9b-v2                      |  **FREE** |   **FREE** |     **$0** | 131K    | fast lightweight generalist                  |
+| free/nemotron-nano-12b-v2-vl                  |  **FREE** |   **FREE** |     **$0** | 131K    | vision (text + image)                        |
 | openai/gpt-5-nano                             |     $0.05 |      $0.40 |    $0.0002 | 128K    | tools                                        |
 | openai/gpt-4.1-nano                           |     $0.10 |      $0.40 |    $0.0003 | 128K    | tools                                        |
 | google/gemini-2.5-flash-lite                  |     $0.10 |      $0.40 |    $0.0003 | 1M      | tools                                        |
@@ -405,15 +405,12 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | xai/grok-4-fast                               |     $0.20 |      $0.50 |    $0.0004 | 131K    | tools                                        |
 | xai/grok-4-fast-reasoning                     |     $0.20 |      $0.50 |    $0.0004 | 131K    | reasoning, tools                             |
 | xai/grok-4-1-fast                             |     $0.20 |      $0.50 |    $0.0004 | 131K    | tools                                        |
-| xai/grok-4-1-fast-reasoning                   |     $0.20 |      $0.50 |    $0.0004 | 131K    | reasoning, tools                             |
-| xai/grok-4-0709                               |     $0.20 |      $1.50 |    $0.0009 | 131K    | reasoning, tools                             |
 | openai/gpt-5-mini                             |     $0.25 |      $2.00 |    $0.0011 | 200K    | tools                                        |
 | deepseek/deepseek-chat                        |     $0.20 |      $0.40 |    $0.0003 | 1M      | tools (V4 Flash chat)                        |
 | deepseek/deepseek-reasoner                    |     $0.20 |      $0.40 |    $0.0003 | 1M      | reasoning, tools (V4 Flash thinking)         |
 | deepseek/deepseek-v4-pro                      |    $0.435 |      $0.87 |    $0.0007 | 1M      | reasoning, agentic, tools (V4 flagship)      |
 | zai/glm-5                                     |     $0.60 |      $1.92 |    $0.0013 | 200K    | tools                                        |
 | zai/glm-5-turbo                               |     $1.20 |      $4.00 |    $0.0026 | 200K    | tools                                        |
-| xai/grok-3-mini                               |     $0.30 |      $0.50 |    $0.0004 | 131K    | tools                                        |
 | minimax/minimax-m3                            |     $0.30 |      $1.20 |    $0.0008 | 1M      | reasoning, agentic, tools                    |
 | minimax/minimax-m2.7                          |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                    |
 | minimax/minimax-m2.5                          |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                    |
@@ -422,7 +419,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | google/gemini-3.5-flash                       |     $0.50 |      $3.00 |    $0.0018 | 1M      | reasoning, vision, tools (thinking built-in) |
 | google/gemini-3-flash-preview                 |     $0.50 |      $3.00 |    $0.0018 | 1M      | vision                                       |
 | moonshot/kimi-k2.5                            |     $0.60 |      $3.00 |    $0.0018 | 262K    | reasoning, vision, agentic, tools            |
-| moonshot/kimi-k2.6                            |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools            |
+| moonshot/kimi-k2.7                            |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools            |
 
 ### Mid-Range Models ($0.001–$0.01/request)
 
@@ -437,6 +434,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | zai/glm-5.2                 |     $1.40 |      $4.40 |    $0.0029 | 1M      | reasoning, coding, tools (flagship)       |
 | zai/glm-5.1                 |     $1.40 |      $4.40 |    $0.0029 | 200K    | reasoning, tools (promo ended 2026-06-05) |
 | xai/grok-4.3                |     $1.50 |      $4.00 |    $0.0028 | 1M      | reasoning, vision, agentic, tools         |
+| xai/grok-4.5                |     $2.50 |      $9.00 |    $0.0058 | 500K    | reasoning, vision, agentic, tools         |
 | xai/grok-build-0.1          |     $1.50 |      $3.00 |    $0.0023 | 256K    | agentic coding, tools                     |
 | openai/gpt-5.2              |     $1.75 |     $14.00 |    $0.0079 | 400K    | reasoning, vision, agentic, tools         |
 | openai/gpt-5.3              |     $1.75 |     $14.00 |    $0.0079 | 128K    | reasoning, vision, agentic, tools         |
@@ -456,7 +454,6 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | --------------------------- | --------: | ---------: | ---------: | ------- | --------------------------------- |
 | anthropic/claude-sonnet-5   |     $3.00 |     $15.00 |    $0.0090 | 1M      | reasoning, vision, agentic, tools |
 | anthropic/claude-sonnet-4.6 |     $3.00 |     $15.00 |    $0.0090 | 200K    | reasoning, vision, agentic, tools |
-| xai/grok-3                  |     $3.00 |     $15.00 |    $0.0090 | 131K    | reasoning, tools                  |
 | anthropic/claude-opus-4.8   |     $5.00 |     $25.00 |    $0.0150 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.6-sol          |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.5              |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
@@ -464,7 +461,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | openai/gpt-5.2-pro          |    $21.00 |    $168.00 |    $0.0945 | 400K    | reasoning, tools                  |
 | openai/gpt-5.4-pro          |    $30.00 |    $180.00 |    $0.1050 | 400K    | reasoning, tools                  |
 
-> **Free tier:** several NVIDIA-hosted models cost nothing — `/model free` smart-routes across them, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model qwen3-next` for 262K reasoning, `/model qwen-coder` for coding, `/model maverick`).
+> **Free tier:** several NVIDIA-hosted models cost nothing — `/model free` smart-routes across them, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model qwen3-next` for 262K reasoning, `/model seed-oss` for coding, `/model mistral-large` for the 675B flagship).
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
 
 ---
@@ -541,7 +538,7 @@ For basic usage, no configuration needed. For advanced options:
 Block specific models from being routed to. Useful if a model doesn't follow your agent instructions or you want to control costs.
 
 ```bash
-/exclude add nvidia/gpt-oss-120b   # Block the default free model
+/exclude add free/mistral-large-3-675b   # Block the default free model
 /exclude add grok-4                # Aliases work — blocks all grok-4 variants
 /exclude add gpt-5.4               # Skip expensive models
 /exclude                           # Show current exclusions
@@ -680,7 +677,7 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same 55+ model
 | ------------------------------------------------------ | ------------------------ |
 | [Documentation](https://blockrun.ai/docs)              | Full docs                |
 | [Model Pricing](https://blockrun.ai/models)            | All models & prices      |
-| [Image Generation & Editing](docs/image-generation.md) | API examples, 5 models   |
+| [Image Generation & Editing](docs/image-generation.md) | API examples, 8 models   |
 | [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM details |
 | [Architecture](docs/architecture.md)                   | Technical deep dive      |
 | [Configuration](docs/configuration.md)                 | Environment variables    |
@@ -723,7 +720,7 @@ ClawRouter works with any tool that makes OpenAI-compatible API calls — point 
 
 ### Is ClawRouter free?
 
-ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`gpt-oss-120b`, `gpt-oss-20b`, `mistral-large-3-675b`, `qwen3.5-122b-a10b`, `qwen3-next-80b-a3b-instruct`, `llama-4-maverick`, `seed-oss-36b`, `nemotron-3-nano-omni-30b-a3b-reasoning`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
+ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`mistral-large-3-675b`, `qwen3-next-80b-a3b-instruct`, `seed-oss-36b`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `mistral-nemotron`, `step-3.7-flash`, `nemotron-nano-9b-v2`, `nemotron-nano-12b-v2-vl`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
 
 ---
 

@@ -270,15 +270,17 @@ export const MODEL_ALIASES: Record<string, string> = {
   // They don't need aliases since they're already top-level model IDs
 
   // Image generation
-  dalle: "openai/dall-e-3",
-  "dall-e": "openai/dall-e-3",
+  // dall-e-3 was delisted upstream 2026-05-25; legacy aliases point at its
+  // OpenAI successor. flux (black-forest) has no gateway entry anymore.
+  dalle: "openai/gpt-image-2",
+  "dall-e": "openai/gpt-image-2",
   "gpt-image": "openai/gpt-image-1",
+  "gpt-image-2": "openai/gpt-image-2",
   "nano-banana": "google/nano-banana",
   banana: "google/nano-banana",
   "banana-pro": "google/nano-banana-pro",
   "nano-banana-pro": "google/nano-banana-pro",
-  flux: "black-forest/flux-1.1-pro",
-  "flux-pro": "black-forest/flux-1.1-pro",
+  seedream: "bytedance/seedream-5-pro",
   "grok-imagine": "xai/grok-imagine-image",
   "grok-imagine-pro": "xai/grok-imagine-image-pro",
   cogview: "zai/cogview-4",

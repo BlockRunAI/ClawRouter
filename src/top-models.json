@@ -24,9 +24,6 @@
   "google/gemini-3-flash-preview",
   "xai/grok-4.5",
   "xai/grok-4.3",
-  "xai/grok-4-0709",
-  "xai/grok-4-1-fast-reasoning",
-  "xai/grok-3",
   "xai/grok-build-0.1",
   "zai/glm-5.2",
   "zai/glm-5.1",
@@ -38,12 +35,12 @@
   "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",
-  "free/gpt-oss-120b",
-  "free/gpt-oss-20b",
   "free/mistral-large-3-675b",
-  "free/qwen3.5-122b-a10b",
   "free/qwen3-next-80b-a3b-instruct",
-  "free/llama-4-maverick",
   "free/seed-oss-36b",
-  "free/nemotron-3-nano-omni-30b-a3b-reasoning"
+  "free/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "free/mistral-nemotron",
+  "free/step-3.7-flash",
+  "free/nemotron-nano-9b-v2",
+  "free/nemotron-nano-12b-v2-vl"
 ]

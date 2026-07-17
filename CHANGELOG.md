@@ -4,6 +4,29 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.227 — July 17, 2026
+
+**The picker and every user-facing surface now match the advertised blockrun.ai catalog** (verified against the live `/v1/models` on 2026-07-17, mirroring the same alignment shipped in hermes-plugin-clawrouter 0.3.10).
+
+### Changed — top-models picker aligned with the advertised catalog
+
+- `src/top-models.json` goes 47 → 44 entries. Removed the 7 ids no longer advertised by the gateway: `xai/grok-4-0709`, `xai/grok-4-1-fast-reasoning`, `xai/grok-3`, `free/gpt-oss-120b`, `free/gpt-oss-20b`, `free/qwen3.5-122b-a10b`, `free/llama-4-maverick`. Added the 4 newly advertised free models: `free/mistral-nemotron`, `free/step-3.7-flash`, `free/nemotron-nano-9b-v2`, `free/nemotron-nano-12b-v2-vl` — the free block now equals the live 8-model NVIDIA tier exactly.
+- Router internals are untouched on purpose: the removed ids stay hidden-but-routable at the gateway (verified against blockrun source — catalog `available:true, hidden:true`, or MODEL_REDIRECTS to a successor), so existing fallback chains and pinned users keep working. This only changes what pickers advertise. The allowlist sync in `index.ts`/`update.sh` prunes the stale `blockrun/*` keys from users' configs on next start.
+- `top-models.test.ts` sentinels re-pinned (`grok-4.5`, `claude-fable-5`, `free/step-3.7-flash` in; retired ids asserted out).
+
+### Fixed — image aliases pointed at models the gateway can no longer serve
+
+- `dalle`/`dall-e`/`dall-e-3` aliases (models.ts + `/cr-imagegen`) targeted `openai/dall-e-3`, which the gateway 400s ("Delisted 2026-05-25: OpenAI removed dall-e-3 from the API"). They now route to the successor `openai/gpt-image-2`. `flux`/`flux-pro` targeted `black-forest/flux-1.1-pro`, which has no gateway entry at all — removed.
+- New aliases for the current image catalog: `gpt-image-2`, `seedream` (→ `bytedance/seedream-5-pro`), and `/cr-imagegen` parity aliases for `grok-imagine`/`grok-imagine-pro`/`cogview`. IMAGE_PRICING drops the two dead entries and adds `bytedance/seedream-5-pro` ($0.045 base / $0.09 at 2K-class, matching blockrun's IMAGE_MODELS). The images usage-log fallback model is now `google/nano-banana` (the real `/cr-imagegen` default) instead of dead dall-e-3.
+
+### Changed — README + skills refreshed to the current catalog
+
+- README: free-tier references switch from retired `nvidia/gpt-oss-120b` to `free/mistral-large-3-675b` (the new default free model); the free pricing block lists the live 8; grok-4.5 gets a pricing row ($2.50/$9.00, 500K); rows for grok-4-0709/grok-4-1-fast-reasoning/grok-3/grok-3-mini removed; kimi-k2.6 → kimi-k2.7; routing-tier examples use advertised models only; image table now shows gpt-image-2 + seedream; `~38` → `~44` model-count mentions.
+- `skills/clawrouter/SKILL.md`: the "7 free" vs "8 free" contradiction is fixed (it's 8), Available Models adds claude-fable-5 + grok-4.5 and drops retired ids, image tool row updated.
+- `skills/imagegen/SKILL.md`: dalle/flux rows replaced with gpt-image-2 + seedream (with the legacy-alias note), triggers and size guidance updated.
+
+---
+
 ## v0.12.226 — July 14, 2026
 
 Salvages the two pieces of #206 that were still worth having, with thanks to @0xCheetah1. The rest of that PR either shipped in v0.12.221–223 or was superseded by v0.12.225; it's closed with a full accounting.
