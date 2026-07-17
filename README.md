@@ -207,12 +207,12 @@ Choose your routing strategy with `/model <profile>`:
 Request → Weighted Scorer (15 dimensions) → Tier → Best Model → Response
 ```
 
-| Tier      | ECO Model                             | AUTO Model                            | PREMIUM Model                |
-| --------- | ------------------------------------- | ------------------------------------- | ---------------------------- |
-| SIMPLE    | free/mistral-large-3-675b (**FREE**)  | gemini-2.5-flash ($0.30/$2.50)        | kimi-k2.7 ($0.95/$4.00)      |
-| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)   | kimi-k2.7 ($0.95/$4.00)               | gpt-5.3-codex ($1.75/$14.00) |
-| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)   | gemini-3.1-pro ($2/$12)               | claude-opus-4.8 ($5/$25)     |
-| REASONING | deepseek-reasoner ($0.20/$0.40)       | deepseek-reasoner ($0.20/$0.40)       | claude-sonnet-4.6 ($3/$15)   |
+| Tier      | ECO Model                            | AUTO Model                      | PREMIUM Model                |
+| --------- | ------------------------------------ | ------------------------------- | ---------------------------- |
+| SIMPLE    | free/mistral-large-3-675b (**FREE**) | gemini-2.5-flash ($0.30/$2.50)  | kimi-k2.7 ($0.95/$4.00)      |
+| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)  | kimi-k2.7 ($0.95/$4.00)         | gpt-5.3-codex ($1.75/$14.00) |
+| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)  | gemini-3.1-pro ($2/$12)         | claude-opus-4.8 ($5/$25)     |
+| REASONING | deepseek-reasoner ($0.20/$0.40)      | deepseek-reasoner ($0.20/$0.40) | claude-sonnet-4.6 ($3/$15)   |
 
 **Blended average: $2.05/M** vs $25/M for Claude Opus = **92% savings**
 
@@ -230,16 +230,16 @@ Generate images directly from chat with `/cr-imagegen`:
 
 > The slash command is `/cr-imagegen` to avoid colliding with Telegram channel commands. Typing `/imagegen` in chat still works for backward compatibility.
 
-| Model                        | Provider              | Price        | Max Size  |
-| ---------------------------- | --------------------- | ------------ | --------- |
-| `nano-banana`                | Google Gemini Flash   | $0.05/image  | 1024x1024 |
-| `banana-pro`                 | Google Gemini Pro     | $0.10/image  | 4096x4096 |
-| `gpt-image`                  | OpenAI GPT Image 1    | $0.02/image  | 1536x1024 |
-| `gpt-image-2`                | OpenAI GPT Image 2    | $0.06/image  | 1536x1024 |
-| `seedream`                   | ByteDance Seedream 5  | $0.045/image | 2848x1600 |
-| `xai/grok-imagine-image`     | xAI Grok Imagine      | $0.02/image  | 1024x1024 |
-| `xai/grok-imagine-image-pro` | xAI Grok Imagine Pro  | $0.07/image  | 1024x1024 |
-| `zai/cogview-4`              | Zhipu CogView-4       | $0.015/image | 1440x1440 |
+| Model                        | Provider             | Price        | Max Size  |
+| ---------------------------- | -------------------- | ------------ | --------- |
+| `nano-banana`                | Google Gemini Flash  | $0.05/image  | 1024x1024 |
+| `banana-pro`                 | Google Gemini Pro    | $0.10/image  | 4096x4096 |
+| `gpt-image`                  | OpenAI GPT Image 1   | $0.02/image  | 1536x1024 |
+| `gpt-image-2`                | OpenAI GPT Image 2   | $0.06/image  | 1536x1024 |
+| `seedream`                   | ByteDance Seedream 5 | $0.045/image | 2848x1600 |
+| `xai/grok-imagine-image`     | xAI Grok Imagine     | $0.02/image  | 1024x1024 |
+| `xai/grok-imagine-image-pro` | xAI Grok Imagine Pro | $0.07/image  | 1024x1024 |
+| `zai/cogview-4`              | Zhipu CogView-4      | $0.015/image | 1440x1440 |
 
 ## Video Generation
 
@@ -388,38 +388,38 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ### Budget Models (under $0.001/request)
 
-| Model                                         | Input $/M | Output $/M | ~$/request | Context | Features                                     |
-| --------------------------------------------- | --------: | ---------: | ---------: | ------- | -------------------------------------------- |
-| free/mistral-large-3-675b                     |  **FREE** |   **FREE** |     **$0** | 131K    | 675B general flagship, default free model    |
-| free/deepseek-v4-flash                        |  **FREE** |   **FREE** |     **$0** | 1M      | reasoning + coding, huge context             |
-| free/seed-oss-36b                             |  **FREE** |   **FREE** |     **$0** | 131K    | coding                                       |
-| free/nemotron-3-nano-omni-30b-a3b-reasoning   |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
-| free/mistral-nemotron                         |  **FREE** |   **FREE** |     **$0** | 131K    | instruction following                        |
-| free/step-3.7-flash                           |  **FREE** |   **FREE** |     **$0** | 131K    | reasoning                                    |
-| free/nemotron-nano-9b-v2                      |  **FREE** |   **FREE** |     **$0** | 131K    | fast lightweight generalist                  |
-| free/nemotron-nano-12b-v2-vl                  |  **FREE** |   **FREE** |     **$0** | 131K    | vision (text + image)                        |
-| openai/gpt-5-nano                             |     $0.05 |      $0.40 |    $0.0002 | 128K    | tools                                        |
-| openai/gpt-4.1-nano                           |     $0.10 |      $0.40 |    $0.0003 | 128K    | tools                                        |
-| google/gemini-2.5-flash-lite                  |     $0.10 |      $0.40 |    $0.0003 | 1M      | tools                                        |
-| openai/gpt-4o-mini                            |     $0.15 |      $0.60 |    $0.0004 | 128K    | tools                                        |
-| xai/grok-4-fast                               |     $0.20 |      $0.50 |    $0.0004 | 131K    | tools                                        |
-| xai/grok-4-fast-reasoning                     |     $0.20 |      $0.50 |    $0.0004 | 131K    | reasoning, tools                             |
-| xai/grok-4-1-fast                             |     $0.20 |      $0.50 |    $0.0004 | 131K    | tools                                        |
-| openai/gpt-5-mini                             |     $0.25 |      $2.00 |    $0.0011 | 200K    | tools                                        |
-| deepseek/deepseek-chat                        |     $0.20 |      $0.40 |    $0.0003 | 1M      | tools (V4 Flash chat)                        |
-| deepseek/deepseek-reasoner                    |     $0.20 |      $0.40 |    $0.0003 | 1M      | reasoning, tools (V4 Flash thinking)         |
-| deepseek/deepseek-v4-pro                      |    $0.435 |      $0.87 |    $0.0007 | 1M      | reasoning, agentic, tools (V4 flagship)      |
-| zai/glm-5                                     |     $0.60 |      $1.92 |    $0.0013 | 200K    | tools                                        |
-| zai/glm-5-turbo                               |     $1.20 |      $4.00 |    $0.0026 | 200K    | tools                                        |
-| minimax/minimax-m3                            |     $0.30 |      $1.20 |    $0.0008 | 1M      | reasoning, agentic, tools                    |
-| minimax/minimax-m2.7                          |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                    |
-| minimax/minimax-m2.5                          |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                    |
-| google/gemini-2.5-flash                       |     $0.30 |      $2.50 |    $0.0014 | 1M      | vision, tools                                |
-| openai/gpt-4.1-mini                           |     $0.40 |      $1.60 |    $0.0010 | 128K    | tools                                        |
-| google/gemini-3.5-flash                       |     $0.50 |      $3.00 |    $0.0018 | 1M      | reasoning, vision, tools (thinking built-in) |
-| google/gemini-3-flash-preview                 |     $0.50 |      $3.00 |    $0.0018 | 1M      | vision                                       |
-| moonshot/kimi-k2.5                            |     $0.60 |      $3.00 |    $0.0018 | 262K    | reasoning, vision, agentic, tools            |
-| moonshot/kimi-k2.7                            |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools            |
+| Model                                       | Input $/M | Output $/M | ~$/request | Context | Features                                     |
+| ------------------------------------------- | --------: | ---------: | ---------: | ------- | -------------------------------------------- |
+| free/mistral-large-3-675b                   |  **FREE** |   **FREE** |     **$0** | 131K    | 675B general flagship, default free model    |
+| free/deepseek-v4-flash                      |  **FREE** |   **FREE** |     **$0** | 1M      | reasoning + coding, huge context             |
+| free/seed-oss-36b                           |  **FREE** |   **FREE** |     **$0** | 131K    | coding                                       |
+| free/nemotron-3-nano-omni-30b-a3b-reasoning |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
+| free/mistral-nemotron                       |  **FREE** |   **FREE** |     **$0** | 131K    | instruction following                        |
+| free/step-3.7-flash                         |  **FREE** |   **FREE** |     **$0** | 131K    | reasoning                                    |
+| free/nemotron-nano-9b-v2                    |  **FREE** |   **FREE** |     **$0** | 131K    | fast lightweight generalist                  |
+| free/nemotron-nano-12b-v2-vl                |  **FREE** |   **FREE** |     **$0** | 131K    | vision (text + image)                        |
+| openai/gpt-5-nano                           |     $0.05 |      $0.40 |    $0.0002 | 128K    | tools                                        |
+| openai/gpt-4.1-nano                         |     $0.10 |      $0.40 |    $0.0003 | 128K    | tools                                        |
+| google/gemini-2.5-flash-lite                |     $0.10 |      $0.40 |    $0.0003 | 1M      | tools                                        |
+| openai/gpt-4o-mini                          |     $0.15 |      $0.60 |    $0.0004 | 128K    | tools                                        |
+| xai/grok-4-fast                             |     $0.20 |      $0.50 |    $0.0004 | 131K    | tools                                        |
+| xai/grok-4-fast-reasoning                   |     $0.20 |      $0.50 |    $0.0004 | 131K    | reasoning, tools                             |
+| xai/grok-4-1-fast                           |     $0.20 |      $0.50 |    $0.0004 | 131K    | tools                                        |
+| openai/gpt-5-mini                           |     $0.25 |      $2.00 |    $0.0011 | 200K    | tools                                        |
+| deepseek/deepseek-chat                      |     $0.20 |      $0.40 |    $0.0003 | 1M      | tools (V4 Flash chat)                        |
+| deepseek/deepseek-reasoner                  |     $0.20 |      $0.40 |    $0.0003 | 1M      | reasoning, tools (V4 Flash thinking)         |
+| deepseek/deepseek-v4-pro                    |    $0.435 |      $0.87 |    $0.0007 | 1M      | reasoning, agentic, tools (V4 flagship)      |
+| zai/glm-5                                   |     $0.60 |      $1.92 |    $0.0013 | 200K    | tools                                        |
+| zai/glm-5-turbo                             |     $1.20 |      $4.00 |    $0.0026 | 200K    | tools                                        |
+| minimax/minimax-m3                          |     $0.30 |      $1.20 |    $0.0008 | 1M      | reasoning, agentic, tools                    |
+| minimax/minimax-m2.7                        |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                    |
+| minimax/minimax-m2.5                        |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                    |
+| google/gemini-2.5-flash                     |     $0.30 |      $2.50 |    $0.0014 | 1M      | vision, tools                                |
+| openai/gpt-4.1-mini                         |     $0.40 |      $1.60 |    $0.0010 | 128K    | tools                                        |
+| google/gemini-3.5-flash                     |     $0.50 |      $3.00 |    $0.0018 | 1M      | reasoning, vision, tools (thinking built-in) |
+| google/gemini-3-flash-preview               |     $0.50 |      $3.00 |    $0.0018 | 1M      | vision                                       |
+| moonshot/kimi-k2.5                          |     $0.60 |      $3.00 |    $0.0018 | 262K    | reasoning, vision, agentic, tools            |
+| moonshot/kimi-k2.7                          |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools            |
 
 ### Mid-Range Models ($0.001–$0.01/request)
 
