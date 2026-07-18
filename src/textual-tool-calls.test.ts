@@ -272,6 +272,46 @@ describe("extractTextualToolCalls", () => {
       expect(args.cmd).toBe("a");
     });
 
+    it("extracts Kimi/OpenCode bash cmd JSON as terminal", () => {
+      const content = '{"cmd":["bash","-lc","ls -1a"],"timeout":10000}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        command: "ls -1a",
+        timeout: 10000,
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("does NOT fire on non-bash cmd JSON", () => {
+      const content = '{"cmd":["python","-c","print(1)"]}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("extracts Kimi narrated bare web_search args", () => {
+      const content =
+        'Need to check current info.\nLet\'s do web_search.\n{"query":"2026 FIFA World Cup final date Argentina","top_n":5,"recency_days":-1}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("web_search");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        query: "2026 FIFA World Cup final date Argentina",
+        top_n: 5,
+        recency_days: -1,
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("does NOT infer web_search from bare query JSON without narration", () => {
+      const content = '{"query":"2026 FIFA World Cup final date Argentina","top_n":5}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
     it("does NOT fire on a whole-content object missing parameters", () => {
       const content = '{"name":"x"}';
       const result = extractTextualToolCalls(content);

@@ -33,6 +33,9 @@
  *      - a trailing JSON object after prose, but only when `"type":"function"`
  *        is explicit (so prose that merely quotes a JSON shape does not fire)
  *      - whole-content `terminal\nCOMMAND\n[/terminal]`
+ *      - whole-content `{"cmd":["bash","-lc","COMMAND"],"timeout":10000}`
+ *      - trailing bare web_search args after prose that explicitly names
+ *        `web_search`, e.g. `Let's do web_search.\n{"query":"..."}`
  *    The terminal `cmd` argument is normalized to `command` (preserving `cmd`)
  *    so OpenClaw's terminal tool, which expects `command`, can dispatch it.
  *
@@ -286,6 +289,45 @@ function callFromGptObject(
   return { name: name.trim(), args: normalizeGptArgs(params) };
 }
 
+function callFromBashCmdObject(
+  parsed: unknown,
+): { name: string; args: Record<string, unknown> } | null {
+  if (!isPlainObject(parsed) || !Array.isArray(parsed.cmd)) return null;
+  const [bin, flag, command, ...rest] = parsed.cmd;
+  if (
+    rest.length > 0 ||
+    typeof bin !== "string" ||
+    typeof flag !== "string" ||
+    typeof command !== "string"
+  ) {
+    return null;
+  }
+  if (bin.split("/").pop() !== "bash" || flag !== "-lc" || command.trim() === "") return null;
+
+  const args: Record<string, unknown> = { command };
+  if (typeof parsed.timeout === "number" && Number.isFinite(parsed.timeout)) {
+    args.timeout = parsed.timeout;
+  }
+  return { name: "terminal", args };
+}
+
+function callFromNarratedWebSearchObject(
+  parsed: unknown,
+  prefix: string,
+): { name: string; args: Record<string, unknown>; consumeProse: boolean } | null {
+  if (!isPlainObject(parsed) || typeof parsed.query !== "string" || parsed.query.trim() === "") {
+    return null;
+  }
+  if (!/\bweb[_-]?search\b/i.test(prefix)) return null;
+
+  const args: Record<string, unknown> = { query: parsed.query };
+  for (const key of ["top_n", "recency_days"]) {
+    const value = parsed[key];
+    if (typeof value === "number" && Number.isFinite(value)) args[key] = value;
+  }
+  return { name: "web_search", args, consumeProse: true };
+}
+
 // Locates the JSON object (if any) that ends at the end of `content` (ignoring
 // trailing whitespace). Returns its byte range and parsed value, or null.
 function findTrailingJsonObject(
@@ -358,14 +400,21 @@ function extractGptCalls(content: string): {
   // exactly `"function"` so a quoted JSON example in prose does not fire.
   const trailing = findTrailingJsonObject(content);
   if (trailing) {
-    const built = callFromGptObject(trailing.parsed);
+    const prefix = content.slice(0, trailing.start);
+    const built =
+      callFromGptObject(trailing.parsed) ??
+      callFromBashCmdObject(trailing.parsed) ??
+      callFromNarratedWebSearchObject(trailing.parsed, prefix);
     if (built) {
-      const hasProseBefore = content.slice(0, trailing.start).trim() !== "";
+      const hasProseBefore = prefix.trim() !== "";
       const typeIsFunction = (trailing.parsed as Record<string, unknown>).type === "function";
-      if (!hasProseBefore || typeIsFunction) {
+      const isBashCmd =
+        built.name === "terminal" && callFromBashCmdObject(trailing.parsed) !== null;
+      const consumeProse = "consumeProse" in built && built.consumeProse === true;
+      if (!hasProseBefore || typeIsFunction || isBashCmd || consumeProse) {
         return {
           calls: [makeCall(built.name, built.args)],
-          matches: [{ start: hasProseBefore ? trailing.start : 0, end: content.length }],
+          matches: [{ start: hasProseBefore && !consumeProse ? trailing.start : 0, end: content.length }],
         };
       }
     }
