@@ -420,6 +420,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | google/gemini-3-flash-preview               |     $0.50 |      $3.00 |    $0.0018 | 1M      | vision                                       |
 | moonshot/kimi-k2.5                          |     $0.60 |      $3.00 |    $0.0018 | 262K    | reasoning, vision, agentic, tools            |
 | moonshot/kimi-k2.7                          |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools            |
+| moonshot/kimi-k3                            |     $3.00 |     $15.00 |    $0.0110 | 1M      | reasoning, vision, agentic, tools            |
 
 ### Mid-Range Models ($0.001–$0.01/request)
 

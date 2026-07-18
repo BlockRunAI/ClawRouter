@@ -104,13 +104,16 @@ export const MODEL_ALIASES: Record<string, string> = {
   "deepseek-chat": "deepseek/deepseek-chat",
   reasoner: "deepseek/deepseek-reasoner",
 
-  // Kimi / Moonshot — K2.7 is the featured flagship on BlockRun (added 2026-06-13,
-  // commit cd3d79b; K2.6 marked hidden/superseded, K2.5 hidden). Bare aliases now
-  // resolve to K2.7 (same $0.95/$4.00 price as K2.6 — AT-COST, zero margin). Explicit
+  // Kimi / Moonshot — K3 is the featured flagship on BlockRun (added 2026-07-17; K2.7
+  // hidden/superseded, K2.6 hidden, K2.5 hidden). K3 is ~5x K2.7's price ($3/$15 vs
+  // $0.95/$4.00), so the BARE aliases deliberately STAY on K2.7 — repointing them to K3
+  // would silently ~5x every generic-`kimi` quote and break per-call-cap wallets (mirrors
+  // blockrun's own alias decision). Address the flagship explicitly via "kimi-k3". Explicit
   // pins for "kimi-k2.6" / "kimi-k2.5" still resolve to those exact models (K2.5 is a
   // cost-stability opt-in at $0.60/$3.00). NVIDIA-hosted K2.5 was retired 2026-04-21.
   kimi: "moonshot/kimi-k2.7",
   moonshot: "moonshot/kimi-k2.7",
+  "kimi-k3": "moonshot/kimi-k3",
   "kimi-k2": "moonshot/kimi-k2.7",
   "kimi-k2.7": "moonshot/kimi-k2.7",
   "kimi-k2.6": "moonshot/kimi-k2.6",
@@ -985,10 +988,30 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
 
-  // Kimi K2.7 — Moonshot's flagship (added 2026-06-13). 256K context, multi-modal
-  // (image + VIDEO input), returns reasoning_content. Served via BlockRun's OpenRouter
-  // credit pool (slug moonshotai/kimi-k2.7-code) failing over to direct Moonshot.
-  // AT-COST pricing ($0.95/$4.00 = OpenRouter COGS, zero margin) — same as K2.6.
+  // Kimi K3 — Moonshot's flagship (blockrun added 2026-07-17, live-probed same day).
+  // 2.8T-param open MoE, 1M context, image + text input, returns reasoning_content.
+  // Priced at COGS + BlockRun's 5% margin: users pay ~$3.15/$15.75 per 1M; the fields
+  // here store the raw $3.00/$15.00 COST (server applies margin at billing). ~5x K2.7,
+  // so the generic `kimi` alias deliberately stays on K2.7 — address k3 explicitly.
+  {
+    id: "moonshot/kimi-k3",
+    name: "Kimi K3",
+    version: "k3",
+    inputPrice: 3.0,
+    outputPrice: 15.0,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+
+  // Kimi K2.7 — previous-gen flagship (added 2026-06-13); superseded by K3 + hidden on
+  // BlockRun 2026-07-17 but kept routable. 256K context, multi-modal (image + VIDEO
+  // input), returns reasoning_content. Served via BlockRun's OpenRouter credit pool
+  // (slug moonshotai/kimi-k2.7-code) failing over to direct Moonshot. AT-COST pricing
+  // ($0.95/$4.00 = OpenRouter COGS, zero margin) — same as K2.6.
   {
     id: "moonshot/kimi-k2.7",
     name: "Kimi K2.7",

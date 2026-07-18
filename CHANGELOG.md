@@ -4,6 +4,23 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.229 — July 17, 2026
+
+Syncs **Kimi K3**, which blockrun added and live-probed on 2026-07-17 (blockrun `src/lib/models.ts`).
+
+### Added — Kimi K3 (Moonshot flagship)
+
+- **`moonshot/kimi-k3`** registered in `BLOCKRUN_MODELS`: 2.8T-param open MoE, **1M context**, image + text input, returns `reasoning_content`. Priced at COGS $3.00/$15.00 per 1M (users pay ~$3.15/$15.75 after blockrun's 5% margin). Added to `top-models.json` (picker + allowlist), replacing the now-hidden `moonshot/kimi-k2.7`, and to the README model table + SKILL catalog line.
+- New explicit pin **`kimi-k3` → `moonshot/kimi-k3`**.
+
+### Unchanged — by design
+
+- **Bare `kimi` / `moonshot` / `kimi-k2` aliases stay on K2.7** ($0.95/$4.00). K3 is ~5x the price, so repointing the generic alias would silently ~5x every generic-`kimi` quote and break per-call-cap wallets — mirrors blockrun's own alias decision (and the grok-4.5 precedent). Address the flagship explicitly.
+- **Routing tiers still primary on K2.7.** K3 is not wired into any tier primary or fallback: at $3/$15 a failover in the cheap Kimi coding tiers would spike cost, and promotion needs benchmarks we don't have yet.
+- K2.7 registry entry + pins remain routable (blockrun hid it, didn't retire it).
+
+---
+
 ## v0.12.228 — July 17, 2026
 
 Catches up with blockrun's **2026-07-17 live free-model re-probe** (blockrun PR #257, landed hours before v0.12.227 was cut against the older 07-11 map) and the **flat $0.002/tx settlement fee** introduced upstream on 2026-07-14.
