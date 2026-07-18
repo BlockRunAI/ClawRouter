@@ -16,6 +16,96 @@ WALLET_FILE="$HOME/.openclaw/blockrun/wallet.key"
 WALLET_BACKUP=""
 PLUGIN_BACKUP=""
 CONFIG_BACKUP=""
+ACTIVE_PACKAGE_DIR=""
+
+NPM_PREFIX="$(npm config get prefix 2>/dev/null || echo "")"
+if [ -n "$NPM_PREFIX" ] && [ -d "$NPM_PREFIX/bin" ]; then
+  PATH="$NPM_PREFIX/bin:$PATH"
+  export PATH
+fi
+
+find_clawrouter_package_dir() {
+  node <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const home = os.homedir();
+const candidates = [
+  { packagePath: path.join(home, '.openclaw', 'extensions', 'clawrouter', 'package.json'), priority: 0 },
+  { packagePath: path.join(home, '.openclaw', 'npm', 'node_modules', '@blockrun', 'clawrouter', 'package.json'), priority: 2 },
+];
+
+const projectsDir = path.join(home, '.openclaw', 'npm', 'projects');
+try {
+  for (const name of fs.readdirSync(projectsDir)) {
+    candidates.push({
+      packagePath: path.join(projectsDir, name, 'node_modules', '@blockrun', 'clawrouter', 'package.json'),
+      priority: 1,
+    });
+  }
+} catch {}
+
+function versionParts(version) {
+  return String(version || '').split(/[.-]/).slice(0, 3).map((part) => Number.parseInt(part, 10) || 0);
+}
+
+function compareVersions(a, b) {
+  const left = versionParts(a);
+  const right = versionParts(b);
+  for (let i = 0; i < 3; i++) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+  return 0;
+}
+
+let best = null;
+for (const candidate of candidates) {
+  try {
+    const stat = fs.statSync(candidate.packagePath);
+    const pkg = JSON.parse(fs.readFileSync(candidate.packagePath, 'utf8'));
+    if (pkg?.name !== '@blockrun/clawrouter') continue;
+    const versionOrder = best ? compareVersions(pkg.version, best.pkg.version) : 1;
+    if (
+      !best ||
+      versionOrder > 0 ||
+      (versionOrder === 0 &&
+        (candidate.priority < best.priority ||
+          (candidate.priority === best.priority && stat.mtimeMs > best.mtimeMs)))
+    ) {
+      best = { ...candidate, pkg, mtimeMs: stat.mtimeMs };
+    }
+  } catch {}
+}
+
+if (best) console.log(path.dirname(best.packagePath));
+NODE
+}
+
+sync_cli_shim() {
+  local package_dir="$1"
+  if [ -z "$package_dir" ] || [ ! -f "$package_dir/dist/cli.js" ]; then
+    echo "  ⚠ Could not update CLI shim: ClawRouter CLI not found"
+    return 1
+  fi
+
+  local prefix
+  prefix=$(npm config get prefix 2>/dev/null || echo "")
+  if [ -z "$prefix" ]; then
+    echo "  ⚠ Could not update CLI shim: npm prefix unavailable"
+    return 1
+  fi
+
+  local bin_dir="$prefix/bin"
+  mkdir -p "$bin_dir"
+  rm -f "$bin_dir/clawrouter"
+  cat >"$bin_dir/clawrouter" <<EOF
+#!/bin/sh
+exec node "$package_dir/dist/cli.js" "\$@"
+EOF
+  chmod +x "$bin_dir/clawrouter"
+  echo "  ✓ CLI shim updated: $bin_dir/clawrouter → $package_dir/dist/cli.js"
+}
 
 cleanup_backups() {
   if [ -n "$PLUGIN_BACKUP" ] && [ -d "$PLUGIN_BACKUP" ]; then
@@ -93,6 +183,7 @@ echo ""
 
 # Pre-flight: fail fast if config is corrupt
 validate_config
+ACTIVE_PACKAGE_DIR=$(find_clawrouter_package_dir)
 
 echo "→ Checking wallet..."
 
@@ -105,7 +196,7 @@ if [ -f "$WALLET_FILE" ]; then
     # Derive wallet address via node (viem is available post-install)
     WALLET_ADDRESS=$(node -e "
       try {
-        const { privateKeyToAccount } = require('$HOME/.openclaw/extensions/clawrouter/node_modules/viem/accounts/index.js');
+        const { privateKeyToAccount } = require(require.resolve('viem/accounts', { paths: ['$ACTIVE_PACKAGE_DIR'] }));
         const acct = privateKeyToAccount('$WALLET_KEY');
         console.log(acct.address);
       } catch {
@@ -563,41 +654,42 @@ force_install_from_npm() {
   return 1
 }
 
-if [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ]; then
-  LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
-  if [ -z "$LATEST_VER" ]; then
-    echo "  ✗ Could not resolve latest ClawRouter version from npm"
-    exit 1
+LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
+if [ -z "$LATEST_VER" ]; then
+  echo "  ✗ Could not resolve latest ClawRouter version from npm"
+  exit 1
+fi
+
+ACTIVE_PACKAGE_DIR=$(find_clawrouter_package_dir)
+INSTALLED_VER=""
+if [ -n "$ACTIVE_PACKAGE_DIR" ] && [ -f "$ACTIVE_PACKAGE_DIR/package.json" ]; then
+  INSTALLED_VER=$(node -e "try{const p=require('$ACTIVE_PACKAGE_DIR/package.json');console.log(p.version);}catch{console.log('');}" 2>/dev/null || echo "")
+fi
+
+if [ "$OPENCLAW_INSTALL_RECOVERABLE" = "1" ] || [ -z "$INSTALLED_VER" ] || [ "$INSTALLED_VER" != "$LATEST_VER" ]; then
+  if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" != "$LATEST_VER" ]; then
+    echo "  ⚠️  OpenClaw installed v${INSTALLED_VER} but latest is v${LATEST_VER}"
   fi
   force_install_from_npm "$LATEST_VER"
-  if [ ! -f "$PLUGIN_DIR/package.json" ]; then
-    echo "  ✗ ClawRouter package.json missing after npm fallback"
-    exit 1
-  fi
-  INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('');}" 2>/dev/null || echo "")
-  if [ -z "$INSTALLED_VER" ]; then
-    echo "  ✗ Could not verify ClawRouter version after npm fallback"
-    exit 1
-  fi
-  echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
-  trap - EXIT INT TERM
-elif [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
-  INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('');}" 2>/dev/null || echo "")
-  LATEST_VER=$(npm view @blockrun/clawrouter@latest version 2>/dev/null || echo "")
-  if [ -n "$LATEST_VER" ] && [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" != "$LATEST_VER" ]; then
-    echo "  ⚠️  openclaw installed v${INSTALLED_VER} (cached) but latest is v${LATEST_VER}"
-    force_install_from_npm "$LATEST_VER" || true
-  fi
-  INSTALLED_VER=$(node -e "try{const p=require('$PLUGIN_DIR/package.json');console.log(p.version);}catch{console.log('?');}" 2>/dev/null || echo "?")
-  echo "  ✓ ClawRouter v${INSTALLED_VER} installed"
+  ACTIVE_PACKAGE_DIR=$(find_clawrouter_package_dir)
+  INSTALLED_VER=$(node -e "try{const p=require('$ACTIVE_PACKAGE_DIR/package.json');console.log(p.version);}catch{console.log('');}" 2>/dev/null || echo "")
 fi
+
+if [ -z "$ACTIVE_PACKAGE_DIR" ] || [ -z "$INSTALLED_VER" ]; then
+  echo "  ✗ Could not verify ClawRouter install"
+  exit 1
+fi
+
+echo "  ✓ ClawRouter v${INSTALLED_VER} installed at $ACTIVE_PACKAGE_DIR"
+sync_cli_shim "$ACTIVE_PACKAGE_DIR"
+trap - EXIT INT TERM
 
 # ── Step 4c: Ensure all dependencies are installed ────────────
 # openclaw's plugin installer may skip native/optional deps like @solana/kit.
 # Run npm install in the plugin directory to fill any gaps.
-if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/package.json" ]; then
+if [ -n "$ACTIVE_PACKAGE_DIR" ] && [ -f "$ACTIVE_PACKAGE_DIR/package.json" ]; then
   echo "→ Installing dependencies (Solana, x402, etc.)..."
-  run_dependency_install "$PLUGIN_DIR"
+  run_dependency_install "$ACTIVE_PACKAGE_DIR"
 fi
 
 # ── Step 5: Verify wallet survived ─────────────────────────────
@@ -736,7 +828,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-const topModelsPath = '$SCRIPT_DIR/../src/top-models.json';
+const topModelsPath = path.join('$ACTIVE_PACKAGE_DIR', 'src', 'top-models.json');
 
 if (!fs.existsSync(configPath)) {
   console.log('  No config file found, skipping');
@@ -1037,7 +1129,7 @@ if [ -f "$WALLET_FILE" ]; then
   FINAL_KEY=$(cat "$WALLET_FILE" | tr -d '[:space:]')
   FINAL_ADDRESS=$(node -e "
     try {
-      const { privateKeyToAccount } = require('$HOME/.openclaw/extensions/clawrouter/node_modules/viem/accounts/index.js');
+      const { privateKeyToAccount } = require(require.resolve('viem/accounts', { paths: ['$ACTIVE_PACKAGE_DIR'] }));
       console.log(privateKeyToAccount('$FINAL_KEY').address);
     } catch { console.log('(run /wallet in OpenClaw to see your address)'); }
   " 2>/dev/null || echo "(run /wallet in OpenClaw to see your address)")
