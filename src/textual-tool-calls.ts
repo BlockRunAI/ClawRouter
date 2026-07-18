@@ -374,6 +374,123 @@ function extractGptCalls(content: string): {
   return { calls: [], matches: [] };
 }
 
+// ---------------------------------------------------------------------------
+// Kimi K3 (issue #213) — nameless argument-blob recovery.
+//
+// K3 emits the tool's ARGUMENTS as a bare JSON object with no `name`/`type`
+// field; the tool name is either only in the preceding prose ("Let's do
+// web_search.\n{...}") or absent entirely ({"path":...,"action":"read"}). The
+// other extractors all need the name inside the text, so these leak as content.
+//
+// Recovering a nameless blob is only safe when we can resolve WHICH tool it is
+// against the request's declared `tools`, so this extractor never fires unless
+// the caller passes the request tool schemas. Resolution is deliberately
+// conservative — a prose-mentioned tool name, or a UNIQUE parameter-signature
+// match; anything ambiguous is left as content rather than mis-dispatched.
+// ---------------------------------------------------------------------------
+
+export type RequestToolSchema = {
+  type?: string;
+  function?: {
+    name?: string;
+    parameters?: { properties?: Record<string, unknown>; required?: unknown };
+  };
+};
+
+type DerivedTool = { name: string; propKeys: Set<string>; required: string[] };
+
+export function deriveRequestTools(tools: unknown): DerivedTool[] {
+  if (!Array.isArray(tools)) return [];
+  const derived: DerivedTool[] = [];
+  for (const raw of tools) {
+    const fn = (raw as RequestToolSchema | null)?.function;
+    const name = fn?.name;
+    if (typeof name !== "string" || name.trim() === "") continue;
+    const params = fn?.parameters;
+    const props = isPlainObject(params?.properties) ? Object.keys(params!.properties!) : [];
+    const required = Array.isArray(params?.required)
+      ? (params!.required as unknown[]).filter((r): r is string => typeof r === "string")
+      : [];
+    derived.push({ name: name.trim(), propKeys: new Set(props), required });
+  }
+  return derived;
+}
+
+// OpenClaw's terminal tool declares `command`; models often emit `cmd`. Treat
+// the two as interchangeable when matching a blob's keys to a tool's schema.
+function keyMatchesParam(key: string, propKeys: Set<string>): boolean {
+  if (propKeys.has(key)) return true;
+  if (key === "cmd" && propKeys.has("command")) return true;
+  if (key === "command" && propKeys.has("cmd")) return true;
+  return false;
+}
+
+function requiredSatisfied(tool: DerivedTool, blobKeys: Set<string>): boolean {
+  return tool.required.every(
+    (r) =>
+      blobKeys.has(r) ||
+      (r === "command" && blobKeys.has("cmd")) ||
+      (r === "cmd" && blobKeys.has("command")),
+  );
+}
+
+function resolveKimiTool(
+  prose: string,
+  blob: Record<string, unknown>,
+  tools: DerivedTool[],
+): string | null {
+  const blobKeys = Object.keys(blob);
+
+  // Method A — a tool name mentioned in the preceding prose (whole-word). If
+  // exactly one declared tool is named, that wins.
+  if (prose) {
+    const named = tools.filter((t) =>
+      new RegExp(`(?:^|[^A-Za-z0-9_])${escapeRegExp(t.name)}(?:[^A-Za-z0-9_]|$)`).test(prose),
+    );
+    if (named.length === 1) return named[0]!.name;
+  }
+
+  // Method B — a UNIQUE parameter-signature match: every blob key is declared by
+  // the tool (with cmd/command aliasing) and all its required params are present.
+  // Requires a non-empty blob so an empty `{}` answer can't match a no-arg tool.
+  if (blobKeys.length === 0) return null;
+  const keySet = new Set(blobKeys);
+  const sigMatches = tools.filter(
+    (t) => blobKeys.every((k) => keyMatchesParam(k, t.propKeys)) && requiredSatisfied(t, keySet),
+  );
+  return sigMatches.length === 1 ? sigMatches[0]!.name : null;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractKimiCalls(
+  content: string,
+  tools: DerivedTool[],
+): { calls: ExtractedToolCall[]; matches: Range[] } {
+  if (tools.length === 0) return { calls: [], matches: [] };
+
+  const trailing = findTrailingJsonObject(content);
+  if (!trailing || !isPlainObject(trailing.parsed)) return { calls: [], matches: [] };
+
+  // A blob that already carries its own `name` is a GPT-style call, not this
+  // shape — leave it to extractGptCalls.
+  if (typeof trailing.parsed.name === "string" && trailing.parsed.name.trim() !== "") {
+    return { calls: [], matches: [] };
+  }
+
+  const prose = content.slice(0, trailing.start).trim();
+  const name = resolveKimiTool(prose, trailing.parsed, tools);
+  if (!name) return { calls: [], matches: [] };
+
+  const start = prose === "" ? 0 : trailing.start;
+  return {
+    calls: [makeCall(name, normalizeGptArgs(trailing.parsed))],
+    matches: [{ start, end: content.length }],
+  };
+}
+
 function stripRanges(content: string, ranges: Range[]): string {
   if (ranges.length === 0) return content;
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
@@ -389,7 +506,17 @@ function stripRanges(content: string, ranges: Range[]): string {
   return cleaned;
 }
 
-export function extractTextualToolCalls(content: string): ExtractionResult {
+export type ExtractOptions = {
+  // The request's OpenAI-style `tools` array. Enables tool-aware recovery of
+  // nameless argument blobs (Kimi K3, issue #213); without it that shape is
+  // left untouched so a legitimate JSON answer is never hijacked.
+  tools?: unknown;
+};
+
+export function extractTextualToolCalls(
+  content: string,
+  options?: ExtractOptions,
+): ExtractionResult {
   if (!content) {
     return { toolCalls: [], cleanedContent: "" };
   }
@@ -400,12 +527,23 @@ export function extractTextualToolCalls(content: string): ExtractionResult {
   // GPT plain-text shapes (issue #193) operate on whole-content / trailing
   // semantics, so only consider them when the tag-based extractors above found
   // nothing — otherwise their strict checks would not match the tagged content.
-  const gpt =
-    openClaw.calls.length + anthropic.calls.length + gemini.calls.length === 0
-      ? extractGptCalls(content)
+  const tagBasedCount = openClaw.calls.length + anthropic.calls.length + gemini.calls.length;
+  const gpt = tagBasedCount === 0 ? extractGptCalls(content) : { calls: [], matches: [] };
+
+  // Kimi K3 nameless blobs (issue #213) — only when everything above found
+  // nothing AND the request declared tools to resolve the name against.
+  const kimi =
+    tagBasedCount + gpt.calls.length === 0
+      ? extractKimiCalls(content, deriveRequestTools(options?.tools))
       : { calls: [], matches: [] };
 
-  const toolCalls = [...openClaw.calls, ...anthropic.calls, ...gemini.calls, ...gpt.calls];
+  const toolCalls = [
+    ...openClaw.calls,
+    ...anthropic.calls,
+    ...gemini.calls,
+    ...gpt.calls,
+    ...kimi.calls,
+  ];
   if (toolCalls.length === 0) {
     return { toolCalls: [], cleanedContent: content };
   }
@@ -415,6 +553,7 @@ export function extractTextualToolCalls(content: string): ExtractionResult {
     ...anthropic.matches,
     ...gemini.matches,
     ...gpt.matches,
+    ...kimi.matches,
   ]);
   return { toolCalls, cleanedContent };
 }

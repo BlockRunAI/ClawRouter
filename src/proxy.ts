@@ -3553,6 +3553,7 @@ async function proxyRequest(
   // --- Smart routing ---
   let routingDecision: RoutingDecision | undefined;
   let hasTools = false; // true when request includes a tools schema
+  let requestTools: unknown; // the request's `tools` schema, for tool-aware textual recovery (#213)
   let hasVision = false; // true when request includes image_url content parts
   let isStreaming = false;
   let modelId = "";
@@ -3608,6 +3609,7 @@ async function proxyRequest(
       // Early tool detection for ALL request types (explicit model + routing profile).
       // The routing-profile branch may re-assign below (no-op since same value).
       hasTools = Array.isArray(parsed.tools) && (parsed.tools as unknown[]).length > 0;
+      requestTools = parsed.tools;
 
       // Preserve OpenClaw tool schemas exactly as provided.
       // Stripping tools like web_search/web_fetch/browser/exec makes the upstream
@@ -5708,7 +5710,7 @@ async function proxyRequest(
               // (six retries then a hallucinated "API key missing") came from
               // this gap.
               if (!endsWithToolCalls && (!toolCalls || toolCalls.length === 0) && rawContent) {
-                const extracted = extractTextualToolCalls(rawContent);
+                const extracted = extractTextualToolCalls(rawContent, { tools: requestTools });
                 if (extracted.toolCalls.length > 0) {
                   toolCalls = extracted.toolCalls;
                 }
@@ -5972,7 +5974,7 @@ async function proxyRequest(
             // `content` (OpenClaw `<tool_call><arg_key>...`, Anthropic-style
             // `<function_calls><invoke>...`). Without this, tool calls land as
             // plain text and downstream executors can't dispatch them.
-            const extracted = extractTextualToolCalls(message.content);
+            const extracted = extractTextualToolCalls(message.content, { tools: requestTools });
             if (extracted.toolCalls.length > 0) {
               message.tool_calls = extracted.toolCalls;
               message.content = "";

@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.230 — July 18, 2026
+
+Fixes **[#213](https://github.com/BlockRunAI/ClawRouter/issues/213)** — Kimi K3 tool calls leaking into OpenClaw as plain assistant text.
+
+### Fixed — tool-aware recovery of nameless argument blobs (Kimi K3)
+
+- ClawRouter already synthesizes structured `tool_calls` from four textual leak shapes (OpenClaw XML, Anthropic `<invoke>`, Gemini transcript, GPT named-JSON). Each needs the tool **name** inside the text. Kimi K3 instead emits the tool's **arguments** as a bare JSON object with no `name`/`type` field — the name is only in the preceding prose (`Let's do web_search.\n{...}`) or absent entirely (`{"path":...,"action":"read"}`, `{"cmd":[...],"timeout":...}`) — so none of them fired and the JSON leaked to the chat channel.
+- `extractTextualToolCalls(content, { tools })` now takes the request's `tools` schema and, as a final pass, resolves a nameless blob to a declared tool by: (a) a tool name mentioned in the preceding prose, or (b) a **unique** parameter-signature match (every blob key is a declared param — with `cmd`↔`command` aliasing for the terminal tool — and all required params present). `proxy.ts` passes the request tools at both the streaming and non-streaming recovery sites.
+- **Conservative by construction** — the new pass never fires unless the request actually declared tools, and never on an ambiguous/zero signature match, so a legitimate JSON answer is never hijacked into a tool call. Backward-compatible: callers that pass no tools behave exactly as before.
+
+---
+
 ## v0.12.229 — July 17, 2026
 
 Syncs **Kimi K3**, which blockrun added and live-probed on 2026-07-17 (blockrun `src/lib/models.ts`).

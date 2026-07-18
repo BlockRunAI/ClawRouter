@@ -329,4 +329,93 @@ describe("extractTextualToolCalls", () => {
       expect(result.cleanedContent).toBe("");
     });
   });
+
+  // Kimi K3 (issue #213) emits the tool's ARGUMENTS as a bare JSON object with no
+  // `name`/`type` field — the tool name is either only in the preceding prose or
+  // absent entirely. Recovery is only safe when the request actually declared
+  // tools, so these shapes resolve the name against the request's `tools` schema.
+  describe("Kimi K3 nameless argument-blob shapes (tool-aware)", () => {
+    const tool = (name: string, properties: Record<string, unknown>, required: string[] = []) => ({
+      type: "function" as const,
+      function: { name, parameters: { type: "object", properties, required } },
+    });
+
+    it("resolves the tool by a name mentioned in the preceding prose", () => {
+      const content =
+        'Let\'s do web_search.\n{"query": "2026 FIFA World Cup final date Argentina", "top_n": 5, "recency_days": -1}';
+      const result = extractTextualToolCalls(content, {
+        tools: [tool("web_search", { query: {}, top_n: {}, recency_days: {} }, ["query"])],
+      });
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("web_search");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        query: "2026 FIFA World Cup final date Argentina",
+        top_n: 5,
+        recency_days: -1,
+      });
+    });
+
+    it("resolves a whole-content nameless args blob by unique signature match", () => {
+      const content = '{"path":"/home/Blockrun/.openclaw/workspace/IDENTITY.md","action":"read"}';
+      const result = extractTextualToolCalls(content, {
+        tools: [tool("read_file", { path: {}, action: {} }, ["path"])],
+      });
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("read_file");
+      expect(JSON.parse(result.toolCalls[0]!.function.arguments)).toEqual({
+        path: "/home/Blockrun/.openclaw/workspace/IDENTITY.md",
+        action: "read",
+      });
+      expect(result.cleanedContent).toBe("");
+    });
+
+    it("matches a terminal call whose `cmd` aliases the declared `command` param", () => {
+      const content = '{"cmd":["bash","-lc","ls -1a"], "timeout": 10000}';
+      const result = extractTextualToolCalls(content, {
+        tools: [tool("terminal", { command: {}, timeout: {} }, ["command"])],
+      });
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("terminal");
+      const args = JSON.parse(result.toolCalls[0]!.function.arguments) as Record<string, unknown>;
+      expect(args.command).toEqual(["bash", "-lc", "ls -1a"]);
+      expect(args.timeout).toBe(10000);
+    });
+
+    it("does NOT fire on a nameless JSON blob when the request carried no tools", () => {
+      const content = '{"path":"/x","action":"read"}';
+      const result = extractTextualToolCalls(content);
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("does NOT fire when two declared tools match the signature ambiguously", () => {
+      const content = '{"path":"/x","action":"read"}';
+      const result = extractTextualToolCalls(content, {
+        tools: [
+          tool("reader", { path: {}, action: {} }, ["path"]),
+          tool("editor", { path: {}, action: {} }, ["path"]),
+        ],
+      });
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("does NOT fire when a JSON answer matches no declared tool and names none", () => {
+      const content = '{"foo":1,"bar":2}';
+      const result = extractTextualToolCalls(content, {
+        tools: [tool("web_search", { query: {} }, ["query"])],
+      });
+      expect(result.toolCalls).toHaveLength(0);
+      expect(result.cleanedContent).toBe(content);
+    });
+
+    it("still recovers a GPT-style named object when tools are also present", () => {
+      const content = '{"name":"web_search","parameters":{"query":"x"}}';
+      const result = extractTextualToolCalls(content, {
+        tools: [tool("web_search", { query: {} }, ["query"])],
+      });
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.function.name).toBe("web_search");
+    });
+  });
 });
