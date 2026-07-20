@@ -66,6 +66,7 @@ import {
   supportsVision,
   getActivePromoPrice,
 } from "./models.js";
+import { DEFAULT_MAX_TOKENS, resolveMaxTokens } from "./max-tokens.js";
 import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats, clearStats } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
@@ -1484,6 +1485,9 @@ export function buildCostBreakdown(params: {
 /** Model lookup by id — estimateAmount runs in per-request loops (the budget
  *  pre-check scans every model), so a linear find would be O(n²) per request. */
 const BLOCKRUN_MODEL_BY_ID = new Map(BLOCKRUN_MODELS.map((m) => [m.id, m]));
+
+// Re-exported so `proxy.js` stays the single import surface for proxy internals.
+export { DEFAULT_MAX_TOKENS, resolveMaxTokens } from "./max-tokens.js";
 
 /**
  * Estimate USDC cost for a request based on model pricing.
@@ -3557,7 +3561,7 @@ async function proxyRequest(
   let hasVision = false; // true when request includes image_url content parts
   let isStreaming = false;
   let modelId = "";
-  let maxTokens = 4096;
+  let maxTokens = DEFAULT_MAX_TOKENS;
   let routingProfile: "eco" | "auto" | "premium" | null = null;
   let stickyExplicitModel: string | undefined;
   let balanceFallbackNotice: string | undefined;
@@ -3580,7 +3584,7 @@ async function proxyRequest(
       const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
       isStreaming = parsed.stream === true;
       modelId = (parsed.model as string) || "";
-      maxTokens = (parsed.max_tokens as number) || 4096;
+      maxTokens = resolveMaxTokens(parsed);
       let bodyModified = false;
 
       // Extract last user message content (used by session journal + /debug command)

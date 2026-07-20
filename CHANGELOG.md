@@ -4,6 +4,20 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.232 — July 20, 2026
+
+Fixes a cost-control hole: requests using OpenAI's current `max_completion_tokens` field were priced as if they had asked for nothing.
+
+### Fixed — `max_completion_tokens` was never read
+
+- OpenAI deprecated `max_tokens` in favour of `max_completion_tokens`, but ClawRouter only ever read the legacy field. Every request from a client on the modern field was sized at the 4096 default no matter how much output it actually requested — the string `max_completion_tokens` did not appear anywhere in `src/`.
+- That number is not cosmetic. It feeds the routing decision, `estimateAmount` (balance pre-check), **the strict-mode `maxCostPerRun` cap**, `chargedOutputTokens` in `logUsage`, and the pre-auth reuse check. A request asking for 65536 output tokens was priced at 1/16th of its real cost and **walked straight through a cost cap the user had set** — reproduced in `src/proxy.max-tokens-cap.test.ts`, which fails with HTTP 200 before the fix and 429 after.
+- The same gap sat in `src/payment-preauth.ts`, where it sized the request at **0** tokens: a payment authorization cached for a tiny request could be reused to pay for a much larger one.
+- Both now share `resolveMaxTokens()` (new `src/max-tokens.ts`, kept separate to avoid a `proxy` ↔ `payment-preauth` import cycle). It reads either field, ignores values that cannot be a token budget (`NaN`, `Infinity`, negatives, non-numbers — any of which would silently disable the cap comparison), and when a client sends both takes the **larger**: over-estimating only makes the pre-check stricter, under-estimating defeats it.
+- Affects all 55+ models; the exposure scaled with output price, so `moonshot/kimi-k3` ($15/M out) was the worst case.
+
+---
+
 ## v0.12.231 — July 20, 2026
 
 Syncs **Qwen3.7 Max**, which blockrun added and endpoint-probed on 2026-07-20 (blockrun `src/lib/models.ts`). Thanks **[@KillerQueen-Z](https://github.com/KillerQueen-Z)** ([#215](https://github.com/BlockRunAI/ClawRouter/pull/215)).

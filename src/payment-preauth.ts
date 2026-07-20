@@ -24,6 +24,8 @@
 import type { x402Client } from "@x402/fetch";
 import { x402HTTPClient } from "@x402/fetch";
 
+import { resolveMaxTokens } from "./max-tokens.js";
+
 type PaymentRequired = Parameters<InstanceType<typeof x402Client>["createPaymentPayload"]>[0];
 
 interface CachedEntry {
@@ -74,9 +76,14 @@ export function createPayFetchWithPreAuth(
               : "";
         if (bodyStr) {
           bodyLength = bodyStr.length;
-          const parsed = JSON.parse(bodyStr) as { model?: string; max_tokens?: number };
-          requestModel = parsed.model ?? "";
-          maxTokens = Number(parsed.max_tokens) || 0;
+          const parsed = JSON.parse(bodyStr) as Record<string, unknown>;
+          requestModel = (parsed.model as string) ?? "";
+          // Accept OpenAI's current `max_completion_tokens` as well as the
+          // legacy `max_tokens` — reading only the latter sized a large request
+          // as 0 tokens, letting it reuse a pre-auth bought for a tiny one.
+          // Fallback stays 0 here (not the proxy's 4096): with no declared
+          // budget this layer prices on body length alone, as it always has.
+          maxTokens = resolveMaxTokens(parsed, 0);
         }
       } catch {
         /* not JSON, use empty model */

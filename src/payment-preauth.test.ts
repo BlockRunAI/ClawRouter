@@ -137,6 +137,33 @@ describe("payment pre-auth — per-request pricing safety", () => {
     expect(seq[seq.length - 1]).toBe(true); // then paid correctly
   });
 
+  it("sizes the request by max_completion_tokens too, so a grown request can't reuse a small pre-auth", async () => {
+    // OpenAI deprecated `max_tokens` for `max_completion_tokens`. Reading only
+    // the legacy field made a 9000-token request look like a 0-token one, so a
+    // pre-auth cached for a tiny request was reused to pay for a large one.
+    const est = vi.fn((_m: string, _len: number, maxTokens: number) =>
+      String(maxTokens * 10 + 100),
+    );
+    const gw = fakeGateway();
+    const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, { estimateAmount: est });
+
+    await pay(URL, { method: "POST", body: body(10) }); // seed cover = 10*10+100 = 200
+    const seeded = gw.calls.length;
+
+    const grown = JSON.stringify({
+      model: "test/model",
+      max_completion_tokens: 9000, // needs 90100 ≫ the cached 200
+      messages: [],
+    });
+    const res = await pay(URL, { method: "POST", body: grown });
+
+    expect(res.status).toBe(200);
+    // The estimator must have SEEN the real budget, not 0.
+    expect(est).toHaveBeenCalledWith(expect.anything(), expect.anything(), 9000);
+    // Too big for the cached authorization → clean unpaid request, then paid retry.
+    expect(gw.calls.slice(seeded).map((c) => c.paid)).toEqual([false, true]);
+  });
+
   it("disables pre-auth entirely when no estimator is provided (never underpays)", async () => {
     const gw = fakeGateway();
     const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {}); // no estimateAmount
