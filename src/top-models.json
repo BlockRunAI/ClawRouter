@@ -21,6 +21,7 @@
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",
   "moonshot/kimi-k2.7",
+  "qwen/qwen3.7-max",
   "xai/grok-4.3",
   "xai/grok-build-0.1",
   "xai/grok-3",
