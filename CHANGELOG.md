@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.231 — July 20, 2026
+
+Syncs **Qwen3.7 Max**, which blockrun added and endpoint-probed on 2026-07-20 (blockrun `src/lib/models.ts`). Thanks **[@KillerQueen-Z](https://github.com/KillerQueen-Z)** ([#215](https://github.com/BlockRunAI/ClawRouter/pull/215)).
+
+### Added — Qwen3.7 Max (Alibaba flagship)
+
+- **`qwen/qwen3.7-max`** registered in `BLOCKRUN_MODELS`: Alibaba's Max tier resold through blockrun's OpenRouter credit pool, **1M context**, 65K max output, reasoning + agentic tool use. Priced at COGS $1.475/$4.425 per 1M (users pay ~$1.55/$4.65 after blockrun's 5% margin). Added to `top-models.json` (picker + allowlist), the README mid-range table, and the SKILL catalog line.
+- Explicit pins **`qwen3.7-max`**, **`qwen-3.7-max`**, and **`qwen3-7-max`** — both punctuation conventions, matching the `sonnet-4.6` / `sonnet-4-6` pattern.
+- `reasoning: true` also enrolls the id in `REASONING_MODEL_IDS`, raising its per-model timeout from 60s to 180s. Noted inline so the longer stall on a hung upstream isn't a surprise.
+- **`toolCalling: true` is live-verified, not assumed.** An end-to-end request through the gateway returned a structured `tool_calls` array (`get_weather` + valid JSON arguments, `finish_reason: "tool_calls"`) — no textual leak of the kind Kimi K3 ([#213](https://github.com/BlockRunAI/ClawRouter/issues/213)), Gemini ([#189](https://github.com/BlockRunAI/ClawRouter/issues/189)) and GPT ([#193](https://github.com/BlockRunAI/ClawRouter/issues/193)) produce. Streaming, all three pins, and the unbound bare `qwen` were verified against the live gateway in the same pass.
+
+### Unchanged — by design
+
+- **Bare `qwen` stays unbound.** Every other `qwen*` shorthand resolves to a FREE model (`qwen-coder`, `qwen-thinking`, `qwen3-next`, `qwen3.5-122b`), so binding the shortest name to a $1.475/$4.425 flagship would silently bill callers who typed it expecting the free tier. Same rule that keeps generic `kimi` on K2.7 — address the flagship explicitly. (`grok` was promoted to 4.5, but only with the cost tradeoff argued on the record; there's no such case for qwen yet.) A regression test pins this.
+- **Routing tiers untouched.** No benchmarks yet to justify promoting a $4.425/M-out model into the cheap coding fallbacks.
+
+---
+
 ## v0.12.230 — July 18, 2026
 
 Fixes **[#213](https://github.com/BlockRunAI/ClawRouter/issues/213)** — Kimi K3 tool calls leaking into OpenClaw as plain assistant text.

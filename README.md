@@ -434,6 +434,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | google/gemini-2.5-pro       |     $1.25 |     $10.00 |    $0.0056 | 1M      | reasoning, vision, tools                  |
 | zai/glm-5.2                 |     $1.40 |      $4.40 |    $0.0029 | 1M      | reasoning, coding, tools (flagship)       |
 | zai/glm-5.1                 |     $1.40 |      $4.40 |    $0.0029 | 200K    | reasoning, tools (promo ended 2026-06-05) |
+| qwen/qwen3.7-max            |    $1.475 |     $4.425 |    $0.0030 | 1M      | reasoning, agentic, tools (Qwen flagship) |
 | xai/grok-4.3                |     $1.50 |      $4.00 |    $0.0028 | 1M      | reasoning, vision, agentic, tools         |
 | xai/grok-4.5                |     $2.50 |      $9.00 |    $0.0058 | 500K    | reasoning, vision, agentic, tools         |
 | xai/grok-build-0.1          |     $1.50 |      $3.00 |    $0.0023 | 256K    | agentic coding, tools                     |

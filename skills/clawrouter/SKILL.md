@@ -135,7 +135,7 @@ Rules handle ~~80% of requests in <1ms. Only ambiguous queries hit the LLM class
 
 ## Available Models
 
-55+ models including: gpt-5.6-terra [balanced, stable default], gpt-5.6-sol [flagship], gpt-5.6-luna [cost-efficient], gpt-5.5, gpt-5.4, gpt-4o, o3, claude-fable-5, claude-opus-4.8, claude-opus-4.7, claude-opus-4.5, claude-sonnet-5, claude-sonnet-4.6, gemini-3.1-pro, gemini-2.5-flash, deepseek-v4-pro, deepseek-chat, grok-4.5, grok-4.3, grok-build-0.1, kimi-k3 [1M ctx flagship], kimi-k2.7, and 8 free NVIDIA models (mistral-large-3-675b [default, 675B flagship], deepseek-v4-flash [1M context], seed-oss-36b [coding], nemotron-3-nano-omni-30b-a3b-reasoning [vision], mistral-nemotron, step-3.7-flash, nemotron-nano-9b-v2, nemotron-nano-12b-v2-vl [vision]).
+55+ models including: gpt-5.6-terra [balanced, stable default], gpt-5.6-sol [flagship], gpt-5.6-luna [cost-efficient], gpt-5.5, gpt-5.4, gpt-4o, o3, claude-fable-5, claude-opus-4.8, claude-opus-4.7, claude-opus-4.5, claude-sonnet-5, claude-sonnet-4.6, gemini-3.1-pro, gemini-2.5-flash, deepseek-v4-pro, deepseek-chat, grok-4.5, grok-4.3, grok-build-0.1, kimi-k3 [1M ctx flagship], kimi-k2.7, qwen3.7-max [Qwen flagship, 1M ctx], and 8 free NVIDIA models (mistral-large-3-675b [default, 675B flagship], deepseek-v4-flash [1M context], seed-oss-36b [coding], nemotron-3-nano-omni-30b-a3b-reasoning [vision], mistral-nemotron, step-3.7-flash, nemotron-nano-9b-v2, nemotron-nano-12b-v2-vl [vision]).
 
 ## Built-in Agent Tools
 

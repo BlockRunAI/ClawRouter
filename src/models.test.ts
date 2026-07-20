@@ -112,17 +112,40 @@ describe("resolveModelAlias", () => {
   it("registers Qwen3.7 Max with its public aliases and gateway pricing", () => {
     const qwen = BLOCKRUN_MODELS.find((model) => model.id === "qwen/qwen3.7-max");
 
-    expect(qwen).toMatchObject({
+    // Full-shape equality, not toMatchObject — a subset match cannot fail on a
+    // stray `deprecated` / `fallbackModel` / `flatPrice` sneaking onto the entry.
+    expect(qwen).toEqual({
+      id: "qwen/qwen3.7-max",
       name: "Qwen3.7 Max",
+      version: "3.7-max",
       inputPrice: 1.475,
       outputPrice: 4.425,
       contextWindow: 1_000_000,
       maxOutput: 65_536,
       reasoning: true,
+      agentic: true,
       toolCalling: true,
     });
-    expect(resolveModelAlias("qwen")).toBe("qwen/qwen3.7-max");
+
+    // Every advertised pin resolves, including both punctuation conventions.
     expect(resolveModelAlias("qwen3.7-max")).toBe("qwen/qwen3.7-max");
+    expect(resolveModelAlias("qwen-3.7-max")).toBe("qwen/qwen3.7-max");
+    expect(resolveModelAlias("qwen3-7-max")).toBe("qwen/qwen3.7-max");
+  });
+
+  it("leaves bare `qwen` unbound so it cannot silently bill a free-tier caller", () => {
+    // Every other qwen* shorthand is FREE. Binding the shortest name to the
+    // $1.475/$4.425 flagship would re-price callers who typed it expecting the
+    // free tier — same precedent as generic `kimi`, which stays on K2.7.
+    expect(resolveModelAlias("qwen")).toBe("qwen");
+    for (const alias of ["qwen-coder", "qwen-thinking", "qwen3-next", "qwen3.5-122b"]) {
+      expect(resolveModelAlias(alias)).toMatch(/^free\//);
+    }
+  });
+
+  it("advertises Qwen3.7 Max in the picker", () => {
+    expect(TOP_MODELS).toContain("qwen/qwen3.7-max");
+    expect(VISIBLE_OPENCLAW_MODELS.map((m) => m.id)).toContain("qwen/qwen3.7-max");
   });
 });
 

@@ -121,10 +121,16 @@ export const MODEL_ALIASES: Record<string, string> = {
   "nvidia/kimi-k2.5": "moonshot/kimi-k2.5",
 
   // Qwen — Qwen3.7 Max is Alibaba's current flagship for reasoning, coding,
-  // and agentic tool use.
-  qwen: "qwen/qwen3.7-max",
+  // and agentic tool use. EXPLICIT PINS ONLY: bare `qwen` deliberately stays
+  // unbound. Every other qwen* shorthand below points at a FREE model
+  // (qwen-coder, qwen-thinking, qwen3-next, qwen3.5-122b), so binding the
+  // shortest name to a $1.475/$4.425 flagship would silently charge callers
+  // who typed it expecting the free tier — same rule that keeps generic
+  // `kimi` on K2.7. (`grok` WAS promoted to 4.5, but only after the cost
+  // tradeoff was argued explicitly; there's no such case for qwen yet.)
   "qwen3.7-max": "qwen/qwen3.7-max",
   "qwen-3.7-max": "qwen/qwen3.7-max",
+  "qwen3-7-max": "qwen/qwen3.7-max",
 
   // Google
   // gemini-3-pro-preview delisted by Google 2026-06-06 — mirror the gateway
@@ -1035,6 +1041,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   // Qwen3.7 Max — BlockRun's paid Qwen flagship, served through its
   // OpenRouter credit pool. The gateway applies its standard 5% margin at
   // settlement, so keep the catalog rates at the upstream $1.475/$4.425 COGS.
+  // NOTE: `reasoning: true` also enrolls this id in REASONING_MODEL_IDS
+  // (proxy.ts), which raises its per-model timeout from 60s to 180s.
+  // `toolCalling: true` is LIVE-VERIFIED (2026-07-20): a real request through
+  // the gateway returned a structured tool_calls array (name + valid JSON
+  // arguments, finish_reason "tool_calls"), not the textual leak that Kimi K3
+  // (#213), Gemini (#189) and GPT (#193) produce. Don't downgrade on a hunch.
   {
     id: "qwen/qwen3.7-max",
     name: "Qwen3.7 Max",
