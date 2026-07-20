@@ -108,6 +108,22 @@ describe("resolveModelAlias", () => {
     expect(BLOCKRUN_MODELS.some((m) => m.id === "anthropic/claude-sonnet-4.5")).toBe(true);
     expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
   });
+
+  it("registers Qwen3.7 Max with its public aliases and gateway pricing", () => {
+    const qwen = BLOCKRUN_MODELS.find((model) => model.id === "qwen/qwen3.7-max");
+
+    expect(qwen).toMatchObject({
+      name: "Qwen3.7 Max",
+      inputPrice: 1.475,
+      outputPrice: 4.425,
+      contextWindow: 1_000_000,
+      maxOutput: 65_536,
+      reasoning: true,
+      toolCalling: true,
+    });
+    expect(resolveModelAlias("qwen")).toBe("qwen/qwen3.7-max");
+    expect(resolveModelAlias("qwen3.7-max")).toBe("qwen/qwen3.7-max");
+  });
 });
 
 describe("OPENCLAW_MODELS integrity", () => {

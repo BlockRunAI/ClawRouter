@@ -120,6 +120,12 @@ export const MODEL_ALIASES: Record<string, string> = {
   "kimi-k2.5": "moonshot/kimi-k2.5",
   "nvidia/kimi-k2.5": "moonshot/kimi-k2.5",
 
+  // Qwen — Qwen3.7 Max is Alibaba's current flagship for reasoning, coding,
+  // and agentic tool use.
+  qwen: "qwen/qwen3.7-max",
+  "qwen3.7-max": "qwen/qwen3.7-max",
+  "qwen-3.7-max": "qwen/qwen3.7-max",
+
   // Google
   // gemini-3-pro-preview delisted by Google 2026-06-06 — mirror the gateway
   // redirect to its successor so pinned callers land on 3.1-pro, not an error.
@@ -1022,6 +1028,22 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 65536,
     reasoning: true,
     vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+
+  // Qwen3.7 Max — BlockRun's paid Qwen flagship, served through its
+  // OpenRouter credit pool. The gateway applies its standard 5% margin at
+  // settlement, so keep the catalog rates at the upstream $1.475/$4.425 COGS.
+  {
+    id: "qwen/qwen3.7-max",
+    name: "Qwen3.7 Max",
+    version: "3.7-max",
+    inputPrice: 1.475,
+    outputPrice: 4.425,
+    contextWindow: 1000000,
+    maxOutput: 65536,
+    reasoning: true,
     agentic: true,
     toolCalling: true,
   },

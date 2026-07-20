@@ -32,6 +32,7 @@
   "minimax/minimax-m3",
   "minimax/minimax-m2.7",
   "moonshot/kimi-k3",
+  "qwen/qwen3.7-max",
   "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",
