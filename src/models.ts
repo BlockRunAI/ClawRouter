@@ -97,6 +97,11 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-5.6-terra": "openai/gpt-5.6-terra",
   "gpt-5.6-luna": "openai/gpt-5.6-luna",
   "gpt-5.5": "openai/gpt-5.5",
+  "gpt-5.5-pro": "openai/gpt-5.5-pro",
+  // ChatGPT Instant. `chat-latest` is a rolling upstream id — pinning it means
+  // "whatever ChatGPT's default is today", not a fixed snapshot.
+  "chat-latest": "openai/chat-latest",
+  chatgpt: "openai/chat-latest",
   "gpt-5.4": "openai/gpt-5.4",
   "gpt-5.4-pro": "openai/gpt-5.4-pro",
   "gpt-5.4-nano": "openai/gpt-5.4-nano",
@@ -565,6 +570,38 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
     vision: true,
     agentic: true,
+    toolCalling: true,
+  },
+  // GPT-5.5 Pro — max-compute tier of the 5.5 family, mirrors the gpt-5.4-pro
+  // shape. Upstream also has an OpenAI long-context tier (2x in / 1.5x out above
+  // 272K prompt tokens) that this registry cannot express; as with grok, that
+  // skews `logUsage` only — the charge is server-dictated via 402.
+  {
+    id: "openai/gpt-5.5-pro",
+    name: "GPT-5.5 Pro",
+    version: "5.5",
+    inputPrice: 30.0,
+    outputPrice: 180.0,
+    contextWindow: 1050000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  // ChatGPT Instant — upstream exposes ChatGPT's default model ONLY as the
+  // rolling version-less `chat-latest` id, so that is the honest catalog id: it
+  // stays correct when OpenAI rolls the default to the next Instant. The display
+  // name tracks whichever snapshot is current and must be refreshed on each roll.
+  // Chat/vision only upstream — no reasoning or agentic categories.
+  {
+    id: "openai/chat-latest",
+    name: "ChatGPT Instant (GPT-5.5)",
+    version: "5.5",
+    inputPrice: 5.0,
+    outputPrice: 30.0,
+    contextWindow: 128000,
+    maxOutput: 128000,
+    vision: true,
     toolCalling: true,
   },
   // GPT-5.4 — flagship benchmarked into routing tiers

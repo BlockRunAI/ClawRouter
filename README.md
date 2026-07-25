@@ -460,9 +460,11 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | anthropic/claude-opus-4.8   |     $5.00 |     $25.00 |    $0.0150 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.6-sol          |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.5              |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
+| openai/chat-latest          |     $5.00 |     $30.00 |    $0.0175 | 128K    | vision, tools                     |
 | openai/o1                   |    $15.00 |     $60.00 |    $0.0375 | 200K    | reasoning, tools                  |
 | openai/gpt-5.2-pro          |    $21.00 |    $168.00 |    $0.0945 | 400K    | reasoning, tools                  |
 | openai/gpt-5.4-pro          |    $30.00 |    $180.00 |    $0.1050 | 400K    | reasoning, tools                  |
+| openai/gpt-5.5-pro          |    $30.00 |    $180.00 |    $0.1050 | 1M      | reasoning, vision, tools          |
 
 > **Free tier:** several NVIDIA-hosted models cost nothing — `/model free` smart-routes across them, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model v4-flash` for 1M-context reasoning, `/model seed-oss` for coding, `/model mistral-large` for the 675B flagship).
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.

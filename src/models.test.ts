@@ -186,6 +186,54 @@ describe("resolveModelAlias", () => {
     expect(TOP_MODELS).toContain("qwen/qwen3.7-max");
     expect(VISIBLE_OPENCLAW_MODELS.map((m) => m.id)).toContain("qwen/qwen3.7-max");
   });
+
+  it("registers GPT-5.5 Pro with gateway pricing and the max-compute shape", () => {
+    // Full-shape equality — a subset match cannot fail on a stray flag.
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "openai/gpt-5.5-pro")).toEqual({
+      id: "openai/gpt-5.5-pro",
+      name: "GPT-5.5 Pro",
+      version: "5.5",
+      inputPrice: 30.0,
+      outputPrice: 180.0,
+      contextWindow: 1_050_000,
+      maxOutput: 128_000,
+      reasoning: true,
+      vision: true,
+      toolCalling: true,
+    });
+    expect(resolveModelAlias("gpt-5.5-pro")).toBe("openai/gpt-5.5-pro");
+    // Catalog id is not an alias key — it must survive resolution untouched.
+    expect(resolveModelAlias("openai/gpt-5.5-pro")).toBe("openai/gpt-5.5-pro");
+    // Pro tier is deliberately NOT `agentic` (mirrors gpt-5.4-pro): max-compute
+    // latency makes it a poor multi-step autonomous pick.
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "openai/gpt-5.5-pro")?.agentic).toBeUndefined();
+    expect(TOP_MODELS).toContain("openai/gpt-5.5-pro");
+  });
+
+  it("registers ChatGPT Instant under the rolling chat-latest id", () => {
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "openai/chat-latest")).toEqual({
+      id: "openai/chat-latest",
+      name: "ChatGPT Instant (GPT-5.5)",
+      version: "5.5",
+      inputPrice: 5.0,
+      outputPrice: 30.0,
+      contextWindow: 128_000,
+      maxOutput: 128_000,
+      vision: true,
+      toolCalling: true,
+    });
+    expect(resolveModelAlias("chat-latest")).toBe("openai/chat-latest");
+    expect(resolveModelAlias("chatgpt")).toBe("openai/chat-latest");
+    expect(resolveModelAlias("openai/chat-latest")).toBe("openai/chat-latest");
+    // Chat/vision only upstream — claiming reasoning would mis-route it into the
+    // REASONING tier and inflate its per-model timeout.
+    const instant = BLOCKRUN_MODELS.find((m) => m.id === "openai/chat-latest");
+    expect(instant?.reasoning).toBeUndefined();
+    expect(instant?.agentic).toBeUndefined();
+    // Deliberately NOT in the picker: a rolling alias is a pin-on-purpose model,
+    // not a curated default (same treatment as sonnet-4.5 / opus-4.6).
+    expect(TOP_MODELS).not.toContain("openai/chat-latest");
+  });
 });
 
 describe("OPENCLAW_MODELS integrity", () => {

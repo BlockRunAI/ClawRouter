@@ -4,6 +4,29 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.234 — July 25, 2026
+
+Closes two catalog gaps found by diffing the live gateway against `BLOCKRUN_MODELS` during the Opus 5 sync — both models were already live upstream and billable, but absent from the registry, so they carried no local pricing and never appeared in the picker.
+
+### Added — GPT-5.5 Pro
+
+- **`openai/gpt-5.5-pro`**: max-compute tier of the 5.5 family. $30/$180 per 1M, **1.05M context**, 128K max output, reasoning + vision. Mirrors the `gpt-5.4-pro` shape and joins it in the picker.
+- Pin: **`gpt-5.5-pro`**. Deliberately **not** flagged `agentic` (same as `gpt-5.4-pro`) — max-compute latency makes it a poor multi-step autonomous pick, and the flag would pull it into agentic tier selection.
+- Upstream also applies OpenAI's long-context tier (2x input / 1.5x output above 272K prompt tokens), which this registry cannot express. As with grok, that skews `logUsage` only — the charge is server-dictated via 402.
+
+### Added — ChatGPT Instant (`chat-latest`)
+
+- **`openai/chat-latest`**: ChatGPT's default model, tuned for speed and concision. $5/$30 per 1M, 128K context, chat + vision. Pins: **`chat-latest`**, **`chatgpt`**.
+- The id is intentionally version-less. Upstream exposes ChatGPT's default _only_ as the rolling `chat-latest` alias, so pinning it means "whatever ChatGPT's default is today", not a fixed snapshot — the display name tracks the current one and needs refreshing whenever OpenAI rolls it.
+- **Not** added to the picker: a rolling alias is a pin-on-purpose model, not a curated default. Same treatment as `sonnet-4.5` and `opus-4.6` — resolvable, just not featured.
+- Registered with neither `reasoning` nor `agentic`, matching its upstream categories. Claiming reasoning would mis-route it into the REASONING tier and silently raise its per-model timeout from 60s to 180s.
+
+`toolCalling: true` is **live-verified on both** — gateway probes returned structured `tool_calls` arrays (`get_weather` + valid JSON args, `finish_reason: "tool_calls"`), no textual leak.
+
+Routing tiers are untouched: neither model is benchmarked, and a $30/$180 model does not belong in a fallback chain reached by an automatic tier decision.
+
+---
+
 ## v0.12.233 — July 24, 2026
 
 Syncs **Claude Opus 5**, which Anthropic shipped and blockrun added on launch day (blockrun `src/lib/models.ts`, [#283](https://github.com/blockrunai/blockrun/pull/283)).
