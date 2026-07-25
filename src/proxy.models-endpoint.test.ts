@@ -19,6 +19,7 @@ describe("buildProxyModelList", () => {
     expect(ids.has("moonshot/kimi-k2.6")).toBe(true);
     expect(ids.has("moonshot/kimi-k2.7")).toBe(true);
     expect(ids.has("anthropic/claude-opus-4.8")).toBe(true);
+    expect(ids.has("anthropic/claude-opus-5")).toBe(true);
   });
 
   it("lists relisted fable-5 and new free flagships as resolvable targets", () => {

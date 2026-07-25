@@ -16,7 +16,7 @@ import { TOP_MODELS } from "./top-models.js";
  * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4-6`.
  */
 export const MODEL_ALIASES: Record<string, string> = {
-  // Claude - flagship opus is 4.8; bare sonnet stays at 4.6 (sonnet-5 is opt-in
+  // Claude - flagship opus is 5; bare sonnet stays at 4.6 (sonnet-5 is opt-in
   // via explicit `sonnet-5` — not promoted to the bare alias pending benchmarks)
   claude: "anthropic/claude-sonnet-4.6",
   "br-sonnet": "anthropic/claude-sonnet-4.6",
@@ -40,7 +40,15 @@ export const MODEL_ALIASES: Record<string, string> = {
   fable: "anthropic/claude-fable-5",
   "fable-5": "anthropic/claude-fable-5",
   "fable-5.0": "anthropic/claude-fable-5",
-  opus: "anthropic/claude-opus-4.8",
+  // Opus 5 (2026-07-24) takes the bare `opus` alias: identical $5/$25 and the
+  // same 1M/128K envelope as 4.8, so no per-call-cap wallet changes behavior,
+  // and BlockRun already repointed `clawrouter-premium` → opus-5. `opus-4` and
+  // `anthropic/claude-opus-4` stay on 4.8 — they name the 4-series generation.
+  // Note: `anthropic/claude-opus-5` must NOT be an alias key (see fable note).
+  opus: "anthropic/claude-opus-5",
+  "opus-5": "anthropic/claude-opus-5",
+  "opus-5.0": "anthropic/claude-opus-5",
+  "opus-5-0": "anthropic/claude-opus-5",
   "opus-4": "anthropic/claude-opus-4.8",
   "opus-4.8": "anthropic/claude-opus-4.8",
   "opus-4-8": "anthropic/claude-opus-4.8",
@@ -54,7 +62,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   // fable-5 relisted 2026-07-06 (see note above)
   "anthropic/fable": "anthropic/claude-fable-5",
   "anthropic/claude-fable-5.0": "anthropic/claude-fable-5",
-  "anthropic/opus": "anthropic/claude-opus-4.8",
+  "anthropic/opus": "anthropic/claude-opus-5",
+  "anthropic/claude-opus-5.0": "anthropic/claude-opus-5",
+  "anthropic/claude-opus-5-0": "anthropic/claude-opus-5",
   "anthropic/haiku": "anthropic/claude-haiku-4.5",
   "anthropic/claude": "anthropic/claude-sonnet-4.6",
   // Backward compatibility - generic opus-4 and older flagships point at 4.8;
@@ -857,6 +867,22 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "anthropic/claude-opus-4.8",
     name: "Claude Opus 4.8",
     version: "4.8",
+    inputPrice: 5.0,
+    outputPrice: 25.0,
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  // claude-opus-5 added 2026-07-24 (BlockRun launch-day sync, PR #283).
+  // Same $5/$25 as Opus 4.8 — Anthropic bills the 1M window at standard rates,
+  // so there is no long-context premium to model here.
+  {
+    id: "anthropic/claude-opus-5",
+    name: "Claude Opus 5",
+    version: "5",
     inputPrice: 5.0,
     outputPrice: 25.0,
     contextWindow: 1000000,

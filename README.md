@@ -140,7 +140,7 @@ models:
       - apply
 ```
 
-To pin a specific model, replace `blockrun/auto` with any model from [blockrun.ai/models](https://blockrun.ai/models), e.g. `anthropic/claude-opus-4.8`, `xai/grok-4.5`.
+To pin a specific model, replace `blockrun/auto` with any model from [blockrun.ai/models](https://blockrun.ai/models), e.g. `anthropic/claude-opus-5`, `xai/grok-4.5`.
 
 Both `provider: openai` and `provider: clawrouter` work — just make sure `apiBase` ends with `/v1/`.
 
@@ -211,7 +211,7 @@ Request → Weighted Scorer (15 dimensions) → Tier → Best Model → Response
 | --------- | ------------------------------------ | ------------------------------- | ---------------------------- |
 | SIMPLE    | free/mistral-large-3-675b (**FREE**) | gemini-2.5-flash ($0.30/$2.50)  | kimi-k2.7 ($0.95/$4.00)      |
 | MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)  | kimi-k2.7 ($0.95/$4.00)         | gpt-5.3-codex ($1.75/$14.00) |
-| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)  | gemini-3.1-pro ($2/$12)         | claude-opus-4.8 ($5/$25)     |
+| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)  | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     |
 | REASONING | deepseek-reasoner ($0.20/$0.40)      | deepseek-reasoner ($0.20/$0.40) | claude-sonnet-4.6 ($3/$15)   |
 
 **Blended average: $2.05/M** vs $25/M for Claude Opus = **92% savings**
@@ -456,6 +456,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | --------------------------- | --------: | ---------: | ---------: | ------- | --------------------------------- |
 | anthropic/claude-sonnet-5   |     $3.00 |     $15.00 |    $0.0090 | 1M      | reasoning, vision, agentic, tools |
 | anthropic/claude-sonnet-4.6 |     $3.00 |     $15.00 |    $0.0090 | 200K    | reasoning, vision, agentic, tools |
+| anthropic/claude-opus-5     |     $5.00 |     $25.00 |    $0.0150 | 1M      | reasoning, vision, agentic, tools |
 | anthropic/claude-opus-4.8   |     $5.00 |     $25.00 |    $0.0150 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.6-sol          |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.5              |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |

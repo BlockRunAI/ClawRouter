@@ -4,6 +4,30 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.233 — July 24, 2026
+
+Syncs **Claude Opus 5**, which Anthropic shipped and blockrun added on launch day (blockrun `src/lib/models.ts`, [#283](https://github.com/blockrunai/blockrun/pull/283)).
+
+### Added — Claude Opus 5 (Anthropic flagship)
+
+- **`anthropic/claude-opus-5`** registered in `BLOCKRUN_MODELS`: **$5/$25** per 1M, **1M context**, 128K max output, reasoning + vision + agentic tool use. Anthropic bills the 1M window at standard rates, so there are no long-context tier fields to model. Verified against both source-of-truth planes — the live gateway (`GET /api/v1/models`) and blockrun's registry, which lists it in the featured array with `fallbackModel: anthropic/claude-opus-4.8`.
+- Added to `top-models.json` at rank 2 (picker + default-model allowlist), the README premium pricing table, and the SKILL catalog line.
+- Inserted at the head of the in-family Opus fallback chain in **four** routing tiers — premium COMPLEX + REASONING, agentic COMPLEX + REASONING. Cost-neutral, so no tier primary moved: premium COMPLEX stays on `claude-fable-5`, and the `auto`/`eco`/`free` profiles are untouched.
+- `clawrouter doctor opus` now runs on Opus 5 (`DOCTOR_MODELS` in `src/doctor.ts`), same `~$0.01` estimate.
+
+### Changed — bare `opus` alias promoted to Opus 5
+
+- **`opus`, `anthropic/opus`, and `blockrun/opus` now resolve to `anthropic/claude-opus-5`** (previously 4.8). New explicit pins `opus-5` / `opus-5.0` / `opus-5-0` / `anthropic/claude-opus-5-0`.
+- The generic-alias rule is "only move it with the cost tradeoff argued explicitly" — here the tradeoff is **zero**. Opus 5 is $5/$25 with a 1M/128K envelope, identical to 4.8 on every axis that can bill or truncate a caller, so no wallet with a per-call cap changes behavior. blockrun made the same call upstream, repointing its `clawrouter-premium` redirect from 4.8 to Opus 5 on launch day; leaving `opus` on 4.8 would have made the proxy disagree with the gateway it fronts. Contrast `kimi`, deliberately left on K2.7 in v0.12.229 because K3 is ~5x the price.
+- **Every 4.x pin stays routable** — `opus-4.8`, `opus-4.7`, `opus-4.6`, `opus-4.5` and their `anthropic/claude-opus-4-N` forms are unchanged, as are the generation-generic `opus-4` / `anthropic/claude-opus-4` (they name the 4-series, not "newest"). Pinned by `src/models.test.ts`.
+- `selector.ts` savings baseline stays on `claude-opus-4.7` — pricing-identical, so no change to the savings math.
+
+### Fixed — stale premium COMPLEX primary in the docs
+
+- `README.md` and `docs/routing-profiles.md` both still listed the premium COMPLEX primary as `claude-opus-4.8`; it has been `claude-fable-5` ($10/$50) since v0.12.221. Corrected in both.
+
+---
+
 ## v0.12.232 — July 20, 2026
 
 Fixes a cost-control hole: requests using OpenAI's current `max_completion_tokens` field were priced as if they had asked for nothing.

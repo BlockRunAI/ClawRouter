@@ -1174,7 +1174,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       // back to Google at the same time). Prefer xAI Grok → Moonshot → OpenAI
       // flagship → DeepSeek → NVIDIA free instead.
       fallback: [
-        "anthropic/claude-opus-4.8", // in-family hot swap first (half the price, 1M ctx + adaptive thinking)
+        "anthropic/claude-opus-5", // in-family hot swap first (half the price, 1M ctx + adaptive thinking)
+        "anthropic/claude-opus-4.8", // in-family hot swap (identical cost to 5)
         "anthropic/claude-opus-4.7", // in-family hot swap (identical cost to 4.8)
         "anthropic/claude-opus-4.6", // in-family hot swap
         "anthropic/claude-sonnet-5", // Sonnet-tier drop-down, near-Opus quality
@@ -1196,7 +1197,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       primary: "anthropic/claude-sonnet-4.6", // 2,110ms, $3/$15 - best for reasoning/instructions
       fallback: [
         "anthropic/claude-sonnet-5", // in-family hot swap — same cost, adaptive thinking, 1M ctx
-        "anthropic/claude-opus-4.8", // Newest flagship Opus w/ adaptive thinking
+        "anthropic/claude-opus-5", // Newest flagship Opus w/ adaptive thinking
+        "anthropic/claude-opus-4.8", // Prior flagship Opus — identical cost to 5
         "anthropic/claude-opus-4.7", // Flagship Opus w/ adaptive thinking
         "anthropic/claude-opus-4.6", // 2,139ms
         "xai/grok-4-1-fast-reasoning", // 1,454ms, cheap fast reasoning
@@ -1234,7 +1236,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       // Prefer 503-resistant providers first.
       fallback: [
         "anthropic/claude-sonnet-5", // in-family hot swap — same cost, near-Opus agentic quality
-        "anthropic/claude-opus-4.8", // Newest flagship Opus — in-family hot swap
+        "anthropic/claude-opus-5", // Newest flagship Opus — in-family hot swap
+        "anthropic/claude-opus-4.8", // Prior flagship Opus — identical cost to 5
         "anthropic/claude-opus-4.7", // Flagship Opus — in-family hot swap
         "anthropic/claude-opus-4.6", // 2,139ms
         "xai/grok-4-0709", // 1,348ms — strong tool use, independent infra
@@ -1251,7 +1254,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       primary: "anthropic/claude-sonnet-4.6", // 2,110ms — strong tool use + reasoning
       fallback: [
         "anthropic/claude-sonnet-5", // in-family hot swap — same cost, adaptive thinking
-        "anthropic/claude-opus-4.8", // Newest flagship Opus w/ adaptive thinking
+        "anthropic/claude-opus-5", // Newest flagship Opus w/ adaptive thinking
+        "anthropic/claude-opus-4.8", // Prior flagship Opus — identical cost to 5
         "anthropic/claude-opus-4.7", // Flagship Opus w/ adaptive thinking
         "anthropic/claude-opus-4.6", // 2,139ms
         "xai/grok-4-1-fast-reasoning", // 1,454ms

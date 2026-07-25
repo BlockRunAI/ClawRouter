@@ -14,7 +14,7 @@ describe("resolveModelAlias", () => {
     expect(resolveModelAlias("claude")).toBe("anthropic/claude-sonnet-4.6");
     expect(resolveModelAlias("br-sonnet")).toBe("anthropic/claude-sonnet-4.6");
     expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-4.8");
+    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-5");
     expect(resolveModelAlias("haiku")).toBe("anthropic/claude-haiku-4.5");
   });
 
@@ -62,13 +62,15 @@ describe("resolveModelAlias", () => {
   it("resolves aliases even when sent with blockrun/ prefix", () => {
     expect(resolveModelAlias("blockrun/claude")).toBe("anthropic/claude-sonnet-4.6");
     expect(resolveModelAlias("blockrun/sonnet-4.6")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("blockrun/opus")).toBe("anthropic/claude-opus-4.8");
+    expect(resolveModelAlias("blockrun/opus")).toBe("anthropic/claude-opus-5");
   });
 
-  it("keeps explicit version pins routable, promotes generic opus-4 to flagship 4.8", () => {
+  it("keeps explicit version pins routable, promotes generic opus-4 to 4-series flagship 4.8", () => {
     expect(resolveModelAlias("anthropic/claude-sonnet-4")).toBe("anthropic/claude-sonnet-4.6");
+    // `opus-4` names the 4-series generation, so it stays on 4.8 even though the
+    // bare `opus` alias has moved on to Opus 5.
     expect(resolveModelAlias("anthropic/claude-opus-4")).toBe("anthropic/claude-opus-4.8");
-    // Newest flagship resolves both as bare alias and explicit pin.
+    expect(resolveModelAlias("opus-4")).toBe("anthropic/claude-opus-4.8");
     expect(resolveModelAlias("opus-4.8")).toBe("anthropic/claude-opus-4.8");
     expect(resolveModelAlias("anthropic/claude-opus-4-8")).toBe("anthropic/claude-opus-4.8");
     // Explicit version pins must stay on their version, not upgrade to the flagship.
@@ -98,6 +100,33 @@ describe("resolveModelAlias", () => {
     expect(resolveModelAlias("xai/grok-code-fast-1")).toBe("deepseek/deepseek-chat");
     expect(resolveModelAlias("blockrun/xai/grok-code-fast-1")).toBe("deepseek/deepseek-chat");
     expect(resolveModelAlias("grok-code-fast-1")).toBe("deepseek/deepseek-chat");
+  });
+
+  it("promotes bare opus to Opus 5 while every 4.x pin stays routable", () => {
+    // Opus 5 takes the bare alias because the move is cost-neutral: $5/$25 and a
+    // 1M/128K envelope, identical to Opus 4.8 — so no per-call-cap wallet changes
+    // behavior. BlockRun made the same call upstream, repointing its
+    // `clawrouter-premium` redirect to anthropic/claude-opus-5 on launch day.
+    // Contrast `kimi`, deliberately left on K2.7 because K3 is ~5x the price.
+    const opus5 = BLOCKRUN_MODELS.find((m) => m.id === "anthropic/claude-opus-5");
+    expect(opus5).toBeDefined();
+    expect(opus5?.inputPrice).toBe(5.0);
+    expect(opus5?.outputPrice).toBe(25.0);
+    expect(opus5?.contextWindow).toBe(1000000);
+    expect(opus5?.maxOutput).toBe(128000);
+
+    for (const alias of ["opus", "opus-5", "opus-5.0", "opus-5-0", "anthropic/opus"]) {
+      expect(resolveModelAlias(alias)).toBe("anthropic/claude-opus-5");
+    }
+    // The catalog id must survive resolution untouched — it is not an alias key.
+    expect(resolveModelAlias("anthropic/claude-opus-5")).toBe("anthropic/claude-opus-5");
+
+    // Cost-stability callers pinned to a 4.x version keep that version.
+    expect(resolveModelAlias("opus-4.8")).toBe("anthropic/claude-opus-4.8");
+    expect(resolveModelAlias("anthropic/claude-opus-4-8")).toBe("anthropic/claude-opus-4.8");
+    expect(resolveModelAlias("opus-4.7")).toBe("anthropic/claude-opus-4.7");
+    expect(resolveModelAlias("opus-4.6")).toBe("anthropic/claude-opus-4.6");
+    expect(resolveModelAlias("anthropic/claude-opus-4.5")).toBe("anthropic/claude-opus-4.5");
   });
 
   it("keeps sonnet-4.5 as a distinct pin while bare sonnet stays on 4.6", () => {

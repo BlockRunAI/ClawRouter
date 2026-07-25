@@ -374,8 +374,8 @@ const DOCTOR_MODELS: Record<DoctorModel, { id: string; name: string; cost: strin
     cost: "~$0.003",
   },
   opus: {
-    id: "anthropic/claude-opus-4.8",
-    name: "Claude Opus 4.8",
+    id: "anthropic/claude-opus-5",
+    name: "Claude Opus 5",
     cost: "~$0.01",
   },
 };

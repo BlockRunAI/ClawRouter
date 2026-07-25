@@ -877,7 +877,7 @@ fi
 echo ""
 echo "Model aliases available:"
 echo "  /model sonnet    → claude-sonnet-4.6"
-echo "  /model opus      → claude-opus-4.8"
+echo "  /model opus      → claude-opus-5"
 echo "  /model codex     → openai/gpt-5.3-codex"
 echo "  /model deepseek  → deepseek/deepseek-chat"
 echo "  /model free      → gpt-oss-120b (default free)"

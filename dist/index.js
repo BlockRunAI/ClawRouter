@@ -58,6 +58,7 @@ var init_top_models = __esm({
       "eco",
       "free",
       "anthropic/claude-fable-5",
+      "anthropic/claude-opus-5",
       "anthropic/claude-opus-4.8",
       "anthropic/claude-opus-4.7",
       "anthropic/claude-sonnet-5",
@@ -213,7 +214,7 @@ var init_models = __esm({
     "use strict";
     init_top_models2();
     MODEL_ALIASES = {
-      // Claude - flagship opus is 4.8; bare sonnet stays at 4.6 (sonnet-5 is opt-in
+      // Claude - flagship opus is 5; bare sonnet stays at 4.6 (sonnet-5 is opt-in
       // via explicit `sonnet-5` — not promoted to the bare alias pending benchmarks)
       claude: "anthropic/claude-sonnet-4.6",
       "br-sonnet": "anthropic/claude-sonnet-4.6",
@@ -237,7 +238,15 @@ var init_models = __esm({
       fable: "anthropic/claude-fable-5",
       "fable-5": "anthropic/claude-fable-5",
       "fable-5.0": "anthropic/claude-fable-5",
-      opus: "anthropic/claude-opus-4.8",
+      // Opus 5 (2026-07-24) takes the bare `opus` alias: identical $5/$25 and the
+      // same 1M/128K envelope as 4.8, so no per-call-cap wallet changes behavior,
+      // and BlockRun already repointed `clawrouter-premium` → opus-5. `opus-4` and
+      // `anthropic/claude-opus-4` stay on 4.8 — they name the 4-series generation.
+      // Note: `anthropic/claude-opus-5` must NOT be an alias key (see fable note).
+      opus: "anthropic/claude-opus-5",
+      "opus-5": "anthropic/claude-opus-5",
+      "opus-5.0": "anthropic/claude-opus-5",
+      "opus-5-0": "anthropic/claude-opus-5",
       "opus-4": "anthropic/claude-opus-4.8",
       "opus-4.8": "anthropic/claude-opus-4.8",
       "opus-4-8": "anthropic/claude-opus-4.8",
@@ -251,7 +260,9 @@ var init_models = __esm({
       // fable-5 relisted 2026-07-06 (see note above)
       "anthropic/fable": "anthropic/claude-fable-5",
       "anthropic/claude-fable-5.0": "anthropic/claude-fable-5",
-      "anthropic/opus": "anthropic/claude-opus-4.8",
+      "anthropic/opus": "anthropic/claude-opus-5",
+      "anthropic/claude-opus-5.0": "anthropic/claude-opus-5",
+      "anthropic/claude-opus-5-0": "anthropic/claude-opus-5",
       "anthropic/haiku": "anthropic/claude-haiku-4.5",
       "anthropic/claude": "anthropic/claude-sonnet-4.6",
       // Backward compatibility - generic opus-4 and older flagships point at 4.8;
@@ -957,6 +968,22 @@ var init_models = __esm({
         id: "anthropic/claude-opus-4.8",
         name: "Claude Opus 4.8",
         version: "4.8",
+        inputPrice: 5,
+        outputPrice: 25,
+        contextWindow: 1e6,
+        maxOutput: 128e3,
+        reasoning: true,
+        vision: true,
+        agentic: true,
+        toolCalling: true
+      },
+      // claude-opus-5 added 2026-07-24 (BlockRun launch-day sync, PR #283).
+      // Same $5/$25 as Opus 4.8 — Anthropic bills the 1M window at standard rates,
+      // so there is no long-context premium to model here.
+      {
+        id: "anthropic/claude-opus-5",
+        name: "Claude Opus 5",
+        version: "5",
         inputPrice: 5,
         outputPrice: 25,
         contextWindow: 1e6,
@@ -35625,8 +35652,10 @@ var init_config = __esm({
           // back to Google at the same time). Prefer xAI Grok → Moonshot → OpenAI
           // flagship → DeepSeek → NVIDIA free instead.
           fallback: [
-            "anthropic/claude-opus-4.8",
+            "anthropic/claude-opus-5",
             // in-family hot swap first (half the price, 1M ctx + adaptive thinking)
+            "anthropic/claude-opus-4.8",
+            // in-family hot swap (identical cost to 5)
             "anthropic/claude-opus-4.7",
             // in-family hot swap (identical cost to 4.8)
             "anthropic/claude-opus-4.6",
@@ -35661,8 +35690,10 @@ var init_config = __esm({
           fallback: [
             "anthropic/claude-sonnet-5",
             // in-family hot swap — same cost, adaptive thinking, 1M ctx
-            "anthropic/claude-opus-4.8",
+            "anthropic/claude-opus-5",
             // Newest flagship Opus w/ adaptive thinking
+            "anthropic/claude-opus-4.8",
+            // Prior flagship Opus — identical cost to 5
             "anthropic/claude-opus-4.7",
             // Flagship Opus w/ adaptive thinking
             "anthropic/claude-opus-4.6",
@@ -35717,8 +35748,10 @@ var init_config = __esm({
           fallback: [
             "anthropic/claude-sonnet-5",
             // in-family hot swap — same cost, near-Opus agentic quality
-            "anthropic/claude-opus-4.8",
+            "anthropic/claude-opus-5",
             // Newest flagship Opus — in-family hot swap
+            "anthropic/claude-opus-4.8",
+            // Prior flagship Opus — identical cost to 5
             "anthropic/claude-opus-4.7",
             // Flagship Opus — in-family hot swap
             "anthropic/claude-opus-4.6",
@@ -35747,8 +35780,10 @@ var init_config = __esm({
           fallback: [
             "anthropic/claude-sonnet-5",
             // in-family hot swap — same cost, adaptive thinking
-            "anthropic/claude-opus-4.8",
+            "anthropic/claude-opus-5",
             // Newest flagship Opus w/ adaptive thinking
+            "anthropic/claude-opus-4.8",
+            // Prior flagship Opus — identical cost to 5
             "anthropic/claude-opus-4.7",
             // Flagship Opus w/ adaptive thinking
             "anthropic/claude-opus-4.6",
