@@ -87057,10 +87057,14 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   let estimatedCostMicros;
   let isFreeModel = FREE_MODELS.has(modelId ?? "");
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
-    const estimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
+    const estimated = estimateAmount(modelId, body.length, maxTokens);
+    const preflightEstimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
-      const bufferedCostMicros = estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
+    }
+    if (preflightEstimated) {
+      const preflightEstimatedCostMicros = BigInt(preflightEstimated);
+      const bufferedCostMicros = preflightEstimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
       let sufficiency = null;
       let balanceCheckTimer;
       try {
@@ -87090,6 +87094,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         );
         modelId = freeFallback;
         isFreeModel = true;
+        estimatedCostMicros = void 0;
         const parsed = JSON.parse(body.toString());
         parsed.model = toUpstreamModelId(freeFallback);
         body = Buffer.from(JSON.stringify(parsed));

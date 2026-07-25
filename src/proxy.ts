@@ -4689,14 +4689,18 @@ async function proxyRequest(
   let isFreeModel = FREE_MODELS.has(modelId ?? "");
 
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
-    const estimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
+    const estimated = estimateAmount(modelId, body.length, maxTokens);
+    const preflightEstimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
+    }
+    if (preflightEstimated) {
+      const preflightEstimatedCostMicros = BigInt(preflightEstimated);
 
       // Apply extra buffer for balance check to prevent x402 failures after streaming starts.
       // This is aggressive to avoid triggering OpenClaw's 5-24 hour billing cooldown.
       const bufferedCostMicros =
-        (estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
+        (preflightEstimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
 
       // Check balance before proceeding (using buffered amount)
       // Wrap in try/catch: Solana RPC failures (timeouts, rate limits) should
@@ -4737,6 +4741,7 @@ async function proxyRequest(
         );
         modelId = freeFallback;
         isFreeModel = true; // keep in sync — budget logic gates on !isFreeModel
+        estimatedCostMicros = undefined;
         // Update the body with new model (map free/ → nvidia/ for upstream)
         const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
         parsed.model = toUpstreamModelId(freeFallback);
