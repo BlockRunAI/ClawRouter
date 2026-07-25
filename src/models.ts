@@ -507,6 +507,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 400000,
     maxOutput: 128000,
     reasoning: true,
+    vision: true,
     toolCalling: true,
   },
   // GPT-5.6 Family — GA 2026-07-09. Three fixed tiers (Sol/Terra/Luna) replace the
@@ -639,6 +640,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 400000,
     maxOutput: 128000,
     reasoning: true,
+    vision: true,
     toolCalling: true,
   },
   {
@@ -981,6 +983,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 3.0,
     contextWindow: 1000000,
     maxOutput: 65536,
+    reasoning: true,
     vision: true,
   },
   {
@@ -1559,6 +1562,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0,
     contextWindow: 131072,
     maxOutput: 16384,
+    reasoning: true,
   },
   {
     // NVIDIA Nemotron Nano 12B v2 VL: vision-language (text + image), 131K context.
@@ -1569,6 +1573,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0,
     contextWindow: 131072,
     maxOutput: 16384,
+    reasoning: true,
     vision: true,
   },
 
@@ -1584,6 +1589,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 4.4,
     contextWindow: 1000000,
     maxOutput: 262144,
+    reasoning: true,
     toolCalling: true,
   },
   {
@@ -1596,6 +1602,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 4.4,
     contextWindow: 200000,
     maxOutput: 128000,
+    reasoning: true,
     toolCalling: true,
     promo: { flatPrice: 0.001, startDate: "2026-04-01", endDate: "2026-06-05" },
   },
@@ -1608,6 +1615,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 1.92,
     contextWindow: 200000,
     maxOutput: 128000,
+    reasoning: true,
     toolCalling: true,
   },
   {
@@ -1619,6 +1627,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 4.0,
     contextWindow: 200000,
     maxOutput: 128000,
+    reasoning: true,
     toolCalling: true,
   },
 ];

@@ -4,6 +4,33 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.235 — July 25, 2026
+
+Fixes capability-flag drift found by auditing all 88 shared entries against blockrun's `categories` array. What began as a single missing `vision` on `gpt-5.4-pro` turned out to be 16 mismatches; 9 are corrected here, 7 are deliberate and now pinned by tests.
+
+### Fixed — `vision` missing on the max-compute Pro tiers
+
+- `openai/gpt-5.2-pro` and `openai/gpt-5.4-pro` were registered without `vision`, though blockrun lists it on both. `vision` gates `filterByVision()`, so image requests were dropping both models from the candidate pool for no reason — a silent capability under-claim, not a routing preference.
+
+### Fixed — `reasoning` missing on seven thinking-capable models
+
+- `google/gemini-3-flash-preview`, `free/nemotron-nano-9b-v2`, `free/nemotron-nano-12b-v2-vl`, `zai/glm-5`, `zai/glm-5.1`, `zai/glm-5.2`, `zai/glm-5-turbo`.
+- The flag enrolls an id in `REASONING_MODEL_IDS` (`proxy.ts`), raising its per-model timeout from 60s to 180s. These models genuinely think before first token, so the 60s ceiling was cutting them off early on cold start. None of the seven is a tier primary, so the longer stall is confined to fallback paths that only run after a primary already failed.
+
+### Kept — `vision` on two Claude models blockrun under-claims
+
+- blockrun lists `claude-haiku-4.5` as chat+coding and `claude-sonnet-4.6` as chat+coding+reasoning; neither carries `vision`. That is an **upstream catalog bug, not a ClawRouter over-claim** — a live gateway probe sent an image to `claude-haiku-4.5` and it read the image correctly.
+- Dropping the flag to "match" the source of truth would have broken image routing to the premium REASONING primary and both agentic primaries. The source-of-truth rule governs pricing, ids and aliases; it is not a mandate to copy an upstream data error into a working-feature regression. Worth fixing in blockrun's catalog.
+
+### Notes
+
+- Also confirmed the deployed `/api/v1/models` response lags blockrun's repo on `categories` — audit against the repo, not the live endpoint.
+- Three remaining `reasoning` gaps (`openai/gpt-5.3-codex`, `google/gemini-3.1-flash-lite`, `free/gpt-oss-120b`) are **intentionally left alone**: all three are tier primaries, so the flag would triple the failover stall on default routing paths. Changing them is a latency decision, not a data fix.
+- `xai/grok-4.20-*` are hidden upstream and left untouched.
+- A new `capability flags vs blockrun's catalog` suite pins the resolved set so this cannot drift silently again.
+
+---
+
 ## v0.12.234 — July 25, 2026
 
 Closes two catalog gaps found by diffing the live gateway against `BLOCKRUN_MODELS` during the Opus 5 sync — both models were already live upstream and billable, but absent from the registry, so they carried no local pricing and never appeared in the picker.

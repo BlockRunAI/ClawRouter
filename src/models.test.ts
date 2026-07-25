@@ -236,6 +236,49 @@ describe("resolveModelAlias", () => {
   });
 });
 
+describe("capability flags vs blockrun's catalog", () => {
+  // `vision` gates filterByVision() — an under-claim drops the model from the
+  // candidate pool on image requests; an over-claim routes an image to a model
+  // that cannot read it. `reasoning` enrolls the id in REASONING_MODEL_IDS,
+  // which triples the per-model timeout (60s -> 180s) on a hung upstream.
+  // Both were silently drifting from blockrun's categories until the 2026-07-25
+  // audit, so the resolved set is pinned here rather than left to drift again.
+
+  it("marks every max-compute Pro tier vision-capable", () => {
+    // Missing on 5.2-pro/5.4-pro until 2026-07-25 — blockrun lists vision on
+    // both, so image requests were skipping them for no reason.
+    for (const id of ["openai/gpt-5.2-pro", "openai/gpt-5.4-pro", "openai/gpt-5.5-pro"]) {
+      expect(BLOCKRUN_MODELS.find((m) => m.id === id)?.vision).toBe(true);
+    }
+  });
+
+  it("marks thinking-capable models as reasoning so they get the 180s timeout", () => {
+    for (const id of [
+      "google/gemini-3-flash-preview",
+      "free/nemotron-nano-9b-v2",
+      "free/nemotron-nano-12b-v2-vl",
+      "zai/glm-5",
+      "zai/glm-5.1",
+      "zai/glm-5.2",
+      "zai/glm-5-turbo",
+    ]) {
+      expect(BLOCKRUN_MODELS.find((m) => m.id === id)?.reasoning).toBe(true);
+    }
+  });
+
+  it("keeps vision on Claude models that blockrun's catalog under-claims", () => {
+    // blockrun lists haiku-4.5 as chat+coding and sonnet-4.6 as
+    // chat+coding+reasoning — neither carries `vision`. That is an upstream
+    // catalog bug, not a ClawRouter over-claim: a live gateway probe on
+    // 2026-07-25 sent an image to claude-haiku-4.5 and it answered correctly.
+    // Dropping the flag to "match" blockrun would break image routing to the
+    // premium REASONING and agentic COMPLEX/REASONING primaries.
+    for (const id of ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4.6"]) {
+      expect(BLOCKRUN_MODELS.find((m) => m.id === id)?.vision).toBe(true);
+    }
+  });
+});
+
 describe("OPENCLAW_MODELS integrity", () => {
   it("contains no duplicate ids (alias-shadowed catalog entries are excluded)", () => {
     const ids = OPENCLAW_MODELS.map((m) => m.id);

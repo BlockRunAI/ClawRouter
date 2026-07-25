@@ -615,6 +615,7 @@ var init_models = __esm({
         contextWindow: 4e5,
         maxOutput: 128e3,
         reasoning: true,
+        vision: true,
         toolCalling: true
       },
       // GPT-5.6 Family — GA 2026-07-09. Three fixed tiers (Sol/Terra/Luna) replace the
@@ -746,6 +747,7 @@ var init_models = __esm({
         contextWindow: 4e5,
         maxOutput: 128e3,
         reasoning: true,
+        vision: true,
         toolCalling: true
       },
       {
@@ -1082,6 +1084,7 @@ var init_models = __esm({
         outputPrice: 3,
         contextWindow: 1e6,
         maxOutput: 65536,
+        reasoning: true,
         vision: true
       },
       {
@@ -1646,7 +1649,8 @@ var init_models = __esm({
         inputPrice: 0,
         outputPrice: 0,
         contextWindow: 131072,
-        maxOutput: 16384
+        maxOutput: 16384,
+        reasoning: true
       },
       {
         // NVIDIA Nemotron Nano 12B v2 VL: vision-language (text + image), 131K context.
@@ -1657,6 +1661,7 @@ var init_models = __esm({
         outputPrice: 0,
         contextWindow: 131072,
         maxOutput: 16384,
+        reasoning: true,
         vision: true
       },
       // Z.AI GLM-5 Models
@@ -1671,6 +1676,7 @@ var init_models = __esm({
         outputPrice: 4.4,
         contextWindow: 1e6,
         maxOutput: 262144,
+        reasoning: true,
         toolCalling: true
       },
       {
@@ -1683,6 +1689,7 @@ var init_models = __esm({
         outputPrice: 4.4,
         contextWindow: 2e5,
         maxOutput: 128e3,
+        reasoning: true,
         toolCalling: true,
         promo: { flatPrice: 1e-3, startDate: "2026-04-01", endDate: "2026-06-05" }
       },
@@ -1695,6 +1702,7 @@ var init_models = __esm({
         outputPrice: 1.92,
         contextWindow: 2e5,
         maxOutput: 128e3,
+        reasoning: true,
         toolCalling: true
       },
       {
@@ -1706,6 +1714,7 @@ var init_models = __esm({
         outputPrice: 4,
         contextWindow: 2e5,
         maxOutput: 128e3,
+        reasoning: true,
         toolCalling: true
       }
     ];
