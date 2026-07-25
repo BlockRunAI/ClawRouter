@@ -14,6 +14,11 @@ export type ModelPricing = {
   flatPrice?: number;
 };
 
+// The savings baseline is a price anchor, not "the current flagship" — it is
+// deliberately NOT bumped every time a new Opus ships. Opus 4.7, 4.8 and 5 all
+// bill $5/$25, so moving it would change no reported number while breaking
+// comparability with historical journal entries. Only move it if the Opus tier
+// itself is repriced.
 const BASELINE_MODEL_ID = "anthropic/claude-opus-4.7";
 
 // Hardcoded fallback: Claude Opus 4.7 pricing (per 1M tokens)

@@ -115,7 +115,17 @@ describe("resolveModelAlias", () => {
     expect(opus5?.contextWindow).toBe(1000000);
     expect(opus5?.maxOutput).toBe(128000);
 
-    for (const alias of ["opus", "opus-5", "opus-5.0", "opus-5-0", "anthropic/opus"]) {
+    for (const alias of [
+      "opus",
+      "opus-5",
+      "opus-5.0",
+      "opus-5-0",
+      "anthropic/opus",
+      "anthropic/claude-opus-5.0",
+      "anthropic/claude-opus-5-0",
+      "blockrun/opus",
+      "openai/opus",
+    ]) {
       expect(resolveModelAlias(alias)).toBe("anthropic/claude-opus-5");
     }
     // The catalog id must survive resolution untouched — it is not an alias key.

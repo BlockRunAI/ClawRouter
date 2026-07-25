@@ -239,8 +239,12 @@ var init_models = __esm({
       "fable-5": "anthropic/claude-fable-5",
       "fable-5.0": "anthropic/claude-fable-5",
       // Opus 5 (2026-07-24) takes the bare `opus` alias: identical $5/$25 and the
-      // same 1M/128K envelope as 4.8, so no per-call-cap wallet changes behavior,
-      // and BlockRun already repointed `clawrouter-premium` → opus-5. `opus-4` and
+      // same 1M/128K envelope as 4.8, so a wallet with a per-call cost cap sees no
+      // change in how a request is priced or sized — the promotion cannot push a
+      // caller through a cap. BlockRun repointed `clawrouter-premium` → opus-5 for
+      // the same reason. (Unit price only: adaptive thinking may emit more output
+      // tokens per call, which raises realized spend without changing the cap math.)
+      // `opus-4` and
       // `anthropic/claude-opus-4` stay on 4.8 — they name the 4-series generation.
       // Note: `anthropic/claude-opus-5` must NOT be an alias key (see fable note).
       opus: "anthropic/claude-opus-5",
