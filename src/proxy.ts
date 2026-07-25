@@ -1993,12 +1993,50 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     };
   }
 
+
+/**
+ * Default-on TWZRD AutoGate for the internal x402 client (Fork-1 seat).
+ * Soft-fails if the package is missing at runtime so forks can omit it.
+ * Kill: TWZRD_AUTO_GATE=0 or TWZRD_GATE_ENABLED=false (handled inside the gate).
+ */
+async function installTwzrdAutoGateOnClient(client: x402Client): Promise<void> {
+  try {
+    const { installTwzrdAutoGate } = await import("twzrd-x402-gate");
+    installTwzrdAutoGate(client, {
+      // refuse hard wash on Solana; Base remains observe (network unscored → allow)
+      refuseWashFlagged: true,
+      gateOnCanSpend: false,
+      unsupportedNetworkMode: "observe",
+    });
+    console.log(
+      "[ClawRouter] TWZRD AutoGate ON (pre-spend check). Kill: TWZRD_AUTO_GATE=0",
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Missing optional dep or incompatible client surface — do not block proxy boot.
+    if (/Cannot find module|ERR_MODULE_NOT_FOUND|twzrd-x402-gate/i.test(msg)) {
+      console.warn(
+        "[ClawRouter] twzrd-x402-gate not available — payments unguarded. npm i twzrd-x402-gate@^0.8.4",
+      );
+      return;
+    }
+    console.warn(`[ClawRouter] TWZRD AutoGate install skipped: ${msg}`);
+  }
+}
+
   // Create x402 payment client with EVM scheme (always available)
   const account = privateKeyToAccount(walletKey as `0x${string}`);
   const evmPublicClient = createPublicClient({ chain: base, transport: http() });
   const evmSigner = toClientEvmSigner(account, evmPublicClient);
   const x402 = new x402Client();
   registerExactEvmScheme(x402, { signer: evmSigner });
+
+  // TWZRD Fork-1 default seat: pre-spend gate on every payment before sign.
+  // Default ON when twzrd-x402-gate is installed (dependency). Kill switch:
+  //   TWZRD_AUTO_GATE=0 | TWZRD_GATE_ENABLED=false
+  // Base/EVM payments: observe mode (allow; Solana corpus does not score EVM).
+  // Solana payments: full wash/preflight. Seat identity stamps X-Twzrd-Caller.
+  await installTwzrdAutoGateOnClient(x402);
 
   // Register Solana scheme if key is available
   // Uses registerExactSvmScheme helper which registers:

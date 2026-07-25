@@ -55,6 +55,25 @@ ClawRouter is built for the agent-first world:
 
 This is the stack that lets agents operate autonomously: **x402 + USDC + local routing**.
 
+### Pre-spend trust (TWZRD AutoGate)
+
+By default ClawRouter installs [`twzrd-x402-gate`](https://www.npmjs.com/package/twzrd-x402-gate) on its internal x402 client **before any payment is signed**:
+
+- **Solana** pays: free TWZRD preflight (wash / allow|warn|block). `block` aborts the sign.
+- **Base / EVM** pays: observe mode (no fabricated Solana reputation; payment proceeds).
+- **Seat identity:** every gate call stamps `X-Twzrd-Caller: twzrd-x402-gate/<ver>` for measurable installs.
+
+**Kill switch (default remains ON):**
+
+```bash
+export TWZRD_AUTO_GATE=0
+# or
+export TWZRD_GATE_ENABLED=false
+```
+
+TWZRD is a pre-spend check, not a facilitator and not a replacement for ClawRouter routing.
+
+
 ---
 
 ## How it compares
