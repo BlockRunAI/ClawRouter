@@ -4,7 +4,7 @@
  * All routing parameters as a TypeScript constant.
  * Operators override via openclaw.yaml plugin config.
  *
- * Scoring uses 14 weighted dimensions with sigmoid confidence calibration.
+ * Scoring uses 15 weighted dimensions with sigmoid confidence calibration.
  */
 
 import type { RoutingConfig } from "./types.js";

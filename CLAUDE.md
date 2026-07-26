@@ -1,6 +1,6 @@
 # ClawRouter
 
-Smart LLM router for autonomous agents. 55+ models. Wallet-based auth. USDC micropayments via x402.
+Smart LLM router for autonomous agents. <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models. Wallet-based auth. USDC micropayments via x402.
 
 ## Commands
 
@@ -56,4 +56,4 @@ src/
 - Node >= 22
 - MIT license
 - npm registry: `@blockrun/clawrouter`
-- 15-dimension scoring for model routing (all local, < 1ms)
+- <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring for model routing (all local, < 1ms)

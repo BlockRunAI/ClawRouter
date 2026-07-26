@@ -1,3 +1,8 @@
 dist/
 node_modules/
 package-lock.json
+
+# Vendored byte-for-byte from BlockRunAI/blockrun:brand/sync-brand-numbers.mjs.
+# Formatting it here would fork the copy from the source and from the other 36
+# repos that carry it, and CI compares them.
+scripts/sync-brand-numbers.mjs
