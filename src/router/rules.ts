@@ -1,7 +1,7 @@
 /**
  * Rule-Based Classifier (v2 — Weighted Scoring)
  *
- * Scores a request across 14 weighted dimensions and maps the aggregate
+ * Scores a request across 15 weighted dimensions and maps the aggregate
  * score to a tier using configurable boundaries. Confidence is calibrated
  * via sigmoid — low confidence triggers the fallback classifier.
  *
@@ -145,7 +145,8 @@ export function classifyByRules(
   // and make every request score identically. See GitHub issue #50.
   const userText = prompt.toLowerCase();
 
-  // Score all 14 dimensions against user text only
+  // Score the base dimensions against user text only; the agentic dimension is
+  // appended below, so the scored total is one more than this list.
   const dimensions: DimensionScore[] = [
     // Token count uses total estimated tokens (system + user) — context size matters for model selection
     scoreTokenCount(estimatedTokens, config.tokenCountThresholds),

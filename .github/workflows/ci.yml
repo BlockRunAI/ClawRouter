@@ -50,5 +50,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The unit suite (713 tests) was never wired in here — only the lifecycle
+      # integration test ran, so a failing unit test could merge unnoticed.
+      - name: Unit tests
+        run: npm test
+
+      # Fails when a number in the docs disagrees with brand-numbers.json.
+      # Offline by design: it reads the committed snapshot and never fetches, so
+      # a blockrun.ai deploy in progress cannot fail this repo's CI.
+      - name: Brand numbers
+        run: node scripts/sync-brand-numbers.mjs --check
+
       - name: Integration tests (lifecycle)
         run: npx vitest run --config vitest.integration.config.ts test/integration/lifecycle.test.ts

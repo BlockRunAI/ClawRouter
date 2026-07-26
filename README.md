@@ -7,7 +7,7 @@
 <p>Agents can't sign up for accounts. Agents can't enter credit cards.<br>
 Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
-<em>8 models free, no crypto required. No signup. No API key. No credit card.</em></p>
+<em><!-- br:models.free -->8<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em></p>
 
 <br>
 
@@ -34,7 +34,7 @@ Agents can only sign transactions.<br><br>
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to 92%. It analyzes each request across 15 dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). 55+ models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -46,10 +46,10 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — 8 NVIDIA models are free forever (incl. 675B Mistral Large 3, 262K-context Qwen3-Next 80B + a vision-capable Nemotron Omni)
+- **Starts at $0** — <!-- br:models.free -->8<!-- /br:models.free --> NVIDIA models are free forever (incl. 675B Mistral Large 3, 262K-context Qwen3-Next 80B + a vision-capable Nemotron Omni)
 - **No accounts** — a wallet is generated locally, no signup
 - **No API keys** — your wallet signature IS authentication
-- **No model selection** — 15-dimension scoring picks the right model automatically
+- **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring picks the right model automatically
 - **No credit cards** — agents pay per-request with USDC via [x402](https://x402.org)
 - **No trust required** — runs locally, <1ms routing, zero external dependencies
 
@@ -59,16 +59,16 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ## How it compares
 
-|                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**          |
-| ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ----------------------- |
-| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **55+**                 |
-| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **8 models, no signup** |
-| **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)** |
-| **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature**    |
-| **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request**    |
-| **Runs locally** | No                | Yes              | No                | No                | **Yes**                 |
-| **Open source**  | No                | Yes              | No                | Partial           | **Yes**                 |
-| **Agent-ready**  | No                | No               | No                | No                | **Yes**                 |
+|                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**                                                         |
+| ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ---------------------------------------------------------------------- |
+| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->66<!-- /br:models.chatVisible -->**    |
+| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->8<!-- /br:models.free --> models, no signup** |
+| **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
+| **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature**                                                   |
+| **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request**                                                   |
+| **Runs locally** | No                | Yes              | No                | No                | **Yes**                                                                |
+| **Open source**  | No                | Yes              | No                | Partial           | **Yes**                                                                |
+| **Agent-ready**  | No                | No               | No                | No                | **Yes**                                                                |
 
 ✓ Open source · ✓ Smart routing · ✓ Runs locally · ✓ Crypto native · ✓ Agent ready
 
@@ -78,7 +78,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ## Quick Start
 
-> **No wallet? 8 models work free out of the box.** Install, run, and pin `free/mistral-large-3-675b` (or any of the 8) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+> **No wallet? <!-- br:models.free -->8<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/mistral-large-3-675b` (or any of the <!-- br:models.free -->8<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
 ### Option A — OpenClaw Agent
 
@@ -107,7 +107,7 @@ openclaw gateway restart
 
 > **Using Claude Code?** Check out [BRCC](https://blockrun.ai/brcc.md) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
-> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same 55+ models, same x402 USDC settlement on Base & Solana.
+> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
 
 No OpenClaw required. ClawRouter runs as a local proxy on port 8402.
 
@@ -118,7 +118,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the 8 free models (e.g. `free/mistral-large-3-675b`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->8<!-- /br:models.free --> free models (e.g. `free/mistral-large-3-675b`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -188,12 +188,12 @@ response = client.chat.completions.create(model="blockrun/auto", messages=[...])
 
 Choose your routing strategy with `/model <profile>`:
 
-| Profile          | Strategy           | Savings  | Best For             |
-| ---------------- | ------------------ | -------- | -------------------- |
-| `/model free`    | Free NVIDIA models | **100%** | $0 balance, learning |
-| `/model auto`    | Balanced (default) | 74-100%  | General use          |
-| `/model eco`     | Cheapest possible  | 95-100%  | Maximum savings      |
-| `/model premium` | Best quality       | 0%       | Mission-critical     |
+| Profile          | Strategy           | Savings                                                                            | Best For             |
+| ---------------- | ------------------ | ---------------------------------------------------------------------------------- | -------------------- |
+| `/model free`    | Free NVIDIA models | **100%**                                                                           | $0 balance, learning |
+| `/model auto`    | Balanced (default) | **<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%** | General use          |
+| `/model eco`     | Cheapest possible  | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%**   | Maximum savings      |
+| `/model premium` | Best quality       | 0%                                                                                 | Mission-critical     |
 
 **Shortcuts:** `/model grok`, `/model br-sonnet`, `/model gpt5`, `/model o3`
 
@@ -204,7 +204,7 @@ Choose your routing strategy with `/model <profile>`:
 **100% local routing. <1ms latency. Zero external API calls.**
 
 ```
-Request → Weighted Scorer (15 dimensions) → Tier → Best Model → Response
+Request → Weighted Scorer (<!-- br:clawrouter.dimensions -->14<!-- /br:clawrouter.dimensions --> dimensions) → Tier → Best Model → Response
 ```
 
 | Tier      | ECO Model                            | AUTO Model                      | PREMIUM Model                |
@@ -214,7 +214,14 @@ Request → Weighted Scorer (15 dimensions) → Tier → Best Model → Response
 | COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)  | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     |
 | REASONING | deepseek-reasoner ($0.20/$0.40)      | deepseek-reasoner ($0.20/$0.40) | claude-sonnet-4.6 ($3/$15)   |
 
-**Blended average: $2.05/M** vs $25/M for Claude Opus = **92% savings**
+**<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5** for the same traffic, on `auto`; **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** on `eco`.
+
+Not an "up to" figure. The baseline, the workload mix and the token ratio are
+published in [`savings-mix.json`](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json),
+priced against the live catalog, so anyone can recompute it and get the same
+answer. Models withheld from `/v1/models` are excluded from the mix — pricing a
+public claim on a model you cannot look up is not defensible — which makes the
+number conservative.
 
 ---
 
@@ -382,7 +389,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Models & Pricing
 
-55+ models across 9 providers, one wallet. **8 models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->8<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
 > **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.002/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
@@ -637,7 +644,7 @@ npm test
 
 **The LLM router built for autonomous agents**
 
-You're here. 55+ models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
+You're here. <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
 
 `curl -fsSL https://blockrun.ai/ClawRouter-update | bash`
 
@@ -661,7 +668,7 @@ Run Claude Code with 50+ models, no rate limits, no Anthropic account, no phone 
 
 **ClawRouter for NousResearch Hermes**
 
-Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same 55+ models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
+Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
 
 `pip install hermes-plugin-clawrouter`
 
@@ -678,15 +685,15 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same 55+ model
 
 ## More Resources
 
-| Resource                                               | Description              |
-| ------------------------------------------------------ | ------------------------ |
-| [Documentation](https://blockrun.ai/docs)              | Full docs                |
-| [Model Pricing](https://blockrun.ai/models)            | All models & prices      |
-| [Image Generation & Editing](docs/image-generation.md) | API examples, 8 models   |
-| [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM details |
-| [Architecture](docs/architecture.md)                   | Technical deep dive      |
-| [Configuration](docs/configuration.md)                 | Environment variables    |
-| [Troubleshooting](docs/troubleshooting.md)             | Common issues            |
+| Resource                                               | Description                                                             |
+| ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| [Documentation](https://blockrun.ai/docs)              | Full docs                                                               |
+| [Model Pricing](https://blockrun.ai/models)            | All models & prices                                                     |
+| [Image Generation & Editing](docs/image-generation.md) | API examples, <!-- br:models.image -->8<!-- /br:models.image --> models |
+| [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM details                                                |
+| [Architecture](docs/architecture.md)                   | Technical deep dive                                                     |
+| [Configuration](docs/configuration.md)                 | Environment variables                                                   |
+| [Troubleshooting](docs/troubleshooting.md)             | Common issues                                                           |
 
 ### Blog
 
@@ -705,11 +712,11 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same 55+ model
 
 ### What is ClawRouter?
 
-ClawRouter is an open-source (MIT licensed) smart LLM router built for autonomous AI agents. It analyzes each request across 15 dimensions and routes to the cheapest capable model in under 1ms, entirely locally — no external API calls needed for routing decisions.
+ClawRouter is an open-source (MIT licensed) smart LLM router built for autonomous AI agents. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally — no external API calls needed for routing decisions.
 
 ### How much can ClawRouter save on LLM costs?
 
-ClawRouter's blended average cost is $2.05 per million tokens compared to $25/M for Claude Opus, representing 92% savings. Actual savings depend on your workload — simple queries are routed to free models ($0/request), while complex tasks get premium models.
+On the `auto` profile ClawRouter costs <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% less than pinning Claude Opus 5 for every request, and <!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->% less on `eco`. That is computed from a published workload mix rather than estimated — see [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) for the baseline and assumptions. Actual savings depend on your workload — simple queries are routed to free models ($0/request), while complex tasks get premium models.
 
 ### How does ClawRouter compare to OpenRouter?
 
