@@ -135,3 +135,23 @@ describe("README tier table", () => {
     }
   }
 });
+
+describe("skill frontmatter", () => {
+  // A skill's YAML frontmatter is the description an agent reads when deciding
+  // whether to load it. A marker there is not inert — it becomes part of the
+  // string — so it holds literals, asserted here like package.json is.
+  const skill = readFileSync("skills/clawrouter/SKILL.md", "utf8");
+  const frontmatter = skill.slice(0, skill.indexOf("\n---", 4));
+  const n = JSON.parse(readFileSync("brand-numbers.json", "utf8")) as {
+    models: { chatVisible: number };
+    savings: { autoVsBaselinePct: number };
+  };
+
+  it("quotes the published savings figure", () => {
+    expect(frontmatter).toContain(`save ${n.savings.autoVsBaselinePct}% on inference costs`);
+  });
+
+  it("quotes the published model count", () => {
+    expect(frontmatter).toContain(`${n.models.chatVisible} models`);
+  });
+});
