@@ -2,6 +2,11 @@
 
 _March 16, 2026 | BlockRun Engineering_
 
+> **Numbers in this post are a snapshot from the date above.** They record what was
+> measured then and are deliberately not updated — rewriting them would misrepresent
+> the benchmark. For current figures see
+> [blockrun.ai/brand/numbers.json](https://blockrun.ai/brand/numbers.json).
+
 Last week we ran every model on BlockRun through a real-world latency benchmark — 39 models, same prompts, same payment pipeline, same hardware. No cherry-picked results. No synthetic lab conditions. Just cold, hard numbers from production infrastructure.
 
 The results changed how we route requests.

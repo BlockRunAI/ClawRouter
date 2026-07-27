@@ -135,7 +135,7 @@ Less context repeated = fewer tokens = lower cost. Agents that need to recall ea
 
 ### 7. x402 Micropayments — Wallet-Based Budget Control
 
-<p align="center"><img src="assets/blockrun-clawrouter-x402-usdc-micropayment-wallet-budget-control.png" alt="Budget limits enforced by physical construction — wallet loaded via Base/Solana, pay per call across 41+ models, balance hits zero and the valve shuts cleanly" width="720"></p>
+<p align="center"><img src="assets/blockrun-clawrouter-x402-usdc-micropayment-wallet-budget-control.png" alt="Budget limits enforced by physical construction — wallet loaded via Base/Solana, pay per call across <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, balance hits zero and the valve shuts cleanly" width="720"></p>
 
 ClawRouter pays for inference via [x402](https://x402.org/) USDC micropayments (Base or Solana). You load a wallet. Each inference call costs exactly what it costs. When the wallet runs low, requests stop cleanly.
 
@@ -144,7 +144,7 @@ There is no monthly invoice. There is no 3am email. There is a wallet balance, a
 **`maxCostPerRun`** — a per-session cost ceiling that stops or downgrades requests once a session exceeds a configured threshold (e.g., `$0.50`). This closes the remaining gap ([#3181](https://github.com/openclaw/openclaw/issues/3181)) where a wallet with sufficient funds can still accumulate within a single run. Two modes: `graceful` (downgrade to cheaper models) and `strict` (hard 429 once the cap is hit).
 
 ```
-41+ models. One wallet. Pay per call.
+<!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models. One wallet. Pay per call.
 ```
 
 ---
