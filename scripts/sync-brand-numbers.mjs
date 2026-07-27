@@ -19,7 +19,7 @@
  * and wrap the WHOLE token, so a badge URL, its alt text and the prose number
  * can all regenerate from one key.
  */
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, relative, extname } from "node:path";
 
 const ROOT = process.cwd();
@@ -43,7 +43,10 @@ const SKIP_DIRS = new Set([
   "node_modules", ".git", "dist", "build", "out", ".next", "coverage",
   "vendor", "target", "__pycache__", ".venv", "venv",
 ]);
-const TEXT_EXT = new Set([".md", ".mdx"]);
+// .txt is here for llms.txt, which is a first-class marketing surface: it is
+// what agents read to find out what BlockRun serves. Scanning other .txt files
+// costs a read and changes nothing — only files with markers are ever written.
+const TEXT_EXT = new Set([".md", ".mdx", ".txt"]);
 
 /* ── 1. numbers ──────────────────────────────────────────────────────────── */
 
@@ -194,9 +197,20 @@ function* walk(dir) {
   for (const name of readdirSync(dir)) {
     if (SKIP_DIRS.has(name)) continue;
     const p = join(dir, name);
-    const s = statSync(p);
-    if (s.isDirectory()) yield* walk(p);
-    else if (TEXT_EXT.has(extname(name))) yield p;
+    // lstat, not stat: a symlinked directory is reached by its real path or not
+    // at all. blockrun's docs/ -> awesome-blockrun/docs is exactly the case that
+    // matters — following it would edit a submodule's files behind the skip
+    // below, and a link pointing at an ancestor would recurse forever.
+    const s = lstatSync(p);
+    if (s.isSymbolicLink()) continue;
+    if (s.isDirectory()) {
+      // A nested repo is a submodule or vendored checkout: it carries its own
+      // brand-numbers.json and syncs itself. Rewriting its markers from THIS
+      // repo's snapshot would dirty a submodule nobody asked us to touch, and
+      // would report drift that belongs to another repo's CI.
+      if (existsSync(join(p, ".git"))) continue;
+      yield* walk(p);
+    } else if (TEXT_EXT.has(extname(name))) yield p;
   }
 }
 
