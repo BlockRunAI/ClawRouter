@@ -2,6 +2,11 @@
 
 _March 20, 2026 | BlockRun Engineering_
 
+> **Numbers in this post are a snapshot from the date above.** They record what was
+> measured then and are deliberately not updated — rewriting them would misrepresent
+> the benchmark. For current figures see
+> [blockrun.ai/brand/numbers.json](https://blockrun.ai/brand/numbers.json).
+
 When you route AI requests across 55+ models from 8 providers, you can't just pick the cheapest one. You can't just pick the fastest one either. We learned this the hard way.
 
 This is the technical story of how we benchmarked every model on our platform, discovered that speed and intelligence are poorly correlated, and built a production routing system that classifies requests in under 1ms using 14 weighted dimensions with sigmoid confidence calibration.

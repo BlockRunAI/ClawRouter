@@ -1,5 +1,11 @@
 # 9 Free AI Models, Zero Cost: How BlockRun Gives Developers Top-Tier LLMs for Nothing
 
+> **The count in this title is a snapshot.** It was 9 when this was written; the
+> published free tier is now 8 — models are withheld from `/v1/models` when a
+> provider's terms change, most recently over NVIDIA's prompt-retention policy.
+> The URL keeps its original slug so existing links do not break. Current figures:
+> [blockrun.ai/brand/numbers.json](https://blockrun.ai/brand/numbers.json).
+
 ## The Cost Problem Nobody Talks About
 
 It's 2026. Large language models are table stakes for developers. But here's the uncomfortable truth — **the models you can afford aren't good enough, and the good ones aren't affordable.**
@@ -80,7 +86,7 @@ Assume 100 requests per day, distributed roughly as:
 | ClawRouter ECO mode         | ~$1–3                  |
 | Manual free model selection | **$0**                 |
 
-**ECO mode saves 92%+ compared to Claude Opus alone.**
+**ECO mode is <!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->% cheaper than pinning Claude Opus 5 for every request.**
 
 ---
 
