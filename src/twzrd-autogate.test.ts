@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 /**
  * Proxy installs TWZRD AutoGate on the internal x402Client before payFetch.
@@ -14,7 +14,6 @@ describe("TWZRD AutoGate seat (Fork-1)", () => {
     if (prevGate === undefined) delete process.env.TWZRD_GATE_ENABLED;
     else process.env.TWZRD_GATE_ENABLED = prevGate;
     vi.resetModules();
-    vi.unmock("twzrd-x402-gate");
   });
 
   it("isTwzrdAutoGateDisabled honors TWZRD_AUTO_GATE=0", async () => {

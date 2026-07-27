@@ -1996,32 +1996,39 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
 /**
  * Default-on TWZRD AutoGate for the internal x402 client (Fork-1 seat).
- * Soft-fails if the package is missing at runtime so forks can omit it.
+ * Missing package = soft-skip so forks can omit the optional gate. Any other
+ * install failure fails closed: boot aborts instead of paying unguarded.
  * Kill: TWZRD_AUTO_GATE=0 or TWZRD_GATE_ENABLED=false (handled inside the gate).
  */
 async function installTwzrdAutoGateOnClient(client: x402Client): Promise<void> {
+  let gate: typeof import("twzrd-x402-gate");
   try {
-    const { installTwzrdAutoGate } = await import("twzrd-x402-gate");
-    installTwzrdAutoGate(client, {
-      // refuse hard wash on Solana; Base remains observe (network unscored → allow)
-      refuseWashFlagged: true,
-      gateOnCanSpend: false,
-      unsupportedNetworkMode: "observe",
-    });
-    console.log(
-      "[ClawRouter] TWZRD AutoGate ON (pre-spend check). Kill: TWZRD_AUTO_GATE=0",
-    );
+    gate = await import("twzrd-x402-gate");
   } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
     const msg = err instanceof Error ? err.message : String(err);
-    // Missing optional dep or incompatible client surface — do not block proxy boot.
-    if (/Cannot find module|ERR_MODULE_NOT_FOUND|twzrd-x402-gate/i.test(msg)) {
+    if (
+      code === "ERR_MODULE_NOT_FOUND" ||
+      code === "MODULE_NOT_FOUND" ||
+      /Cannot find module/i.test(msg)
+    ) {
       console.warn(
         "[ClawRouter] twzrd-x402-gate not available — payments unguarded. npm i twzrd-x402-gate@^0.8.4",
       );
       return;
     }
-    console.warn(`[ClawRouter] TWZRD AutoGate install skipped: ${msg}`);
+    throw err;
   }
+  // Registration failures must not fall through to unguarded payments.
+  gate.installTwzrdAutoGate(client, {
+    // refuse hard wash on Solana; Base remains observe (network unscored → allow)
+    refuseWashFlagged: true,
+    gateOnCanSpend: false,
+    unsupportedNetworkMode: "observe",
+  });
+  console.log(
+    "[ClawRouter] TWZRD AutoGate ON (pre-spend check). Kill: TWZRD_AUTO_GATE=0",
+  );
 }
 
   // Create x402 payment client with EVM scheme (always available)
