@@ -103,3 +103,35 @@ describe("README hero badge", () => {
     expect(readme).toContain(`alt="${free} free models"`);
   });
 });
+
+describe("README tier table", () => {
+  // The table names one model per tier per profile. It had drifted three cells
+  // out of config.ts — eco SIMPLE and both REASONING primaries — and nothing
+  // noticed, because a README is prose to everything except a reader.
+  //
+  // Matched on the model's short name rather than the full id: the table is
+  // written for humans and drops the provider prefix.
+  const readme = readFileSync("README.md", "utf8");
+  // End at the footnote line, not the first "†" — that character also appears
+  // inside the table, marking primaries withheld from /v1/models.
+  const table = readme.slice(readme.indexOf("| Tier "), readme.indexOf("\n† Withheld"));
+
+  const shortName = (id: string) => id.split("/")[1];
+  const profiles = [
+    ["ecoTiers", "ECO"],
+    ["tiers", "AUTO"],
+    ["premiumTiers", "PREMIUM"],
+  ] as const;
+
+  for (const [key, label] of profiles) {
+    for (const tier of ["SIMPLE", "MEDIUM", "COMPLEX", "REASONING"] as const) {
+      it(`${label} ${tier} names the configured primary`, () => {
+        const table_ = DEFAULT_ROUTING_CONFIG[key] as Record<string, { primary: string }>;
+        const primary = shortName(table_[tier].primary);
+        const row = table.split("\n").find((l) => l.startsWith(`| ${tier}`));
+        expect(row, `no ${tier} row in the README table`).toBeDefined();
+        expect(row).toContain(primary);
+      });
+    }
+  }
+});

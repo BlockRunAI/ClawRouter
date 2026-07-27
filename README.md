@@ -46,7 +46,7 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — <!-- br:models.free -->8<!-- /br:models.free --> NVIDIA models are free forever (incl. 675B Mistral Large 3, 262K-context Qwen3-Next 80B + a vision-capable Nemotron Omni)
+- **Starts at $0** — <!-- br:models.free -->8<!-- /br:models.free --> NVIDIA models are free forever (incl. 262K-context Qwen3-Next 80B, DeepSeek V4 Flash + a vision-capable Nemotron Omni)
 - **No accounts** — a wallet is generated locally, no signup
 - **No API keys** — your wallet signature IS authentication
 - **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring picks the right model automatically
@@ -78,7 +78,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ## Quick Start
 
-> **No wallet? <!-- br:models.free -->8<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/mistral-large-3-675b` (or any of the <!-- br:models.free -->8<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+> **No wallet? <!-- br:models.free -->8<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/mistral-nemotron` (or any of the <!-- br:models.free -->8<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
 ### Option A — OpenClaw Agent
 
@@ -118,7 +118,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->8<!-- /br:models.free --> free models (e.g. `free/mistral-large-3-675b`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->8<!-- /br:models.free --> free models (e.g. `free/mistral-nemotron`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -188,12 +188,14 @@ response = client.chat.completions.create(model="blockrun/auto", messages=[...])
 
 Choose your routing strategy with `/model <profile>`:
 
-| Profile          | Strategy           | Savings                                                                            | Best For             |
-| ---------------- | ------------------ | ---------------------------------------------------------------------------------- | -------------------- |
-| `/model free`    | Free NVIDIA models | **100%**                                                                           | $0 balance, learning |
-| `/model auto`    | Balanced (default) | **<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%** | General use          |
-| `/model eco`     | Cheapest possible  | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%**   | Maximum savings      |
-| `/model premium` | Best quality       | 0%                                                                                 | Mission-critical     |
+| Profile       | Strategy           | Savings                                                                                                                                                                                                                                                                                           | Best For             |
+| ------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `/model free` | Free NVIDIA models | **100%**                                                                                                                                                                                                                                                                                          | $0 balance, learning |
+| `/model auto` | Balanced (default) | † Withheld from `/v1/models` — the router still calls it by direct ID, but you will not find it on the public pricing page. See [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json), which prices the published savings claim on visible models only. |
+
+**<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%** | General use |
+| `/model eco` | Cheapest possible | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** | Maximum savings |
+| `/model premium` | Best quality | 0% | Mission-critical |
 
 **Shortcuts:** `/model grok`, `/model br-sonnet`, `/model gpt5`, `/model o3`
 
@@ -207,12 +209,12 @@ Choose your routing strategy with `/model <profile>`:
 Request → Weighted Scorer (<!-- br:clawrouter.dimensions -->14<!-- /br:clawrouter.dimensions --> dimensions) → Tier → Best Model → Response
 ```
 
-| Tier      | ECO Model                            | AUTO Model                      | PREMIUM Model                |
-| --------- | ------------------------------------ | ------------------------------- | ---------------------------- |
-| SIMPLE    | free/mistral-large-3-675b (**FREE**) | gemini-2.5-flash ($0.30/$2.50)  | kimi-k2.7 ($0.95/$4.00)      |
-| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)  | kimi-k2.7 ($0.95/$4.00)         | gpt-5.3-codex ($1.75/$14.00) |
-| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)  | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     |
-| REASONING | deepseek-reasoner ($0.20/$0.40)      | deepseek-reasoner ($0.20/$0.40) | claude-sonnet-4.6 ($3/$15)   |
+| Tier      | ECO Model                               | AUTO Model                              | PREMIUM Model                |
+| --------- | --------------------------------------- | --------------------------------------- | ---------------------------- |
+| SIMPLE    | free/gpt-oss-120b † (**FREE**)          | gemini-2.5-flash ($0.30/$2.50)          | kimi-k2.7 † ($0.95/$4.00)    |
+| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)     | kimi-k2.7 ($0.95/$4.00)                 | gpt-5.3-codex ($1.75/$14.00) |
+| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)     | gemini-3.1-pro ($2/$12)                 | claude-fable-5 ($10/$50)     |
+| REASONING | grok-4-1-fast-reasoning † ($0.20/$0.50) | grok-4-1-fast-reasoning † ($0.20/$0.50) | claude-sonnet-4.6 ($3/$15)   |
 
 **<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5** for the same traffic, on `auto`; **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** on `eco`.
 
