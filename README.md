@@ -657,7 +657,7 @@ You're here. <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> mod
 
 **BlockRun for Claude Code**
 
-Run Claude Code with 50+ models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
+Run Claude Code with <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
 
 `curl -fsSL https://blockrun.ai/brcc-install | bash`
 
