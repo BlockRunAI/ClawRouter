@@ -1358,6 +1358,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
+    vision: true,
     agentic: true,
     toolCalling: true,
   },

@@ -277,6 +277,15 @@ describe("capability flags vs blockrun's catalog", () => {
       expect(BLOCKRUN_MODELS.find((m) => m.id === id)?.vision).toBe(true);
     }
   });
+
+  it("marks MiniMax M3 vision-capable so image_url requests reach it", () => {
+    // The target metadata lists text+image+video input for MiniMax M3, but the
+    // model was registered without `vision`, so filterByVision() excluded it
+    // whenever a request carried an image_url content part. M2.7 is text-only
+    // upstream and must stay without the flag.
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "minimax/minimax-m3")?.vision).toBe(true);
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "minimax/minimax-m2.7")?.vision).toBeUndefined();
+  });
 });
 
 describe("OPENCLAW_MODELS integrity", () => {
