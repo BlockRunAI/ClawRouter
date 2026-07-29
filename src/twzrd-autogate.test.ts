@@ -44,7 +44,33 @@ describe("TWZRD AutoGate seat (Fork-1)", () => {
       gateOnCanSpend: false,
       unsupportedNetworkMode: "observe",
     });
-    // install wraps registrar + installs at least one hook path
+    // Registrar must actually be invoked — typeof alone is true pre-install.
+    expect(hooks.length).toBeGreaterThan(0);
     expect(typeof client.onBeforePaymentCreation).toBe("function");
+  });
+
+  it("soft-skip matcher only accepts missing twzrd-x402-gate itself", () => {
+    // Mirror installTwzrdAutoGateOnClient catch predicate (proxy.ts).
+    const isSoftSkip = (code: string | undefined, msg: string): boolean => {
+      const missingModule =
+        code === "ERR_MODULE_NOT_FOUND" ||
+        code === "MODULE_NOT_FOUND" ||
+        /Cannot find module/i.test(msg) ||
+        /Cannot find package/i.test(msg);
+      return missingModule && /['"]twzrd-x402-gate['"]/i.test(msg);
+    };
+    expect(
+      isSoftSkip(
+        "ERR_MODULE_NOT_FOUND",
+        "Cannot find package 'twzrd-x402-gate' imported from /app/proxy.js",
+      ),
+    ).toBe(true);
+    expect(
+      isSoftSkip(
+        "ERR_MODULE_NOT_FOUND",
+        "Cannot find package 'some-transitive-dep' imported from /app/node_modules/twzrd-x402-gate/index.js",
+      ),
+    ).toBe(false);
+    expect(isSoftSkip(undefined, "boom unrelated")).toBe(false);
   });
 });

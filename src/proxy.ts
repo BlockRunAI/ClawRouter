@@ -1996,8 +1996,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
 /**
  * Default-on TWZRD AutoGate for the internal x402 client (Fork-1 seat).
- * Missing package = soft-skip so forks can omit the optional gate. Any other
- * install failure fails closed: boot aborts instead of paying unguarded.
+ * Missing optional package twzrd-x402-gate = soft-skip so forks can omit it.
+ * Soft-skip only when the resolution error names twzrd-x402-gate itself —
+ * missing transitive deps (or any other failure) fail closed so the proxy
+ * never boots with unguarded payments.
  * Kill: TWZRD_AUTO_GATE=0 or TWZRD_GATE_ENABLED=false (handled inside the gate).
  */
 async function installTwzrdAutoGateOnClient(client: x402Client): Promise<void> {
@@ -2007,13 +2009,15 @@ async function installTwzrdAutoGateOnClient(client: x402Client): Promise<void> {
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     const msg = err instanceof Error ? err.message : String(err);
-    if (
+    const missingModule =
       code === "ERR_MODULE_NOT_FOUND" ||
       code === "MODULE_NOT_FOUND" ||
-      /Cannot find module/i.test(msg)
-    ) {
+      /Cannot find module/i.test(msg) ||
+      /Cannot find package/i.test(msg);
+    // Only soft-skip when the absent package is the gate itself.
+    if (missingModule && /['"]twzrd-x402-gate['"]/i.test(msg)) {
       console.warn(
-        "[ClawRouter] twzrd-x402-gate not available — payments unguarded. npm i twzrd-x402-gate@^0.8.4",
+        "[ClawRouter] twzrd-x402-gate not available — payments unguarded. npm i twzrd-x402-gate@^0.8.6",
       );
       return;
     }
@@ -2039,7 +2043,7 @@ async function installTwzrdAutoGateOnClient(client: x402Client): Promise<void> {
   registerExactEvmScheme(x402, { signer: evmSigner });
 
   // TWZRD Fork-1 default seat: pre-spend gate on every payment before sign.
-  // Default ON when twzrd-x402-gate is installed (dependency). Kill switch:
+  // Default ON when twzrd-x402-gate is installed (optionalDependency). Kill switch:
   //   TWZRD_AUTO_GATE=0 | TWZRD_GATE_ENABLED=false
   // Base/EVM payments: observe mode (allow; Solana corpus does not score EVM).
   // Solana payments: full wash/preflight. Seat identity stamps X-Twzrd-Caller.
