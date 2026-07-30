@@ -2769,7 +2769,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         }
         const reqBody = Buffer.concat(chunks);
-        let audioModel = "minimax/music-2.5+";
+        let audioModel = "minimax/music-3.0";
         try {
           const parsed = JSON.parse(reqBody.toString());
           audioModel = parsed.model || audioModel;

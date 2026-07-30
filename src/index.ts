@@ -1261,8 +1261,8 @@ function buildMusicGenerationProvider(): MusicGenerationProviderPlugin {
   return {
     id: "blockrun",
     label: "BlockRun",
-    defaultModel: "minimax/music-2.5+",
-    models: ["minimax/music-2.5+", "minimax/music-2.5"],
+    defaultModel: "minimax/music-3.0",
+    models: ["minimax/music-3.0", "minimax/music-2.6", "minimax/music-3.0-free", "minimax/music-2.6-free"],
     capabilities: {
       maxTracks: 1,
       maxDurationSeconds: 240,

@@ -241,7 +241,7 @@ async function startMockUpstream(): Promise<MockUpstream> {
       const port = getListeningPort(server);
       writeJson(res, 200, {
         created: Math.floor(Date.now() / 1000),
-        model: "minimax/music-2.5+",
+        model: "minimax/music-3.0",
         data: [
           {
             url: `http://127.0.0.1:${port}/mock-assets/tiny.mp3`,
@@ -767,7 +767,7 @@ async function runLocalSuite(startProxy: StartProxy): Promise<boolean> {
     allPassed =
       (await runTest("Audio generation via mock upstream", async () => {
         const res = await postJson(proxy!, "/v1/audio/generations", {
-          model: "minimax/music-2.5+",
+          model: "minimax/music-3.0",
           prompt: "Short tone",
           instrumental: true,
           duration_seconds: 1,
@@ -979,12 +979,12 @@ async function runLiveSuite(startProxy: StartProxy): Promise<boolean> {
 
     if (RUN_MUSIC_TEST) {
       allPassed =
-        (await runTest("Live music generation (minimax/music-2.5+)", async () => {
+        (await runTest("Live music generation (minimax/music-3.0)", async () => {
           const res = await postJson(
             proxy!,
             "/v1/audio/generations",
             {
-              model: "minimax/music-2.5+",
+              model: "minimax/music-3.0",
               prompt: "Upbeat electronic music with a fast beat",
               instrumental: true,
               duration_seconds: 30,
@@ -1006,7 +1006,7 @@ async function runLiveSuite(startProxy: StartProxy): Promise<boolean> {
           return `(url=${audioUrl.split("/").pop()}, size=${(buf.byteLength / 1024).toFixed(0)}KB)`;
         })) && allPassed;
     } else {
-      skipTest("Live music generation (minimax/music-2.5+)", "set RUN_MUSIC_TEST=1");
+      skipTest("Live music generation (minimax/music-3.0)", "set RUN_MUSIC_TEST=1");
     }
   } finally {
     await proxy?.close();
