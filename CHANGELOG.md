@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.236 — August 2, 2026
+
+### Fixed — `vision` missing on MiniMax M3
+
+- `minimax/minimax-m3` was registered without `vision`, so `filterByVision()` dropped it from the candidate pool whenever a request carried an `image_url` content part. blockrun's catalog lists M3 as chat+reasoning+coding with no vision category, but that is the same upstream under-claim class as `claude-haiku-4.5`/`claude-sonnet-4.6` (see v0.12.235): a live gateway probe on 2026-08-02 sent a two-color image to M3 and it described both colors and their positions correctly. `minimax-m2.7` is text-only upstream and stays without the flag; a regression test pins both. (#226)
+
+### Notes
+
+- Rejected in review, not merged: a proposed switch of the music default to `minimax/music-3.0` (#227). blockrun's gateway registers only `minimax/music-2.5+` and rejects unknown audio model ids with `400`, so the new default would have failed every music request. The mock-upstream e2e suite cannot catch invalid gateway ids — it accepts any model string.
+
+---
+
 ## v0.12.235 — July 25, 2026
 
 Fixes capability-flag drift found by auditing all 88 shared entries against blockrun's `categories` array. What began as a single missing `vision` on `gpt-5.4-pro` turned out to be 16 mismatches; 9 are corrected here, 7 are deliberate and now pinned by tests.

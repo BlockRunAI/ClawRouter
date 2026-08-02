@@ -1447,6 +1447,7 @@ var init_models = __esm({
         contextWindow: 1048576,
         maxOutput: 65536,
         reasoning: true,
+        vision: true,
         agentic: true,
         toolCalling: true
       },

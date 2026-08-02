@@ -279,10 +279,13 @@ describe("capability flags vs blockrun's catalog", () => {
   });
 
   it("marks MiniMax M3 vision-capable so image_url requests reach it", () => {
-    // The target metadata lists text+image+video input for MiniMax M3, but the
-    // model was registered without `vision`, so filterByVision() excluded it
-    // whenever a request carried an image_url content part. M2.7 is text-only
-    // upstream and must stay without the flag.
+    // blockrun's catalog lists M3 as chat+reasoning+coding with no `vision`
+    // category, but that is an upstream under-claim (same class as the Claude
+    // models above): a live gateway probe on 2026-08-02 sent a two-color image
+    // to minimax/minimax-m3 and it described both colors and their positions
+    // correctly. Without the flag, filterByVision() excluded M3 whenever a
+    // request carried an image_url content part. M2.7 is text-only upstream
+    // and must stay without the flag.
     expect(BLOCKRUN_MODELS.find((m) => m.id === "minimax/minimax-m3")?.vision).toBe(true);
     expect(BLOCKRUN_MODELS.find((m) => m.id === "minimax/minimax-m2.7")?.vision).toBeUndefined();
   });
