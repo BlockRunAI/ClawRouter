@@ -4,6 +4,16 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.237 — August 2, 2026
+
+### Fixed — huge default `max_tokens` no longer forces free-model fallback
+
+- OpenClaw can send a model's default output ceiling as `max_tokens` (128k on Opus-class models). The low-balance preflight treated that as guaranteed spend, so a paid call to `anthropic/claude-opus-5` could silently fall back to a free model even with $5+ in the wallet. The preflight now caps its assumed output at 4096 tokens via `estimateBalancePreflightAmount()`; the request payload is untouched and x402 still enforces the real server quote.
+- `estimateAmount()` stays exact where worst-case matters: the strict `maxCostPerRun` cap and cached-balance deduction. The free-fallback path now also clears the stale paid estimate, so a request that fell back to free no longer deducts a paid-model estimate from the cached balance.
+- Thanks to @0xCheetah1 for the fix and regression suite (#217).
+
+---
+
 ## v0.12.236 — August 2, 2026
 
 ### Fixed — `vision` missing on MiniMax M3

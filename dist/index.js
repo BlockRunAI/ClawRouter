@@ -84612,6 +84612,13 @@ function estimateAmount(modelId, bodyLength, maxTokens) {
   const amountMicros = Math.max(1e3, Math.ceil(costUsd * 1.2 * 1e6));
   return amountMicros.toString();
 }
+function estimateBalancePreflightAmount(modelId, bodyLength, maxTokens) {
+  const preflightMaxTokens = Math.min(
+    maxTokens || BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP,
+    BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP
+  );
+  return estimateAmount(modelId, bodyLength, preflightMaxTokens);
+}
 function estimatePhoneCost(urlPath) {
   const op = urlPath.replace(/^\/v1\//, "").split("?")[0];
   for (const key2 of Object.keys(PHONE_PRICING).sort((a, b) => b.length - a.length)) {
@@ -86872,9 +86879,13 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   let isFreeModel = FREE_MODELS.has(modelId ?? "");
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
+    const preflightEstimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
-      const bufferedCostMicros = estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
+    }
+    if (preflightEstimated) {
+      const preflightEstimatedCostMicros = BigInt(preflightEstimated);
+      const bufferedCostMicros = preflightEstimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100)) / 100n;
       let sufficiency = null;
       let balanceCheckTimer;
       try {
@@ -86904,6 +86915,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         );
         modelId = freeFallback;
         isFreeModel = true;
+        estimatedCostMicros = void 0;
         const parsed = JSON.parse(body.toString());
         parsed.model = toUpstreamModelId(freeFallback);
         body = Buffer.from(JSON.stringify(parsed));
@@ -88016,7 +88028,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, VIDEO_PRICING, PHONE_PRICING;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -88108,6 +88120,7 @@ var init_proxy = __esm({
     overloadedModels = /* @__PURE__ */ new Map();
     perProviderErrors = /* @__PURE__ */ new Map();
     BALANCE_CHECK_BUFFER = 1.5;
+    BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP = 4096;
     PROVIDER_ERROR_PATTERNS = [
       /billing/i,
       /insufficient.*balance/i,
