@@ -585,6 +585,7 @@ function safeWrite(res: ServerResponse, data: string | Buffer): boolean {
 // This prevents x402 payment failures after streaming headers are sent,
 // which would trigger OpenClaw's 5-24 hour billing cooldown.
 const BALANCE_CHECK_BUFFER = 1.5;
+const BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP = 4096;
 
 /**
  * Make a string safe for use as an HTTP header value.
@@ -1493,7 +1494,7 @@ export { DEFAULT_MAX_TOKENS, resolveMaxTokens } from "./max-tokens.js";
  * Estimate USDC cost for a request based on model pricing.
  * Returns amount string in USDC smallest unit (6 decimals) or undefined if unknown.
  */
-function estimateAmount(
+export function estimateAmount(
   modelId: string,
   bodyLength: number,
   maxTokens: number,
@@ -1525,6 +1526,22 @@ function estimateAmount(
   // Minimum 1000 ($0.001) to match CDP Facilitator's enforced minimum payment
   const amountMicros = Math.max(1000, Math.ceil(costUsd * 1.2 * 1_000_000));
   return amountMicros.toString();
+}
+
+export function estimateBalancePreflightAmount(
+  modelId: string,
+  bodyLength: number,
+  maxTokens: number,
+): string | undefined {
+  // Clients like OpenClaw may send the model's huge default max output
+  // (for example 128k) even when the user did not request that much output.
+  // Keep this as a preflight-only spend estimate; the real request is unchanged
+  // and x402 still enforces the actual server quote.
+  const preflightMaxTokens = Math.min(
+    maxTokens || BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP,
+    BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP,
+  );
+  return estimateAmount(modelId, bodyLength, preflightMaxTokens);
 }
 
 // Image pricing table (must match server's IMAGE_MODELS in blockrun/src/lib/models.ts)
@@ -4673,13 +4690,17 @@ async function proxyRequest(
 
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
+    const preflightEstimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
+    }
+    if (preflightEstimated) {
+      const preflightEstimatedCostMicros = BigInt(preflightEstimated);
 
       // Apply extra buffer for balance check to prevent x402 failures after streaming starts.
       // This is aggressive to avoid triggering OpenClaw's 5-24 hour billing cooldown.
       const bufferedCostMicros =
-        (estimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
+        (preflightEstimatedCostMicros * BigInt(Math.ceil(BALANCE_CHECK_BUFFER * 100))) / 100n;
 
       // Check balance before proceeding (using buffered amount)
       // Wrap in try/catch: Solana RPC failures (timeouts, rate limits) should
@@ -4720,6 +4741,7 @@ async function proxyRequest(
         );
         modelId = freeFallback;
         isFreeModel = true; // keep in sync — budget logic gates on !isFreeModel
+        estimatedCostMicros = undefined;
         // Update the body with new model (map free/ → nvidia/ for upstream)
         const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
         parsed.model = toUpstreamModelId(freeFallback);
