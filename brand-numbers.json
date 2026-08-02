@@ -2,17 +2,17 @@
   "$schema": "https://blockrun.ai/brand/numbers.schema.json",
   "version": 1,
   "models": {
-    "chatVisible": 66,
-    "totalVisible": 86,
-    "free": 8,
-    "freeWithheld": 17,
+    "chatVisible": 65,
+    "totalVisible": 85,
+    "free": 7,
+    "freeWithheld": 18,
     "image": 8,
     "video": 5,
     "music": 1,
     "speech": 5,
     "soundfx": 1,
-    "withFallback": 44,
-    "withFallbackAllEntries": 75
+    "withFallback": 42,
+    "withFallbackAllEntries": 74
   },
   "clawrouter": {
     "dimensions": 15,
@@ -21,7 +21,7 @@
     "aliases": 202
   },
   "mcp": {
-    "tools": 19
+    "tools": 20
   },
   "chains": {
     "rpc": 40

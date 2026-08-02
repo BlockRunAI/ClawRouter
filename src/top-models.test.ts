@@ -20,5 +20,8 @@ describe("TOP_MODELS", () => {
     expect(TOP_MODELS).not.toContain("free/gpt-oss-120b");
     // Died in the 2026-07-17 re-probe (hidden + redirected upstream).
     expect(TOP_MODELS).not.toContain("free/qwen3-next-80b-a3b-instruct");
+    // HTTP 410 Gone at NVIDIA in blockrun's 2026-07-28 re-probe (baa967b) —
+    // hidden + redirected to gpt-oss-120b upstream; must not reappear.
+    expect(TOP_MODELS).not.toContain("free/mistral-large-3-675b");
   });
 });

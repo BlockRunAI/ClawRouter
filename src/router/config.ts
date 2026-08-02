@@ -1101,9 +1101,8 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       primary: "free/gpt-oss-120b", // FREE! $0.00/$0.00 — heavy user default
       fallback: [
         "free/gpt-oss-20b", // FREE — smaller, faster
-        "free/mistral-large-3-675b", // FREE — 675B general flagship (re-featured 2026-06-14)
-        "free/deepseek-v4-flash", // FREE — 1M ctx, recovered in blockrun's 2026-07-17 re-probe
-        "free/seed-oss-36b", // FREE — live coder (qwen3.5-122b + qwen3-next died 2026-07)
+        "free/deepseek-v4-flash", // FREE — 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
+        "free/seed-oss-36b", // FREE — live coder (qwen3.5-122b + qwen3-next died 2026-07; mistral-large-3-675b EOL'd 07-28)
         "google/gemini-3.1-flash-lite", // $0.25/$1.50 — newest flash-lite
         "openai/gpt-5.4-nano", // $0.20/$1.25 — fast nano
         "google/gemini-2.5-flash-lite", // $0.10/$0.40

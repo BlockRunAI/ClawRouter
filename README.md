@@ -7,11 +7,11 @@
 <p>Agents can't sign up for accounts. Agents can't enter credit cards.<br>
 Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
-<em><!-- br:models.free -->8<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em></p>
+<em><!-- br:models.free -->7<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em></p>
 
 <br>
 
-<img src="https://img.shields.io/badge/🆓_8_Free_Models-success?style=for-the-badge" alt="8 free models">&nbsp;
+<img src="https://img.shields.io/badge/🆓_7_Free_Models-success?style=for-the-badge" alt="7 free models">&nbsp;
 <img src="https://img.shields.io/badge/🤖_Agent--Native-black?style=for-the-badge" alt="Agent native">&nbsp;
 <img src="https://img.shields.io/badge/🔑_Zero_API_Keys-blue?style=for-the-badge" alt="No API keys">&nbsp;
 <img src="https://img.shields.io/badge/⚡_Local_Routing-yellow?style=for-the-badge" alt="Local routing">&nbsp;
@@ -34,7 +34,7 @@ Agents can only sign transactions.<br><br>
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->65<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -46,7 +46,7 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — <!-- br:models.free -->8<!-- /br:models.free --> NVIDIA models are free forever (incl. 262K-context Qwen3-Next 80B, DeepSeek V4 Flash + a vision-capable Nemotron Omni)
+- **Starts at $0** — <!-- br:models.free -->7<!-- /br:models.free --> NVIDIA models are free forever (incl. 1M-context DeepSeek V4 Flash + a vision-capable Nemotron Omni)
 - **No accounts** — a wallet is generated locally, no signup
 - **No API keys** — your wallet signature IS authentication
 - **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring picks the right model automatically
@@ -61,8 +61,8 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 |                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**                                                         |
 | ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ---------------------------------------------------------------------- |
-| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->66<!-- /br:models.chatVisible -->**    |
-| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->8<!-- /br:models.free --> models, no signup** |
+| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->65<!-- /br:models.chatVisible -->**    |
+| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->7<!-- /br:models.free --> models, no signup** |
 | **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
 | **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature**                                                   |
 | **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request**                                                   |
@@ -78,7 +78,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ## Quick Start
 
-> **No wallet? <!-- br:models.free -->8<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/mistral-nemotron` (or any of the <!-- br:models.free -->8<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+> **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/mistral-nemotron` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
 ### Option A — OpenClaw Agent
 
@@ -107,7 +107,7 @@ openclaw gateway restart
 
 > **Using Claude Code?** Check out [BRCC](https://blockrun.ai/brcc.md) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
-> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
+> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->65<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
 
 No OpenClaw required. ClawRouter runs as a local proxy on port 8402.
 
@@ -118,7 +118,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->8<!-- /br:models.free --> free models (e.g. `free/mistral-nemotron`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->7<!-- /br:models.free --> free models (e.g. `free/mistral-nemotron`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -391,15 +391,14 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Models & Pricing
 
-<!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->8<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->65<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->7<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
-> **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.002/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
+> **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
 ### Budget Models (under $0.001/request)
 
 | Model                                       | Input $/M | Output $/M | ~$/request | Context | Features                                     |
 | ------------------------------------------- | --------: | ---------: | ---------: | ------- | -------------------------------------------- |
-| free/mistral-large-3-675b                   |  **FREE** |   **FREE** |     **$0** | 131K    | 675B general flagship, default free model    |
 | free/deepseek-v4-flash                      |  **FREE** |   **FREE** |     **$0** | 1M      | reasoning + coding, huge context             |
 | free/seed-oss-36b                           |  **FREE** |   **FREE** |     **$0** | 131K    | coding                                       |
 | free/nemotron-3-nano-omni-30b-a3b-reasoning |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
@@ -552,7 +551,7 @@ For basic usage, no configuration needed. For advanced options:
 Block specific models from being routed to. Useful if a model doesn't follow your agent instructions or you want to control costs.
 
 ```bash
-/exclude add free/mistral-large-3-675b   # Block the default free model
+/exclude add free/deepseek-v4-flash # Block a free model (e.g. too slow for you)
 /exclude add grok-4                # Aliases work — blocks all grok-4 variants
 /exclude add gpt-5.4               # Skip expensive models
 /exclude                           # Show current exclusions
@@ -646,7 +645,7 @@ npm test
 
 **The LLM router built for autonomous agents**
 
-You're here. <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
+You're here. <!-- br:models.chatVisible -->65<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
 
 `curl -fsSL https://blockrun.ai/ClawRouter-update | bash`
 
@@ -657,7 +656,7 @@ You're here. <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> mod
 
 **BlockRun for Claude Code**
 
-Run Claude Code with <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
+Run Claude Code with <!-- br:models.chatVisible -->65<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
 
 `curl -fsSL https://blockrun.ai/brcc-install | bash`
 
@@ -670,7 +669,7 @@ Run Claude Code with <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible
 
 **ClawRouter for NousResearch Hermes**
 
-Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
+Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->65<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
 
 `pip install hermes-plugin-clawrouter`
 
@@ -734,7 +733,7 @@ ClawRouter works with any tool that makes OpenAI-compatible API calls — point 
 
 ### Is ClawRouter free?
 
-ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`mistral-large-3-675b`, `deepseek-v4-flash`, `seed-oss-36b`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `mistral-nemotron`, `step-3.7-flash`, `nemotron-nano-9b-v2`, `nemotron-nano-12b-v2-vl`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
+ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`deepseek-v4-flash`, `seed-oss-36b`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `mistral-nemotron`, `step-3.7-flash`, `nemotron-nano-9b-v2`, `nemotron-nano-12b-v2-vl`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
 
 ---
 

@@ -4,6 +4,28 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.239 — August 2, 2026
+
+Catches up with blockrun's **2026-07-28 free-model re-probe** (blockrun #309) and the **2026-07-29 fee revert** (blockrun #319). Verified live against the gateway before syncing: `nvidia/deepseek-v4-flash` answers and stays $0; the brand artifact now publishes 65 chat models / 7 free.
+
+### Changed — free/mistral-large-3-675b is EOL at NVIDIA (HTTP 410)
+
+- blockrun's 07-28 re-probe got **410 Gone on both passes** for `mistral-large-3-675b` (plus `qwen3-next-80b` and `qwen3.5-397b`, which ClawRouter had already dropped on 07-17). Upstream hides it and server-redirects calls to `gpt-oss-120b`.
+- Removed from the `FREE_MODELS` auto-pick cascade, the picker (`top-models.json`), and the eco SIMPLE fallback chain — a server-redirected dead model in the cascade silently defeats `/exclude`. The catalog entry and explicit pins (`mistral-large`, `mistral-large-3-675b`) stay routable; the gateway redirects them.
+- `mistral-free` re-aimed at `free/mistral-nemotron`, the last live free Mistral (blockrun demoted its own `/free-mistral` primary the same way).
+- `free/deepseek-v4-flash` **stays**: the same probe measured it slow on real prompts (~10 tok/s, 74.6s) but completing — and it is the only 1M-context free model. The 07-17 "3.2s recovery" was a short-ping artifact.
+- Free count is now **7** across README, SKILL.md, and brand-number markers (chat-visible total: 65).
+
+### Changed — per-transaction fee mirrored back to $0.001
+
+- blockrun reverted the flat settlement fee from $0.002 to **$0.001/tx** on 2026-07-29 (#319). `estimateAmount()` and the README pricing note follow. Payments were always server-quoted via 402 — the old value only over-reserved balance pre-checks and overstated usage logs by $0.001/call.
+
+### Security — dependency refresh
+
+- `openclaw` dev dependency bumped to 2026.7.1; overrides added for `brace-expansion`, `fast-uri`, `tar`, `hono`, and `jayson > uuid` (all merged into the single existing `overrides` block — see v0.12.238's gotcha), and `package-lock.json` regenerated. tsup bundles runtime deps into `dist/`, so the override floors ship in the artifact.
+
+---
+
 ## v0.12.238 — August 2, 2026
 
 ### Security — vulnerable axios 0.27.2 was being bundled into every install

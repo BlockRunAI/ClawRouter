@@ -1,7 +1,7 @@
 {
   "name": "@blockrun/clawrouter",
-  "version": "0.12.238",
-  "description": "Smart LLM router — save 87% on inference costs. 66 models (8 free), one wallet, x402 micropayments.",
+  "version": "0.12.239",
+  "description": "Smart LLM router — save 87% on inference costs. 65 models (7 free), one wallet, x402 micropayments.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -108,7 +108,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.2.0",
-    "openclaw": "^2026.5.4",
+    "openclaw": "^2026.7.1",
     "prettier": "^3.8.1",
     "tsup": "^8.0.0",
     "tsx": "^4.21.0",
@@ -120,8 +120,15 @@
     "axios": "$axios",
     "basic-ftp": "^5.3.1",
     "ws": "^8.21.0",
-    "postcss": "^8.5.10",
-    "esbuild": "^0.28.1"
+    "postcss": "^8.5.18",
+    "esbuild": "^0.28.1",
+    "brace-expansion": "^5.0.7",
+    "fast-uri": "^3.1.4",
+    "tar": "^7.5.18",
+    "hono": "^4.12.27",
+    "jayson": {
+      "uuid": "^11.1.1"
+    }
   },
   "engines": {
     "node": ">=22"

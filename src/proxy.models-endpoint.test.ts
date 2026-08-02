@@ -32,7 +32,8 @@ describe("buildProxyModelList", () => {
     // grok-4.5 added upstream 2026-07-13
     expect(ids.has("xai/grok-4.5")).toBe(true);
     expect(resolveModelAlias("grok-4.5")).toBe("xai/grok-4.5");
-    // new blockrun-featured free flagships (2026-06-14 sweep)
+    // dead-but-routable pins (both EOL'd upstream — mistral-large 07-28,
+    // qwen3.5-122b 07-17 — the gateway redirects; explicit pins must resolve)
     expect(ids.has("free/mistral-large-3-675b")).toBe(true);
     expect(ids.has("free/qwen3.5-122b-a10b")).toBe(true);
   });

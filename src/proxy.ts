@@ -137,11 +137,14 @@ const ROUTING_PROFILES = new Set([
 // head (heavy-user red line); qwen3.5-122b, qwen3-next-80b and llama-4-maverick
 // dropped (all hidden + server-redirected to gpt-oss-120b upstream, so keeping
 // them here would silently defeat /exclude); deepseek-v4-flash recovered.
+// 2026-08-02, following blockrun's 07-28 re-probe (baa967b): mistral-large-3-675b
+// is HTTP 410 Gone at NVIDIA (EOL, redirected to gpt-oss-120b) — dropped for the
+// same /exclude reason. deepseek-v4-flash completes but is slow on real prompts
+// (~10 tok/s); kept, since slow ≠ dead and it's the only 1M-ctx free model.
 const FREE_MODELS = new Set([
   "free/gpt-oss-120b",
   "free/gpt-oss-20b",
-  "free/mistral-large-3-675b", // 675B general flagship (re-featured 2026-06-14)
-  "free/deepseek-v4-flash", // 1M ctx, recovered 2026-07-17 (3.2s probe)
+  "free/deepseek-v4-flash", // 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
   "free/seed-oss-36b", // live coder (successor to retired qwen3-coder-480b)
   "free/mistral-nemotron", // strong instruction following
   "free/step-3.7-flash", // reasoning-focused
@@ -1516,11 +1519,12 @@ export function estimateAmount(
       (estimatedOutputTokens / 1_000_000) * model.outputPrice;
   }
 
-  // blockrun charges a flat $0.002 per-transaction fee on every PAID product
-  // (2026-07-14, covers gas; included in the server's 402 quote). Mirror it so
+  // blockrun charges a flat $0.001 per-transaction fee on every PAID product
+  // (covers gas; included in the server's 402 quote). Introduced at $0.002 on
+  // 2026-07-14, reverted to $0.001 on 2026-07-29 (blockrun #319). Mirror it so
   // balance pre-checks and usage logs track what the gateway actually charges.
   // Free models ($0 estimate) never pay it.
-  if (costUsd > 0) costUsd += 0.002;
+  if (costUsd > 0) costUsd += 0.001;
 
   // Convert to USDC 6-decimal integer, add 20% buffer for estimation error
   // Minimum 1000 ($0.001) to match CDP Facilitator's enforced minimum payment

@@ -232,15 +232,16 @@ export const MODEL_ALIASES: Record<string, string> = {
   // ultra-253b redirects to gpt-oss-120b; the two supers have NO server redirect —
   // they stay hidden-but-routable, so their pins pass through to the real ids).
   "nvidia/nemotron-ultra-253b": "free/gpt-oss-120b",
-  // mistral-large-3-675b un-retired 2026-06-14: BlockRun re-featured it (available,
-  // NVIDIA upstream recovered) so it's a real free catalog entry again.
+  // mistral-large-3-675b un-retired 2026-06-14, then EOL'd for good 2026-07-28:
+  // blockrun's re-probe got HTTP 410 Gone from NVIDIA on both passes (baa967b).
+  // Pin stays routable — the gateway redirects it to gpt-oss-120b.
   "nvidia/mistral-large-3-675b": "free/mistral-large-3-675b",
   "nvidia/qwen3.5-122b-a10b": "free/qwen3.5-122b-a10b",
   // devstral-2-123b died upstream; blockrun redirects it to gpt-oss-120b (2026-07-17 map)
   "nvidia/devstral-2-123b": "free/gpt-oss-120b",
   "free/nemotron-ultra-253b": "free/gpt-oss-120b",
   "free/devstral-2-123b": "free/gpt-oss-120b",
-  // New blockrun-featured free models (2026-06-14 catalog sweep)
+  // Explicit-ish pins — dead upstream since 2026-07-28, gateway redirects to gpt-oss-120b
   "mistral-large": "free/mistral-large-3-675b",
   "mistral-large-3-675b": "free/mistral-large-3-675b",
   "qwen3.5-122b": "free/qwen3.5-122b-a10b",
@@ -251,7 +252,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   "deepseek-v4-flash": "free/deepseek-v4-flash",
   "v4-pro": "free/deepseek-v4-flash", // V4 Pro NVIDIA hung → flash
   "v4-flash": "free/deepseek-v4-flash",
-  "mistral-free": "free/mistral-large-3-675b", // was llama-4-maverick (died 2026-07) — live Mistral flagship
+  "mistral-free": "free/mistral-nemotron", // mistral-large-3-675b EOL'd 2026-07-28 → last live free Mistral (blockrun demoted its /free-mistral primary the same way)
   "glm-free": "free/seed-oss-36b", // qwen3-coder retired → live coder successor
   "llama-free": "free/gpt-oss-120b", // no live free Llama left (maverick died 2026-07)
   "qwen-coder": "free/seed-oss-36b", // qwen3-coder-480b retired → seed-oss-36b
@@ -1483,8 +1484,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   // Added to the auto-pick set behind gpt-oss to strengthen the mid/back of the
   // free cascade with strong general models.
   {
-    // Mistral Large 3: 675B dense flagship, strong general reasoning. Un-retired
-    // 2026-06-14 (NVIDIA upstream recovered; BlockRun marks it available + featured).
+    // Mistral Large 3: 675B dense flagship. Un-retired 2026-06-14, EOL'd again
+    // 2026-07-28 — blockrun's re-probe got HTTP 410 Gone from NVIDIA (baa967b);
+    // upstream now hides it and redirects calls to gpt-oss-120b. Entry kept so
+    // explicit pins stay routable; off the picker and the FREE_MODELS cascade.
     id: "free/mistral-large-3-675b",
     name: "[Free] Mistral Large 3 675B",
     version: "3-675b",
