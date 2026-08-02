@@ -4,6 +4,16 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.238 — August 2, 2026
+
+### Security — vulnerable axios 0.27.2 was being bundled into every install
+
+- `@polymarket/builder-relayer-client@0.0.10` pins `axios@^0.27.2` (2022-era, 20+ open advisories including high-severity SSRF/CSRF classes). Because tsup bundles all dependencies (`noExternal`), that copy shipped inside `dist/` to every user — npm overrides in a consumer's project can't reach it. Added a root `axios: "$axios"` override so the whole tree dedupes to the current 1.x line; the relayer client's axios usage (`create`/`request`/`isAxiosError`) is 1.x-compatible, and the newer Polymarket SDKs in the same tree were already on 1.x. Verified the 0.27.2 code is gone from the built bundle.
+- **Gotcha for next time:** `package.json` already had an `overrides` block further down (basic-ftp/ws/postcss/esbuild). Adding a second `overrides` key parses as valid JSON but npm silently uses only the last one — merge into the existing block.
+- Remaining known-unfixable transitive: `bigint-buffer` (buffer overflow in `toBigIntLE()`, no patched release exists) via `@blockrun/llm → @solana/spl-token`. It processes our own wallet-balance buffers, not attacker-controlled input; tracked until the Solana ecosystem moves off it.
+
+---
+
 ## v0.12.237 — August 2, 2026
 
 ### Fixed — huge default `max_tokens` no longer forces free-model fallback
