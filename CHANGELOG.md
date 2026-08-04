@@ -4,6 +4,44 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.240 — August 4, 2026
+
+Security housekeeping. Clears **13 of the 15 open Dependabot alerts** — including 3 of the 4 highs — by removing the thing that was silently swallowing our `overrides` block.
+
+### Fixed — openclaw's `npm-shrinkwrap.json` was voiding every override we wrote
+
+- `openclaw` ≤ 2026.7.1 publishes with `hasShrinkwrap: true`. A shipped `npm-shrinkwrap.json` pins that package's **entire subtree** verbatim, and npm resolves it ahead of the root project's `overrides`. The failure is silent and actively misleading: `npm ls` prints `fast-uri@3.1.2 overridden` next to a version the override forbids.
+- So v0.12.239's `fast-uri`/`hono`/`brace-expansion` overrides — and the pre-existing ones — **never took effect** on anything under `node_modules/openclaw/`. Deleting `package-lock.json` and reinstalling from scratch did not help either; only the shrinkwrap going away does.
+- Bumped the `openclaw` dev dependency to **`^2026.7.2-beta.7`**, the first release that ships without the shrinkwrap. With it gone the overrides land, and the openclaw subtree audits clean:
+
+  | package             | before  | after  |
+  | ------------------- | ------- | ------ |
+  | `undici`            | 8.5.0   | 8.10.0 |
+  | `fast-uri`          | 3.1.2   | 3.1.5  |
+  | `hono`              | 4.12.25 | 4.13.0 |
+  | `@hono/node-server` | 1.19.14 | 2.1.0  |
+  | `ip-address`        | 10.2.0  | 10.4.0 |
+  | `brace-expansion`   | 5.0.7   | 5.0.9  |
+
+- Overrides for `@hono/node-server` and `ip-address` are new; `ws`, `postcss`, `tar`, `brace-expansion`, and `fast-uri` floors were raised. All still inside the **single** `overrides` key (see v0.12.238's gotcha).
+- The `openclaw` scanner integration test still runs against the real scanner chunk on the new version — it throws rather than skipping when the chunk cannot be loaded, so a silent pass is not possible.
+
+### Changed — contributor Node floor is now 22.22.3
+
+- openclaw 2026.7.2's preinstall gate rejects Node below `22.22.3`, so `npm install` in this repo now requires it. CI's `node-version: "22"` already resolves above the floor.
+- **Published users are unaffected**: `openclaw` is a dev dependency and an optional peer, and is never bundled into `dist/`. The package's own `engines.node` stays `>=22`.
+
+### Changed — bundled `undici` floor raised to ^8.10.0
+
+- tsup inlines runtime deps, so this one does ship. The previously bundled 8.9.0 was already past the advisory range (`< 8.9.0`); the bump is the current patch line, not a vulnerability fix. `dist/` grows the corresponding upstream changes (TLS `servername` handling, idle-socket timeout).
+
+### Not fixed — two alerts with no upstream patch
+
+- **`bigint-buffer` (high, GHSA-3gc7-fjrx-p6mg).** No fixed release exists: 1.1.5 is the last publish (2019), and `@trufflesuite/bigint-buffer@1.1.10`'s `src/bigint-buffer.c` is **byte-identical** to it — the fork is not a patch, so overriding onto it would launder the alert without fixing anything. It reaches the lockfile as an optional dependency of `@blockrun/llm` (`→ @solana/spl-token → @solana/buffer-layout-utils`), pulled in only by `createSolanaPaymentPayload`, which ClawRouter never imports — we use the EVM `createPaymentPayload`. Verified absent from the shipped bundle: `dist/` contains zero references to `spl-token`, `buffer-layout-utils`, or `toBigIntLE`. The real fix belongs upstream in `@blockrun/llm`, whose Solana extras are already lazy `await import()`s and could be optional peers instead of optional dependencies.
+- **`elliptic` (low, GHSA-848j-6mx2-7j84).** 6.6.1 is the latest release and is still in the vulnerable range. It arrives via ethers v5 under `@polymarket/*`.
+
+---
+
 ## v0.12.239 — August 2, 2026
 
 Catches up with blockrun's **2026-07-28 free-model re-probe** (blockrun #309) and the **2026-07-29 fee revert** (blockrun #319). Verified live against the gateway before syncing: `nvidia/deepseek-v4-flash` answers and stays $0; the brand artifact now publishes 65 chat models / 7 free.
