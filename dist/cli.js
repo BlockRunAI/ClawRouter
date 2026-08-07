@@ -34773,8 +34773,8 @@ var init_config = __esm({
             // FREE — smaller, faster
             "free/deepseek-v4-flash",
             // FREE — 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
-            "free/seed-oss-36b",
-            // FREE — live coder (qwen3.5-122b + qwen3-next died 2026-07; mistral-large-3-675b EOL'd 07-28)
+            // seed-oss-36b sat here as the free coder until it EOL'd 2026-08-03 (HTTP 410).
+            // gpt-oss-120b/20b already head this chain, so the rung is dropped, not retargeted.
             "google/gemini-3.1-flash-lite",
             // $0.25/$1.50 — newest flash-lite
             "openai/gpt-5.4-nano",
@@ -34891,8 +34891,8 @@ var init_config = __esm({
             "openai/gpt-5.3-codex",
             "deepseek/deepseek-chat",
             // Cheap, reliable
-            "free/seed-oss-36b"
-            // NVIDIA free ultimate backstop (qwen3-coder-480b retired)
+            "free/gpt-oss-120b"
+            // NVIDIA free ultimate backstop (was seed-oss-36b; EOL'd 2026-08-03)
           ]
         },
         REASONING: {
@@ -34981,8 +34981,8 @@ var init_config = __esm({
             // Previous flagship — 6,213ms, reliable
             "deepseek/deepseek-chat",
             // 1,431ms — cheap, reliable
-            "free/seed-oss-36b"
-            // NVIDIA free ultimate backstop (qwen3-coder-480b retired)
+            "free/gpt-oss-120b"
+            // NVIDIA free ultimate backstop (was seed-oss-36b; EOL'd 2026-08-03)
           ]
         },
         REASONING: {
@@ -35090,7 +35090,6 @@ var init_top_models = __esm({
       "deepseek/deepseek-chat",
       "deepseek/deepseek-reasoner",
       "free/deepseek-v4-flash",
-      "free/seed-oss-36b",
       "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "free/mistral-nemotron",
       "free/step-3.7-flash",
@@ -35400,9 +35399,10 @@ var init_models = __esm({
       "free/deepseek-v4-pro": "free/deepseek-v4-flash",
       "nvidia/deepseek-v4-flash": "free/deepseek-v4-flash",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
-      // qwen3-coder-480b retired (NVIDIA EOL 2026-06-14) → redirects to seed-oss-36b
-      // server-side; keep the explicit id mappings for pinned callers (BlockRun still
-      // resolves them), but point the generic coding shorthands at the live successor.
+      // qwen3-coder-480b retired (NVIDIA EOL 2026-06-14). Its server-side redirect used
+      // to be seed-oss-36b, but that EOL'd too on 2026-08-03, so blockrun re-pointed it
+      // at gpt-oss-120b. Keep the explicit id mappings for pinned callers (BlockRun still
+      // resolves them); the generic coding shorthands follow the gateway to gpt-oss-120b.
       "nvidia/qwen3-coder-480b": "free/qwen3-coder-480b",
       "qwen/qwen3-coder-480b-a35b-instruct": "free/qwen3-coder-480b",
       // glm-4.7 pin keeps the real id — blockrun redirects it server-side (→ gpt-oss-120b).
@@ -35448,13 +35448,14 @@ var init_models = __esm({
       "v4-flash": "free/deepseek-v4-flash",
       "mistral-free": "free/mistral-nemotron",
       // mistral-large-3-675b EOL'd 2026-07-28 → last live free Mistral (blockrun demoted its /free-mistral primary the same way)
-      "glm-free": "free/seed-oss-36b",
-      // qwen3-coder retired → live coder successor
+      "glm-free": "free/gpt-oss-120b",
+      // seed-oss-36b (the prior target) EOL'd 2026-08-03
       "llama-free": "free/gpt-oss-120b",
       // no live free Llama left (maverick died 2026-07)
-      "qwen-coder": "free/seed-oss-36b",
-      // qwen3-coder-480b retired → seed-oss-36b
-      "qwen-coder-free": "free/seed-oss-36b",
+      // qwen3-coder-480b retired 2026-06-14 → seed-oss-36b, which then EOL'd 2026-08-03.
+      // Follow the gateway's own retarget rather than chaining to a second dead model.
+      "qwen-coder": "free/gpt-oss-120b",
+      "qwen-coder-free": "free/gpt-oss-120b",
       "qwen-thinking": "free/gpt-oss-120b",
       // qwen3-next died 2026-07-17; no live free Qwen left
       "qwen3-next": "free/qwen3-next-80b-a3b-instruct",
@@ -35463,9 +35464,11 @@ var init_models = __esm({
       "mistral-small": "free/mistral-nemotron",
       // closest live Mistral-family free model
       // New live free models (2026-06-14 BlockRun free-tier refresh)
+      // seed-oss pins name the model itself — kept routable, the gateway redirects them.
       "seed-oss": "free/seed-oss-36b",
       "seed-oss-36b": "free/seed-oss-36b",
-      "coder-free": "free/seed-oss-36b",
+      "coder-free": "free/gpt-oss-120b",
+      // generic "a free coder" → follows the gateway retarget
       "mistral-nemotron": "free/mistral-nemotron",
       "step-flash": "free/step-3.7-flash",
       "step-3.7-flash": "free/step-3.7-flash",
@@ -35486,8 +35489,9 @@ var init_models = __esm({
       "nemotron-super": "free/gpt-oss-120b",
       "nemotron-49b": "free/gpt-oss-120b",
       "nemotron-120b": "free/gpt-oss-120b",
-      devstral: "free/seed-oss-36b",
-      "devstral-2": "free/seed-oss-36b",
+      devstral: "free/gpt-oss-120b",
+      // seed-oss-36b EOL'd 2026-08-03; matches blockrun's own retarget
+      "devstral-2": "free/gpt-oss-120b",
       maverick: "free/llama-4-maverick",
       // explicit-ish pin — gateway redirects
       free: "free/gpt-oss-120b",
@@ -36610,8 +36614,13 @@ var init_models = __esm({
         reasoning: true
       },
       {
-        // ByteDance Seed-OSS 36B: strong open-source coder, 131K context. Successor
-        // to the retired qwen3-coder-480b (BlockRun redirects qwen3-coder → seed-oss).
+        // ByteDance Seed-OSS 36B: was the free coder, and the redirect target for the
+        // retired qwen3-coder-480b. EOL'd 2026-08-03 — blockrun's probe got HTTP 410
+        // Gone from NVIDIA on both passes and the prod health gate fired
+        // [ALERT][free-model-dead] kind=gone the same day; upstream now hides it and
+        // re-pointed its own dependents (qwen3-coder-480b, devstral-2) at gpt-oss-120b.
+        // Entry kept so explicit pins stay routable; off the picker, the FREE_MODELS
+        // cascade, and the router fallback chains.
         id: "free/seed-oss-36b",
         name: "[Free] Seed-OSS 36B",
         version: "oss-36b",
@@ -90216,8 +90225,6 @@ var init_proxy = __esm({
       "free/gpt-oss-20b",
       "free/deepseek-v4-flash",
       // 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
-      "free/seed-oss-36b",
-      // live coder (successor to retired qwen3-coder-480b)
       "free/mistral-nemotron",
       // strong instruction following
       "free/step-3.7-flash",

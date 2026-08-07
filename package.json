@@ -85,7 +85,7 @@
   },
   "dependencies": {
     "@blockrun/llm": "^3.6.1",
-    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/9edfb53749ae5e6cca5f94b26fda84e3353eec9a",
+    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/6a790ebec60161825bbc8c4093fd221006b4e5fb",
     "@noble/hashes": "^2.2.0",
     "@polymarket/builder-relayer-client": "^0.0.10",
     "@polymarket/builder-signing-sdk": "0.0.8",

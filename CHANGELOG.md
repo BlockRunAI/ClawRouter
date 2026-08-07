@@ -4,6 +4,28 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.241 — August 7, 2026
+
+Finishes the free-tier resync that #232 started. That commit refreshed the **brand markers** to blockrun's live catalog (71 chat-visible / 6 free) but touched no code, so the router kept routing to a model that has been dead upstream since 2026-08-03.
+
+### Fixed — `free/seed-oss-36b` is EOL and was still in the auto-pick cascade
+
+- blockrun's probe got **HTTP 410 Gone** from NVIDIA on both passes (2026-08-03) and the production health gate fired `[ALERT][free-model-dead] kind=gone` the same day. Upstream hid the model and re-pointed its own dependents — `qwen3-coder-480b` and `devstral-2-123b`, which both used seed-oss as their fallback — at `gpt-oss-120b`.
+- ClawRouter was still carrying it in three places that matter at request time:
+  - the **`FREE_MODELS` auto-pick cascade** (`proxy.ts`) — 9 entries → **8**,
+  - the **picker** (`src/top-models.json`) — 7 free → **6**, now exactly blockrun's visible free set,
+  - **three router fallback chains** (`router/config.ts`).
+- This is not cosmetic. A dead model that the gateway server-redirects **silently defeats `/exclude`**: a caller excludes it, the router hands the request to it anyway, and the gateway answers from the redirect target. Same failure mode as `mistral-large-3-675b` in v0.12.239 — same fix.
+- The `free` profile's SIMPLE chain drops the rung outright (`gpt-oss-120b`/`20b` already head it). The premium and agentic "NVIDIA free ultimate backstop" rungs are **retargeted** to `free/gpt-oss-120b` rather than dropped, since nothing else free sat below them.
+
+### Changed — generic coding aliases follow the gateway, pins stay routable
+
+Six shorthands promised "a live free coder" and pointed at a dead one. They now resolve to `free/gpt-oss-120b`, matching blockrun's own retarget: `qwen-coder`, `qwen-coder-free`, `coder-free`, `glm-free`, `devstral`, `devstral-2`.
+
+Unchanged and still routable, because they name the model itself rather than a capability: `seed-oss`, `seed-oss-36b`, `nvidia/seed-oss-36b`, and the catalog entry. The gateway redirects them, exactly as it does for the other retired free ids.
+
+---
+
 ## v0.12.240 — August 4, 2026
 
 Security housekeeping. Clears **13 of the 15 open Dependabot alerts** — including 3 of the 4 highs — by removing the thing that was silently swallowing our `overrides` block.
