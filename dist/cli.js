@@ -36181,8 +36181,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             // FREE — smaller, faster
             "free/deepseek-v4-flash",
             // FREE — 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
-            "free/seed-oss-36b",
-            // FREE — live coder (qwen3.5-122b + qwen3-next died 2026-07; mistral-large-3-675b EOL'd 07-28)
+            // seed-oss-36b sat here as the free coder until it EOL'd 2026-08-03 (HTTP 410).
+            // gpt-oss-120b/20b already head this chain, so the rung is dropped, not retargeted.
             "google/gemini-3.1-flash-lite",
             // $0.25/$1.50 — newest flash-lite
             "openai/gpt-5.4-nano",
@@ -36299,8 +36299,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             "openai/gpt-5.3-codex",
             "deepseek/deepseek-chat",
             // Cheap, reliable
-            "free/seed-oss-36b"
-            // NVIDIA free ultimate backstop (qwen3-coder-480b retired)
+            "free/gpt-oss-120b"
+            // NVIDIA free ultimate backstop (was seed-oss-36b; EOL'd 2026-08-03)
           ]
         },
         REASONING: {
@@ -36389,8 +36389,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             // Previous flagship — 6,213ms, reliable
             "deepseek/deepseek-chat",
             // 1,431ms — cheap, reliable
-            "free/seed-oss-36b"
-            // NVIDIA free ultimate backstop (qwen3-coder-480b retired)
+            "free/gpt-oss-120b"
+            // NVIDIA free ultimate backstop (was seed-oss-36b; EOL'd 2026-08-03)
           ]
         },
         REASONING: {
