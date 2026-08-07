@@ -80,9 +80,22 @@ export class RulesStrategy implements RouterStrategy {
     // Estimate input tokens (~4 chars per token)
     const fullText = `${systemPrompt ?? ""} ${prompt}`;
     const estimatedTokens = Math.ceil(fullText.length / 4);
+    const scanLimit = Math.max(1, Math.min(8_000, config.classifier.promptTruncationChars));
+    const sample = (value: string): string => {
+      if (value.length <= scanLimit) return value;
+      const prefixLength = Math.ceil(scanLimit / 2);
+      return `${value.slice(0, prefixLength)}\n${value.slice(-(scanLimit - prefixLength))}`;
+    };
+    const scannedPrompt = sample(prompt);
+    const scannedSystemPrompt = systemPrompt ? sample(systemPrompt) : undefined;
 
     // --- Rule-based classification (runs first to get agenticScore) ---
-    const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
+    const ruleResult = classifyByRules(
+      scannedPrompt,
+      scannedSystemPrompt,
+      estimatedTokens,
+      config.scoring,
+    );
 
     // --- Select tier configs based on routing profile ---
     const { routingProfile } = options;
@@ -154,7 +167,9 @@ export class RulesStrategy implements RouterStrategy {
     }
 
     // Structured output detection
-    const hasStructuredOutput = systemPrompt ? /json|structured|schema/i.test(systemPrompt) : false;
+    const hasStructuredOutput =
+      options.requiresStructuredOutput === true ||
+      (scannedSystemPrompt ? /json|structured|schema/i.test(scannedSystemPrompt) : false);
 
     let tier: Tier;
     let confidence: number;

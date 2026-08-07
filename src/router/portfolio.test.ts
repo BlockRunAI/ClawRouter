@@ -890,4 +890,39 @@ describe("PortfolioStrategy", () => {
 
     expect(decision.candidates?.[0]).toBe("xai/grok-4-1-fast-non-reasoning");
   });
+
+  it("ignores a malformed performance timestamp instead of producing NaN scores", () => {
+    const decision = route("Extract the fields as JSON", undefined, 512, {
+      config: DEFAULT_ROUTING_CONFIG,
+      modelPricing: pricing,
+      now: new Date("2026-07-21T00:00:00Z"),
+      modelPerformance: {
+        "openai/gpt-4o-mini": {
+          measuredAt: "not-a-timestamp",
+          latencyMs: 1,
+          outputTokensPerSecond: 10_000,
+          intelligenceIndex: 50,
+        },
+      },
+    });
+
+    expect(decision.candidateScores?.every((row) => Number.isFinite(row.score))).toBe(true);
+  });
+
+  it("falls back to the rules decision when a tier has no usable candidate", () => {
+    const emptyTierConfig: typeof DEFAULT_ROUTING_CONFIG.tiers = {
+      SIMPLE: { primary: "", fallback: [] },
+      MEDIUM: { primary: "", fallback: [] },
+      COMPLEX: { primary: "", fallback: [] },
+      REASONING: { primary: "", fallback: [] },
+    };
+
+    const decision = route("hello", undefined, 128, {
+      config: { ...DEFAULT_ROUTING_CONFIG, tiers: emptyTierConfig },
+      modelPricing: pricing,
+    });
+
+    expect(decision.method).toBe("rules");
+    expect(decision.model).toBe("");
+  });
 });

@@ -271,6 +271,99 @@ describe("proxy session pinning", () => {
     expect(JSON.stringify(shadows[0])).not.toContain("simple follow-up");
   });
 
+  it("reports the session-pinned serving model in shadow telemetry", async () => {
+    const receivedModels: string[] = [];
+    const shadows: Array<{ executed: RoutingDecision; shadow: RoutingDecision }> = [];
+    const upstreamSetup = await createUpstream((body, _req, res) => {
+      const model = String(body.model ?? "");
+      receivedModels.push(model);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: `chatcmpl-shadow-pin-${receivedModels.length}`,
+          object: "chat.completion",
+          created: 1,
+          model,
+          choices: [
+            { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      );
+    });
+    upstream = upstreamSetup.server;
+    proxy = await startProxy({
+      wallet: generatePrivateKey(),
+      apiBase: upstreamSetup.url,
+      port: 0,
+      skipBalanceCheck: true,
+      cacheConfig: { enabled: false },
+      routingConfig: {
+        ...createRoutingConfig(),
+        strategy: "portfolio",
+        shadow: { strategy: "rules", sampleRate: 1 },
+      },
+      onShadowRouted: (comparison) => shadows.push(comparison),
+    });
+
+    const sessionId = "shadow-pinned-session";
+    expect((await postChat(proxy, sessionId, EXPLICIT_MODEL, "pin this model")).status).toBe(200);
+    expect((await postChat(proxy, sessionId, "blockrun/auto", "simple follow-up")).status).toBe(
+      200,
+    );
+
+    expect(receivedModels).toEqual([EXPLICIT_MODEL, EXPLICIT_MODEL]);
+    expect(shadows).toHaveLength(1);
+    expect(shadows[0]?.executed.model).toBe(EXPLICIT_MODEL);
+    expect(shadows[0]?.shadow.model).toBe(AUTO_PRIMARY);
+    expect(shadows[0]?.executed.model).not.toBe(shadows[0]?.shadow.model);
+  });
+
+  it("does not reinsert a sticky model removed by a hard capacity filter", async () => {
+    const capacityLimitedModel = "openai/gpt-5.3";
+    const receivedModels: string[] = [];
+    const upstreamSetup = await createUpstream((body, _req, res) => {
+      const model = String(body.model ?? "");
+      receivedModels.push(model);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: `chatcmpl-capacity-${receivedModels.length}`,
+          object: "chat.completion",
+          created: 1,
+          model,
+          choices: [
+            { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      );
+    });
+    upstream = upstreamSetup.server;
+    proxy = await startProxy({
+      wallet: generatePrivateKey(),
+      apiBase: upstreamSetup.url,
+      port: 0,
+      skipBalanceCheck: true,
+      cacheConfig: { enabled: false },
+      routingConfig: createRoutingConfig(),
+    });
+
+    const sessionId = "capacity-filtered-pin";
+    expect((await postChat(proxy, sessionId, capacityLimitedModel, "pin this model")).status).toBe(
+      200,
+    );
+    expect(
+      (
+        await postChat(proxy, sessionId, "blockrun/auto", "produce a long answer", {
+          max_tokens: 20_000,
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(receivedModels).toEqual([capacityLimitedModel, AUTO_PRIMARY]);
+  });
+
   it("retries an explicit-pin model once on transient 5xx upstream errors", async () => {
     const receivedModels: string[] = [];
     let attempts = 0;

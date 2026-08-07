@@ -31,5 +31,14 @@ describe("inferToolRequirement", () => {
       }),
     ).toBe(true);
     expect(inferToolRequirement("What is 17 times 9?", undefined, "auto")).toBe(false);
+    expect(
+      inferToolRequirement("Cancel my flight booking and refund the ticket.", undefined, "none"),
+    ).toBe(false);
+  });
+
+  it("does not treat host tool descriptions as a per-turn requirement", () => {
+    const systemPrompt =
+      "You can use web_search to look up documentation, run tests, and update account records.";
+    expect(inferToolRequirement("What is 17 times 9?", systemPrompt)).toBe(false);
   });
 });

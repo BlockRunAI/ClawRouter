@@ -8,6 +8,8 @@
  * provider SLA or as task-quality measurements.
  */
 
+import liveProfiles from "./model-profiles.generated.json";
+
 export type ModelPerformanceProfile = {
   measuredAt: string;
   /** Gateway end-to-end latency for the benchmark workload. */
@@ -103,4 +105,3 @@ export const HISTORICAL_MODEL_PROFILES: Readonly<Record<string, ModelPerformance
       intelligenceIndex: 41,
     },
   });
-import liveProfiles from "./model-profiles.generated.json";

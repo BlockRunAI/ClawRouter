@@ -3594,6 +3594,14 @@ async function proxyRequest(
   let maxTokens = DEFAULT_MAX_TOKENS;
   let routingProfile: "eco" | "auto" | "premium" | null = null;
   let stickyExplicitModel: string | undefined;
+  let pendingShadowComparison:
+    | {
+        shadow: RoutingDecision;
+        hasTools: boolean;
+        hasVision: boolean;
+        requiresStructuredOutput: boolean;
+      }
+    | undefined;
   let balanceFallbackNotice: string | undefined;
   let budgetDowngradeNotice: string | undefined;
   let budgetDowngradeHeaderMode: "downgraded" | undefined;
@@ -4410,14 +4418,12 @@ async function proxyRequest(
               hasVision,
               requiresStructuredOutput,
             });
-            options.onShadowRouted?.({
-              executed: routingDecision,
+            pendingShadowComparison = {
               shadow: shadowDecision,
-              sameModel: routingDecision.model === shadowDecision.model,
               hasTools,
               hasVision,
               requiresStructuredOutput,
-            });
+            };
           }
 
           // Keep agentic routing when tools are present, even for SIMPLE queries.
@@ -4571,6 +4577,16 @@ async function proxyRequest(
             }
           }
 
+          if (pendingShadowComparison) {
+            options.onShadowRouted?.({
+              executed: routingDecision,
+              shadow: pendingShadowComparison.shadow,
+              sameModel: routingDecision.model === pendingShadowComparison.shadow.model,
+              hasTools: pendingShadowComparison.hasTools,
+              hasVision: pendingShadowComparison.hasVision,
+              requiresStructuredOutput: pendingShadowComparison.requiresStructuredOutput,
+            });
+          }
           options.onRouted?.(routingDecision);
         }
       }
@@ -5081,13 +5097,16 @@ async function proxyRequest(
         selectedModel,
         ...rankedCandidates.filter((model) => model !== selectedModel),
       ]);
-      const contextFiltered = prependStickyExplicitModel(
-        filterCandidatesByCapacity(fullChain, estimatedInputTokens, maxTokens, (modelId) => {
+      const contextFiltered = filterCandidatesByCapacity(
+        fullChain,
+        estimatedInputTokens,
+        maxTokens,
+        (modelId) => {
           const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
           return model
             ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput }
             : undefined;
-        }),
+        },
       );
 
       // Log if models were filtered out due to context limits
@@ -5099,9 +5118,7 @@ async function proxyRequest(
       }
 
       // Filter out user-excluded models
-      const excludeFiltered = prependStickyExplicitModel(
-        filterByExcludeList(contextFiltered, excludeList),
-      );
+      const excludeFiltered = filterByExcludeList(contextFiltered, excludeList);
       const excludeExcluded = contextFiltered.filter((m) => !excludeFiltered.includes(m));
       if (excludeExcluded.length > 0) {
         console.log(
@@ -5112,9 +5129,7 @@ async function proxyRequest(
       // Filter to models that support tool calling when request has tools.
       // Prevents models like grok-code-fast-1 from outputting tool invocations
       // as plain text JSON (the "talking to itself" bug).
-      let toolFiltered = prependStickyExplicitModel(
-        filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling),
-      );
+      let toolFiltered = filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling);
       const toolExcluded = excludeFiltered.filter((m) => !toolFiltered.includes(m));
       if (toolExcluded.length > 0) {
         console.log(
@@ -5137,14 +5152,12 @@ async function proxyRequest(
           console.log(
             `[ClawRouter] Tool-compliance filter: excluded ${dropped.join(", ")} (unreliable tool schema handling)`,
           );
-          toolFiltered = prependStickyExplicitModel(compliant);
+          toolFiltered = compliant;
         }
       }
 
       // Filter to models that support vision when request has image_url content
-      const visionFiltered = prependStickyExplicitModel(
-        filterByVision(toolFiltered, hasVision, supportsVision),
-      );
+      const visionFiltered = filterByVision(toolFiltered, hasVision, supportsVision);
       const visionExcluded = toolFiltered.filter((m) => !visionFiltered.includes(m));
       if (visionExcluded.length > 0) {
         console.log(
@@ -5153,7 +5166,7 @@ async function proxyRequest(
       }
 
       // Limit to MAX_FALLBACK_ATTEMPTS to prevent infinite loops
-      modelsToTry = prependStickyExplicitModel(visionFiltered).slice(0, MAX_FALLBACK_ATTEMPTS);
+      modelsToTry = visionFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
 
       // Deprioritize rate-limited models (put them at the end)
       modelsToTry = prioritizeNonRateLimited(modelsToTry);

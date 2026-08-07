@@ -161,11 +161,23 @@ function classifyTask(
   options: RouterOptions,
 ): TaskFeatures {
   const fullText = `${systemPrompt ?? ""} ${prompt}`;
-  const text = prompt.toLowerCase();
   const estimatedInputTokens = Math.ceil(fullText.length / 4);
+  // Feature regexes need request shape and intent, not the entire document.
+  // Sample both ends so a long pasted artifact keeps the task instruction at
+  // either boundary, while the full length still drives capacity decisions.
+  const scanLimit = Math.max(1, Math.min(8_000, options.config.classifier.promptTruncationChars));
+  const sample = (value: string): string => {
+    if (value.length <= scanLimit) return value;
+    const prefixLength = Math.ceil(scanLimit / 2);
+    return `${value.slice(0, prefixLength)}\n${value.slice(-(scanLimit - prefixLength))}`;
+  };
+  const scannedPrompt = sample(prompt);
+  const scannedSystemPrompt = sample(systemPrompt ?? "");
+  const scannedFullText = `${scannedSystemPrompt} ${scannedPrompt}`;
+  const text = scannedPrompt.toLowerCase();
   const explicitCodeSignal =
     /```|\b(?:typescript|javascript|python|rust|java|sql|stack trace|traceback|exception)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   // `class` is common in non-code Agent domains (for example airline cabin
   // class). Treat code constructs as code only when the prompt also contains
@@ -173,18 +185,19 @@ function classifyTask(
   // noun redirect an entire tool session to the code-agent portfolio.
   const codeConstructSignal =
     /\b(?:implement|refactor|debug|write|edit|modify|create|define|review|fix)\b[\s\S]{0,48}\b(?:api|function|class|method)\b|\b(?:api|function|class|method)\b[\s\S]{0,48}\b(?:code|implementation|typescript|javascript|python|rust|java)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   const nativeCodeSignal =
     /\b(?:programmed|written|implemented?|code)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   const hasCode = explicitCodeSignal || codeConstructSignal || nativeCodeSignal;
   const toolsAvailable = options.hasTools ?? false;
   const needsTools =
-    options.requiresTools ?? (toolsAvailable && inferToolRequirement(prompt, systemPrompt));
+    options.requiresTools ??
+    (toolsAvailable && inferToolRequirement(scannedPrompt, scannedSystemPrompt));
   const likelyParallelToolCalls = likelyNeedsParallelToolCalls(
-    prompt,
+    scannedPrompt,
     needsTools,
     options.toolCount,
     options.toolNames,
@@ -213,16 +226,16 @@ function classifyTask(
   // ordinary search causes long, costly loops. This is request/tool-surface
   // evidence only and does not depend on a benchmark id or hidden answer.
   const clueConnectors =
-    fullText.match(
+    scannedFullText.match(
       /\b(?:after|before|while|where|whose|which|in \d{4}|as of|over \d+|another|also|furthermore)\b|(?:之后|之前|其中|截至|超过|另一个|此外)/gi,
     ) ?? [];
   const entityResolutionSignal =
     /\b(?:identify|who (?:is|was)|what (?:is|was) the name|which (?:person|player|company|country|city)|find the (?:person|player|name|entity))\b|(?:找出|识别|是谁|哪位|名称是什么)/i.test(
-      fullText,
+      scannedFullText,
     );
   const exactAnswerSignal =
     /\b(?:exact answer|single best-supported answer|following clues|multiple public sources)\b|(?:精确答案|根据.*线索|多个公开来源)/i.test(
-      fullText,
+      scannedFullText,
     );
   const deepWebResearch =
     agentDomain === "web_research" &&
@@ -230,32 +243,32 @@ function classifyTask(
       (entityResolutionSignal && (clueConnectors.length >= 3 || prompt.length >= 320)));
   const globalOptimizationSignal =
     /\b(?:cheapest|lowest[- ]price|least expensive|most expensive|highest(?:[- ]priced)?|largest|smallest|maximum|minimum|best available|closest|not (?:cost|exceed))\b|最便宜|最低价|最贵|最高价|最大|最小/i.test(
-      prompt,
+      scannedPrompt,
     );
   const globalScopeSignal =
     /\b(?:everything|all (?:(?:my|your|their|the) )?(?:future |upcoming )?(?:items|orders|passengers|flights|reservations|bookings)|every (?:item|order|passenger|flight|reservation|booking))\b|全部|所有|每个/i.test(
-      prompt,
+      scannedPrompt,
     );
   const globalChoiceSignal = globalOptimizationSignal || globalScopeSignal;
   const crossRecordSignal =
     /\b(?:another|other|different|previous)\s+(?:order|reservation|booking|account|address)\b|另一(?:个)?(?:订单|预订|账户|地址)|其他(?:订单|预订|账户|地址)/i.test(
-      prompt,
+      scannedPrompt,
     );
-  const reservationIds = prompt.match(/\b[A-Z0-9]{6}\b/g) ?? [];
+  const reservationIds = scannedPrompt.match(/\b[A-Z0-9]{6}\b/g) ?? [];
   const crossReservationBatchSignal =
     agentDomain === "airline" &&
     (/\b(?:two|three|multiple|several)(?:\s+of\s+(?:my|our|the))?\s+(?:upcoming\s+)?(?:reservations?|bookings?)\b|\b(?:a\s+)?(?:second|third)\s+(?:reservation|booking)\b/i.test(
-      prompt,
+      scannedPrompt,
     ) ||
       new Set(reservationIds).size >= 2);
   const conditionalGlobalWorkflowSignal =
     agentDomain === "airline" &&
     globalScopeSignal &&
     /\b(?:if|that (?:contain|have)|longer than|shorter than|under|over|at (?:most|least)|wherever possible)\b|如果|超过|少于|不超过|尽可能/i.test(
-      prompt,
+      scannedPrompt,
     ) &&
     /\b(?:cancel|change|upgrade|move|book)\b[\s\S]*\b(?:cancel|change|upgrade|move|book)\b|取消[\s\S]*(?:升级|更改)|升级[\s\S]*(?:取消|更改)/i.test(
-      prompt,
+      scannedPrompt,
     );
   // A refund explicitly targeted at a named/non-original card can conflict
   // with account state and require escalation rather than a substitute action.
@@ -263,9 +276,11 @@ function classifyTask(
   // ordinary return workflow to the expensive policy specialist.
   const policyExceptionSignal =
     agentDomain === "retail" &&
-    /\b(?:return|refund|send back|get (?:my |the )?money back)\b|退货|退款|退回/i.test(prompt) &&
+    /\b(?:return|refund|send back|get (?:my |the )?money back)\b|退货|退款|退回/i.test(
+      scannedPrompt,
+    ) &&
     /\b(?:amex|american express|visa|mastercard|credit card|debit card|different card|another card|other card)\b|信用卡|借记卡|其他卡|另一张卡/i.test(
-      prompt,
+      scannedPrompt,
     );
   // A comparative selector can mention two products while requesting only
   // one write (for example "send back the pricier one"). Three-repeat tau2
@@ -274,15 +289,15 @@ function classifyTask(
   const singleSelectedPolicyException =
     policyExceptionSignal &&
     /\b(?:return|refund|send back)\b[^.!?。！？]{0,96}\b(?:the )?(?:pricier|cheaper|more expensive|less expensive|costlier|one)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   // Returns and exchanges often pivot after confirmation (return -> rethink
   // -> exchange -> choose a variant). That future state is not visible to a
   // task-start router, so treat the observable workflow verb as the risk cue.
   // Simpler cancellation and one-field order edits stay on the standard path.
   const negotiatedWorkflowSignal =
-    agentDomain === "retail" && /\b(?:return|exchange)\b|退货|退回|换货|交换/i.test(prompt);
-  const numberedSteps = (prompt.match(/(?:^|\s)\d+(?:\.\d+)*[.)]\s+/g) ?? []).length;
+    agentDomain === "retail" && /\b(?:return|exchange)\b|退货|退回|换货|交换/i.test(scannedPrompt);
+  const numberedSteps = (scannedPrompt.match(/(?:^|\s)\d+(?:\.\d+)*[.)]\s+/g) ?? []).length;
   const complexMultiToolPlan =
     likelyParallelToolCalls &&
     ((options.toolCount ?? 0) >= 6 || numberedSteps >= 3 || prompt.length > 1_200);
@@ -312,10 +327,12 @@ function classifyTask(
   const needsVision = options.hasVision ?? false;
   const needsStructuredOutput = options.requiresStructuredOutput ?? false;
   const latencySensitive =
-    /\b(?:urgent|asap|fast|quick|low latency|real[- ]time)\b|尽快|马上|快速|低延迟/i.test(fullText);
+    /\b(?:urgent|asap|fast|quick|low latency|real[- ]time)\b|尽快|马上|快速|低延迟/i.test(
+      scannedFullText,
+    );
   const highStakes =
     /\b(?:production|security|payment|legal|medical|financial|audit)\b|生产|安全|支付|法律|医疗|财务|审计/i.test(
-      fullText,
+      scannedFullText,
     );
   // Terminal tasks often describe the desired artifact rather than naming a
   // programming language. Treat only small, deterministic local build/file
@@ -327,7 +344,7 @@ function classifyTask(
   );
   const simpleTerminalArtifact =
     /\b(?:create|write|convert|generate|build|implement|run|fix|repair|debug|make)\b[\s\S]{0,120}\b(?:file|script|csv|parquet|json|txt|server|endpoint)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   // Multi-file repair is qualitatively different from fixing one known local
   // script. The agent must preserve state across inspections, infer ordering
@@ -339,22 +356,25 @@ function classifyTask(
   const terminalComplexRepair =
     terminalToolSignal &&
     /\b(?:multiple|several)\s+(?:scripts?|files?|components?)\b|\b(?:pipeline|dependencies)\b[\s\S]{0,100}\b(?:fail|issue|fix|repair|run|execute)\b|\b(?:identify|find|fix|repair)\s+(?:and\s+)?(?:fix\s+)?all\s+(?:the\s+)?issues\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   // One artifact that must be accepted by multiple compilers/runtimes is not
   // a routine file-writing task. It requires reasoning across incompatible
   // grammars and validating every execution path; cheap code models can
   // produce plausible-looking source that satisfies neither toolchain.
   const mentionedTerminalRuntimes = new Set(
-    (prompt.match(/\b(?:gcc|clang|rustc|javac|go\s+build|node|python)\b/gi) ?? []).map((name) =>
-      name.toLowerCase().replace(/\s+/g, " "),
+    (scannedPrompt.match(/\b(?:gcc|clang|rustc|javac|go\s+build|node|python)\b/gi) ?? []).map(
+      (name) => name.toLowerCase().replace(/\s+/g, " "),
     ),
   );
   const terminalCrossRuntimeArtifact =
     terminalToolSignal &&
-    (/\bpolyglot\b/i.test(prompt) ||
-      /\b(?:both|each)\b[\s\S]{0,120}\b(?:compilers?|runtimes?|toolchains?)\b/i.test(prompt) ||
-      (mentionedTerminalRuntimes.size >= 2 && /\b(?:compile|build|run|execute)\b/i.test(prompt)));
+    (/\bpolyglot\b/i.test(scannedPrompt) ||
+      /\b(?:both|each)\b[\s\S]{0,120}\b(?:compilers?|runtimes?|toolchains?)\b/i.test(
+        scannedPrompt,
+      ) ||
+      (mentionedTerminalRuntimes.size >= 2 &&
+        /\b(?:compile|build|run|execute)\b/i.test(scannedPrompt)));
   // Framework-to-native ports combine binary checkpoint inspection, weight
   // export, tensor-layout reasoning, image/data decoding, and a separately
   // compiled runtime. A task-start router can see this boundary directly in
@@ -364,12 +384,12 @@ function classifyTask(
   const terminalFrameworkToNativeArtifact =
     terminalToolSignal &&
     /\b(?:pytorch|tensorflow|jax|onnx|state[_ -]?dict|checkpoint|safetensors?)\b|\.(?:pth|pt|onnx)\b/i.test(
-      prompt,
+      scannedPrompt,
     ) &&
     /\b(?:pure|native|programmed|written|implemented?)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b|\b(?:c\+\+|c|rust|go)\s+(?:program|binary|executable|cli|tool|implementation)\b/i.test(
-      prompt,
+      scannedPrompt,
     ) &&
-    /\b(?:inference|model|weights?|tensor|export|convert|load)\b/i.test(prompt);
+    /\b(?:inference|model|weights?|tensor|export|convert|load)\b/i.test(scannedPrompt);
   if (
     needsTools &&
     (terminalComplexRepair || terminalCrossRuntimeArtifact || terminalFrameworkToNativeArtifact) &&
@@ -378,7 +398,7 @@ function classifyTask(
     agentRisk = "complex_high";
   const complexTerminalOperation =
     /\b(?:git|ssh|nginx|https|certificate|authentication|credential|deploy|production|encrypt|gpg|shred|securely delete|decommission|benchmark|evaluate|embedding|chess|image|search the web|schema|statistical|statistics|aggregate|join|multiple inputs?)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   // A bare "token" is not a credential signal: blockchain, tokenizer, and
   // LLM tasks use that word routinely (for example "token transfers"). Only
@@ -386,10 +406,10 @@ function classifyTask(
   // qualifier. API keys remain an unambiguous high-risk signal on their own.
   const terminalCredentialSignal =
     /\b(?:ssh|nginx|certificate|authentication|credentials?|passwords?|api keys?|deploy|production|encrypt|gpg|shred|securely delete|decommission)\b/i.test(
-      prompt,
+      scannedPrompt,
     ) ||
     /\b(?:access|auth|authentication|bearer|secret|api)\s+tokens?\b|\btokens?\s+(?:secret|credential|authentication)\b/i.test(
-      prompt,
+      scannedPrompt,
     );
   const terminalSafetySensitive = terminalToolSignal && (highStakes || terminalCredentialSignal);
   const implicitTerminalCode =
@@ -401,17 +421,17 @@ function classifyTask(
     numberedSteps < 3 &&
     prompt.length <= 1_000 &&
     simpleTerminalArtifact;
-  const language = /[\u3400-\u9fff]/.test(fullText) ? "zh" : "other";
-  const multipleChoiceSignals = (prompt.match(/(?:^|\n)\s*[A-D][.)]\s+/gim) ?? []).length;
-  const numericSignals = (prompt.match(/-?\d+(?:[.,]\d+)?/g) ?? []).length;
+  const language = /[\u3400-\u9fff]/.test(scannedFullText) ? "zh" : "other";
+  const multipleChoiceSignals = (scannedPrompt.match(/(?:^|\n)\s*[A-D][.)]\s+/gim) ?? []).length;
+  const numericSignals = (scannedPrompt.match(/-?\d+(?:[.,]\d+)?/g) ?? []).length;
   const compactMathProblem =
     !hasCode &&
     prompt.length < 2_500 &&
     numericSignals >= 2 &&
     (/[+×÷=%$€£¥]|\b(?:total|each|per|times|half|twice|percent|how many|how much|calculate)\b/i.test(
-      prompt,
+      scannedPrompt,
     ) ||
-      /[?？]\s*$/.test(prompt.trim()) ||
+      /[?？]\s*$/.test(scannedPrompt.trim()) ||
       numericSignals >= 3);
 
   let taskType: TaskType = "chat";
@@ -950,7 +970,9 @@ function profileScore(
     LIVE_MODEL_PROFILES[modelId] ??
     HISTORICAL_MODEL_PROFILES[modelId];
   if (!profile) return undefined;
-  const ageDays = Math.max(0, (now.getTime() - Date.parse(profile.measuredAt)) / 86_400_000);
+  const measuredAt = Date.parse(profile.measuredAt);
+  if (!Number.isFinite(measuredAt)) return undefined;
+  const ageDays = Math.max(0, (now.getTime() - measuredAt) / 86_400_000);
   // A 30-day half-life makes old data a tie-breaker only. Small probe runs are
   // also weak evidence: three quick samples should not overturn a curated
   // tier ordering merely because of a transient provider tail. Callers that
@@ -987,20 +1009,21 @@ export class PortfolioStrategy implements RouterStrategy {
       ...options,
       requiresTools: features.needsTools,
     });
-    const tierConfigs = base.tierConfigs!;
+    const tierConfigs = base.tierConfigs;
+    if (!tierConfigs) return base;
     const targetTier: Tier =
       (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") &&
       (base.tier === "SIMPLE" || base.tier === "MEDIUM")
         ? "REASONING"
         : base.tier;
+    const tierConfig = tierConfigs[targetTier];
+    const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
     const chain = [
-      ...new Set([
-        ...getFallbackChain(targetTier, tierConfigs),
-        ...evidenceCandidates(features.taskType),
-      ]),
-    ];
+      ...new Set([...configuredCandidates, ...evidenceCandidates(features.taskType)]),
+    ].filter((model): model is string => typeof model === "string" && model.length > 0);
     const eligible = chain.filter((model) => isEligible(model, features, maxOutputTokens));
     const eligibleCandidates = eligible.length > 0 ? eligible : chain;
+    if (eligibleCandidates.length === 0) return base;
     const profileName =
       options.routingProfile === "eco"
         ? "eco"

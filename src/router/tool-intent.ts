@@ -9,11 +9,12 @@
  */
 export function inferToolRequirement(
   prompt: string,
-  systemPrompt?: string,
+  _systemPrompt?: string,
   toolChoice?: unknown,
 ): boolean {
   // OpenAI-compatible clients can state this requirement directly. Treat that
   // protocol signal as authoritative instead of trying to infer it from prose.
+  if (toolChoice === "none") return false;
   if (toolChoice === "required") return true;
   if (
     typeof toolChoice === "object" &&
@@ -23,7 +24,10 @@ export function inferToolRequirement(
     return true;
   }
 
-  const text = `${systemPrompt ?? ""}\n${prompt}`;
+  // System prompts commonly describe every tool a host exposes. They are not
+  // evidence that the user asked to perform an action on this turn. Explicit
+  // host requirements should use tool_choice/requiresTools instead.
+  const text = prompt;
   const explicitTool =
     /\b(?:use|call|invoke)\s+(?:the\s+)?[\w.-]+\s+(?:tool|function|api)\b|\btool[_ -]?call\b|使用.{0,20}(?:工具|函数|接口)|调用.{0,20}(?:工具|函数|接口)/i;
   const codeEnvironment =

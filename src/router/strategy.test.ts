@@ -67,6 +67,17 @@ describe("RulesStrategy", () => {
     expect(["auto", "eco", "premium", "agentic"]).toContain(decision.profile);
   });
 
+  it("honors the protocol structured-output requirement", () => {
+    const strategy = new RulesStrategy();
+    const decision = strategy.route("hello", undefined, 100, {
+      ...baseOptions,
+      requiresStructuredOutput: true,
+    });
+
+    expect(decision.tier).toBe("MEDIUM");
+    expect(decision.reasoning).toContain("structured output");
+  });
+
   it("sets eco profile when routingProfile is eco", () => {
     const strategy = new RulesStrategy();
     const decision = strategy.route("hello", undefined, 100, {
