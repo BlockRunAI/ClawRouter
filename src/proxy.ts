@@ -4578,14 +4578,19 @@ async function proxyRequest(
           }
 
           if (pendingShadowComparison) {
-            options.onShadowRouted?.({
-              executed: routingDecision,
-              shadow: pendingShadowComparison.shadow,
-              sameModel: routingDecision.model === pendingShadowComparison.shadow.model,
-              hasTools: pendingShadowComparison.hasTools,
-              hasVision: pendingShadowComparison.hasVision,
-              requiresStructuredOutput: pendingShadowComparison.requiresStructuredOutput,
-            });
+            try {
+              options.onShadowRouted?.({
+                executed: routingDecision,
+                shadow: pendingShadowComparison.shadow,
+                sameModel: routingDecision.model === pendingShadowComparison.shadow.model,
+                hasTools: pendingShadowComparison.hasTools,
+                hasVision: pendingShadowComparison.hasVision,
+                requiresStructuredOutput: pendingShadowComparison.requiresStructuredOutput,
+              });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.warn(`[ClawRouter] Shadow routing callback failed: ${message}`);
+            }
           }
           options.onRouted?.(routingDecision);
         }
@@ -5108,6 +5113,32 @@ async function proxyRequest(
             : undefined;
         },
       );
+
+      if (contextFiltered.length === 0) {
+        const errPayload = JSON.stringify({
+          error: {
+            message: `No routed model can satisfy the requested context and output capacity (~${estimatedTotalTokens} tokens). Reduce the input or max_tokens and retry.`,
+            type: "invalid_request_error",
+            code: "context_capacity_exceeded",
+          },
+        });
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = undefined;
+        }
+        if (headersSentEarly) {
+          safeWrite(res, `data: ${errPayload}\n\ndata: [DONE]\n\n`);
+          res.end();
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(errPayload);
+        }
+        completed = true;
+        deduplicator.removeInflight(dedupKey);
+        clearTimeout(timeoutId);
+        req.removeListener("close", onClientClose);
+        return;
+      }
 
       // Log if models were filtered out due to context limits
       const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));

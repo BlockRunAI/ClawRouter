@@ -114,9 +114,9 @@ describe("filterCandidatesByCapacity", () => {
     ).toEqual(["large"]);
   });
 
-  it("returns the original chain when no known candidate fits", () => {
+  it("returns an empty chain when no known candidate fits", () => {
     expect(
       filterCandidatesByCapacity(["small"], 100_000, 40_000, (model) => capabilities.get(model)),
-    ).toEqual(["small"]);
+    ).toEqual([]);
   });
 });

@@ -245,5 +245,5 @@ export function filterCandidatesByCapacity(
       capabilities.maxOutput >= requestedOutputTokens
     );
   });
-  return filtered.length > 0 ? filtered : models;
+  return filtered;
 }
