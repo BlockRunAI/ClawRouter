@@ -321,6 +321,7 @@ describe("proxy session pinning", () => {
 
   it("isolates shadow callback failures from the serving request", async () => {
     const receivedModels: string[] = [];
+    let shadowCallbackCalls = 0;
     const upstreamSetup = await createUpstream((body, _req, res) => {
       const model = String(body.model ?? "");
       receivedModels.push(model);
@@ -351,6 +352,7 @@ describe("proxy session pinning", () => {
         shadow: { strategy: "rules", sampleRate: 1 },
       },
       onShadowRouted: () => {
+        shadowCallbackCalls += 1;
         throw new Error("telemetry sink unavailable");
       },
     });
@@ -358,6 +360,7 @@ describe("proxy session pinning", () => {
     const response = await postChat(proxy, "shadow-callback-failure", "blockrun/auto", "hello");
     expect(response.status).toBe(200);
     expect(receivedModels).toEqual([AUTO_PRIMARY]);
+    expect(shadowCallbackCalls).toBe(1);
   });
 
   it("does not reinsert a sticky model removed by a hard capacity filter", async () => {
