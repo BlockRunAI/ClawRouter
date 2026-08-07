@@ -4396,11 +4396,7 @@ async function proxyRequest(
           const shadow = routerOpts.config.shadow;
           const activeStrategy = routerOpts.config.strategy ?? "portfolio";
           const shadowRate = Math.max(0, Math.min(1, shadow?.sampleRate ?? 1));
-          if (
-            shadow &&
-            shadow.strategy !== activeStrategy &&
-            Math.random() < shadowRate
-          ) {
+          if (shadow && shadow.strategy !== activeStrategy && Math.random() < shadowRate) {
             const requiresStructuredOutput =
               typeof parsed.response_format === "object" && parsed.response_format !== null;
             const shadowDecision = route(prompt, systemPrompt, maxTokens, {
@@ -5086,17 +5082,12 @@ async function proxyRequest(
         ...rankedCandidates.filter((model) => model !== selectedModel),
       ]);
       const contextFiltered = prependStickyExplicitModel(
-        filterCandidatesByCapacity(
-          fullChain,
-          estimatedInputTokens,
-          maxTokens,
-          (modelId) => {
-            const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
-            return model
-              ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput }
-              : undefined;
-          },
-        ),
+        filterCandidatesByCapacity(fullChain, estimatedInputTokens, maxTokens, (modelId) => {
+          const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
+          return model
+            ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput }
+            : undefined;
+        }),
       );
 
       // Log if models were filtered out due to context limits

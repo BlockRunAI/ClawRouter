@@ -43,7 +43,9 @@ describe("PortfolioStrategy", () => {
     expect(decision.model).toBe("openai/gpt-5-mini");
     expect(decision.candidates).toContain(decision.model);
     expect(decision.candidates).toContain("openai/gpt-5.3-codex");
-    expect(["moonshot/kimi-k2.7", "moonshot/kimi-k2.6", "moonshot/kimi-k2.5"]).not.toContain(decision.model);
+    expect(["moonshot/kimi-k2.7", "moonshot/kimi-k2.6", "moonshot/kimi-k2.5"]).not.toContain(
+      decision.model,
+    );
     expect(decision.candidates).not.toContain("google/gemini-3.1-pro");
   });
 
@@ -58,7 +60,9 @@ describe("PortfolioStrategy", () => {
     expect(decision.model).toBe("anthropic/claude-sonnet-5");
     expect(decision.candidates).toContain(decision.model);
     expect(decision.candidates).toContain("google/gemini-3.5-flash");
-    expect(["moonshot/kimi-k2.7", "moonshot/kimi-k2.6", "moonshot/kimi-k2.5"]).not.toContain(decision.model);
+    expect(["moonshot/kimi-k2.7", "moonshot/kimi-k2.6", "moonshot/kimi-k2.5"]).not.toContain(
+      decision.model,
+    );
   });
 
   it.each([
@@ -71,19 +75,22 @@ describe("PortfolioStrategy", () => {
     "能帮我查一下中国广州市和北京市现在的天气状况吗？请使用公制单位。",
     "Could you provide the latest news for Paris, France, and also for Letterkenny, Ireland?",
     "I'd like to change my food order to a salad, and for the drink, update it to coffee.",
-  ])("routes a high-confidence repeated single-tool request to the calibrated parallel specialist", (prompt) => {
-    const decision = route(prompt, undefined, 600, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 1,
-    });
+  ])(
+    "routes a high-confidence repeated single-tool request to the calibrated parallel specialist",
+    (prompt) => {
+      const decision = route(prompt, undefined, 600, {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 1,
+      });
 
-    expect(decision.taskType).toBe("tool_agent_parallel");
-    expect(decision.model).toBe("anthropic/claude-opus-4.8");
-  });
+      expect(decision.taskType).toBe("tool_agent_parallel");
+      expect(decision.model).toBe("anthropic/claude-opus-4.8");
+    },
+  );
 
   it("keeps an ordinary single lookup on the standard tool-agent path", () => {
     const decision = route("Use lookup_order for order B-42.", undefined, 256, {
@@ -128,22 +135,28 @@ describe("PortfolioStrategy", () => {
   });
 
   it("keeps a routine web lookup on Sonnet 5", () => {
-    const decision = route("Search the official documentation for the current API timeout setting.", undefined, 1024, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 2,
-      toolNames: ["web_search", "web_fetch"],
-    });
+    const decision = route(
+      "Search the official documentation for the current API timeout setting.",
+      undefined,
+      1024,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 2,
+        toolNames: ["web_search", "web_fetch"],
+      },
+    );
 
     expect(decision.model).toBe("anthropic/claude-sonnet-5");
     expect(decision.reasoning).toContain("deepWebResearch=false");
   });
 
   it("keeps a known cross-reservation batch on the cost-controlled airline model", () => {
-    const prompt = "Hi! I’d like to make some changes to my bookings. I need to cancel two of my upcoming reservations and upgrade another one to business class. Can you help me with that?";
+    const prompt =
+      "Hi! I’d like to make some changes to my bookings. I need to cancel two of my upcoming reservations and upgrade another one to business class. Can you help me with that?";
     const decision = route(prompt, undefined, 4096, {
       config: DEFAULT_ROUTING_CONFIG,
       modelPricing: pricing,
@@ -152,8 +165,13 @@ describe("PortfolioStrategy", () => {
       requiresTools: true,
       toolCount: 7,
       toolNames: [
-        "get_user_details", "get_reservation_details", "search_direct_flight",
-        "update_reservation_flights", "cancel_reservation", "book_reservation", "update_reservation_baggages",
+        "get_user_details",
+        "get_reservation_details",
+        "search_direct_flight",
+        "update_reservation_flights",
+        "cancel_reservation",
+        "book_reservation",
+        "update_reservation_baggages",
       ],
     });
 
@@ -163,18 +181,28 @@ describe("PortfolioStrategy", () => {
   });
 
   it("promotes conditional-global airline work to the complex band", () => {
-    const decision = route("Cancel all your future reservations that contain flights longer than 4 hours. For flights under 3 hours, upgrade to business wherever possible.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 7,
-      toolNames: [
-        "get_user_details", "get_reservation_details", "search_direct_flight",
-        "update_reservation_flights", "cancel_reservation", "book_reservation", "update_reservation_baggages",
-      ],
-    });
+    const decision = route(
+      "Cancel all your future reservations that contain flights longer than 4 hours. For flights under 3 hours, upgrade to business wherever possible.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 7,
+        toolNames: [
+          "get_user_details",
+          "get_reservation_details",
+          "search_direct_flight",
+          "update_reservation_flights",
+          "cancel_reservation",
+          "book_reservation",
+          "update_reservation_baggages",
+        ],
+      },
+    );
 
     expect(decision.reasoning).toContain("agentRisk=complex_high");
     expect(decision.model).toBe("anthropic/claude-sonnet-5");
@@ -306,7 +334,9 @@ describe("PortfolioStrategy", () => {
     expect(decision.reasoning).toContain("terminalSafety=true");
     expect(decision.model).toBe("anthropic/claude-sonnet-5");
     expect(decision.candidates).toContain("openai/gpt-5.3-codex");
-    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain("openai/gpt-5.3-codex");
+    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain(
+      "openai/gpt-5.3-codex",
+    );
   });
 
   it("admits a cost-controlled strong model for sensitive multi-file Terminal work", () => {
@@ -369,15 +399,25 @@ describe("PortfolioStrategy", () => {
   });
 
   it("uses the trajectory-validated high-risk model for retail order tools", () => {
-    const decision = route("Exchange both items after I confirm the price difference.", undefined, 512, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 4,
-      toolNames: ["get_order_details", "get_product_details", "exchange_delivered_order_items", "modify_pending_order_address"],
-    });
+    const decision = route(
+      "Exchange both items after I confirm the price difference.",
+      undefined,
+      512,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 4,
+        toolNames: [
+          "get_order_details",
+          "get_product_details",
+          "exchange_delivered_order_items",
+          "modify_pending_order_address",
+        ],
+      },
+    );
 
     expect(["tool_agent", "tool_agent_parallel"]).toContain(decision.taskType);
     expect(decision.model).toBe("deepseek/deepseek-v4-pro");
@@ -385,44 +425,68 @@ describe("PortfolioStrategy", () => {
   });
 
   it("uses the calibrated low-cost model for one local retail operation", () => {
-    const decision = route("Change the blue earbuds in order W5061109 to red after I confirm.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 6,
-      toolNames: ["find_user_id_by_name_zip", "get_order_details", "get_product_details", "modify_pending_order_items"],
-    });
+    const decision = route(
+      "Change the blue earbuds in order W5061109 to red after I confirm.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 6,
+        toolNames: [
+          "find_user_id_by_name_zip",
+          "get_order_details",
+          "get_product_details",
+          "modify_pending_order_items",
+        ],
+      },
+    );
 
     expect(decision.taskType).toBe("tool_agent");
     expect(decision.model).toBe("openai/gpt-5-mini");
   });
 
   it("keeps global retail choices on the high-risk calibrated model", () => {
-    const decision = route("Exchange my tablet for the cheapest available variant in another order.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 6,
-      toolNames: ["get_order_details", "get_product_details", "exchange_delivered_order_items"],
-    });
+    const decision = route(
+      "Exchange my tablet for the cheapest available variant in another order.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 6,
+        toolNames: ["get_order_details", "get_product_details", "exchange_delivered_order_items"],
+      },
+    );
 
     expect(decision.model).toBe("deepseek/deepseek-v4-pro");
   });
 
   it("uses the policy specialist for a refund targeted at another card", () => {
-    const decision = route("Return everything except the pet bed and refund it to my Amex card.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 6,
-      toolNames: ["get_order_details", "return_delivered_order_items", "transfer_to_human_agents"],
-    });
+    const decision = route(
+      "Return everything except the pet bed and refund it to my Amex card.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 6,
+        toolNames: [
+          "get_order_details",
+          "return_delivered_order_items",
+          "transfer_to_human_agents",
+        ],
+      },
+    );
 
     expect(["tool_agent", "tool_agent_parallel"]).toContain(decision.taskType);
     expect(decision.model).toBe("openai/gpt-4.1");
@@ -430,45 +494,73 @@ describe("PortfolioStrategy", () => {
   });
 
   it("keeps a single comparative send-back request on the current low-cost model", () => {
-    const decision = route("Send back the pricier one and get my money back on my credit card.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 6,
-      toolNames: ["get_order_details", "return_delivered_order_items", "transfer_to_human_agents"],
-    });
+    const decision = route(
+      "Send back the pricier one and get my money back on my credit card.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 6,
+        toolNames: [
+          "get_order_details",
+          "return_delivered_order_items",
+          "transfer_to_human_agents",
+        ],
+      },
+    );
 
     expect(decision.model).toBe("openai/gpt-5-mini");
     expect(decision.reasoning).toContain("agentRisk=policy_exception_simple");
   });
 
   it("uses the policy specialist when a named-card refund covers multiple returned objects", () => {
-    const decision = route("Return these two skateboards and refund them to my credit card.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 6,
-      toolNames: ["get_order_details", "return_delivered_order_items", "transfer_to_human_agents"],
-    });
+    const decision = route(
+      "Return these two skateboards and refund them to my credit card.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 6,
+        toolNames: [
+          "get_order_details",
+          "return_delivered_order_items",
+          "transfer_to_human_agents",
+        ],
+      },
+    );
 
     expect(decision.model).toBe("openai/gpt-4.1");
     expect(decision.reasoning).toContain("agentRisk=policy_exception");
   });
 
   it("treats a simple-looking retail return as a negotiated high-risk workflow", () => {
-    const decision = route("I want to return an office chair that arrived broken.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 6,
-      toolNames: ["get_order_details", "get_product_details", "return_delivered_order_items", "exchange_delivered_order_items"],
-    });
+    const decision = route(
+      "I want to return an office chair that arrived broken.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 6,
+        toolNames: [
+          "get_order_details",
+          "get_product_details",
+          "return_delivered_order_items",
+          "exchange_delivered_order_items",
+        ],
+      },
+    );
 
     expect(decision.taskType).toBe("tool_agent");
     expect(decision.model).toBe("deepseek/deepseek-v4-pro");
@@ -492,15 +584,24 @@ describe("PortfolioStrategy", () => {
   });
 
   it("does not mistake airline cabin class for a code-agent task", () => {
-    const decision = route("Move my flight to May 24 and upgrade all passengers to business class.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 8,
-      toolNames: ["get_reservation_details", "search_direct_flight", "update_reservation_flights"],
-    });
+    const decision = route(
+      "Move my flight to May 24 and upgrade all passengers to business class.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 8,
+        toolNames: [
+          "get_reservation_details",
+          "search_direct_flight",
+          "update_reservation_flights",
+        ],
+      },
+    );
 
     expect(decision.taskType).not.toBe("code_agent");
     expect(decision.model).toBe("openai/gpt-5-mini");
@@ -508,15 +609,26 @@ describe("PortfolioStrategy", () => {
   });
 
   it("reserves the airline specialist for global itinerary optimization", () => {
-    const decision = route("Show my gift card and certificate balances, then change my reservation to the cheapest business round trip without changing the dates.", undefined, 4096, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 8,
-      toolNames: ["get_user_details", "get_reservation_details", "search_onestop_flight", "cancel_reservation", "book_reservation"],
-    });
+    const decision = route(
+      "Show my gift card and certificate balances, then change my reservation to the cheapest business round trip without changing the dates.",
+      undefined,
+      4096,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 8,
+        toolNames: [
+          "get_user_details",
+          "get_reservation_details",
+          "search_onestop_flight",
+          "cancel_reservation",
+          "book_reservation",
+        ],
+      },
+    );
 
     expect(decision.taskType).not.toBe("code_agent");
     expect(decision.model).toBe("anthropic/claude-sonnet-5");
@@ -524,69 +636,102 @@ describe("PortfolioStrategy", () => {
   });
 
   it("does not mistake a lookup followed by local explanation for parallel tool use", () => {
-    const decision = route("Get the weather for London and explain whether I need an umbrella.", undefined, 256, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 1,
-      toolNames: ["get_current_weather"],
-    });
+    const decision = route(
+      "Get the weather for London and explain whether I need an umbrella.",
+      undefined,
+      256,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 1,
+        toolNames: ["get_current_weather"],
+      },
+    );
 
     expect(decision.taskType).toBe("tool_agent");
   });
 
   it("uses two distinctive visible tool names as a multi-operation signal", () => {
-    const decision = route("Add task draft release notes, then delete task obsolete draft.", undefined, 256, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 2,
-      toolNames: ["add_task", "delete_task"],
-    });
+    const decision = route(
+      "Add task draft release notes, then delete task obsolete draft.",
+      undefined,
+      256,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 2,
+        toolNames: ["add_task", "delete_task"],
+      },
+    );
 
     expect(decision.taskType).toBe("tool_agent_parallel");
   });
 
   it("does not spend-upgrade a large numbered multi-tool plan without supporting quality evidence", () => {
-    const decision = route("Do all the following:\n1. Clone the repository.\n2. Analyze it.\n3. Create Docker and Kubernetes files.\n4. Commit and push.", undefined, 600, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 7,
-      toolNames: ["clone_repo", "analyze_repo", "create_docker_file", "create_kubernetes_yaml", "commit_changes", "push_changes", "read_file"],
-    });
+    const decision = route(
+      "Do all the following:\n1. Clone the repository.\n2. Analyze it.\n3. Create Docker and Kubernetes files.\n4. Commit and push.",
+      undefined,
+      600,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 7,
+        toolNames: [
+          "clone_repo",
+          "analyze_repo",
+          "create_docker_file",
+          "create_kubernetes_yaml",
+          "commit_changes",
+          "push_changes",
+          "read_file",
+        ],
+      },
+    );
 
     expect(decision.taskType).not.toBe("tool_agent_parallel");
     expect(decision.model).not.toBe("anthropic/claude-opus-4.8");
   });
 
   it("detects an explicit multi-object request even when a distractor tool is visible", () => {
-    const decision = route("What's the weather like in the two cities of Boston and San Francisco?", undefined, 600, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      routingProfile: "auto",
-      hasTools: true,
-      requiresTools: true,
-      toolCount: 2,
-    });
+    const decision = route(
+      "What's the weather like in the two cities of Boston and San Francisco?",
+      undefined,
+      600,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        routingProfile: "auto",
+        hasTools: true,
+        requiresTools: true,
+        toolCount: 2,
+      },
+    );
 
     expect(decision.taskType).toBe("tool_agent_parallel");
     expect(decision.model).toBe("anthropic/claude-opus-4.8");
   });
 
   it("does not classify ordinary QA as a tool task just because the host exposes tools", () => {
-    const decision = route("Which answer is correct?\nA. One\nB. Two\nC. Three\nD. Four", undefined, 256, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-      hasTools: true,
-      requiresTools: false,
-    });
+    const decision = route(
+      "Which answer is correct?\nA. One\nB. Two\nC. Three\nD. Four",
+      undefined,
+      256,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+        hasTools: true,
+        requiresTools: false,
+      },
+    );
 
     expect(decision.taskType).toBe("reasoning_mcq");
     expect(decision.profile).toBe("auto");
@@ -600,17 +745,24 @@ describe("PortfolioStrategy", () => {
     });
 
     expect(decision.taskType).toBe("long_context");
-    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain("deepseek/deepseek-v4-pro");
+    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain(
+      "deepseek/deepseek-v4-pro",
+    );
     expect(decision.candidates).toContain("deepseek/deepseek-v4-pro");
     expect(decision.model).toBe("google/gemini-3.1-pro");
     expect(decision.candidates).toContain(decision.model);
   });
 
   it("keeps Mandarin structured extraction in the source-language affinity band", () => {
-    const decision = route("只输出 JSON：从订单 A-17，数量 3，状态已发货中提取 orderId、quantity、status 三个字段。", undefined, 256, {
-      config: DEFAULT_ROUTING_CONFIG,
-      modelPricing: pricing,
-    });
+    const decision = route(
+      "只输出 JSON：从订单 A-17，数量 3，状态已发货中提取 orderId、quantity、status 三个字段。",
+      undefined,
+      256,
+      {
+        config: DEFAULT_ROUTING_CONFIG,
+        modelPricing: pricing,
+      },
+    );
 
     expect(decision.taskType).toBe("extraction");
     expect(decision.model).toBe("moonshot/kimi-k2.7");
@@ -626,7 +778,9 @@ describe("PortfolioStrategy", () => {
     // DeepSeek Chat is a valid availability fallback in the SIMPLE tier, but
     // is not an explicitly profiled code-edit specialist. It must not win the
     // Auto ranking simply because it is inexpensive.
-    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain("deepseek/deepseek-chat");
+    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain(
+      "deepseek/deepseek-chat",
+    );
     expect(decision.candidates).toContain("deepseek/deepseek-chat");
   });
 
@@ -634,10 +788,13 @@ describe("PortfolioStrategy", () => {
     const exactNameConfig = {
       ...DEFAULT_ROUTING_CONFIG,
       tiers: Object.fromEntries(
-        Object.keys(DEFAULT_ROUTING_CONFIG.tiers).map((tier) => [tier, {
-          primary: "google/gemini-2.5-flash",
-          fallback: ["google/gemini-2.5-flash-lite"],
-        }]),
+        Object.keys(DEFAULT_ROUTING_CONFIG.tiers).map((tier) => [
+          tier,
+          {
+            primary: "google/gemini-2.5-flash",
+            fallback: ["google/gemini-2.5-flash-lite"],
+          },
+        ]),
       ) as typeof DEFAULT_ROUTING_CONFIG.tiers,
     };
     const decision = route("Explain the deployment status.", undefined, 256, {
@@ -650,7 +807,9 @@ describe("PortfolioStrategy", () => {
 
     expect(decision.candidates?.[0]).toBe("google/gemini-2.5-flash");
     expect(decision.candidates).toContain("google/gemini-2.5-flash-lite");
-    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain("google/gemini-2.5-flash-lite");
+    expect((decision.candidateScores ?? []).map((row) => row.model)).not.toContain(
+      "google/gemini-2.5-flash-lite",
+    );
   });
 
   it("filters models that cannot satisfy the requested output length", () => {
@@ -670,10 +829,13 @@ describe("PortfolioStrategy", () => {
     const twoCandidateConfig = {
       ...DEFAULT_ROUTING_CONFIG,
       tiers: Object.fromEntries(
-        Object.keys(DEFAULT_ROUTING_CONFIG.tiers).map((tier) => [tier, {
-          primary: "xai/grok-4-1-fast-non-reasoning",
-          fallback: ["openai/gpt-4o-mini"],
-        }]),
+        Object.keys(DEFAULT_ROUTING_CONFIG.tiers).map((tier) => [
+          tier,
+          {
+            primary: "xai/grok-4-1-fast-non-reasoning",
+            fallback: ["openai/gpt-4o-mini"],
+          },
+        ]),
       ) as typeof DEFAULT_ROUTING_CONFIG.tiers,
     };
     const decision = route("Extract the fields as JSON", undefined, 512, {
@@ -702,10 +864,13 @@ describe("PortfolioStrategy", () => {
     const twoCandidateConfig = {
       ...DEFAULT_ROUTING_CONFIG,
       tiers: Object.fromEntries(
-        Object.keys(DEFAULT_ROUTING_CONFIG.tiers).map((tier) => [tier, {
-          primary: "xai/grok-4-1-fast-non-reasoning",
-          fallback: ["openai/gpt-4o-mini"],
-        }]),
+        Object.keys(DEFAULT_ROUTING_CONFIG.tiers).map((tier) => [
+          tier,
+          {
+            primary: "xai/grok-4-1-fast-non-reasoning",
+            fallback: ["openai/gpt-4o-mini"],
+          },
+        ]),
       ) as typeof DEFAULT_ROUTING_CONFIG.tiers,
     };
     const decision = route("Explain the deployment status.", undefined, 512, {

@@ -69,7 +69,10 @@ try {
 
 try {
   const router = await import(`file://${resolve(root, "dist", "router", "index.js")}`);
-  if (typeof router.route !== "function" || router.DEFAULT_ROUTING_CONFIG?.strategy !== "portfolio") {
+  if (
+    typeof router.route !== "function" ||
+    router.DEFAULT_ROUTING_CONFIG?.strategy !== "portfolio"
+  ) {
     failures.push("dist/router/index.js did not expose the default portfolio router");
   }
 } catch (err) {

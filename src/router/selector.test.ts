@@ -108,23 +108,15 @@ describe("filterCandidatesByCapacity", () => {
 
   it("preserves portfolio order while removing candidates that cannot fit the request", () => {
     expect(
-      filterCandidatesByCapacity(
-        ["small", "large"],
-        10_000,
-        4_000,
-        (model) => capabilities.get(model),
+      filterCandidatesByCapacity(["small", "large"], 10_000, 4_000, (model) =>
+        capabilities.get(model),
       ),
     ).toEqual(["large"]);
   });
 
   it("returns the original chain when no known candidate fits", () => {
     expect(
-      filterCandidatesByCapacity(
-        ["small"],
-        100_000,
-        40_000,
-        (model) => capabilities.get(model),
-      ),
+      filterCandidatesByCapacity(["small"], 100_000, 40_000, (model) => capabilities.get(model)),
     ).toEqual(["small"]);
   });
 });

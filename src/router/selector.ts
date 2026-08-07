@@ -235,9 +235,7 @@ export function filterCandidatesByCapacity(
   models: string[],
   estimatedInputTokens: number,
   requestedOutputTokens: number,
-  getCapabilities: (
-    modelId: string,
-  ) => { contextWindow: number; maxOutput: number } | undefined,
+  getCapabilities: (modelId: string) => { contextWindow: number; maxOutput: number } | undefined,
 ): string[] {
   const filtered = models.filter((modelId) => {
     const capabilities = getCapabilities(modelId);
