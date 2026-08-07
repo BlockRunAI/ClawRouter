@@ -145,7 +145,6 @@ const FREE_MODELS = new Set([
   "free/gpt-oss-120b",
   "free/gpt-oss-20b",
   "free/deepseek-v4-flash", // 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
-  "free/seed-oss-36b", // live coder (successor to retired qwen3-coder-480b)
   "free/mistral-nemotron", // strong instruction following
   "free/step-3.7-flash", // reasoning-focused
   "free/nemotron-nano-9b-v2", // fast lightweight generalist
