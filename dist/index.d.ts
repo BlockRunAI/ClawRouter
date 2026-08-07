@@ -1,3 +1,6 @@
+import { RoutingConfig, RoutingDecision } from '@blockrun/router-core';
+export { DEFAULT_ROUTING_CONFIG, RouterOptions, RoutingConfig, RoutingDecision, TaskType, Tier, calculateModelCost, filterCandidatesByCapacity, getFallbackChain, getFallbackChainFiltered, inferToolRequirement, route } from '@blockrun/router-core';
+
 /**
  * OpenClaw Plugin Types (locally defined)
  *
@@ -354,181 +357,6 @@ type OpenClawPluginDefinition = {
         noopPrefixes?: string[];
     };
 };
-
-/**
- * Tier → Model Selection
- *
- * Maps a classification tier to the cheapest capable model.
- * Builds RoutingDecision metadata with cost estimates and savings.
- */
-
-type ModelPricing = {
-    inputPrice: number;
-    outputPrice: number;
-    /** Active promo flat price per request (overrides token-based pricing when set) */
-    flatPrice?: number;
-};
-/**
- * Get the ordered fallback chain for a tier: [primary, ...fallbacks].
- */
-declare function getFallbackChain(tier: Tier, tierConfigs: Record<Tier, TierConfig>): string[];
-declare function calculateModelCost(model: string, modelPricing: Map<string, ModelPricing>, estimatedInputTokens: number, maxOutputTokens: number, routingProfile?: "free" | "eco" | "auto" | "premium"): {
-    costEstimate: number;
-    baselineCost: number;
-    savings: number;
-};
-/**
- * Get the fallback chain filtered by context length.
- * Only returns models that can handle the estimated total context.
- *
- * @param tier - The tier to get fallback chain for
- * @param tierConfigs - Tier configurations
- * @param estimatedTotalTokens - Estimated total context (input + output)
- * @param getContextWindow - Function to get context window for a model ID
- * @returns Filtered list of models that can handle the context
- */
-declare function getFallbackChainFiltered(tier: Tier, tierConfigs: Record<Tier, TierConfig>, estimatedTotalTokens: number, getContextWindow: (modelId: string) => number | undefined): string[];
-
-/**
- * Smart Router Types
- *
- * Four classification tiers — REASONING is distinct from COMPLEX because
- * reasoning tasks need different models (o3, gemini-pro) than general
- * complex tasks (gpt-4o, sonnet-4).
- *
- * Scoring uses weighted float dimensions with sigmoid confidence calibration.
- */
-type Tier = "SIMPLE" | "MEDIUM" | "COMPLEX" | "REASONING";
-type RoutingDecision = {
-    model: string;
-    tier: Tier;
-    confidence: number;
-    method: "rules" | "llm";
-    reasoning: string;
-    costEstimate: number;
-    baselineCost: number;
-    savings: number;
-    agenticScore?: number;
-    /** Which tier configs were used (auto/eco/premium/agentic) — avoids re-derivation in proxy */
-    tierConfigs?: Record<Tier, TierConfig>;
-    /** Which routing profile was applied */
-    profile?: "auto" | "eco" | "premium" | "agentic";
-};
-type RouterOptions = {
-    config: RoutingConfig;
-    modelPricing: Map<string, ModelPricing>;
-    routingProfile?: "eco" | "auto" | "premium";
-    hasTools?: boolean;
-    /** Override current time for promotion window checks (for testing). Default: new Date() */
-    now?: Date;
-};
-type TierConfig = {
-    primary: string;
-    fallback: string[];
-};
-type ScoringConfig = {
-    tokenCountThresholds: {
-        simple: number;
-        complex: number;
-    };
-    codeKeywords: string[];
-    reasoningKeywords: string[];
-    simpleKeywords: string[];
-    technicalKeywords: string[];
-    creativeKeywords: string[];
-    imperativeVerbs: string[];
-    constraintIndicators: string[];
-    outputFormatKeywords: string[];
-    referenceKeywords: string[];
-    negationKeywords: string[];
-    domainSpecificKeywords: string[];
-    agenticTaskKeywords: string[];
-    dimensionWeights: Record<string, number>;
-    tierBoundaries: {
-        simpleMedium: number;
-        mediumComplex: number;
-        complexReasoning: number;
-    };
-    confidenceSteepness: number;
-    confidenceThreshold: number;
-};
-type ClassifierConfig = {
-    llmModel: string;
-    llmMaxTokens: number;
-    llmTemperature: number;
-    promptTruncationChars: number;
-    cacheTtlMs: number;
-};
-type OverridesConfig = {
-    maxTokensForceComplex: number;
-    structuredOutputMinTier: Tier;
-    ambiguousDefaultTier: Tier;
-    /**
-     * When enabled, prefer models optimized for agentic workflows.
-     * Agentic models continue autonomously with multi-step tasks
-     * instead of stopping and waiting for user input.
-     */
-    agenticMode?: boolean;
-};
-/**
- * Time-windowed promotion that temporarily overrides tier routing.
- * Active promotions are auto-applied; expired ones are ignored at runtime.
- */
-type Promotion = {
-    /** Human-readable label (e.g. "GLM-5 Launch Promo") */
-    name: string;
-    /** ISO date string, promotion starts (inclusive). e.g. "2026-04-01" */
-    startDate: string;
-    /** ISO date string, promotion ends (exclusive). e.g. "2026-04-15" */
-    endDate: string;
-    /** Partial tier overrides — merged into the active tier configs (primary/fallback) */
-    tierOverrides: Partial<Record<Tier, Partial<TierConfig>>>;
-    /** Which profiles this applies to. Default: all profiles. */
-    profiles?: Array<"auto" | "eco" | "premium" | "agentic">;
-};
-type RoutingConfig = {
-    version: string;
-    classifier: ClassifierConfig;
-    scoring: ScoringConfig;
-    tiers: Record<Tier, TierConfig>;
-    /**
-     * Tier configs for agentic mode — models that excel at multi-step tasks.
-     * Set to `null` to disable agentic tier selection entirely (forces all
-     * requests through `tiers`, even when tools are present in the request).
-     */
-    agenticTiers?: Record<Tier, TierConfig> | null;
-    /** Tier configs for eco profile — ultra cost-optimized (blockrun/eco). `null` falls back to `tiers`. */
-    ecoTiers?: Record<Tier, TierConfig> | null;
-    /** Tier configs for premium profile — best quality (blockrun/premium). `null` falls back to `tiers`. */
-    premiumTiers?: Record<Tier, TierConfig> | null;
-    /** Time-windowed promotions that temporarily override tier routing */
-    promotions?: Promotion[];
-    overrides: OverridesConfig;
-};
-
-/**
- * Default Routing Config
- *
- * All routing parameters as a TypeScript constant.
- * Operators override via openclaw.yaml plugin config.
- *
- * Scoring uses 15 weighted dimensions with sigmoid confidence calibration.
- */
-
-declare const DEFAULT_ROUTING_CONFIG: RoutingConfig;
-
-/**
- * Smart Router Entry Point
- *
- * Classifies requests and routes to the cheapest capable model.
- * Delegates to pluggable RouterStrategy (default: RulesStrategy, <1ms).
- */
-
-/**
- * Route a request to the cheapest capable model.
- * Delegates to the registered "rules" strategy by default.
- */
-declare function route(prompt: string, systemPrompt: string | undefined, maxOutputTokens: number, options: RouterOptions): RoutingDecision;
 
 /**
  * Response Cache for LLM Completions
@@ -1000,6 +828,15 @@ type ProxyOptions = {
         network: string;
     }) => void;
     onRouted?: (decision: RoutingDecision) => void;
+    /** Local comparison only; it never changes the serving request or sends another completion. */
+    onShadowRouted?: (comparison: {
+        executed: RoutingDecision;
+        shadow: RoutingDecision;
+        sameModel: boolean;
+        hasTools: boolean;
+        hasVision: boolean;
+        requiresStructuredOutput: boolean;
+    }) => void;
     /** Called when balance drops below $1.00 (warning, request still proceeds) */
     onLowBalance?: (info: LowBalanceInfo) => void;
     /** Called when balance is insufficient for a request (request fails) */
@@ -1752,4 +1589,4 @@ declare function parseCallArgs(raw: string): {
 };
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_ROUTING_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, type RoutingConfig, type RoutingDecision, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type Tier, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, calculateModelCost, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getFallbackChain, getFallbackChainFiltered, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, resolveModelAlias, resolvePaymentChain, route, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };
