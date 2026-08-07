@@ -32,7 +32,7 @@ const BASELINE_OUTPUT_PRICE = 25.0;
 export function selectModel(
   tier: Tier,
   confidence: number,
-  method: "rules" | "llm",
+  method: "rules" | "llm" | "portfolio",
   reasoning: string,
   tierConfigs: Record<Tier, TierConfig>,
   modelPricing: Map<string, ModelPricing>,
@@ -225,4 +225,27 @@ export function getFallbackChainFiltered(
   }
 
   return filtered;
+}
+
+/**
+ * Filter an already-ranked candidate list by total context and requested output.
+ * Unlike the legacy tier helper, this supports the V3 portfolio order.
+ */
+export function filterCandidatesByCapacity(
+  models: string[],
+  estimatedInputTokens: number,
+  requestedOutputTokens: number,
+  getCapabilities: (
+    modelId: string,
+  ) => { contextWindow: number; maxOutput: number } | undefined,
+): string[] {
+  const filtered = models.filter((modelId) => {
+    const capabilities = getCapabilities(modelId);
+    if (!capabilities) return true;
+    return (
+      capabilities.contextWindow >= (estimatedInputTokens + requestedOutputTokens) * 1.1 &&
+      capabilities.maxOutput >= requestedOutputTokens
+    );
+  });
+  return filtered.length > 0 ? filtered : models;
 }

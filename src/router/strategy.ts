@@ -114,7 +114,7 @@ export class RulesStrategy implements RouterStrategy {
       const agenticScore = ruleResult.agenticScore ?? 0;
       const isAutoAgentic = agenticScore >= 0.5;
       const agenticModeSetting = config.overrides.agenticMode;
-      const hasToolsInRequest = options.hasTools ?? false;
+      const hasToolsInRequest = options.requiresTools ?? options.hasTools ?? false;
       let useAgenticTiers: boolean;
       if (agenticModeSetting === false) {
         // Explicitly disabled — never use agentic tiers

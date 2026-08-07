@@ -1,0 +1,242 @@
+{
+  "openai/gpt-5.5": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 6243.1,
+    "p95LatencyMs": 9865,
+    "outputTokensPerSecond": 12.53,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "openai/gpt-5.4-pro": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 13015.5,
+    "p95LatencyMs": 23976.4,
+    "outputTokensPerSecond": 6.42,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "openai/gpt-5.4-mini": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 5550,
+    "p95LatencyMs": 6595.7,
+    "outputTokensPerSecond": 11.96,
+    "errorRate": 0.3333,
+    "samples": 3
+  },
+  "openai/gpt-5.3-codex": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4617.1,
+    "p95LatencyMs": 5800.7,
+    "outputTokensPerSecond": 12.48,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "anthropic/claude-opus-4.8": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 3915.1,
+    "p95LatencyMs": 6130.8,
+    "outputTokensPerSecond": 16.33,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "anthropic/claude-opus-4.6": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 3765.5,
+    "p95LatencyMs": 4257.2,
+    "outputTokensPerSecond": 14.18,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "anthropic/claude-sonnet-4.6": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 3860.6,
+    "p95LatencyMs": 5093.5,
+    "outputTokensPerSecond": 13.85,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "anthropic/claude-haiku-4.5": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 2734.9,
+    "p95LatencyMs": 3181.6,
+    "outputTokensPerSecond": 19.58,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "google/gemini-3.1-pro": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 13935.7,
+    "p95LatencyMs": 26675.3,
+    "outputTokensPerSecond": 77.47,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "google/gemini-3.5-flash": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4608.7,
+    "p95LatencyMs": 8420.9,
+    "outputTokensPerSecond": 57.88,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "google/gemini-3.1-flash-lite": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4619.7,
+    "p95LatencyMs": 9927.1,
+    "outputTokensPerSecond": 42.01,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "google/gemini-2.5-flash": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 5506.9,
+    "p95LatencyMs": 11462.5,
+    "outputTokensPerSecond": 65.19,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "deepseek/deepseek-v4-pro": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 6044.8,
+    "p95LatencyMs": 10782.3,
+    "outputTokensPerSecond": 22.47,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "deepseek/deepseek-reasoner": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4111.9,
+    "p95LatencyMs": 5305.7,
+    "outputTokensPerSecond": 16.46,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "deepseek/deepseek-chat": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 2648.6,
+    "p95LatencyMs": 3524.1,
+    "outputTokensPerSecond": 16.73,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "moonshot/kimi-k2.7": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4295.4,
+    "p95LatencyMs": 6153.8,
+    "outputTokensPerSecond": 18.54,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "qwen/qwen3.7-max": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 30729.4,
+    "p95LatencyMs": 39622,
+    "outputTokensPerSecond": 36.89,
+    "errorRate": 0.3333,
+    "samples": 3
+  },
+  "xai/grok-4.3": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 6946.1,
+    "p95LatencyMs": 9495.4,
+    "outputTokensPerSecond": 65.3,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "xai/grok-4.20-reasoning": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 3472.4,
+    "p95LatencyMs": 5332.4,
+    "outputTokensPerSecond": 13.27,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "xai/grok-4.20-non-reasoning": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 5174.4,
+    "p95LatencyMs": 6081.7,
+    "outputTokensPerSecond": 10.21,
+    "errorRate": 0.3333,
+    "samples": 3
+  },
+  "xai/grok-4-1-fast-reasoning": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 13148.2,
+    "p95LatencyMs": 19104.2,
+    "outputTokensPerSecond": 4.28,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "minimax/minimax-m3": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 3385,
+    "p95LatencyMs": 4247.2,
+    "outputTokensPerSecond": 15.16,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "minimax/minimax-m2.7": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4596.7,
+    "p95LatencyMs": 6884.6,
+    "outputTokensPerSecond": 17.03,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "zai/glm-5.2": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4406.3,
+    "p95LatencyMs": 6139.7,
+    "outputTokensPerSecond": 10.41,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "zai/glm-5.1": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 7775.4,
+    "p95LatencyMs": 9182.1,
+    "outputTokensPerSecond": 6.08,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "zai/glm-5": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 4159.4,
+    "p95LatencyMs": 4992.7,
+    "outputTokensPerSecond": 10.28,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "free/qwen3-coder-480b": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 2063.9,
+    "p95LatencyMs": 3646.3,
+    "outputTokensPerSecond": 39.8,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "free/mistral-large-3-675b": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 3147.5,
+    "p95LatencyMs": 5555.3,
+    "outputTokensPerSecond": 27.76,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "free/nemotron-3-nano-omni-30b-a3b-reasoning": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 6508.4,
+    "p95LatencyMs": 14252.7,
+    "outputTokensPerSecond": 68.26,
+    "errorRate": 0,
+    "samples": 3
+  },
+  "free/glm-4.7": {
+    "measuredAt": "2026-07-21T10:21:31Z",
+    "latencyMs": 2014.8,
+    "p95LatencyMs": 3039.9,
+    "outputTokensPerSecond": 39.92,
+    "errorRate": 0,
+    "samples": 3
+  }
+}

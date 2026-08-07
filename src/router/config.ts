@@ -10,7 +10,37 @@
 import type { RoutingConfig } from "./types.js";
 
 export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
-  version: "2.0",
+  version: "3.4",
+  strategy: "portfolio",
+  portfolio: {
+    auto: {
+      quality: 0.47,
+      capability: 0.2,
+      cost: 0.18,
+      speed: 0.07,
+      reliability: 0.03,
+      legacy: 0.05,
+    },
+    eco: {
+      quality: 0.36,
+      capability: 0.2,
+      cost: 0.28,
+      speed: 0.1,
+      reliability: 0.04,
+      legacy: 0.02,
+    },
+    premium: {
+      quality: 0.58,
+      capability: 0.2,
+      cost: 0.08,
+      speed: 0.06,
+      reliability: 0.06,
+      legacy: 0.02,
+    },
+    highStakesBoost: { quality: 0.08, reliability: 0.05 },
+    latencySensitiveSpeedBoost: 0.08,
+    affinityFloorGap: { auto: 0.1, eco: 0.22, premium: 0.05 },
+  },
 
   classifier: {
     llmModel: "google/gemini-2.5-flash",

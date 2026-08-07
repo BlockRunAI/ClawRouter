@@ -213,6 +213,64 @@ describe("proxy session pinning", () => {
     expect(routedDecisions[0]?.model).toBe(EXPLICIT_MODEL);
   });
 
+  it("emits a local shadow comparison without changing the serving request", async () => {
+    const receivedModels: string[] = [];
+    const shadows: Array<{
+      executed: RoutingDecision;
+      shadow: RoutingDecision;
+      sameModel: boolean;
+      hasTools: boolean;
+      hasVision: boolean;
+      requiresStructuredOutput: boolean;
+    }> = [];
+    const upstreamSetup = await createUpstream((body, _req, res) => {
+      const model = String(body.model ?? "");
+      receivedModels.push(model);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "chatcmpl-shadow",
+          object: "chat.completion",
+          created: 1,
+          model,
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "ok" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      );
+    });
+    upstream = upstreamSetup.server;
+    proxy = await startProxy({
+      wallet: generatePrivateKey(),
+      apiBase: upstreamSetup.url,
+      port: 0,
+      skipBalanceCheck: true,
+      cacheConfig: { enabled: false },
+      routingConfig: {
+        ...createRoutingConfig(),
+        strategy: "portfolio",
+        shadow: { strategy: "rules", sampleRate: 1 },
+      },
+      onShadowRouted: (comparison) => shadows.push(comparison),
+    });
+
+    const response = await postChat(proxy, "shadow", "blockrun/auto", "simple follow-up");
+    expect(response.status).toBe(200);
+    expect(receivedModels).toEqual([AUTO_PRIMARY]);
+    expect(shadows).toHaveLength(1);
+    expect(shadows[0]).toMatchObject({
+      hasTools: false,
+      hasVision: false,
+      requiresStructuredOutput: false,
+    });
+    expect(JSON.stringify(shadows[0])).not.toContain("simple follow-up");
+  });
+
   it("retries an explicit-pin model once on transient 5xx upstream errors", async () => {
     const receivedModels: string[] = [];
     let attempts = 0;

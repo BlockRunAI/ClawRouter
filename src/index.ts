@@ -899,6 +899,14 @@ async function startProxyInBackground(
         `[${decision.tier}] ${decision.model} $${cost} (saved ${saved}%) | ${decision.reasoning}`,
       );
     },
+    onShadowRouted: (comparison) => {
+      api.logger.info(
+        `[router-shadow] executed=${comparison.executed.model} (${comparison.executed.method}) ` +
+          `candidate=${comparison.shadow.model} (${comparison.shadow.method}) ` +
+          `same=${comparison.sameModel} tools=${comparison.hasTools} ` +
+          `vision=${comparison.hasVision} structured=${comparison.requiresStructuredOutput}`,
+      );
+    },
     onLowBalance: (info) => {
       api.logger.warn(`[!] Low balance: ${info.balanceUSD}. Fund wallet: ${info.walletAddress}`);
     },
@@ -2394,9 +2402,17 @@ export {
   DEFAULT_ROUTING_CONFIG,
   getFallbackChain,
   getFallbackChainFiltered,
+  filterCandidatesByCapacity,
+  inferToolRequirement,
   calculateModelCost,
 } from "./router/index.js";
-export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
+export type {
+  RoutingDecision,
+  RoutingConfig,
+  RouterOptions,
+  TaskType,
+  Tier,
+} from "./router/index.js";
 export { logUsage } from "./logger.js";
 export type { UsageEntry } from "./logger.js";
 export { RequestDeduplicator } from "./dedup.js";

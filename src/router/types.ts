@@ -23,7 +23,7 @@ export type RoutingDecision = {
   model: string;
   tier: Tier;
   confidence: number;
-  method: "rules" | "llm";
+  method: "rules" | "llm" | "portfolio";
   reasoning: string;
   costEstimate: number;
   baselineCost: number;
@@ -33,7 +33,36 @@ export type RoutingDecision = {
   tierConfigs?: Record<Tier, TierConfig>;
   /** Which routing profile was applied */
   profile?: "auto" | "eco" | "premium" | "agentic";
+  /** Ordered, capability-eligible candidates. The first entry is `model`. */
+  candidates?: string[];
+  /** Explainable request classification used by the portfolio router. */
+  taskType?: TaskType;
+  /** Router implementation that made the selection. */
+  routerVersion?: "v2-rules" | "v3-portfolio";
+  /** Explainable local portfolio score breakdown, ordered with `candidates`. */
+  candidateScores?: Array<{
+    model: string;
+    score: number;
+    quality: number;
+    cost: number;
+    speed: number;
+    reliability: number;
+  }>;
 };
+
+export type TaskType =
+  | "chat"
+  | "extraction"
+  | "code_edit"
+  | "code_agent"
+  | "tool_agent"
+  | "tool_agent_parallel"
+  | "debug"
+  | "reasoning"
+  | "reasoning_mcq"
+  | "reasoning_math"
+  | "long_context"
+  | "vision";
 
 export interface RouterStrategy {
   readonly name: string;
@@ -50,8 +79,24 @@ export type RouterOptions = {
   modelPricing: Map<string, import("./selector.js").ModelPricing>;
   routingProfile?: "eco" | "auto" | "premium";
   hasTools?: boolean;
+  /** Number of tool definitions visible to the model on this turn. */
+  toolCount?: number;
+  /** Local tool identifiers, used only for request/tool intent matching. */
+  toolNames?: readonly string[];
+  /** Tools are attached by the host and this specific turn needs to use them. */
+  requiresTools?: boolean;
+  hasVision?: boolean;
+  /** OpenAI `response_format` / JSON schema requires reliable structured output. */
+  requiresStructuredOutput?: boolean;
   /** Override current time for promotion window checks (for testing). Default: new Date() */
   now?: Date;
+  /**
+   * Fresh gateway performance observations. Injected rather than fetched on
+   * the hot path; omitted entries fall back to a weak historical prior.
+   */
+  modelPerformance?: Readonly<
+    Record<string, import("./model-profiles.js").ModelPerformanceProfile>
+  >;
 };
 
 export type TierConfig = {
@@ -125,6 +170,45 @@ export type Promotion = {
 
 export type RoutingConfig = {
   version: string;
+  /** Enables a one-line rollback to the established V2 rules selector. */
+  strategy?: "rules" | "portfolio";
+  /**
+   * Locally recompute a comparison strategy without changing the model that
+   * actually serves the request. The proxy emits only decision metadata via
+   * `onShadowRouted`; it never persists prompt content or makes a second call.
+   */
+  shadow?: { strategy: "rules" | "portfolio"; sampleRate?: number };
+  /** Calibratable local portfolio scoring weights; values are relative, not probabilities. */
+  portfolio?: {
+    auto: {
+      quality: number;
+      capability: number;
+      cost: number;
+      speed: number;
+      reliability: number;
+      legacy: number;
+    };
+    eco: {
+      quality: number;
+      capability: number;
+      cost: number;
+      speed: number;
+      reliability: number;
+      legacy: number;
+    };
+    premium: {
+      quality: number;
+      capability: number;
+      cost: number;
+      speed: number;
+      reliability: number;
+      legacy: number;
+    };
+    highStakesBoost: { quality: number; reliability: number };
+    latencySensitiveSpeedBoost: number;
+    /** A candidate materially below the best task affinity cannot win on cost alone. */
+    affinityFloorGap: { auto: number; eco: number; premium: number };
+  };
   classifier: ClassifierConfig;
   scoring: ScoringConfig;
   tiers: Record<Tier, TierConfig>;

@@ -34,7 +34,7 @@ const failures = [];
 // have confirmed the growth is real.
 const MAX_BUNDLE_BYTES = 12 * 1024 * 1024;
 
-for (const entry of ["index.js", "cli.js"]) {
+for (const entry of ["index.js", "cli.js", "router/index.js"]) {
   const path = resolve(root, "dist", entry);
   let source;
   try {
@@ -65,6 +65,15 @@ try {
   }
 } catch (err) {
   failures.push(`dist/index.js failed to load: ${err.message}`);
+}
+
+try {
+  const router = await import(`file://${resolve(root, "dist", "router", "index.js")}`);
+  if (typeof router.route !== "function" || router.DEFAULT_ROUTING_CONFIG?.strategy !== "portfolio") {
+    failures.push("dist/router/index.js did not expose the default portfolio router");
+  }
+} catch (err) {
+  failures.push(`dist/router/index.js failed to load: ${err.message}`);
 }
 
 // OpenClaw scans a plugin's loose script files for "dangerous code patterns" and

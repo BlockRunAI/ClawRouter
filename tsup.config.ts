@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/cli.ts"],
+  entry: ["src/index.ts", "src/cli.ts", "src/router/index.ts"],
   format: ["esm"],
   dts: true,
   clean: true,

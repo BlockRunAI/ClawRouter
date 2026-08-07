@@ -17,6 +17,11 @@ const MODEL_PRICING = new Map<string, ModelPricing>([
   ["deepseek/deepseek-chat", { inputPrice: 0.14, outputPrice: 0.28 }],
   ["anthropic/claude-sonnet-4.6", { inputPrice: 3, outputPrice: 15 }],
   ["google/gemini-3.1-pro", { inputPrice: 1.25, outputPrice: 10 }],
+  ["google/gemini-3.5-flash", { inputPrice: 0.5, outputPrice: 3 }],
+  ["xai/grok-4.5", { inputPrice: 2.5, outputPrice: 9 }],
+  ["anthropic/claude-sonnet-5", { inputPrice: 3, outputPrice: 15 }],
+  ["deepseek/deepseek-v4-pro", { inputPrice: 0.435, outputPrice: 0.87 }],
+  ["moonshot/kimi-k3", { inputPrice: 3, outputPrice: 15 }],
   ["xai/grok-4-1-fast-reasoning", { inputPrice: 0.2, outputPrice: 0.5 }],
   ["nvidia/gpt-oss-120b", { inputPrice: 0, outputPrice: 0 }],
   ["nvidia/gpt-oss-20b", { inputPrice: 0, outputPrice: 0 }],
@@ -218,13 +223,15 @@ describe("Strategy Registry", () => {
   });
 });
 
-describe("Backward compatibility", () => {
-  it("route() produces same model/tier/method as before", () => {
+describe("Portfolio default", () => {
+  it("route() uses the V3 portfolio while retaining rule tiers", () => {
     // Simple prompt → SIMPLE tier
     const simple = route("hello", undefined, 100, baseOptions);
     expect(simple.tier).toBe("SIMPLE");
-    expect(simple.method).toBe("rules");
+    expect(simple.method).toBe("portfolio");
     expect(simple.model).toBeDefined();
+    expect(simple.candidates?.[0]).toBe(simple.model);
+    expect(simple.routerVersion).toBe("v3-portfolio");
 
     // Reasoning prompt → REASONING tier
     const reasoning = route(
@@ -234,12 +241,59 @@ describe("Backward compatibility", () => {
       baseOptions,
     );
     expect(reasoning.tier).toBe("REASONING");
-    expect(reasoning.method).toBe("rules");
+    expect(reasoning.method).toBe("portfolio");
 
     // New fields are present
     expect(simple.tierConfigs).toBeDefined();
     expect(simple.profile).toBeDefined();
     expect(reasoning.tierConfigs).toBeDefined();
     expect(reasoning.profile).toBeDefined();
+  });
+
+  it("supports a config-only rollback to the V2 rules strategy", () => {
+    const decision = route("hello", undefined, 100, {
+      ...baseOptions,
+      config: { ...DEFAULT_ROUTING_CONFIG, strategy: "rules" },
+    });
+    expect(decision.method).toBe("rules");
+  });
+
+  it("recognizes multiple-choice reasoning and uses the calibrated model pool", () => {
+    const decision = route(
+      "Which statement is correct?\n\nA. First\nB. Second\nC. Third\nD. Fourth\n\nReturn the final answer choice.",
+      undefined,
+      512,
+      baseOptions,
+    );
+
+    expect(decision.taskType).toBe("reasoning_mcq");
+    expect(decision.tier).toBe("REASONING");
+    expect(decision.model).toBe("google/gemini-3-flash-preview");
+    expect(decision.candidates).toContain("xai/grok-4.5");
+    expect(decision.tierConfigs?.REASONING.primary).toBe(decision.model);
+  });
+
+  it("recognizes compact multilingual arithmetic as mathematical reasoning", () => {
+    const decision = route(
+      "Una caja tiene 12 libros. Hay 4 cajas. ¿Cuántos libros hay en total?",
+      undefined,
+      512,
+      baseOptions,
+    );
+
+    expect(decision.taskType).toBe("reasoning_math");
+    expect(decision.tier).toBe("REASONING");
+    expect(decision.model).toBe("google/gemini-3.5-flash");
+  });
+
+  it("recognizes math word problems in languages that omit question marks", () => {
+    const decision = route(
+      "เรือแล่นได้เร็ว 10 ไมล์ต่อชั่วโมง ตั้งแต่ 13.00 น. ถึง 16.00 น. และกลับด้วยความเร็ว 6 ไมล์ต่อชั่วโมง",
+      undefined,
+      512,
+      baseOptions,
+    );
+
+    expect(decision.taskType).toBe("reasoning_math");
   });
 });

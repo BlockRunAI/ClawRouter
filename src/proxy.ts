@@ -43,12 +43,13 @@ import { toClientEvmSigner } from "@x402/evm";
 import {
   route,
   getFallbackChain,
-  getFallbackChainFiltered,
+  filterCandidatesByCapacity,
   filterByToolCalling,
   filterByVision,
   filterByExcludeList,
   calculateModelCost,
   DEFAULT_ROUTING_CONFIG,
+  inferToolRequirement,
   type RouterOptions,
   type RoutingDecision,
   type RoutingConfig,
@@ -60,7 +61,6 @@ import {
   BLOCKRUN_MODELS,
   OPENCLAW_MODELS,
   resolveModelAlias,
-  getModelContextWindow,
   isReasoningModel,
   supportsToolCalling,
   supportsVision,
@@ -1301,6 +1301,15 @@ export type ProxyOptions = {
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
   onRouted?: (decision: RoutingDecision) => void;
+  /** Local comparison only; it never changes the serving request or sends another completion. */
+  onShadowRouted?: (comparison: {
+    executed: RoutingDecision;
+    shadow: RoutingDecision;
+    sameModel: boolean;
+    hasTools: boolean;
+    hasVision: boolean;
+    requiresStructuredOutput: boolean;
+  }) => void;
   /** Called when balance drops below $1.00 (warning, request still proceeds) */
   onLowBalance?: (info: LowBalanceInfo) => void;
   /** Called when balance is insufficient for a request (request fails) */
@@ -4341,9 +4350,20 @@ async function proxyRequest(
           // Tool detection — when tools are present, force agentic tiers for reliable tool use
           const tools = parsed.tools as unknown[] | undefined;
           hasTools = Array.isArray(tools) && tools.length > 0;
+          const requiresTools =
+            hasTools && inferToolRequirement(prompt, systemPrompt, parsed.tool_choice);
+          const toolNames = (tools ?? [])
+            .map((tool) => {
+              if (typeof tool !== "object" || tool === null) return undefined;
+              const fn = (tool as { function?: unknown }).function;
+              if (typeof fn !== "object" || fn === null) return undefined;
+              const name = (fn as { name?: unknown }).name;
+              return typeof name === "string" ? name : undefined;
+            })
+            .filter((name): name is string => name !== undefined);
 
           if (hasTools && tools) {
-            console.log(`[ClawRouter] Tools detected (${tools.length}), forcing agentic tiers`);
+            console.log(`[ClawRouter] Tools detected (${tools.length}), required=${requiresTools}`);
           }
 
           // Vision detection: scan messages for image_url content parts
@@ -4362,7 +4382,47 @@ async function proxyRequest(
             ...routerOpts,
             routingProfile: routingProfile ?? undefined,
             hasTools,
+            toolCount: tools?.length ?? 0,
+            toolNames,
+            requiresTools,
+            hasVision,
+            requiresStructuredOutput:
+              typeof parsed.response_format === "object" && parsed.response_format !== null,
           });
+
+          // Shadow routing is deliberately local-only: compare metadata for a
+          // sampled request without changing the serving model or making a
+          // second paid upstream call.
+          const shadow = routerOpts.config.shadow;
+          const activeStrategy = routerOpts.config.strategy ?? "portfolio";
+          const shadowRate = Math.max(0, Math.min(1, shadow?.sampleRate ?? 1));
+          if (
+            shadow &&
+            shadow.strategy !== activeStrategy &&
+            Math.random() < shadowRate
+          ) {
+            const requiresStructuredOutput =
+              typeof parsed.response_format === "object" && parsed.response_format !== null;
+            const shadowDecision = route(prompt, systemPrompt, maxTokens, {
+              ...routerOpts,
+              config: { ...routerOpts.config, strategy: shadow.strategy },
+              routingProfile: routingProfile ?? undefined,
+              hasTools,
+              toolCount: tools?.length ?? 0,
+              toolNames,
+              requiresTools,
+              hasVision,
+              requiresStructuredOutput,
+            });
+            options.onShadowRouted?.({
+              executed: routingDecision,
+              shadow: shadowDecision,
+              sameModel: routingDecision.model === shadowDecision.model,
+              hasTools,
+              hasVision,
+              requiresStructuredOutput,
+            });
+          }
 
           // Keep agentic routing when tools are present, even for SIMPLE queries.
           // Tool-using requests need models with reliable function-call support;
@@ -5015,16 +5075,27 @@ async function proxyRequest(
       // Use tier configs from the routing decision (set by RouterStrategy)
       const tierConfigs = routingDecision.tierConfigs ?? routerOpts.config.tiers;
 
-      // Get full chain first, then filter by context
-      const fullChain = prependStickyExplicitModel(
-        getFallbackChain(routingDecision.tier, tierConfigs),
-      );
+      // Portfolio decisions carry a capability-ranked candidate order. Legacy
+      // rules decisions retain the established tier chain. Always put the
+      // actual serving decision first so a session pin remains sticky.
+      const rankedCandidates =
+        routingDecision.candidates ?? getFallbackChain(routingDecision.tier, tierConfigs);
+      const selectedModel = routingDecision.model;
+      const fullChain = prependStickyExplicitModel([
+        selectedModel,
+        ...rankedCandidates.filter((model) => model !== selectedModel),
+      ]);
       const contextFiltered = prependStickyExplicitModel(
-        getFallbackChainFiltered(
-          routingDecision.tier,
-          tierConfigs,
-          estimatedTotalTokens,
-          getModelContextWindow,
+        filterCandidatesByCapacity(
+          fullChain,
+          estimatedInputTokens,
+          maxTokens,
+          (modelId) => {
+            const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
+            return model
+              ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput }
+              : undefined;
+          },
         ),
       );
 
