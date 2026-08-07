@@ -4,8 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { generatePrivateKey } from "viem/accounts";
 
 import { startProxy, type ProxyHandle } from "./proxy.js";
-import { DEFAULT_ROUTING_CONFIG } from "./router/config.js";
-import type { RoutingDecision } from "./router/types.js";
+import { DEFAULT_ROUTING_CONFIG, type RoutingDecision } from "./router/index.js";
 
 const EXPLICIT_MODEL = "openai/user-explicit";
 const AUTO_PRIMARY = "openai/auto-primary";

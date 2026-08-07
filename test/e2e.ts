@@ -8,11 +8,15 @@
  *   npx tsup test/e2e.ts --format esm --outDir test/dist --no-dts && node test/dist/e2e.js
  */
 
-import { route, DEFAULT_ROUTING_CONFIG, type RoutingDecision } from "../src/router/index.js";
-import { classifyByRules } from "../src/router/rules.js";
+import {
+  route,
+  classifyByRules,
+  DEFAULT_ROUTING_CONFIG,
+  type ModelPricing,
+  type RoutingDecision,
+} from "../src/router/index.js";
 import { BLOCKRUN_MODELS } from "../src/models.js";
 import { startProxy } from "../src/proxy.js";
-import type { ModelPricing } from "../src/router/selector.js";
 
 // ─── Helpers ───
 

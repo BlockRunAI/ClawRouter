@@ -54,9 +54,10 @@ import {
   type RoutingDecision,
   type RoutingConfig,
   type ModelPricing,
+  type ModelCapabilities,
   type Tier,
 } from "./router/index.js";
-import { classifyByRules } from "./router/rules.js";
+import { classifyByRules } from "./router/index.js";
 import {
   BLOCKRUN_MODELS,
   OPENCLAW_MODELS,
@@ -1349,6 +1350,20 @@ function buildModelPricing(): Map<string, ModelPricing> {
   return map;
 }
 
+function buildModelCapabilities(): Record<string, ModelCapabilities> {
+  return Object.fromEntries(
+    BLOCKRUN_MODELS.map((model) => [
+      model.id,
+      {
+        contextWindow: model.contextWindow,
+        maxOutputTokens: model.maxOutput,
+        supportsTools: model.toolCalling === true,
+        supportsVision: model.vision === true,
+      },
+    ]),
+  );
+}
+
 type ModelListEntry = {
   id: string;
   object: "model";
@@ -2104,6 +2119,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const routerOpts: RouterOptions = {
     config: routingConfig,
     modelPricing,
+    modelCapabilities: buildModelCapabilities(),
   };
 
   // Request deduplicator (shared across all requests)

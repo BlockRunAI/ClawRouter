@@ -18,8 +18,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { MODEL_ALIASES } from "../models.js";
-import { DEFAULT_ROUTING_CONFIG } from "./config.js";
-import { classifyByRules } from "./rules.js";
+import { DEFAULT_ROUTING_CONFIG, classifyByRules } from "./index.js";
 
 const published = JSON.parse(readFileSync("brand-numbers.json", "utf8")) as {
   clawrouter: { dimensions: number; tiers: number; profiles: number; aliases: number };

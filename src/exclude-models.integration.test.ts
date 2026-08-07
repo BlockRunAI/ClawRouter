@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { filterByExcludeList, getFallbackChain } from "./router/selector.js";
-import { DEFAULT_ROUTING_CONFIG } from "./router/config.js";
+import {
+  DEFAULT_ROUTING_CONFIG,
+  filterByExcludeList,
+  getFallbackChain,
+} from "./router/index.js";
 
 describe("excludeModels integration", () => {
   it("filters nvidia/gpt-oss-120b from eco SIMPLE chain", () => {
