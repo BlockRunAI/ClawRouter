@@ -2,8 +2,7 @@ import { validateHeaderValue } from "node:http";
 
 import { describe, expect, it } from "vitest";
 
-import { classifyByRules } from "./router/rules.js";
-import { DEFAULT_ROUTING_CONFIG } from "./router/config.js";
+import { classifyByRules, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
 import { debugHeadersEnabledFromEnv, sanitizeHeaderValue } from "./proxy.js";
 
 describe("sanitizeHeaderValue", () => {

@@ -43,24 +43,25 @@ import { toClientEvmSigner } from "@x402/evm";
 import {
   route,
   getFallbackChain,
-  getFallbackChainFiltered,
+  filterCandidatesByCapacity,
   filterByToolCalling,
   filterByVision,
   filterByExcludeList,
   calculateModelCost,
   DEFAULT_ROUTING_CONFIG,
+  inferToolRequirement,
   type RouterOptions,
   type RoutingDecision,
   type RoutingConfig,
   type ModelPricing,
+  type ModelCapabilities,
   type Tier,
 } from "./router/index.js";
-import { classifyByRules } from "./router/rules.js";
+import { classifyByRules } from "./router/index.js";
 import {
   BLOCKRUN_MODELS,
   OPENCLAW_MODELS,
   resolveModelAlias,
-  getModelContextWindow,
   isReasoningModel,
   supportsToolCalling,
   supportsVision,
@@ -1300,6 +1301,15 @@ export type ProxyOptions = {
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
   onRouted?: (decision: RoutingDecision) => void;
+  /** Local comparison only; it never changes the serving request or sends another completion. */
+  onShadowRouted?: (comparison: {
+    executed: RoutingDecision;
+    shadow: RoutingDecision;
+    sameModel: boolean;
+    hasTools: boolean;
+    hasVision: boolean;
+    requiresStructuredOutput: boolean;
+  }) => void;
   /** Called when balance drops below $1.00 (warning, request still proceeds) */
   onLowBalance?: (info: LowBalanceInfo) => void;
   /** Called when balance is insufficient for a request (request fails) */
@@ -1337,6 +1347,20 @@ function buildModelPricing(): Map<string, ModelPricing> {
     });
   }
   return map;
+}
+
+function buildModelCapabilities(): Record<string, ModelCapabilities> {
+  return Object.fromEntries(
+    BLOCKRUN_MODELS.map((model) => [
+      model.id,
+      {
+        contextWindow: model.contextWindow,
+        maxOutputTokens: model.maxOutput,
+        supportsTools: model.toolCalling === true,
+        supportsVision: model.vision === true,
+      },
+    ]),
+  );
 }
 
 type ModelListEntry = {
@@ -2094,6 +2118,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const routerOpts: RouterOptions = {
     config: routingConfig,
     modelPricing,
+    modelCapabilities: buildModelCapabilities(),
   };
 
   // Request deduplicator (shared across all requests)
@@ -3584,6 +3609,14 @@ async function proxyRequest(
   let maxTokens = DEFAULT_MAX_TOKENS;
   let routingProfile: "eco" | "auto" | "premium" | null = null;
   let stickyExplicitModel: string | undefined;
+  let pendingShadowComparison:
+    | {
+        shadow: RoutingDecision;
+        hasTools: boolean;
+        hasVision: boolean;
+        requiresStructuredOutput: boolean;
+      }
+    | undefined;
   let balanceFallbackNotice: string | undefined;
   let budgetDowngradeNotice: string | undefined;
   let budgetDowngradeHeaderMode: "downgraded" | undefined;
@@ -4340,9 +4373,20 @@ async function proxyRequest(
           // Tool detection — when tools are present, force agentic tiers for reliable tool use
           const tools = parsed.tools as unknown[] | undefined;
           hasTools = Array.isArray(tools) && tools.length > 0;
+          const requiresTools =
+            hasTools && inferToolRequirement(prompt, systemPrompt, parsed.tool_choice);
+          const toolNames = (tools ?? [])
+            .map((tool) => {
+              if (typeof tool !== "object" || tool === null) return undefined;
+              const fn = (tool as { function?: unknown }).function;
+              if (typeof fn !== "object" || fn === null) return undefined;
+              const name = (fn as { name?: unknown }).name;
+              return typeof name === "string" ? name : undefined;
+            })
+            .filter((name): name is string => name !== undefined);
 
           if (hasTools && tools) {
-            console.log(`[ClawRouter] Tools detected (${tools.length}), forcing agentic tiers`);
+            console.log(`[ClawRouter] Tools detected (${tools.length}), required=${requiresTools}`);
           }
 
           // Vision detection: scan messages for image_url content parts
@@ -4361,7 +4405,41 @@ async function proxyRequest(
             ...routerOpts,
             routingProfile: routingProfile ?? undefined,
             hasTools,
+            toolCount: tools?.length ?? 0,
+            toolNames,
+            requiresTools,
+            hasVision,
+            requiresStructuredOutput:
+              typeof parsed.response_format === "object" && parsed.response_format !== null,
           });
+
+          // Shadow routing is deliberately local-only: compare metadata for a
+          // sampled request without changing the serving model or making a
+          // second paid upstream call.
+          const shadow = routerOpts.config.shadow;
+          const activeStrategy = routerOpts.config.strategy ?? "portfolio";
+          const shadowRate = Math.max(0, Math.min(1, shadow?.sampleRate ?? 1));
+          if (shadow && shadow.strategy !== activeStrategy && Math.random() < shadowRate) {
+            const requiresStructuredOutput =
+              typeof parsed.response_format === "object" && parsed.response_format !== null;
+            const shadowDecision = route(prompt, systemPrompt, maxTokens, {
+              ...routerOpts,
+              config: { ...routerOpts.config, strategy: shadow.strategy },
+              routingProfile: routingProfile ?? undefined,
+              hasTools,
+              toolCount: tools?.length ?? 0,
+              toolNames,
+              requiresTools,
+              hasVision,
+              requiresStructuredOutput,
+            });
+            pendingShadowComparison = {
+              shadow: shadowDecision,
+              hasTools,
+              hasVision,
+              requiresStructuredOutput,
+            };
+          }
 
           // Keep agentic routing when tools are present, even for SIMPLE queries.
           // Tool-using requests need models with reliable function-call support;
@@ -4514,6 +4592,21 @@ async function proxyRequest(
             }
           }
 
+          if (pendingShadowComparison) {
+            try {
+              options.onShadowRouted?.({
+                executed: routingDecision,
+                shadow: pendingShadowComparison.shadow,
+                sameModel: routingDecision.model === pendingShadowComparison.shadow.model,
+                hasTools: pendingShadowComparison.hasTools,
+                hasVision: pendingShadowComparison.hasVision,
+                requiresStructuredOutput: pendingShadowComparison.requiresStructuredOutput,
+              });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.warn(`[ClawRouter] Shadow routing callback failed: ${message}`);
+            }
+          }
           options.onRouted?.(routingDecision);
         }
       }
@@ -5014,18 +5107,53 @@ async function proxyRequest(
       // Use tier configs from the routing decision (set by RouterStrategy)
       const tierConfigs = routingDecision.tierConfigs ?? routerOpts.config.tiers;
 
-      // Get full chain first, then filter by context
-      const fullChain = prependStickyExplicitModel(
-        getFallbackChain(routingDecision.tier, tierConfigs),
+      // Portfolio decisions carry a capability-ranked candidate order. Legacy
+      // rules decisions retain the established tier chain. Always put the
+      // actual serving decision first so a session pin remains sticky.
+      const rankedCandidates =
+        routingDecision.candidates ?? getFallbackChain(routingDecision.tier, tierConfigs);
+      const selectedModel = routingDecision.model;
+      const fullChain = prependStickyExplicitModel([
+        selectedModel,
+        ...rankedCandidates.filter((model) => model !== selectedModel),
+      ]);
+      const contextFiltered = filterCandidatesByCapacity(
+        fullChain,
+        estimatedInputTokens,
+        maxTokens,
+        (modelId) => {
+          const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
+          return model
+            ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput }
+            : undefined;
+        },
       );
-      const contextFiltered = prependStickyExplicitModel(
-        getFallbackChainFiltered(
-          routingDecision.tier,
-          tierConfigs,
-          estimatedTotalTokens,
-          getModelContextWindow,
-        ),
-      );
+
+      if (contextFiltered.length === 0) {
+        const errPayload = JSON.stringify({
+          error: {
+            message: `No routed model can satisfy the requested context and output capacity (~${estimatedTotalTokens} tokens). Reduce the input or max_tokens and retry.`,
+            type: "invalid_request_error",
+            code: "context_capacity_exceeded",
+          },
+        });
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = undefined;
+        }
+        if (headersSentEarly) {
+          safeWrite(res, `data: ${errPayload}\n\ndata: [DONE]\n\n`);
+          res.end();
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(errPayload);
+        }
+        completed = true;
+        deduplicator.removeInflight(dedupKey);
+        clearTimeout(timeoutId);
+        req.removeListener("close", onClientClose);
+        return;
+      }
 
       // Log if models were filtered out due to context limits
       const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
@@ -5036,9 +5164,7 @@ async function proxyRequest(
       }
 
       // Filter out user-excluded models
-      const excludeFiltered = prependStickyExplicitModel(
-        filterByExcludeList(contextFiltered, excludeList),
-      );
+      const excludeFiltered = filterByExcludeList(contextFiltered, excludeList);
       const excludeExcluded = contextFiltered.filter((m) => !excludeFiltered.includes(m));
       if (excludeExcluded.length > 0) {
         console.log(
@@ -5049,9 +5175,7 @@ async function proxyRequest(
       // Filter to models that support tool calling when request has tools.
       // Prevents models like grok-code-fast-1 from outputting tool invocations
       // as plain text JSON (the "talking to itself" bug).
-      let toolFiltered = prependStickyExplicitModel(
-        filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling),
-      );
+      let toolFiltered = filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling);
       const toolExcluded = excludeFiltered.filter((m) => !toolFiltered.includes(m));
       if (toolExcluded.length > 0) {
         console.log(
@@ -5074,14 +5198,12 @@ async function proxyRequest(
           console.log(
             `[ClawRouter] Tool-compliance filter: excluded ${dropped.join(", ")} (unreliable tool schema handling)`,
           );
-          toolFiltered = prependStickyExplicitModel(compliant);
+          toolFiltered = compliant;
         }
       }
 
       // Filter to models that support vision when request has image_url content
-      const visionFiltered = prependStickyExplicitModel(
-        filterByVision(toolFiltered, hasVision, supportsVision),
-      );
+      const visionFiltered = filterByVision(toolFiltered, hasVision, supportsVision);
       const visionExcluded = toolFiltered.filter((m) => !visionFiltered.includes(m));
       if (visionExcluded.length > 0) {
         console.log(
@@ -5090,7 +5212,7 @@ async function proxyRequest(
       }
 
       // Limit to MAX_FALLBACK_ATTEMPTS to prevent infinite loops
-      modelsToTry = prependStickyExplicitModel(visionFiltered).slice(0, MAX_FALLBACK_ATTEMPTS);
+      modelsToTry = visionFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
 
       // Deprioritize rate-limited models (put them at the end)
       modelsToTry = prioritizeNonRateLimited(modelsToTry);

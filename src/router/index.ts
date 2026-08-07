@@ -1,42 +1,8 @@
 /**
- * Smart Router Entry Point
+ * Backward-compatible ClawRouter export surface.
  *
- * Classifies requests and routes to the cheapest capable model.
- * Delegates to pluggable RouterStrategy (default: RulesStrategy, <1ms).
+ * The implementation lives in the product-neutral @blockrun/router-core
+ * package. Keeping this adapter preserves @blockrun/clawrouter/router for
+ * existing SDK consumers without coupling Router Core back to this product.
  */
-
-import type { RoutingDecision, RouterOptions } from "./types.js";
-import { getStrategy } from "./strategy.js";
-
-/**
- * Route a request to the cheapest capable model.
- * Delegates to the registered "rules" strategy by default.
- */
-export function route(
-  prompt: string,
-  systemPrompt: string | undefined,
-  maxOutputTokens: number,
-  options: RouterOptions,
-): RoutingDecision {
-  const strategy = getStrategy("rules");
-  return strategy.route(prompt, systemPrompt, maxOutputTokens, options);
-}
-
-export { getStrategy, registerStrategy } from "./strategy.js";
-export {
-  getFallbackChain,
-  getFallbackChainFiltered,
-  filterByToolCalling,
-  filterByVision,
-  filterByExcludeList,
-  calculateModelCost,
-} from "./selector.js";
-export { DEFAULT_ROUTING_CONFIG } from "./config.js";
-export type {
-  RoutingDecision,
-  Tier,
-  RoutingConfig,
-  RouterOptions,
-  RouterStrategy,
-} from "./types.js";
-export type { ModelPricing } from "./selector.js";
+export * from "@blockrun/router-core";

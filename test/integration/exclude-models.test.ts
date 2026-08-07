@@ -12,8 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { startProxy } from "../../src/proxy.js";
 import { resolveOrGenerateWalletKey } from "../../src/auth.js";
 import type { ProxyHandle } from "../../src/proxy.js";
-import { DEFAULT_ROUTING_CONFIG } from "../../src/router/config.js";
-import { getFallbackChain } from "../../src/router/selector.js";
+import { DEFAULT_ROUTING_CONFIG, getFallbackChain } from "../../src/router/index.js";
 
 const HEALTH_POLL_INTERVAL_MS = 200;
 const HEALTH_TIMEOUT_MS = 5_000;

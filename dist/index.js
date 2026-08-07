@@ -34777,7 +34777,7 @@ var init_esm5 = __esm({
   }
 });
 
-// src/router/rules.ts
+// node_modules/@blockrun/router-core/dist/index.js
 function scoreTokenCount(estimatedTokens, thresholds) {
   if (estimatedTokens < thresholds.simple) {
     return { name: "tokenCount", score: -1, signal: `short (${estimatedTokens} tokens)` };
@@ -35017,13 +35017,6 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config) {
 function calibrateConfidence(distance, steepness) {
   return 1 / (1 + Math.exp(-steepness * distance));
 }
-var init_rules = __esm({
-  "src/router/rules.ts"() {
-    "use strict";
-  }
-});
-
-// src/router/selector.ts
 function selectModel(tier, confidence, method, reasoning, tierConfigs, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile, agenticScore) {
   const tierConfig = tierConfigs[tier];
   const model = tierConfig.primary;
@@ -35112,19 +35105,14 @@ function getFallbackChainFiltered(tier, tierConfigs, estimatedTotalTokens, getCo
   }
   return filtered;
 }
-var BASELINE_MODEL_ID, BASELINE_INPUT_PRICE, BASELINE_OUTPUT_PRICE, SERVER_MARGIN_PERCENT, MIN_PAYMENT_USD;
-var init_selector = __esm({
-  "src/router/selector.ts"() {
-    "use strict";
-    BASELINE_MODEL_ID = "anthropic/claude-opus-4.7";
-    BASELINE_INPUT_PRICE = 5;
-    BASELINE_OUTPUT_PRICE = 25;
-    SERVER_MARGIN_PERCENT = 5;
-    MIN_PAYMENT_USD = 1e-3;
-  }
-});
-
-// src/router/strategy.ts
+function filterCandidatesByCapacity(models, estimatedInputTokens, requestedOutputTokens, getCapabilities2) {
+  const filtered = models.filter((modelId) => {
+    const capabilities = getCapabilities2(modelId);
+    if (!capabilities) return true;
+    return capabilities.contextWindow >= (estimatedInputTokens + requestedOutputTokens) * 1.1 && capabilities.maxOutput >= requestedOutputTokens;
+  });
+  return filtered;
+}
 function applyPromotions(tierConfigs, promotions, profile, now2 = /* @__PURE__ */ new Date()) {
   if (!promotions || promotions.length === 0) return tierConfigs;
   let result = tierConfigs;
@@ -35154,19 +35142,666 @@ function getStrategy(name) {
   }
   return strategy;
 }
-var RulesStrategy, registry;
-var init_strategy = __esm({
-  "src/router/strategy.ts"() {
+function registerStrategy(strategy) {
+  registry.set(strategy.name, strategy);
+}
+function inferToolRequirement(prompt, _systemPrompt, toolChoice) {
+  if (toolChoice === "none") return false;
+  if (toolChoice === "required") return true;
+  if (typeof toolChoice === "object" && toolChoice !== null && toolChoice.type === "function") {
+    return true;
+  }
+  const text = prompt;
+  const explicitTool = /\b(?:use|call|invoke)\s+(?:the\s+)?[\w.-]+\s+(?:tool|function|api)\b|\btool[_ -]?call\b|使用.{0,20}(?:工具|函数|接口)|调用.{0,20}(?:工具|函数|接口)/i;
+  const codeEnvironment = /\b(?:run|execute)\s+(?:the\s+)?(?:tests?|command|script|build|linter)|\b(?:edit|modify|patch|create|write|save|delete|rename|move|inspect|read)\b.{0,60}\b(?:file|repository|repo|codebase|directory|folder)\b|\b(?:terminal|shell|bash|zsh|pytest|npm test|pnpm test|git\s+(?:status|diff|commit)|docker)\b|(?:运行|执行).{0,20}(?:测试|命令|脚本|构建)|(?:修改|编辑|修复|创建|读取|检查|保存).{0,30}(?:文件|仓库|代码库|目录)/i;
+  const webAction = /\b(?:browse|search|look up|fetch|open)\b.{0,80}\b(?:web|website|url|online|documentation|docs|news|weather|price)\b|(?:浏览|搜索|查询|打开).{0,30}(?:网页|网站|链接|文档|新闻|天气|价格)/i;
+  const statefulAction = /\b(?:refund|cancel|book|reserve|purchase|buy|return|exchange|transfer|update|change)\b.{0,80}\b(?:order|booking|reservation|account|address|payment|subscription|ticket|flight|item)\b|(?:退款|取消|预订|购买|退货|换货|转账|更新|修改).{0,30}(?:订单|预订|账户|地址|付款|订阅|票|航班|商品)/i;
+  return explicitTool.test(text) || codeEnvironment.test(text) || webAction.test(text) || statefulAction.test(text);
+}
+function likelyNeedsParallelToolCalls(prompt, needsTools, toolCount, toolNames) {
+  if (!needsTools || toolCount === void 0 || toolCount < 1) return false;
+  const text = prompt.trim();
+  const explicitRepeat = /\b(?:in parallel|simultaneously|concurrently|for each|each of|every one|both|(?:two|three|multiple|several)\s+(?:cities|locations|items|tasks|orders|users|files))\b|并行|同时|分别|每个|各自|(?:两个|三个|多个)(?:城市|地点|项目|任务|订单|用户|文件)|cada uno|para cada|simult[aá]neamente/i.test(
+    text
+  );
+  if (explicitRepeat) return true;
+  const sentenceClauses = text.split(/[.!?。！？]+/).map((part) => part.trim()).filter((part) => part.length >= 8);
+  if (/\b(?:also|additionally|furthermore)\b|另外|此外|그리고/i.test(text) && sentenceClauses.length >= 2 || /\band\s+(?:also|for the)\b/i.test(text))
+    return true;
+  const pairedQuantity = /\b\d+(?:\.\d+)?\s+(?:and|or)\s+\d+(?:\.\d+)?\s*(?:gb|mb|tb|kg|g|ml|oz|cups?|cores?|cpus?)\b/i.test(
+    text
+  );
+  if (pairedQuantity) return true;
+  const operationTokens = /* @__PURE__ */ new Set([
+    "add",
+    "delete",
+    "remove",
+    "cancel",
+    "return",
+    "exchange",
+    "modify",
+    "book",
+    "transfer",
+    "send",
+    "upload",
+    "download",
+    "create",
+    "close"
+  ]);
+  const lowered = text.toLowerCase();
+  const matchedOperationTokens = new Set(
+    (toolNames ?? []).flatMap((name) => name.toLowerCase().split(/[^a-z0-9\u3400-\u9fff]+/)).filter((token) => operationTokens.has(token) && lowered.includes(token))
+  );
+  if (matchedOperationTokens.size >= 2) return true;
+  const nonEmptyLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const quantityMentions = text.match(
+    /\b(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:oz|ounce|ounces|g|gram|grams|kg|ml|cups?|pieces?|tablespoons?)\b/gi
+  ) ?? [];
+  if (nonEmptyLines.length >= 2 && quantityMentions.length >= 2) return true;
+  const repeatedLookup = /\b(?:weather|climate|clima|tiempo|temperature|snow|news|report)\b|天气|气象|温度|降雪|新闻|报告/i.test(
+    text
+  );
+  const multiLocationConnector = /\b(?:and also|both|y|e)\b|还有|以及|和|、/i.test(text);
+  const commaSeparatedLocations = (text.match(/[,，]/g) ?? []).length >= 2;
+  if (repeatedLookup && (multiLocationConnector || commaSeparatedLocations)) return true;
+  const distinctOrderParts = /\b(?:food|meal)\b[\s\S]*\bdrink\b|\bdrink\b[\s\S]*\b(?:food|meal)\b/i.test(text);
+  const koreanParallelClauses = (text.match(/,/g) ?? []).length >= 3 && /하고|그리고/.test(text);
+  return distinctOrderParts || koreanParallelClauses;
+}
+function classifyTask(prompt, systemPrompt, options) {
+  const fullText = `${systemPrompt ?? ""} ${prompt}`;
+  const estimatedInputTokens = Math.ceil(fullText.length / 4);
+  const scanLimit = Math.max(1, Math.min(8e3, options.config.classifier.promptTruncationChars));
+  const sample = (value) => {
+    if (value.length <= scanLimit) return value;
+    const prefixLength = Math.ceil(scanLimit / 2);
+    return `${value.slice(0, prefixLength)}
+${value.slice(-(scanLimit - prefixLength))}`;
+  };
+  const scannedPrompt = sample(prompt);
+  const scannedSystemPrompt = sample(systemPrompt ?? "");
+  const scannedFullText = `${scannedSystemPrompt} ${scannedPrompt}`;
+  const text = scannedPrompt.toLowerCase();
+  const explicitCodeSignal = /```|\b(?:typescript|javascript|python|rust|java|sql|stack trace|traceback|exception)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(
+    scannedPrompt
+  );
+  const codeConstructSignal = /\b(?:implement|refactor|debug|write|edit|modify|create|define|review|fix)\b[\s\S]{0,48}\b(?:api|function|class|method)\b|\b(?:api|function|class|method)\b[\s\S]{0,48}\b(?:code|implementation|typescript|javascript|python|rust|java)\b/i.test(
+    scannedPrompt
+  );
+  const nativeCodeSignal = /\b(?:programmed|written|implemented?|code)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b/i.test(
+    scannedPrompt
+  );
+  const hasCode = explicitCodeSignal || codeConstructSignal || nativeCodeSignal;
+  const toolsAvailable = options.hasTools ?? false;
+  const needsTools = options.requiresTools ?? (toolsAvailable && inferToolRequirement(scannedPrompt, scannedSystemPrompt));
+  const likelyParallelToolCalls = likelyNeedsParallelToolCalls(
+    scannedPrompt,
+    needsTools,
+    options.toolCount,
+    options.toolNames
+  );
+  const normalizedToolNames = (options.toolNames ?? []).map((name) => name.toLowerCase());
+  const airlineToolSignal = normalizedToolNames.some(
+    (name) => /(?:flight|reservation|airport|baggage|passenger)/.test(name)
+  );
+  const retailToolSignal = normalizedToolNames.some(
+    (name) => /(?:order|product|item|return|exchange|address)/.test(name)
+  );
+  const webResearchToolSignal = normalizedToolNames.some(
+    (name) => /^(?:web_?search|web_?fetch)$/.test(name)
+  );
+  const agentDomain = airlineToolSignal && !retailToolSignal ? "airline" : retailToolSignal && !airlineToolSignal ? "retail" : webResearchToolSignal ? "web_research" : "other";
+  const clueConnectors = scannedFullText.match(
+    /\b(?:after|before|while|where|whose|which|in \d{4}|as of|over \d+|another|also|furthermore)\b|(?:之后|之前|其中|截至|超过|另一个|此外)/gi
+  ) ?? [];
+  const entityResolutionSignal = /\b(?:identify|who (?:is|was)|what (?:is|was) the name|which (?:person|player|company|country|city)|find the (?:person|player|name|entity))\b|(?:找出|识别|是谁|哪位|名称是什么)/i.test(
+    scannedFullText
+  );
+  const exactAnswerSignal = /\b(?:exact answer|single best-supported answer|following clues|multiple public sources)\b|(?:精确答案|根据.*线索|多个公开来源)/i.test(
+    scannedFullText
+  );
+  const deepWebResearch = agentDomain === "web_research" && (exactAnswerSignal || entityResolutionSignal && (clueConnectors.length >= 3 || prompt.length >= 320));
+  const globalOptimizationSignal = /\b(?:cheapest|lowest[- ]price|least expensive|most expensive|highest(?:[- ]priced)?|largest|smallest|maximum|minimum|best available|closest|not (?:cost|exceed))\b|最便宜|最低价|最贵|最高价|最大|最小/i.test(
+    scannedPrompt
+  );
+  const globalScopeSignal = /\b(?:everything|all (?:(?:my|your|their|the) )?(?:future |upcoming )?(?:items|orders|passengers|flights|reservations|bookings)|every (?:item|order|passenger|flight|reservation|booking))\b|全部|所有|每个/i.test(
+    scannedPrompt
+  );
+  const globalChoiceSignal = globalOptimizationSignal || globalScopeSignal;
+  const crossRecordSignal = /\b(?:another|other|different|previous)\s+(?:order|reservation|booking|account|address)\b|另一(?:个)?(?:订单|预订|账户|地址)|其他(?:订单|预订|账户|地址)/i.test(
+    scannedPrompt
+  );
+  const reservationIds = scannedPrompt.match(/\b[A-Z0-9]{6}\b/g) ?? [];
+  const crossReservationBatchSignal = agentDomain === "airline" && (/\b(?:two|three|multiple|several)(?:\s+of\s+(?:my|our|the))?\s+(?:upcoming\s+)?(?:reservations?|bookings?)\b|\b(?:a\s+)?(?:second|third)\s+(?:reservation|booking)\b/i.test(
+    scannedPrompt
+  ) || new Set(reservationIds).size >= 2);
+  const conditionalGlobalWorkflowSignal = agentDomain === "airline" && globalScopeSignal && /\b(?:if|that (?:contain|have)|longer than|shorter than|under|over|at (?:most|least)|wherever possible)\b|如果|超过|少于|不超过|尽可能/i.test(
+    scannedPrompt
+  ) && /\b(?:cancel|change|upgrade|move|book)\b[\s\S]*\b(?:cancel|change|upgrade|move|book)\b|取消[\s\S]*(?:升级|更改)|升级[\s\S]*(?:取消|更改)/i.test(
+    scannedPrompt
+  );
+  const policyExceptionSignal = agentDomain === "retail" && /\b(?:return|refund|send back|get (?:my |the )?money back)\b|退货|退款|退回/i.test(
+    scannedPrompt
+  ) && /\b(?:amex|american express|visa|mastercard|credit card|debit card|different card|another card|other card)\b|信用卡|借记卡|其他卡|另一张卡/i.test(
+    scannedPrompt
+  );
+  const singleSelectedPolicyException = policyExceptionSignal && /\b(?:return|refund|send back)\b[^.!?。！？]{0,96}\b(?:the )?(?:pricier|cheaper|more expensive|less expensive|costlier|one)\b/i.test(
+    scannedPrompt
+  );
+  const negotiatedWorkflowSignal = agentDomain === "retail" && /\b(?:return|exchange)\b|退货|退回|换货|交换/i.test(scannedPrompt);
+  const numberedSteps = (scannedPrompt.match(/(?:^|\s)\d+(?:\.\d+)*[.)]\s+/g) ?? []).length;
+  const complexMultiToolPlan = likelyParallelToolCalls && ((options.toolCount ?? 0) >= 6 || numberedSteps >= 3 || prompt.length > 1200);
+  let agentRisk = needsTools && singleSelectedPolicyException ? "policy_exception_simple" : needsTools && policyExceptionSignal ? "policy_exception" : (
+    // Airline prompts that require a global optimum (for example the
+    // cheapest itinerary across several candidates) are materially harder
+    // than applying one change to every passenger in a known reservation.
+    // Full-session evidence supports Sonnet for the former, while upgrading
+    // the latter merely because it says "all passengers" caused a large cost
+    // increase without a quality gain.
+    needsTools && agentDomain === "airline" && (globalOptimizationSignal || conditionalGlobalWorkflowSignal) ? "complex_high" : needsTools && (likelyParallelToolCalls || globalChoiceSignal || crossRecordSignal || crossReservationBatchSignal || negotiatedWorkflowSignal) ? "high" : "standard"
+  );
+  const needsVision = options.hasVision ?? false;
+  const needsStructuredOutput = options.requiresStructuredOutput ?? false;
+  const latencySensitive = /\b(?:urgent|asap|fast|quick|low latency|real[- ]time)\b|尽快|马上|快速|低延迟/i.test(
+    scannedFullText
+  );
+  const highStakes = /\b(?:production|security|payment|legal|medical|financial|audit)\b|生产|安全|支付|法律|医疗|财务|审计/i.test(
+    scannedFullText
+  );
+  const terminalToolSignal = normalizedToolNames.some(
+    (name) => /^(?:terminalexec|terminalinspect|terminalsendkeys)$/.test(name)
+  );
+  const simpleTerminalArtifact = /\b(?:create|write|convert|generate|build|implement|run|fix|repair|debug|make)\b[\s\S]{0,120}\b(?:file|script|csv|parquet|json|txt|server|endpoint)\b/i.test(
+    scannedPrompt
+  );
+  const terminalComplexRepair = terminalToolSignal && /\b(?:multiple|several)\s+(?:scripts?|files?|components?)\b|\b(?:pipeline|dependencies)\b[\s\S]{0,100}\b(?:fail|issue|fix|repair|run|execute)\b|\b(?:identify|find|fix|repair)\s+(?:and\s+)?(?:fix\s+)?all\s+(?:the\s+)?issues\b/i.test(
+    scannedPrompt
+  );
+  const mentionedTerminalRuntimes = new Set(
+    (scannedPrompt.match(/\b(?:gcc|clang|rustc|javac|go\s+build|node|python)\b/gi) ?? []).map(
+      (name) => name.toLowerCase().replace(/\s+/g, " ")
+    )
+  );
+  const terminalCrossRuntimeArtifact = terminalToolSignal && (/\bpolyglot\b/i.test(scannedPrompt) || /\b(?:both|each)\b[\s\S]{0,120}\b(?:compilers?|runtimes?|toolchains?)\b/i.test(
+    scannedPrompt
+  ) || mentionedTerminalRuntimes.size >= 2 && /\b(?:compile|build|run|execute)\b/i.test(scannedPrompt));
+  const terminalFrameworkToNativeArtifact = terminalToolSignal && /\b(?:pytorch|tensorflow|jax|onnx|state[_ -]?dict|checkpoint|safetensors?)\b|\.(?:pth|pt|onnx)\b/i.test(
+    scannedPrompt
+  ) && /\b(?:pure|native|programmed|written|implemented?)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b|\b(?:c\+\+|c|rust|go)\s+(?:program|binary|executable|cli|tool|implementation)\b/i.test(
+    scannedPrompt
+  ) && /\b(?:inference|model|weights?|tensor|export|convert|load)\b/i.test(scannedPrompt);
+  if (needsTools && (terminalComplexRepair || terminalCrossRuntimeArtifact || terminalFrameworkToNativeArtifact) && (agentRisk === "standard" || agentRisk === "high"))
+    agentRisk = "complex_high";
+  const complexTerminalOperation = /\b(?:git|ssh|nginx|https|certificate|authentication|credential|deploy|production|encrypt|gpg|shred|securely delete|decommission|benchmark|evaluate|embedding|chess|image|search the web|schema|statistical|statistics|aggregate|join|multiple inputs?)\b/i.test(
+    scannedPrompt
+  );
+  const terminalCredentialSignal = /\b(?:ssh|nginx|certificate|authentication|credentials?|passwords?|api keys?|deploy|production|encrypt|gpg|shred|securely delete|decommission)\b/i.test(
+    scannedPrompt
+  ) || /\b(?:access|auth|authentication|bearer|secret|api)\s+tokens?\b|\btokens?\s+(?:secret|credential|authentication)\b/i.test(
+    scannedPrompt
+  );
+  const terminalSafetySensitive = terminalToolSignal && (highStakes || terminalCredentialSignal);
+  const implicitTerminalCode = needsTools && terminalToolSignal && agentRisk === "standard" && !highStakes && !complexTerminalOperation && numberedSteps < 3 && prompt.length <= 1e3 && simpleTerminalArtifact;
+  const language = /[\u3400-\u9fff]/.test(scannedFullText) ? "zh" : "other";
+  const multipleChoiceSignals = (scannedPrompt.match(/(?:^|\n)\s*[A-D][.)]\s+/gim) ?? []).length;
+  const numericSignals = (scannedPrompt.match(/-?\d+(?:[.,]\d+)?/g) ?? []).length;
+  const compactMathProblem = !hasCode && prompt.length < 2500 && numericSignals >= 2 && (/[+×÷=%$€£¥]|\b(?:total|each|per|times|half|twice|percent|how many|how much|calculate)\b/i.test(
+    scannedPrompt
+  ) || /[?？]\s*$/.test(scannedPrompt.trim()) || numericSignals >= 3);
+  let taskType = "chat";
+  if (needsVision) taskType = "vision";
+  else if (estimatedInputTokens > 8e4) taskType = "long_context";
+  else if (needsTools && (hasCode || implicitTerminalCode)) taskType = "code_agent";
+  else if (needsTools && likelyParallelToolCalls && !complexMultiToolPlan)
+    taskType = "tool_agent_parallel";
+  else if (needsTools) taskType = "tool_agent";
+  else if (multipleChoiceSignals >= 3) taskType = "reasoning_mcq";
+  else if (compactMathProblem) taskType = "reasoning_math";
+  else if (/\b(?:bug|debug|error|failure|failing|regression|crash|修复|报错|错误|调试)\b/i.test(text))
+    taskType = "debug";
+  else if (hasCode || /\b(?:refactor|implement|patch|edit|rewrite|重构|实现|修改)\b/i.test(text))
+    taskType = "code_edit";
+  else if (needsStructuredOutput || /\b(?:extract|json|schema|csv|字段|提取)\b/i.test(text))
+    taskType = "extraction";
+  else if (/\b(?:prove|derive|theorem|formal|mathematical|reasoning|证明|推导|定理|数学)\b/i.test(text))
+    taskType = "reasoning";
+  return {
+    taskType,
+    estimatedInputTokens,
+    hasCode,
+    needsTools,
+    toolsAvailable,
+    needsVision,
+    needsStructuredOutput,
+    latencySensitive,
+    highStakes,
+    language,
+    likelyParallelToolCalls,
+    complexMultiToolPlan,
+    agentDomain,
+    deepWebResearch,
+    agentRisk,
+    terminalToolSignal,
+    terminalSafetySensitive,
+    implicitTerminalCode
+  };
+}
+function affinity(modelId, task, language = "other", agentDomain = "other", deepWebResearch = false, agentRisk = "standard", terminalToolSignal = false, terminalSafetySensitive = false) {
+  const id2 = modelId.toLowerCase();
+  const modelName = id2.slice(id2.indexOf("/") + 1);
+  const match = (values, score) => values.some((value) => modelName === value) ? score : 0;
+  const base3 = 0.68;
+  switch (task) {
+    case "code_agent":
+      if (terminalToolSignal && agentRisk === "complex_high") {
+        return Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5.3-codex"], 0.87),
+          match(["gpt-5-mini"], 0.78),
+          match(["gemini-3.5-flash"], 0.76)
+        );
+      }
+      return Math.max(
+        base3,
+        match(["gpt-5.3-codex"], 1),
+        match(["claude-sonnet-5"], 0.98),
+        match(["gpt-5-mini"], 0.96),
+        match(["gemini-3.5-flash"], 0.92),
+        match(["kimi-k3"], 0.9),
+        match(["deepseek-v4-pro", "glm-5.2"], 0.88)
+      );
+    case "tool_agent":
+      if (terminalToolSignal && agentRisk === "complex_high") {
+        return Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5.3-codex"], 0.87),
+          match(["gpt-5-mini"], 0.78),
+          match(["gemini-3.5-flash"], 0.76)
+        );
+      }
+      if (terminalToolSignal && !terminalSafetySensitive) {
+        return Math.max(
+          base3,
+          match(["gpt-5-mini"], 1),
+          match(["gpt-5.3-codex"], 0.98),
+          match(["claude-sonnet-5"], 0.9),
+          match(["gemini-3.5-flash"], 0.89)
+        );
+      }
+      if (terminalToolSignal && terminalSafetySensitive) {
+        return Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["claude-opus-4.8"], 0.9),
+          match(["gpt-5.3-codex"], 0.84)
+        );
+      }
+      if (agentDomain === "web_research") {
+        return deepWebResearch ? Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5-mini"], 0.88),
+          match(["gemini-3.5-flash"], 0.84),
+          match(["claude-opus-5"], 0.8),
+          match(["claude-opus-4.8"], 0.78)
+        ) : Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5-mini"], 0.88),
+          match(["gemini-3.5-flash"], 0.86),
+          match(["claude-opus-5"], 0.84),
+          match(["claude-opus-4.8"], 0.82)
+        );
+      }
+      if (agentDomain === "retail") {
+        if (agentRisk === "standard") {
+          return Math.max(
+            base3,
+            match(["gpt-5-mini"], 1),
+            match(["claude-sonnet-5"], 0.88),
+            match(["gemini-3.5-flash"], 0.82),
+            match(["gpt-5.3-codex"], 0.81),
+            match(["kimi-k3"], 0.78),
+            match(["deepseek-v4-pro"], 0.76)
+          );
+        }
+        if (agentRisk === "policy_exception") {
+          return Math.max(
+            base3,
+            match(["gpt-4.1"], 1),
+            match(["claude-sonnet-5"], 0.9),
+            match(["deepseek-v4-pro"], 0.82),
+            match(["gpt-5-mini"], 0.8),
+            match(["gpt-4o-mini"], 0.76)
+          );
+        }
+        if (agentRisk === "policy_exception_simple") {
+          return Math.max(
+            base3,
+            match(["gpt-5-mini"], 1),
+            match(["gpt-4.1"], 0.86),
+            match(["deepseek-v4-pro"], 0.82),
+            match(["gpt-4o-mini"], 0.8)
+          );
+        }
+        return Math.max(
+          base3,
+          match(["deepseek-v4-pro"], 1),
+          match(["claude-sonnet-5"], 0.88),
+          match(["gemini-3.5-flash"], 0.82),
+          match(["gpt-5.3-codex"], 0.81),
+          match(["kimi-k3"], 0.78),
+          match(["gpt-5-mini"], 0.76)
+        );
+      }
+      if (agentDomain === "airline") {
+        if (agentRisk === "complex_high") {
+          return Math.max(
+            base3,
+            match(["claude-sonnet-5"], 1),
+            match(["gpt-5-mini"], 0.78),
+            match(["gemini-3.5-flash"], 0.76),
+            match(["deepseek-v4-pro"], 0.74)
+          );
+        }
+        return Math.max(
+          base3,
+          match(["gpt-5-mini"], 1),
+          match(["claude-sonnet-5"], 0.9),
+          match(["gemini-3.5-flash"], 0.8),
+          match(["deepseek-v4-pro"], 0.76)
+        );
+      }
+      return Math.max(
+        base3,
+        match(["claude-sonnet-5"], 1),
+        match(["gemini-3.5-flash"], 0.88),
+        match(["gpt-5.3-codex"], 0.87),
+        match(["gpt-5-mini"], 0.84),
+        match(["kimi-k3"], 0.85),
+        match(["deepseek-v4-pro"], 0.82)
+      );
+    case "tool_agent_parallel":
+      if (terminalToolSignal) {
+        return terminalSafetySensitive ? Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["claude-opus-4.8"], 0.9),
+          match(["gpt-5.3-codex"], 0.86)
+        ) : Math.max(
+          base3,
+          match(["gpt-5-mini"], 1),
+          match(["gpt-5.3-codex"], 0.98),
+          match(["claude-sonnet-5"], 0.92),
+          match(["gemini-3.5-flash"], 0.88)
+        );
+      }
+      if (agentDomain === "web_research") {
+        return deepWebResearch ? Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5-mini"], 0.88),
+          match(["gemini-3.5-flash"], 0.84),
+          match(["claude-opus-5"], 0.8),
+          match(["claude-opus-4.8"], 0.78)
+        ) : Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5-mini"], 0.88),
+          match(["gemini-3.5-flash"], 0.86),
+          match(["claude-opus-5"], 0.84),
+          match(["claude-opus-4.8"], 0.82)
+        );
+      }
+      if (agentDomain === "retail") {
+        if (agentRisk === "policy_exception") {
+          return Math.max(
+            base3,
+            match(["gpt-4.1"], 1),
+            match(["claude-sonnet-5"], 0.9),
+            match(["deepseek-v4-pro"], 0.82),
+            match(["gpt-5-mini"], 0.8),
+            match(["gpt-4o-mini"], 0.76)
+          );
+        }
+        if (agentRisk === "policy_exception_simple") {
+          return Math.max(
+            base3,
+            match(["gpt-5-mini"], 1),
+            match(["gpt-4.1"], 0.86),
+            match(["deepseek-v4-pro"], 0.82),
+            match(["gpt-4o-mini"], 0.8)
+          );
+        }
+        return Math.max(
+          base3,
+          match(["deepseek-v4-pro"], 1),
+          match(["claude-sonnet-5"], 0.88),
+          match(["claude-opus-4.8"], 0.84),
+          match(["gpt-5-mini"], 0.78),
+          match(["gemini-3.5-flash"], 0.76)
+        );
+      }
+      if (agentDomain === "airline") {
+        return agentRisk === "complex_high" ? Math.max(
+          base3,
+          match(["claude-sonnet-5"], 1),
+          match(["gpt-5-mini"], 0.78),
+          match(["claude-opus-4.8"], 0.76),
+          match(["gemini-3.5-flash"], 0.74)
+        ) : Math.max(
+          base3,
+          match(["gpt-5-mini"], 1),
+          match(["claude-sonnet-5"], 0.9),
+          match(["gemini-3.5-flash"], 0.8)
+        );
+      }
+      return Math.max(
+        base3,
+        match(["claude-opus-4.8"], 1),
+        match(["claude-sonnet-5"], 0.84),
+        match(["grok-4.5"], 0.82),
+        match(["gemini-3.5-flash"], 0.8),
+        match(["deepseek-v4-pro"], 0.78)
+      );
+    case "code_edit":
+    case "debug":
+      return Math.max(
+        base3,
+        match(["gpt-5.3-codex"], 1),
+        match(["claude-sonnet-4.6"], 0.94),
+        match(["glm-5.2"], 0.9),
+        match(["kimi-k2.7", "deepseek-v4-pro"], 0.86)
+      );
+    case "reasoning":
+      return Math.max(
+        base3,
+        match(["claude-sonnet-5", "claude-sonnet-4.6"], 0.98),
+        match(["deepseek-v4-pro"], 0.95),
+        match(["grok-4.5"], 0.94),
+        match(["gemini-3.1-pro", "gemini-3.5-flash"], 0.92)
+      );
+    case "reasoning_mcq":
+      return Math.max(
+        base3,
+        match(["gemini-3-flash-preview"], 1),
+        match(["gemini-3.5-flash"], 0.91),
+        match(["grok-4.5"], 0.9),
+        match(["claude-sonnet-5"], 0.88),
+        match(["deepseek-v4-pro"], 0.84)
+      );
+    case "reasoning_math":
+      return Math.max(
+        base3,
+        match(["gemini-3.5-flash"], 1),
+        match(["grok-4.5"], 0.93),
+        match(["claude-sonnet-5", "deepseek-v4-pro", "kimi-k3"], 0.9),
+        match(["kimi-k2.7"], 0.84)
+      );
+    case "vision":
+      return Math.max(
+        base3,
+        match(["gemini-3.1-pro"], 0.96),
+        match(["qwen3.7-max", "claude-sonnet-4.6", "kimi-k2.7", "grok-4.3"], 0.9)
+      );
+    case "long_context":
+      return Math.max(
+        base3,
+        match(["gemini-3.1-pro"], 1),
+        match(["qwen3.7-max", "glm-5.2"], 0.89),
+        match(["gemini-3.5-flash"], 0.88),
+        match(["deepseek-v4-pro"], 0.85)
+      );
+    case "extraction": {
+      const kimiExtractionAffinity = language === "zh" ? 1 : 0.9;
+      return Math.max(
+        base3,
+        match(["gemini-3.5-flash", "gemini-2.5-flash", "gpt-4o-mini"], 0.9),
+        match(["claude-sonnet-5", "claude-sonnet-4.6"], 0.9),
+        match(["kimi-k3", "kimi-k2.7"], kimiExtractionAffinity)
+      );
+    }
+    default:
+      return Math.max(
+        base3,
+        match(["gemini-3.5-flash", "gemini-2.5-flash", "kimi-k3", "kimi-k2.7"], 0.86)
+      );
+  }
+}
+function evidenceCandidates(task) {
+  if (task === "code_agent") {
+    return [
+      "openai/gpt-5.3-codex",
+      "anthropic/claude-sonnet-5",
+      "openai/gpt-5-mini",
+      "google/gemini-3.5-flash",
+      "moonshot/kimi-k3",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "tool_agent") {
+    return [
+      "anthropic/claude-sonnet-5",
+      "anthropic/claude-opus-5",
+      "openai/gpt-5-mini",
+      "openai/gpt-4.1",
+      "openai/gpt-4o-mini",
+      "google/gemini-3.5-flash",
+      "openai/gpt-5.3-codex",
+      "moonshot/kimi-k3",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "tool_agent_parallel") {
+    return [
+      "anthropic/claude-opus-5",
+      "anthropic/claude-opus-4.8",
+      "anthropic/claude-sonnet-5",
+      "openai/gpt-5-mini",
+      "openai/gpt-4.1",
+      "openai/gpt-4o-mini",
+      "xai/grok-4.5",
+      "google/gemini-3.5-flash",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "long_context") {
+    return [
+      "google/gemini-3.1-pro",
+      "deepseek/deepseek-v4-pro",
+      "qwen/qwen3.7-max",
+      "zai/glm-5.2",
+      "google/gemini-3.5-flash"
+    ];
+  }
+  if (task === "reasoning_mcq") {
+    return [
+      "google/gemini-3-flash-preview",
+      "google/gemini-3.5-flash",
+      "xai/grok-4.5",
+      "anthropic/claude-sonnet-5",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "reasoning_math") {
+    return [
+      "google/gemini-3.5-flash",
+      "xai/grok-4.5",
+      "anthropic/claude-sonnet-5",
+      "deepseek/deepseek-v4-pro",
+      "moonshot/kimi-k3"
+    ];
+  }
+  return [];
+}
+function isEligible(modelId, features, maxOutputTokens, options) {
+  const model = options.modelCapabilities?.[modelId] ?? DEFAULT_MODEL_CAPABILITIES[modelId];
+  if (!model) return true;
+  if (features.needsTools && !model.supportsTools) return false;
+  if (features.needsVision && !model.supportsVision) return false;
+  if (features.needsStructuredOutput && !model.supportsTools) return false;
+  if (model.maxOutputTokens < maxOutputTokens) return false;
+  return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
+}
+function estimatedCost(modelId, options, inputTokens, outputTokens) {
+  const price = options.modelPricing.get(modelId);
+  if (!price) return Number.POSITIVE_INFINITY;
+  if (price.flatPrice !== void 0) return price.flatPrice;
+  return (inputTokens * price.inputPrice + outputTokens * price.outputPrice) / 1e6;
+}
+function profileScore(modelId, options, now2) {
+  const profile = options.modelPerformance?.[modelId] ?? LIVE_MODEL_PROFILES[modelId] ?? HISTORICAL_MODEL_PROFILES[modelId];
+  if (!profile) return void 0;
+  const measuredAt = Date.parse(profile.measuredAt);
+  if (!Number.isFinite(measuredAt)) return void 0;
+  const ageDays = Math.max(0, (now2.getTime() - measuredAt) / 864e5);
+  const sampleConfidence = profile.samples === void 0 ? 1 : Math.min(1, Math.max(0, profile.samples) / 10);
+  const freshness = Math.pow(0.5, ageDays / 30) * sampleConfidence;
+  const quality = profile.intelligenceIndex === void 0 ? void 0 : Math.min(1, profile.intelligenceIndex / 50);
+  const speed = Math.min(
+    1,
+    (2e3 / Math.max(500, profile.latencyMs) + profile.outputTokensPerSecond / 250) / 2
+  );
+  const tailSpeed = Math.min(1, 3e3 / Math.max(750, profile.p95LatencyMs ?? profile.latencyMs));
+  const reliability = Math.max(0, 1 - (profile.errorRate ?? 0));
+  return { quality, speed, tailSpeed, reliability, freshness };
+}
+function route(prompt, systemPrompt, maxOutputTokens, options) {
+  const strategy = getStrategy(options.config.strategy ?? "portfolio");
+  return strategy.route(prompt, systemPrompt, maxOutputTokens, options);
+}
+var BASELINE_MODEL_ID, BASELINE_INPUT_PRICE, BASELINE_OUTPUT_PRICE, SERVER_MARGIN_PERCENT, MIN_PAYMENT_USD, RulesStrategy, registry, DEFAULT_MODEL_CAPABILITIES, model_profiles_generated_default, LIVE_MODEL_PROFILES, HISTORICAL_MODEL_PROFILES, DEFAULT_PORTFOLIO_WEIGHTS, PortfolioStrategy, DEFAULT_ROUTING_CONFIG;
+var init_dist = __esm({
+  "node_modules/@blockrun/router-core/dist/index.js"() {
     "use strict";
-    init_rules();
-    init_selector();
+    BASELINE_MODEL_ID = "anthropic/claude-opus-4.7";
+    BASELINE_INPUT_PRICE = 5;
+    BASELINE_OUTPUT_PRICE = 25;
+    SERVER_MARGIN_PERCENT = 5;
+    MIN_PAYMENT_USD = 1e-3;
     RulesStrategy = class {
       name = "rules";
       route(prompt, systemPrompt, maxOutputTokens, options) {
         const { config, modelPricing } = options;
         const fullText = `${systemPrompt ?? ""} ${prompt}`;
         const estimatedTokens = Math.ceil(fullText.length / 4);
-        const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
+        const scanLimit = Math.max(1, Math.min(8e3, config.classifier.promptTruncationChars));
+        const sample = (value) => {
+          if (value.length <= scanLimit) return value;
+          const prefixLength = Math.ceil(scanLimit / 2);
+          return `${value.slice(0, prefixLength)}
+${value.slice(-(scanLimit - prefixLength))}`;
+        };
+        const scannedPrompt = sample(prompt);
+        const scannedSystemPrompt = systemPrompt ? sample(systemPrompt) : void 0;
+        const ruleResult = classifyByRules(
+          scannedPrompt,
+          scannedSystemPrompt,
+          estimatedTokens,
+          config.scoring
+        );
         const { routingProfile } = options;
         let tierConfigs;
         let profileSuffix;
@@ -35183,7 +35818,7 @@ var init_strategy = __esm({
           const agenticScore = ruleResult.agenticScore ?? 0;
           const isAutoAgentic = agenticScore >= 0.5;
           const agenticModeSetting = config.overrides.agenticMode;
-          const hasToolsInRequest = options.hasTools ?? false;
+          const hasToolsInRequest = options.requiresTools ?? options.hasTools ?? false;
           let useAgenticTiers;
           if (agenticModeSetting === false) {
             useAgenticTiers = false;
@@ -35213,7 +35848,7 @@ var init_strategy = __esm({
           );
           return { ...decision2, tierConfigs, profile };
         }
-        const hasStructuredOutput = systemPrompt ? /json|structured|schema/i.test(systemPrompt) : false;
+        const hasStructuredOutput = options.requiresStructuredOutput === true || (scannedSystemPrompt ? /json|structured|schema/i.test(scannedSystemPrompt) : false);
         let tier;
         let confidence;
         const method = "rules";
@@ -35252,16 +35887,789 @@ var init_strategy = __esm({
     };
     registry = /* @__PURE__ */ new Map();
     registry.set("rules", new RulesStrategy());
-  }
-});
-
-// src/router/config.ts
-var DEFAULT_ROUTING_CONFIG;
-var init_config = __esm({
-  "src/router/config.ts"() {
-    "use strict";
+    DEFAULT_MODEL_CAPABILITIES = Object.freeze({
+      "anthropic/claude-fable-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-haiku-4.5": {
+        contextWindow: 2e5,
+        maxOutputTokens: 8192,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-4.6": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-4.7": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-4.8": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-4.6": {
+        contextWindow: 2e5,
+        maxOutputTokens: 64e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "deepseek/deepseek-chat": {
+        contextWindow: 1e6,
+        maxOutputTokens: 8192,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "deepseek/deepseek-reasoner": {
+        contextWindow: 1e6,
+        maxOutputTokens: 8192,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "deepseek/deepseek-v4-pro": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "free/deepseek-v4-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "free/gpt-oss-120b": {
+        contextWindow: 128e3,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "free/gpt-oss-20b": {
+        contextWindow: 128e3,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "free/seed-oss-36b": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "google/gemini-2.5-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-2.5-flash-lite": {
+        contextWindow: 1e6,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-2.5-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3-flash-preview": {
+        contextWindow: 1e6,
+        maxOutputTokens: 65536,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "google/gemini-3.1-flash-lite": {
+        contextWindow: 1e6,
+        maxOutputTokens: 8192,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-3.1-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3.5-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "moonshot/kimi-k2.5": {
+        contextWindow: 262144,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "moonshot/kimi-k2.6": {
+        contextWindow: 262144,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "moonshot/kimi-k2.7": {
+        contextWindow: 262144,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "moonshot/kimi-k3": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-4.1": {
+        contextWindow: 128e3,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-4o-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5-mini": {
+        contextWindow: 2e5,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5.3-codex": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5.4": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.4-nano": {
+        contextWindow: 105e4,
+        maxOutputTokens: 32768,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5.5": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-terra": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/o3": {
+        contextWindow: 2e5,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/o4-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "qwen/qwen3.7-max": {
+        contextWindow: 1e6,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-3-mini": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-4-0709": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-4-1-fast-non-reasoning": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-4-1-fast-reasoning": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-4-fast-non-reasoning": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-4-fast-reasoning": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xai/grok-4.5": {
+        contextWindow: 5e5,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "zai/glm-5.1": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5.2": {
+        contextWindow: 1e6,
+        maxOutputTokens: 262144,
+        supportsTools: true,
+        supportsVision: false
+      }
+    });
+    model_profiles_generated_default = {
+      "openai/gpt-5.5": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 6243.1,
+        p95LatencyMs: 9865,
+        outputTokensPerSecond: 12.53,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.4-pro": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 13015.5,
+        p95LatencyMs: 23976.4,
+        outputTokensPerSecond: 6.42,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.4-mini": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 5550,
+        p95LatencyMs: 6595.7,
+        outputTokensPerSecond: 11.96,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "openai/gpt-5.3-codex": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4617.1,
+        p95LatencyMs: 5800.7,
+        outputTokensPerSecond: 12.48,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-opus-4.8": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 3915.1,
+        p95LatencyMs: 6130.8,
+        outputTokensPerSecond: 16.33,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-opus-4.6": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 3765.5,
+        p95LatencyMs: 4257.2,
+        outputTokensPerSecond: 14.18,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-sonnet-4.6": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 3860.6,
+        p95LatencyMs: 5093.5,
+        outputTokensPerSecond: 13.85,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-haiku-4.5": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 2734.9,
+        p95LatencyMs: 3181.6,
+        outputTokensPerSecond: 19.58,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.1-pro": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 13935.7,
+        p95LatencyMs: 26675.3,
+        outputTokensPerSecond: 77.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.5-flash": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4608.7,
+        p95LatencyMs: 8420.9,
+        outputTokensPerSecond: 57.88,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.1-flash-lite": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4619.7,
+        p95LatencyMs: 9927.1,
+        outputTokensPerSecond: 42.01,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-2.5-flash": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 5506.9,
+        p95LatencyMs: 11462.5,
+        outputTokensPerSecond: 65.19,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-v4-pro": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 6044.8,
+        p95LatencyMs: 10782.3,
+        outputTokensPerSecond: 22.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-reasoner": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4111.9,
+        p95LatencyMs: 5305.7,
+        outputTokensPerSecond: 16.46,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-chat": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 2648.6,
+        p95LatencyMs: 3524.1,
+        outputTokensPerSecond: 16.73,
+        errorRate: 0,
+        samples: 3
+      },
+      "moonshot/kimi-k2.7": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4295.4,
+        p95LatencyMs: 6153.8,
+        outputTokensPerSecond: 18.54,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-max": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 30729.4,
+        p95LatencyMs: 39622,
+        outputTokensPerSecond: 36.89,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "xai/grok-4.3": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 6946.1,
+        p95LatencyMs: 9495.4,
+        outputTokensPerSecond: 65.3,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-4.20-reasoning": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 3472.4,
+        p95LatencyMs: 5332.4,
+        outputTokensPerSecond: 13.27,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-4.20-non-reasoning": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 5174.4,
+        p95LatencyMs: 6081.7,
+        outputTokensPerSecond: 10.21,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "xai/grok-4-1-fast-reasoning": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 13148.2,
+        p95LatencyMs: 19104.2,
+        outputTokensPerSecond: 4.28,
+        errorRate: 0,
+        samples: 3
+      },
+      "minimax/minimax-m3": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 3385,
+        p95LatencyMs: 4247.2,
+        outputTokensPerSecond: 15.16,
+        errorRate: 0,
+        samples: 3
+      },
+      "minimax/minimax-m2.7": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4596.7,
+        p95LatencyMs: 6884.6,
+        outputTokensPerSecond: 17.03,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.2": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4406.3,
+        p95LatencyMs: 6139.7,
+        outputTokensPerSecond: 10.41,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.1": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 7775.4,
+        p95LatencyMs: 9182.1,
+        outputTokensPerSecond: 6.08,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 4159.4,
+        p95LatencyMs: 4992.7,
+        outputTokensPerSecond: 10.28,
+        errorRate: 0,
+        samples: 3
+      },
+      "free/qwen3-coder-480b": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 2063.9,
+        p95LatencyMs: 3646.3,
+        outputTokensPerSecond: 39.8,
+        errorRate: 0,
+        samples: 3
+      },
+      "free/mistral-large-3-675b": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 3147.5,
+        p95LatencyMs: 5555.3,
+        outputTokensPerSecond: 27.76,
+        errorRate: 0,
+        samples: 3
+      },
+      "free/nemotron-3-nano-omni-30b-a3b-reasoning": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 6508.4,
+        p95LatencyMs: 14252.7,
+        outputTokensPerSecond: 68.26,
+        errorRate: 0,
+        samples: 3
+      },
+      "free/glm-4.7": {
+        measuredAt: "2026-07-21T10:21:31Z",
+        latencyMs: 2014.8,
+        p95LatencyMs: 3039.9,
+        outputTokensPerSecond: 39.92,
+        errorRate: 0,
+        samples: 3
+      }
+    };
+    LIVE_MODEL_PROFILES = Object.freeze(
+      model_profiles_generated_default
+    );
+    HISTORICAL_MODEL_PROFILES = Object.freeze({
+      "anthropic/claude-haiku-4.5": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2305,
+        outputTokensPerSecond: 140.6
+      },
+      "anthropic/claude-opus-4.6": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2139,
+        outputTokensPerSecond: 119.7
+      },
+      "anthropic/claude-sonnet-4.6": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2110,
+        outputTokensPerSecond: 121.3
+      },
+      "deepseek/deepseek-chat": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1431,
+        outputTokensPerSecond: 179.2,
+        intelligenceIndex: 32
+      },
+      "google/gemini-2.5-flash": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1238,
+        outputTokensPerSecond: 207.6,
+        intelligenceIndex: 20
+      },
+      "google/gemini-2.5-flash-lite": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1353,
+        outputTokensPerSecond: 192.5,
+        intelligenceIndex: 20
+      },
+      "google/gemini-2.5-pro": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1294,
+        outputTokensPerSecond: 197.8
+      },
+      "google/gemini-3.1-pro": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1609,
+        outputTokensPerSecond: 167.2
+      },
+      "moonshot/kimi-k2.5": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1646,
+        outputTokensPerSecond: 155.7
+      },
+      "openai/gpt-4o-mini": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2764,
+        outputTokensPerSecond: 92.8
+      },
+      "openai/gpt-5.3-codex": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 7935,
+        outputTokensPerSecond: 32.3
+      },
+      "xai/grok-4-1-fast-non-reasoning": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1244,
+        outputTokensPerSecond: 205.8,
+        intelligenceIndex: 41
+      },
+      "xai/grok-4-1-fast-reasoning": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1454,
+        outputTokensPerSecond: 176.2,
+        intelligenceIndex: 41
+      }
+    });
+    DEFAULT_PORTFOLIO_WEIGHTS = {
+      auto: {
+        quality: 0.47,
+        capability: 0.2,
+        cost: 0.18,
+        speed: 0.07,
+        reliability: 0.03,
+        legacy: 0.05
+      },
+      eco: { quality: 0.36, capability: 0.2, cost: 0.28, speed: 0.1, reliability: 0.04, legacy: 0.02 },
+      premium: {
+        quality: 0.58,
+        capability: 0.2,
+        cost: 0.08,
+        speed: 0.06,
+        reliability: 0.06,
+        legacy: 0.02
+      },
+      highStakesBoost: { quality: 0.08, reliability: 0.05 },
+      latencySensitiveSpeedBoost: 0.08,
+      affinityFloorGap: { auto: 0.1, eco: 0.22, premium: 0.05 }
+    };
+    PortfolioStrategy = class {
+      name = "portfolio";
+      route(prompt, systemPrompt, maxOutputTokens, options) {
+        const features = classifyTask(prompt, systemPrompt, options);
+        const base3 = new RulesStrategy().route(prompt, systemPrompt, maxOutputTokens, {
+          ...options,
+          requiresTools: features.needsTools
+        });
+        const tierConfigs = base3.tierConfigs;
+        if (!tierConfigs) return base3;
+        const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base3.tier === "SIMPLE" || base3.tier === "MEDIUM") ? "REASONING" : base3.tier;
+        const tierConfig = tierConfigs[targetTier];
+        const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
+        const chain3 = [
+          .../* @__PURE__ */ new Set([...configuredCandidates, ...evidenceCandidates(features.taskType)])
+        ].filter((model2) => typeof model2 === "string" && model2.length > 0);
+        const eligible = chain3.filter(
+          (model2) => isEligible(model2, features, maxOutputTokens, options)
+        );
+        const eligibleCandidates = eligible.length > 0 ? eligible : chain3;
+        if (eligibleCandidates.length === 0) return base3;
+        const profileName = options.routingProfile === "eco" ? "eco" : options.routingProfile === "premium" ? "premium" : "auto";
+        const portfolio = options.config.portfolio ?? DEFAULT_PORTFOLIO_WEIGHTS;
+        const getAffinity = (model2) => affinity(
+          model2,
+          features.taskType,
+          features.language,
+          features.agentDomain,
+          features.deepWebResearch,
+          features.agentRisk,
+          features.terminalToolSignal,
+          features.terminalSafetySensitive
+        );
+        const bestAffinity = Math.max(...eligibleCandidates.map(getAffinity));
+        const specificAffinity = eligibleCandidates.filter((model2) => getAffinity(model2) > 0.68);
+        const affinityPool = specificAffinity.length > 0 ? specificAffinity : [eligibleCandidates[0]];
+        const affinityFloorGap = features.terminalToolSignal ? Math.max(
+          portfolio.affinityFloorGap[profileName],
+          features.terminalSafetySensitive ? 0.15 : 0.12
+        ) : portfolio.affinityFloorGap[profileName];
+        const candidates = affinityPool.filter(
+          (model2) => getAffinity(model2) >= bestAffinity - affinityFloorGap
+        );
+        const costs = candidates.map(
+          (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens)
+        );
+        const finiteCosts = costs.filter(Number.isFinite);
+        const minCost = finiteCosts.length > 0 ? Math.min(...finiteCosts) : 0;
+        const maxCost = finiteCosts.length > 0 ? Math.max(...finiteCosts) : 1;
+        const now2 = options.now ?? /* @__PURE__ */ new Date();
+        const profileWeights = portfolio[profileName];
+        const rankedEntries = candidates.map((model2, index2) => {
+          const cost = estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens);
+          const costScore = Number.isFinite(cost) && maxCost > minCost ? 1 - (cost - minCost) / (maxCost - minCost) : 0.5;
+          const capabilityScore = isEligible(model2, features, maxOutputTokens, options) ? 1 : 0;
+          const profile = profileScore(model2, options, now2);
+          const observedQuality = profile?.quality === void 0 ? getAffinity(model2) : getAffinity(model2) * (1 - profile.freshness) + profile.quality * profile.freshness;
+          const observedSpeed = profile ? profile.speed * profile.freshness : 0.5;
+          const observedTailSpeed = profile ? profile.tailSpeed * profile.freshness : 0.5;
+          const observedReliability = profile ? profile.reliability * profile.freshness + (1 - profile.freshness) : 1;
+          const legacyScore = 1 - index2 / Math.max(1, candidates.length - 1);
+          const qualityWeight = profileWeights.quality + (features.highStakes ? portfolio.highStakesBoost.quality : 0);
+          const speedScore = features.latencySensitive ? observedTailSpeed : observedSpeed;
+          const speedWeight = profileWeights.speed + (features.latencySensitive ? portfolio.latencySensitiveSpeedBoost : 0);
+          const reliabilityWeight = profileWeights.reliability + (features.highStakes ? portfolio.highStakesBoost.reliability : 0);
+          const score = observedQuality * qualityWeight + capabilityScore * profileWeights.capability + costScore * profileWeights.cost + speedScore * speedWeight + observedReliability * reliabilityWeight + legacyScore * profileWeights.legacy;
+          return {
+            model: model2,
+            score,
+            quality: observedQuality,
+            cost: costScore,
+            speed: speedScore,
+            reliability: observedReliability
+          };
+        }).sort((a, b) => b.score - a.score);
+        const scoredModels = rankedEntries.map((item) => item.model);
+        const webResearchFallbackOrder = [
+          "anthropic/claude-sonnet-5",
+          "openai/gpt-5-mini",
+          "google/gemini-3.5-flash",
+          "anthropic/claude-opus-5",
+          "anthropic/claude-opus-4.8",
+          "openai/gpt-5.3-codex"
+        ];
+        const ranked = features.agentDomain === "web_research" ? [
+          ...scoredModels,
+          ...webResearchFallbackOrder.filter(
+            (model2) => eligibleCandidates.includes(model2) && !scoredModels.includes(model2)
+          ),
+          ...eligibleCandidates.filter(
+            (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
+          )
+        ] : features.taskType === "tool_agent" || features.taskType === "tool_agent_parallel" && features.agentDomain !== "other" ? [
+          ...scoredModels,
+          ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))
+        ] : [
+          ...scoredModels,
+          ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))
+        ];
+        const model = ranked[0] ?? base3.model;
+        const selectedTierConfigs = {
+          ...tierConfigs,
+          [targetTier]: { primary: model, fallback: ranked.slice(1) }
+        };
+        const decision = selectModel(
+          targetTier,
+          base3.confidence,
+          "portfolio",
+          `${base3.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
+          selectedTierConfigs,
+          options.modelPricing,
+          features.estimatedInputTokens,
+          maxOutputTokens,
+          options.routingProfile,
+          base3.agenticScore
+        );
+        return {
+          ...decision,
+          tierConfigs: selectedTierConfigs,
+          profile: base3.profile,
+          candidates: ranked,
+          candidateScores: rankedEntries.map(({ model: model2, score, quality, cost, speed, reliability }) => ({
+            model: model2,
+            score,
+            quality,
+            cost,
+            speed,
+            reliability
+          })),
+          taskType: features.taskType,
+          routerVersion: "v3-portfolio"
+        };
+      }
+    };
     DEFAULT_ROUTING_CONFIG = {
-      version: "2.0",
+      version: "3.4",
+      strategy: "portfolio",
+      portfolio: {
+        auto: {
+          quality: 0.47,
+          capability: 0.2,
+          cost: 0.18,
+          speed: 0.07,
+          reliability: 0.03,
+          legacy: 0.05
+        },
+        eco: {
+          quality: 0.36,
+          capability: 0.2,
+          cost: 0.28,
+          speed: 0.1,
+          reliability: 0.04,
+          legacy: 0.02
+        },
+        premium: {
+          quality: 0.58,
+          capability: 0.2,
+          cost: 0.08,
+          speed: 0.06,
+          reliability: 0.06,
+          legacy: 0.02
+        },
+        highStakesBoost: { quality: 0.08, reliability: 0.05 },
+        latencySensitiveSpeedBoost: 0.08,
+        affinityFloorGap: { auto: 0.1, eco: 0.22, premium: 0.05 }
+      },
       classifier: {
         llmModel: "google/gemini-2.5-flash",
         llmMaxTokens: 10,
@@ -36641,21 +38049,15 @@ var init_config = __esm({
         // Set to `true` to force agentic tiers; `false` to disable them entirely.
       }
     };
+    registerStrategy(new PortfolioStrategy());
   }
 });
 
 // src/router/index.ts
-function route(prompt, systemPrompt, maxOutputTokens, options) {
-  const strategy = getStrategy("rules");
-  return strategy.route(prompt, systemPrompt, maxOutputTokens, options);
-}
 var init_router = __esm({
   "src/router/index.ts"() {
     "use strict";
-    init_strategy();
-    init_strategy();
-    init_selector();
-    init_config();
+    init_dist();
   }
 });
 
@@ -56616,7 +58018,7 @@ var init_exclude_models = __esm({
 
 // src/config.ts
 var DEFAULT_PORT, PROXY_PORT;
-var init_config2 = __esm({
+var init_config = __esm({
   "src/config.ts"() {
     "use strict";
     DEFAULT_PORT = 8402;
@@ -73014,27 +74416,27 @@ var require_dns = __commonJS({
           }
         );
       }
-      #defaultPick(origin2, hostnameRecords, affinity) {
+      #defaultPick(origin2, hostnameRecords, affinity2) {
         let ip = null;
         const { records, offset } = hostnameRecords;
         let family;
         if (this.dualStack) {
-          if (affinity == null) {
+          if (affinity2 == null) {
             if (offset == null || offset === maxInt) {
               hostnameRecords.offset = 0;
-              affinity = 4;
+              affinity2 = 4;
             } else {
               hostnameRecords.offset++;
-              affinity = (hostnameRecords.offset & 1) === 1 ? 6 : 4;
+              affinity2 = (hostnameRecords.offset & 1) === 1 ? 6 : 4;
             }
           }
-          if (records[affinity] != null && records[affinity].ips.length > 0) {
-            family = records[affinity];
+          if (records[affinity2] != null && records[affinity2].ips.length > 0) {
+            family = records[affinity2];
           } else {
-            family = records[affinity === 4 ? 6 : 4];
+            family = records[affinity2 === 4 ? 6 : 4];
           }
         } else {
-          family = records[affinity];
+          family = records[affinity2];
         }
         if (family == null || family.ips.length === 0) {
           return ip;
@@ -73051,7 +74453,7 @@ var require_dns = __commonJS({
         }
         if (Date.now() - ip.timestamp > ip.ttl) {
           family.ips.splice(position, 1);
-          return this.pick(origin2, hostnameRecords, affinity);
+          return this.pick(origin2, hostnameRecords, affinity2);
         }
         return ip;
       }
@@ -73190,11 +74592,11 @@ var require_dns = __commonJS({
         throw new InvalidArgumentError("Invalid storage. Must be a object with methods: { get, set, full, delete }");
       }
       const dualStack = interceptorOpts?.dualStack ?? true;
-      let affinity;
+      let affinity2;
       if (dualStack) {
-        affinity = interceptorOpts?.affinity ?? null;
+        affinity2 = interceptorOpts?.affinity ?? null;
       } else {
-        affinity = interceptorOpts?.affinity ?? 4;
+        affinity2 = interceptorOpts?.affinity ?? 4;
       }
       const opts = {
         maxTTL: interceptorOpts?.maxTTL ?? 1e4,
@@ -73202,7 +74604,7 @@ var require_dns = __commonJS({
         lookup: interceptorOpts?.lookup ?? null,
         pick: interceptorOpts?.pick ?? null,
         dualStack,
-        affinity,
+        affinity: affinity2,
         maxItems: interceptorOpts?.maxItems ?? Infinity,
         storage: interceptorOpts?.storage
       };
@@ -86497,6 +87899,19 @@ function buildModelPricing() {
   }
   return map;
 }
+function buildModelCapabilities() {
+  return Object.fromEntries(
+    BLOCKRUN_MODELS.map((model) => [
+      model.id,
+      {
+        contextWindow: model.contextWindow,
+        maxOutputTokens: model.maxOutput,
+        supportsTools: model.toolCalling === true,
+        supportsVision: model.vision === true
+      }
+    ])
+  );
+}
 function buildProxyModelList(createdAt = Math.floor(Date.now() / 1e3)) {
   const seen = /* @__PURE__ */ new Set();
   return OPENCLAW_MODELS.filter((model) => {
@@ -86842,7 +88257,8 @@ async function startProxy(options) {
   const modelPricing = buildModelPricing();
   const routerOpts = {
     config: routingConfig,
-    modelPricing
+    modelPricing,
+    modelCapabilities: buildModelCapabilities()
   };
   const deduplicator = new RequestDeduplicator();
   const responseCache2 = new ResponseCache(options.cacheConfig);
@@ -87988,6 +89404,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   let maxTokens = DEFAULT_MAX_TOKENS;
   let routingProfile = null;
   let stickyExplicitModel;
+  let pendingShadowComparison;
   let balanceFallbackNotice;
   let budgetDowngradeNotice;
   let budgetDowngradeHeaderMode;
@@ -88583,8 +90000,16 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : void 0;
           const tools = parsed.tools;
           hasTools = Array.isArray(tools) && tools.length > 0;
+          const requiresTools = hasTools && inferToolRequirement(prompt, systemPrompt, parsed.tool_choice);
+          const toolNames = (tools ?? []).map((tool) => {
+            if (typeof tool !== "object" || tool === null) return void 0;
+            const fn = tool.function;
+            if (typeof fn !== "object" || fn === null) return void 0;
+            const name = fn.name;
+            return typeof name === "string" ? name : void 0;
+          }).filter((name) => name !== void 0);
           if (hasTools && tools) {
-            console.log(`[ClawRouter] Tools detected (${tools.length}), forcing agentic tiers`);
+            console.log(`[ClawRouter] Tools detected (${tools.length}), required=${requiresTools}`);
           }
           hasVision = parsedMessages.some((m) => {
             if (Array.isArray(m.content)) {
@@ -88598,8 +90023,36 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           routingDecision = route(prompt, systemPrompt, maxTokens, {
             ...routerOpts,
             routingProfile: routingProfile ?? void 0,
-            hasTools
+            hasTools,
+            toolCount: tools?.length ?? 0,
+            toolNames,
+            requiresTools,
+            hasVision,
+            requiresStructuredOutput: typeof parsed.response_format === "object" && parsed.response_format !== null
           });
+          const shadow = routerOpts.config.shadow;
+          const activeStrategy = routerOpts.config.strategy ?? "portfolio";
+          const shadowRate = Math.max(0, Math.min(1, shadow?.sampleRate ?? 1));
+          if (shadow && shadow.strategy !== activeStrategy && Math.random() < shadowRate) {
+            const requiresStructuredOutput = typeof parsed.response_format === "object" && parsed.response_format !== null;
+            const shadowDecision = route(prompt, systemPrompt, maxTokens, {
+              ...routerOpts,
+              config: { ...routerOpts.config, strategy: shadow.strategy },
+              routingProfile: routingProfile ?? void 0,
+              hasTools,
+              toolCount: tools?.length ?? 0,
+              toolNames,
+              requiresTools,
+              hasVision,
+              requiresStructuredOutput
+            });
+            pendingShadowComparison = {
+              shadow: shadowDecision,
+              hasTools,
+              hasVision,
+              requiresStructuredOutput
+            };
+          }
           if (hasTools && routingDecision.tier === "SIMPLE") {
             console.log(
               `[ClawRouter] SIMPLE+tools: keeping agentic model ${routingDecision.model} (tools need reliable function-call support)`
@@ -88706,6 +90159,21 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
               console.log(
                 `[ClawRouter] Session ${effectiveSessionId.slice(0, 8)}... pinned to model: ${routingDecision.model}`
               );
+            }
+          }
+          if (pendingShadowComparison) {
+            try {
+              options.onShadowRouted?.({
+                executed: routingDecision,
+                shadow: pendingShadowComparison.shadow,
+                sameModel: routingDecision.model === pendingShadowComparison.shadow.model,
+                hasTools: pendingShadowComparison.hasTools,
+                hasVision: pendingShadowComparison.hasVision,
+                requiresStructuredOutput: pendingShadowComparison.requiresStructuredOutput
+              });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.warn(`[ClawRouter] Shadow routing callback failed: ${message}`);
             }
           }
           options.onRouted?.(routingDecision);
@@ -89055,35 +90523,64 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
       const estimatedInputTokens = Math.ceil(body.length / 4);
       const estimatedTotalTokens = estimatedInputTokens + maxTokens;
       const tierConfigs = routingDecision.tierConfigs ?? routerOpts.config.tiers;
-      const fullChain = prependStickyExplicitModel(
-        getFallbackChain(routingDecision.tier, tierConfigs)
+      const rankedCandidates = routingDecision.candidates ?? getFallbackChain(routingDecision.tier, tierConfigs);
+      const selectedModel = routingDecision.model;
+      const fullChain = prependStickyExplicitModel([
+        selectedModel,
+        ...rankedCandidates.filter((model) => model !== selectedModel)
+      ]);
+      const contextFiltered = filterCandidatesByCapacity(
+        fullChain,
+        estimatedInputTokens,
+        maxTokens,
+        (modelId2) => {
+          const model = BLOCKRUN_MODEL_BY_ID.get(modelId2);
+          return model ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput } : void 0;
+        }
       );
-      const contextFiltered = prependStickyExplicitModel(
-        getFallbackChainFiltered(
-          routingDecision.tier,
-          tierConfigs,
-          estimatedTotalTokens,
-          getModelContextWindow
-        )
-      );
+      if (contextFiltered.length === 0) {
+        const errPayload = JSON.stringify({
+          error: {
+            message: `No routed model can satisfy the requested context and output capacity (~${estimatedTotalTokens} tokens). Reduce the input or max_tokens and retry.`,
+            type: "invalid_request_error",
+            code: "context_capacity_exceeded"
+          }
+        });
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = void 0;
+        }
+        if (headersSentEarly) {
+          safeWrite(res, `data: ${errPayload}
+
+data: [DONE]
+
+`);
+          res.end();
+        } else {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(errPayload);
+        }
+        completed = true;
+        deduplicator.removeInflight(dedupKey);
+        clearTimeout(timeoutId);
+        req.removeListener("close", onClientClose);
+        return;
+      }
       const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
       if (contextExcluded.length > 0) {
         console.log(
           `[ClawRouter] Context filter (~${estimatedTotalTokens} tokens): excluded ${contextExcluded.join(", ")}`
         );
       }
-      const excludeFiltered = prependStickyExplicitModel(
-        filterByExcludeList(contextFiltered, excludeList)
-      );
+      const excludeFiltered = filterByExcludeList(contextFiltered, excludeList);
       const excludeExcluded = contextFiltered.filter((m) => !excludeFiltered.includes(m));
       if (excludeExcluded.length > 0) {
         console.log(
           `[ClawRouter] Exclude filter: excluded ${excludeExcluded.join(", ")} (user preference)`
         );
       }
-      let toolFiltered = prependStickyExplicitModel(
-        filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling)
-      );
+      let toolFiltered = filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling);
       const toolExcluded = excludeFiltered.filter((m) => !toolFiltered.includes(m));
       if (toolExcluded.length > 0) {
         console.log(
@@ -89102,19 +90599,17 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           console.log(
             `[ClawRouter] Tool-compliance filter: excluded ${dropped.join(", ")} (unreliable tool schema handling)`
           );
-          toolFiltered = prependStickyExplicitModel(compliant);
+          toolFiltered = compliant;
         }
       }
-      const visionFiltered = prependStickyExplicitModel(
-        filterByVision(toolFiltered, hasVision, supportsVision)
-      );
+      const visionFiltered = filterByVision(toolFiltered, hasVision, supportsVision);
       const visionExcluded = toolFiltered.filter((m) => !visionFiltered.includes(m));
       if (visionExcluded.length > 0) {
         console.log(
           `[ClawRouter] Vision filter: excluded ${visionExcluded.join(", ")} (no vision support)`
         );
       }
-      modelsToTry = prependStickyExplicitModel(visionFiltered).slice(0, MAX_FALLBACK_ATTEMPTS);
+      modelsToTry = visionFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
       modelsToTry = prioritizeNonRateLimited(modelsToTry);
     } else {
       modelsToTry = modelId ? [modelId] : [];
@@ -90004,7 +91499,7 @@ var init_proxy = __esm({
     init_client2();
     init_esm5();
     init_router();
-    init_rules();
+    init_router();
     init_models();
     init_max_tokens();
     init_logger();
@@ -90018,7 +91513,7 @@ var init_proxy = __esm({
     init_session();
     init_updater();
     init_exclude_models();
-    init_config2();
+    init_config();
     init_journal();
     init_upstream_proxy();
     init_textual_tool_calls();
@@ -91650,7 +93145,7 @@ var init_headers = __esm({
 
 // node_modules/@polymarket/clob-client-v2/dist/config.js
 var AMOY_CONTRACTS, MATIC_CONTRACTS, COLLATERAL_TOKEN_DECIMALS, getContractConfig;
-var init_config3 = __esm({
+var init_config2 = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/config.js"() {
     "use strict";
     AMOY_CONTRACTS = {
@@ -91950,7 +93445,7 @@ var init_buildMarketOrderCreationArgs = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/order-builder/helpers/buildMarketOrderCreationArgs.js"() {
     "use strict";
     init_constants2();
-    init_config3();
+    init_config2();
     init_getMarketOrderRawAmounts();
     init_esm();
   }
@@ -92511,7 +94006,7 @@ var init_createMarketOrder = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/order-builder/helpers/createMarketOrder.js"() {
     "use strict";
     init_signer();
-    init_config3();
+    init_config2();
     init_buildMarketOrderCreationArgs();
     init_signatureTypeV2();
     init_buildOrder();
@@ -92619,7 +94114,7 @@ var init_buildOrderCreationArgs = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/order-builder/helpers/buildOrderCreationArgs.js"() {
     "use strict";
     init_constants2();
-    init_config3();
+    init_config2();
     init_getOrderRawAmounts();
     init_esm();
   }
@@ -92631,7 +94126,7 @@ var init_createOrder = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/order-builder/helpers/createOrder.js"() {
     "use strict";
     init_signer();
-    init_config3();
+    init_config2();
     init_signatureTypeV2();
     init_buildOrder();
     init_buildOrderCreationArgs();
@@ -92669,7 +94164,7 @@ var init_createExchangeV3OrderFromAmounts = __esm({
     "use strict";
     init_constants2();
     init_signer();
-    init_config3();
+    init_config2();
     init_signatureTypeV2();
     init_buildOrder();
     createExchangeV3OrderFromAmounts = async (eoaSigner, chainId, signatureType, funderAddress, userOrder) => {
@@ -110471,7 +111966,7 @@ var init_axios2 = __esm({
 
 // node_modules/browser-or-node/dist/index.mjs
 var isBrowser, isNode, isWebWorker, isJsDom, isDeno, isBun;
-var init_dist = __esm({
+var init_dist2 = __esm({
   "node_modules/browser-or-node/dist/index.mjs"() {
     "use strict";
     isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
@@ -110495,7 +111990,7 @@ var init_http_helpers = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/http-helpers/index.js"() {
     "use strict";
     init_axios2();
-    init_dist();
+    init_dist2();
     GET = "GET";
     POST = "POST";
     DELETE = "DELETE";
@@ -111527,10 +113022,10 @@ var init_client4 = __esm({
 });
 
 // node_modules/@polymarket/clob-client-v2/dist/index.js
-var init_dist2 = __esm({
+var init_dist3 = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/index.js"() {
     "use strict";
-    init_config3();
+    init_config2();
     init_signatureTypeV2();
     init_side();
     init_clob();
@@ -111550,7 +113045,7 @@ import * as net from "net";
 import * as http4 from "http";
 import { Agent as HttpsAgent } from "https";
 var INTERNAL, Agent2;
-var init_dist3 = __esm({
+var init_dist4 = __esm({
   "node_modules/agent-base/dist/index.js"() {
     "use strict";
     init_helpers();
@@ -111789,7 +113284,7 @@ function createNegotiateAuth() {
     };
   };
 }
-var init_dist4 = __esm({
+var init_dist5 = __esm({
   "node_modules/proxy-agent-negotiate/dist/index.js"() {
     "use strict";
   }
@@ -111816,13 +113311,13 @@ function omit(obj, ...keys) {
   return ret;
 }
 var import_debug2, debug2, setServernameFromNonIpHost, HttpsProxyAgent2;
-var init_dist5 = __esm({
+var init_dist6 = __esm({
   "node_modules/https-proxy-agent/dist/index.js"() {
     "use strict";
     import_debug2 = __toESM(require_src(), 1);
-    init_dist3();
-    init_parse_proxy_response();
     init_dist4();
+    init_parse_proxy_response();
+    init_dist5();
     debug2 = (0, import_debug2.default)("https-proxy-agent");
     setServernameFromNonIpHost = (options) => {
       if (options.servername === void 0 && options.host && !net2.isIP(options.host)) {
@@ -112035,7 +113530,7 @@ var POLYGON_CHAIN_ID, CTF_EXCHANGE_V2, NEG_RISK_CTF_EXCHANGE_V2, NEG_RISK_ADAPTE
 var init_constants3 = __esm({
   "src/polymarket/constants.ts"() {
     "use strict";
-    init_dist2();
+    init_dist3();
     POLYGON_CHAIN_ID = 137;
     CTF_EXCHANGE_V2 = "0xE111180000d2663C0091e4f400237545B87B996B";
     NEG_RISK_CTF_EXCHANGE_V2 = "0xe2222d279d744050d28e00520010520000310F59";
@@ -112572,11 +114067,11 @@ var init_client5 = __esm({
   "src/polymarket/client.ts"() {
     "use strict";
     init_axios2();
-    init_dist5();
+    init_dist6();
     init_esm();
     init_accounts();
     init_chains();
-    init_dist2();
+    init_dist3();
     init_wallet_adapter();
     init_constants3();
     init_creds();
@@ -112946,7 +114441,7 @@ var ledger;
 var init_orders = __esm({
   "src/polymarket/orders.ts"() {
     "use strict";
-    init_dist2();
+    init_dist3();
     init_client5();
     init_constants3();
     init_creds();
@@ -220128,7 +221623,7 @@ var init_relayer = __esm({
     "use strict";
     import_builder_relayer_client = __toESM(require_dist3(), 1);
     import_builder_signing_sdk = __toESM(require_dist4(), 1);
-    init_dist2();
+    init_dist3();
     init_esm();
     init_chains();
     init_client5();
@@ -220468,7 +221963,7 @@ var init_setup = __esm({
     "use strict";
     init_esm();
     init_chains();
-    init_dist2();
+    init_dist3();
     init_client5();
     init_constants3();
     init_creds();
@@ -220922,7 +222417,7 @@ function sleep2(ms) {
   return new Promise((r2) => setTimeout(r2, ms));
 }
 var BlockrunError, PaymentError, APIError, BASE_CHAIN_ID2, USDC_BASE2, USDC_DOMAIN, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, LOCALHOST_DOMAINS, BLOCKRUN_DIR2, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_TIMEOUT, PHONE_PRICES, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, WALLET_DIR2, WALLET_FILE3, WALLET_DIR22, SOLANA_WALLET_FILE, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL;
-var init_dist6 = __esm({
+var init_dist7 = __esm({
   "node_modules/@blockrun/llm/dist/index.js"() {
     "use strict";
     init_accounts();
@@ -221490,7 +222985,7 @@ var init_fund = __esm({
   "src/polymarket/fund.ts"() {
     "use strict";
     init_axios2();
-    init_dist6();
+    init_dist7();
     init_wallet_adapter();
     init_client5();
     init_constants3();
@@ -221969,29 +223464,29 @@ var init_spend_control = __esm({
       getLimits() {
         return { ...this.limits };
       }
-      check(estimatedCost) {
+      check(estimatedCost2) {
         const now2 = this.now();
         if (this.limits.perRequest !== void 0) {
-          if (estimatedCost > this.limits.perRequest) {
+          if (estimatedCost2 > this.limits.perRequest) {
             return {
               allowed: false,
               blockedBy: "perRequest",
               remaining: this.limits.perRequest,
-              reason: `Per-request limit exceeded: $${estimatedCost.toFixed(4)} > $${this.limits.perRequest.toFixed(2)} max`
+              reason: `Per-request limit exceeded: $${estimatedCost2.toFixed(4)} > $${this.limits.perRequest.toFixed(2)} max`
             };
           }
         }
         if (this.limits.hourly !== void 0) {
           const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
           const remaining = this.limits.hourly - hourlySpent;
-          if (estimatedCost > remaining) {
+          if (estimatedCost2 > remaining) {
             const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - HOUR_MS);
             const resetIn = oldestInWindow ? Math.ceil((oldestInWindow.timestamp + HOUR_MS - now2) / 1e3) : 0;
             return {
               allowed: false,
               blockedBy: "hourly",
               remaining,
-              reason: `Hourly limit exceeded: $${(hourlySpent + estimatedCost).toFixed(2)} > $${this.limits.hourly.toFixed(2)} max`,
+              reason: `Hourly limit exceeded: $${(hourlySpent + estimatedCost2).toFixed(2)} > $${this.limits.hourly.toFixed(2)} max`,
               resetIn
             };
           }
@@ -221999,26 +223494,26 @@ var init_spend_control = __esm({
         if (this.limits.daily !== void 0) {
           const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
           const remaining = this.limits.daily - dailySpent;
-          if (estimatedCost > remaining) {
+          if (estimatedCost2 > remaining) {
             const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - DAY_MS);
             const resetIn = oldestInWindow ? Math.ceil((oldestInWindow.timestamp + DAY_MS - now2) / 1e3) : 0;
             return {
               allowed: false,
               blockedBy: "daily",
               remaining,
-              reason: `Daily limit exceeded: $${(dailySpent + estimatedCost).toFixed(2)} > $${this.limits.daily.toFixed(2)} max`,
+              reason: `Daily limit exceeded: $${(dailySpent + estimatedCost2).toFixed(2)} > $${this.limits.daily.toFixed(2)} max`,
               resetIn
             };
           }
         }
         if (this.limits.session !== void 0) {
           const remaining = this.limits.session - this.sessionSpent;
-          if (estimatedCost > remaining) {
+          if (estimatedCost2 > remaining) {
             return {
               allowed: false,
               blockedBy: "session",
               remaining,
-              reason: `Session limit exceeded: $${(this.sessionSpent + estimatedCost).toFixed(2)} > $${this.limits.session.toFixed(2)} max`
+              reason: `Session limit exceeded: $${(this.sessionSpent + estimatedCost2).toFixed(2)} > $${this.limits.session.toFixed(2)} max`
             };
           }
         }
@@ -222692,6 +224187,11 @@ async function startProxyInBackground(api, startupGeneration) {
       const saved = (decision.savings * 100).toFixed(0);
       api.logger.info(
         `[${decision.tier}] ${decision.model} $${cost} (saved ${saved}%) | ${decision.reasoning}`
+      );
+    },
+    onShadowRouted: (comparison) => {
+      api.logger.info(
+        `[router-shadow] executed=${comparison.executed.model} (${comparison.executed.method}) candidate=${comparison.shadow.model} (${comparison.shadow.method}) same=${comparison.sameModel} tools=${comparison.hasTools} vision=${comparison.hasVision} structured=${comparison.requiresStructuredOutput}`
       );
     },
     onLowBalance: (info) => {
@@ -223891,6 +225391,7 @@ export {
   deriveEvmKey,
   deriveSolanaKeyBytes,
   fetchWithRetry,
+  filterCandidatesByCapacity,
   formatDuration,
   formatStatsAscii,
   generateWalletMnemonic,
@@ -223903,6 +225404,7 @@ export {
   getSessionId,
   getStats,
   hashRequestContent,
+  inferToolRequirement,
   injectAuthProfile,
   injectModelsConfig,
   isAgenticModel,

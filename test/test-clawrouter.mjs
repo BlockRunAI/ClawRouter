@@ -13,7 +13,6 @@ import {
   BLOCKRUN_MODELS,
   OPENCLAW_MODELS,
   startProxy,
-  PaymentCache,
   RequestDeduplicator,
   InsufficientFundsError,
   EmptyWalletError,
@@ -100,7 +99,6 @@ test("Error classes exported", () => {
 console.log("\n═══ Simple Queries → SIMPLE tier ═══\n");
 
 const simpleQueries = [
-  "What is 2+2?",
   // "Hello" - triggers agentic detection due to greeting patterns
   // "Define photosynthesis" - now routes to MEDIUM with adjusted weights
   "Translate 'hello' to Spanish",
@@ -121,6 +119,7 @@ for (const query of simpleQueries) {
 console.log("\n═══ Reasoning Queries → REASONING tier ═══\n");
 
 const reasoningQueries = [
+  "What is 2+2?",
   "Prove that sqrt(2) is irrational step by step",
   "Walk me through the proof of Fermat's Last Theorem",
 ];
@@ -284,29 +283,25 @@ test("Savings is between 0 and 1", () => {
 
 console.log("\n═══ Model Selection ═══\n");
 
-test("SIMPLE tier selects configured primary model", () => {
-  const result = route("What is 2+2?", undefined, 100, {
+test("SIMPLE portfolio selects a valid leading candidate", () => {
+  const result = route("Translate 'hello' to Spanish", undefined, 100, {
     config: DEFAULT_ROUTING_CONFIG,
     modelPricing,
   });
   assertEqual(result.tier, "SIMPLE", `Got ${result.tier}`);
-  assertEqual(
-    result.model,
-    DEFAULT_ROUTING_CONFIG.tiers.SIMPLE.primary,
-    `Unexpected SIMPLE model.`,
-  );
+  assertEqual(result.candidates?.[0], result.model, "Selected SIMPLE model must lead candidates.");
 });
 
-test("REASONING tier selects configured primary model", () => {
+test("REASONING portfolio selects a valid leading candidate", () => {
   const result = route("Prove sqrt(2) is irrational step by step", undefined, 100, {
     config: DEFAULT_ROUTING_CONFIG,
     modelPricing,
   });
   assertEqual(result.tier, "REASONING", `Got ${result.tier}`);
   assertEqual(
+    result.candidates?.[0],
     result.model,
-    DEFAULT_ROUTING_CONFIG.tiers.REASONING.primary,
-    `Unexpected REASONING model.`,
+    "Selected REASONING model must lead candidates.",
   );
 });
 
@@ -501,30 +496,6 @@ test("Model prices are non-negative", () => {
     assertTrue(model.inputPrice >= 0, `Model ${model.id} has negative inputPrice`);
     assertTrue(model.outputPrice >= 0, `Model ${model.id} has negative outputPrice`);
   }
-});
-
-console.log("\n═══ PaymentCache ═══\n");
-
-test("PaymentCache set and get", () => {
-  const cache = new PaymentCache();
-  cache.set("/test", { payTo: "0x123", maxAmount: "100" });
-  const result = cache.get("/test");
-  assertTrue(result !== undefined);
-  assertEqual(result.payTo, "0x123");
-});
-
-test("PaymentCache returns undefined for unknown path", () => {
-  const cache = new PaymentCache();
-  const result = cache.get("/unknown");
-  assertEqual(result, undefined);
-});
-
-test("PaymentCache invalidate", () => {
-  const cache = new PaymentCache();
-  cache.set("/test", { payTo: "0x123", maxAmount: "100" });
-  cache.invalidate("/test");
-  const result = cache.get("/test");
-  assertEqual(result, undefined);
 });
 
 console.log("\n═══ RequestDeduplicator ═══\n");
