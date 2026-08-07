@@ -4,6 +4,37 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.242 — August 7, 2026
+
+Makes the deterministic **Router v3.4 portfolio strategy the default for Auto**, and moves the routing engine out of this repo into [`BlockRunAI/router-core`](https://github.com/BlockRunAI/router-core).
+
+Thanks to @KillerQueen-Z for the router work and the extraction (#238).
+
+### Changed — portfolio routing is the Auto default
+
+- Auto now classifies task shape locally, enforces tool / vision / structured-output / context constraints as hard filters, then ranks an ordered fallback portfolio. The previous path picked a fixed tier primary after rule classification. On a frozen 100-task, three-arm evaluation the new policy scored 57% vs 49% and cut normalized cost per successful task by 6.44%.
+- Routing stays **100% local and deterministic** — no extra model call, no network hop. Model capabilities are injected from ClawRouter's live catalog at proxy startup, so the product catalog remains authoritative.
+- `tool_choice: "none"` is authoritative, and host tool descriptions no longer create false per-turn tool requirements.
+- Rollback lever: set `routing.strategy = "rules"`. An optional local-only shadow mode compares the two strategies' metadata without issuing a second paid completion or persisting any prompt.
+
+### Changed — routing engine extracted to router-core
+
+- `src/router/{config,rules,selector,strategy,types}.ts` are gone; `src/router/index.ts` re-exports `@blockrun/router-core`, pinned to immutable commit `6a790eb`. `@blockrun/clawrouter/router` stays available as a subpath export for existing SDK consumers.
+- The dependency is **`devDependencies`, deliberately**: tsup's `noExternal` inlines it into `dist/`, so nothing imports it at runtime. Keeping it in `dependencies` would make every `npm install @blockrun/clawrouter` fetch a `codeload.github.com` tarball at install time — resolved from a bare URL with no lockfile-backed integrity, since the published package doesn't ship our lockfile, and broken whenever GitHub is unreachable. The packed tarball still declares zero non-registry dependencies.
+
+### Fixed — a stale build put the retired seed-oss-36b back in three fallback chains
+
+- `dist/router/index.js` shipped `free/seed-oss-36b` in three fallback chains even though router-core's pinned commit had already removed it. The committed artifact had been built against a pre-fix install. Rebuilt.
+- This is the same class of bug as v0.12.241: BlockRun **server-redirects** retired free ids, so routing to one **silently defeats `/exclude`** — the caller excludes a model, the router hands it the request anyway, and the gateway answers from the redirect target.
+- **A correct commit pin does not imply a correct committed `dist/`.** This repo ships `dist/`, so both have to be checked.
+
+### Added — free-model liveness guard
+
+- `src/router/free-model-liveness.test.ts` walks every tier container's `primary` and `fallback` entries and asserts each `free/*` id is still live. The allowed set is **derived from `src/top-models.json`** (plus the two deliberate `gpt-oss` defaults), so a future free-tier resync updates the guard automatically — models should never be added to it by hand.
+- It exists because router selection coverage left this repo along with the code (`selector.test.ts` and `strategy.test.ts` deleted, none added), and the stale-build regression above walked straight through the gap. Verified to fail against that exact regression, and it fails loudly rather than vacuously if the upstream config shape changes.
+
+---
+
 ## v0.12.241 — August 7, 2026
 
 Finishes the free-tier resync that #232 started. That commit refreshed the **brand markers** to blockrun's live catalog (71 chat-visible / 6 free) but touched no code, so the router kept routing to a model that has been dead upstream since 2026-08-03.
