@@ -34,7 +34,7 @@ Agents can only sign transactions.<br><br>
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -193,7 +193,7 @@ Choose your routing strategy with `/model <profile>`:
 | `/model free` | Free NVIDIA models | **100%**                                                                                                                                                                                                                                                                                          | $0 balance, learning |
 | `/model auto` | Balanced (default) | † Withheld from `/v1/models` — the router still calls it by direct ID, but you will not find it on the public pricing page. See [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json), which prices the published savings claim on visible models only. |
 
-**<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->%** | General use |
+**<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%** | General use |
 | `/model eco` | Cheapest possible | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** | Maximum savings |
 | `/model premium` | Best quality | 0% | Mission-critical |
 
@@ -216,7 +216,7 @@ Request → Weighted Scorer (<!-- br:clawrouter.dimensions -->14<!-- /br:clawrou
 | COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)     | gemini-3.1-pro ($2/$12)                 | claude-fable-5 ($10/$50)     |
 | REASONING | grok-4-1-fast-reasoning † ($0.20/$0.50) | grok-4-1-fast-reasoning † ($0.20/$0.50) | claude-sonnet-4.6 ($3/$15)   |
 
-**<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5** for the same traffic, on `auto`; **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** on `eco`.
+**<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5** for the same traffic, on `auto`; **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** on `eco`.
 
 Not an "up to" figure. The baseline, the workload mix and the token ratio are
 published in [`savings-mix.json`](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json),
@@ -716,7 +716,7 @@ ClawRouter is an open-source (MIT licensed) smart LLM router built for autonomou
 
 ### How much can ClawRouter save on LLM costs?
 
-On the `auto` profile ClawRouter costs <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% less than pinning Claude Opus 5 for every request, and <!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->% less on `eco`. That is computed from a published workload mix rather than estimated — see [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) for the baseline and assumptions. Actual savings depend on your workload — simple queries are routed to free models ($0/request), while complex tasks get premium models.
+On the `auto` profile ClawRouter costs <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% less than pinning Claude Opus 5 for every request, and <!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->% less on `eco`. That is computed from a published workload mix rather than estimated — see [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) for the baseline and assumptions. Actual savings depend on your workload — simple queries are routed to free models ($0/request), while complex tasks get premium models.
 
 ### How does ClawRouter compare to OpenRouter?
 

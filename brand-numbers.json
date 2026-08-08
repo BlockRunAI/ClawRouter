@@ -3,11 +3,11 @@
   "version": 1,
   "models": {
     "chatVisible": 71,
-    "totalVisible": 92,
+    "totalVisible": 93,
     "free": 6,
     "freeWithheld": 19,
     "image": 9,
-    "video": 5,
+    "video": 6,
     "music": 1,
     "speech": 5,
     "soundfx": 1,
@@ -29,6 +29,6 @@
   "savings": {
     "baselineModel": "anthropic/claude-opus-5",
     "ecoVsBaselinePct": 98,
-    "autoVsBaselinePct": 87
+    "autoVsBaselinePct": 88
   }
 }

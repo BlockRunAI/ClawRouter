@@ -271,7 +271,7 @@ No silent drops. No stale catalog. Models are benchmarked for speed, quality, an
 | **Model catalog**   | Laggy, silent drops              | Curated <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, redirect aliases         |
 | **Budget control**  | Monthly invoice                  | Per-session cap (`maxCostPerRun`)                                                                        |
 | **Setup**           | Create account, paste key        | Agent generates wallet, auto-configured                                                                  |
-| **Average cost**    | $25/M tokens (Opus direct)       | auto-routed = **<!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% savings** |
+| **Average cost**    | $25/M tokens (Opus direct)       | auto-routed = **<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% savings** |
 
 ![The Engineering Matrix — Side-by-side feature comparison: OpenRouter vs ClawRouter across Routing, Authentication, Payment, Fallback, Model IDs, Empty Wallet, Vision/Tools, and Average Cost. ClawRouter wins on every dimension.](./assets/clawrouter-engineering-matrix-comparison.png)
 
