@@ -56,7 +56,7 @@ From 20,000+ production requests:
 | Free models (trivial tasks)      | 12.8%        | $0.00             |
 | Others                           | 13.8%        | varies            |
 
-**Result: <!-- br:savings.autoVsBaselinePct -->87<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5 for every request** — the published figure, priced on a stated workload mix rather than estimated.
+**Result: <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5 for every request** — the published figure, priced on a stated workload mix rather than estimated.
 
 A typical user running 10K mixed requests/month:
 
