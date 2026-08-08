@@ -4,6 +4,35 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.244 — August 8, 2026
+
+Syncs the Seedance video family to blockrun, which added a fourth model and repriced the other three.
+
+### Added — `bytedance/seedance-2.5`
+
+- 720p with synced audio, long-form (up to 30s vs the 12–15s ceiling on the rest of the family), multilingual, image-to-video capable. For 1080p or 4K, Seedance 2.0 Pro is still the one.
+- Reachable as `seedance-2.5` or `seedance-2-5`, and listed in `/videogen`.
+- **Bare `seedance` deliberately stays on 1.5-pro.** It is the cheapest of the family ($0.070/s vs 2.5's $0.315/s) and `/videogen` documents it as "default — cheapest"; repointing the short name at the newest tier would 4.5× the quote for everyone who typed it expecting the default. Same rule that keeps `kimi` on K2.7.
+- Note: 2.5 has no OpenRouter failover upstream, so a token360 outage surfaces as an error rather than quietly rendering on a different model.
+
+### Fixed — all three existing Seedance rates were stale
+
+blockrun repriced the family (blockrun #351/#354) and ClawRouter was still carrying the old numbers:
+
+| model               | was     | now       |
+| ------------------- | ------- | --------- |
+| `seedance-1.5-pro`  | 0.0875  | **0.070** |
+| `seedance-2.0-fast` | 0.22687 | **0.165** |
+| `seedance-2.0`      | 0.28358 | **0.227** |
+
+These are base rates; `estimateVideoCost` applies the 5% margin at use. **Telemetry only** — the charge comes from the x402 payment header, and this estimate is the fallback for when `paymentStore` is empty. So the impact was a skewed usage log, never a wrong bill.
+
+### Changed — published alias count 202 → 204
+
+The two new pins move the total, and `src/router/brand-numbers.test.ts` pins it against blockrun's artifact. That number is hand-maintained in blockrun (`src/lib/brand-numbers.ts`) because the alias table lives here and cannot be counted from there. Updated on both sides; the guard is what caught it.
+
+---
+
 ## v0.12.243 — August 8, 2026
 
 Clears the last **high**-severity dependency alert. `npm audit` on this repo goes from 4 high / 17 low to **0 high / 17 low**.

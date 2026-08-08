@@ -37005,10 +37005,17 @@ var init_models = __esm({
       cogview: "zai/cogview-4",
       // Video generation
       "grok-video": "xai/grok-imagine-video",
+      // Bare `seedance` deliberately stays on 1.5-pro. It is the cheapest of the
+      // family ($0.070/s vs 2.5's $0.315/s) and `/videogen` documents it as
+      // "default — cheapest"; repointing it at the newest tier would 4.5x the
+      // quote for every caller who typed the short name expecting the default.
+      // Same reasoning that keeps `kimi` on K2.7. Pin 2.5 explicitly to opt in.
       seedance: "bytedance/seedance-1.5-pro",
       "seedance-1.5": "bytedance/seedance-1.5-pro",
       "seedance-2-fast": "bytedance/seedance-2.0-fast",
-      "seedance-2": "bytedance/seedance-2.0"
+      "seedance-2": "bytedance/seedance-2.0",
+      "seedance-2.5": "bytedance/seedance-2.5",
+      "seedance-2-5": "bytedance/seedance-2.5"
     };
     BLOCKRUN_MODELS = [
       // Smart routing meta-models — proxy replaces with actual model
@@ -92698,13 +92705,25 @@ var init_proxy = __esm({
     };
     VIDEO_PRICING = {
       "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 },
-      "bytedance/seedance-1.5-pro": { pricePerSecond: 0.0875, defaultDurationSeconds: 5 },
+      // Seedance rates re-synced 2026-08-08 from blockrun's models.ts after the
+      // family reprice (blockrun #351/#354). All three were carrying pre-reprice
+      // numbers, which only ever skewed the usage log — the charge comes from the
+      // x402 header, and estimateVideoCost is the fallback for when it is absent.
+      "bytedance/seedance-1.5-pro": { pricePerSecond: 0.07, defaultDurationSeconds: 5 },
       "bytedance/seedance-2.0-fast": {
-        pricePerSecond: 0.22687,
+        pricePerSecond: 0.165,
         defaultDurationSeconds: 5
       },
       "bytedance/seedance-2.0": {
-        pricePerSecond: 0.28358,
+        pricePerSecond: 0.227,
+        defaultDurationSeconds: 5
+      },
+      // Seedance 2.5: 720p with synced audio, up to 30s. Not a replacement for 2.0
+      // Pro — that is still the one for 1080p/4K. No OpenRouter failover exists for
+      // 2.5, so a token360 outage surfaces as an error instead of quietly rendering
+      // on another model.
+      "bytedance/seedance-2.5": {
+        pricePerSecond: 0.315,
         defaultDurationSeconds: 5
       },
       // Sora 2 via Azure AI Foundry — flat $0.10/s for both t2v and i2v.
@@ -226046,7 +226065,8 @@ function buildVideoGenerationProvider() {
       "xai/grok-imagine-video",
       "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2.0-fast",
-      "bytedance/seedance-2.0"
+      "bytedance/seedance-2.0",
+      "bytedance/seedance-2.5"
     ],
     capabilities: {
       maxVideos: 1,
@@ -226599,7 +226619,7 @@ ${errText}`
             const parsed = parseGenArgs(ctx.args ?? "");
             if (!parsed.prompt) {
               return {
-                text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default \u2014 cheapest), `seedance-2-fast`, `seedance-2`, `grok-video`.\n\n\u23F1\uFE0F  Generation takes 60\u2013180 seconds. Payment settles only on success."
+                text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default \u2014 cheapest), `seedance-2-fast`, `seedance-2`, `seedance-2.5` (720p + synced audio, long-form), `grok-video`.\n\n\u23F1\uFE0F  Generation takes 60\u2013180 seconds. Payment settles only on success."
               };
             }
             const model = resolveModelAlias(parsed.model ?? "seedance");

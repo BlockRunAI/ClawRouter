@@ -1355,6 +1355,7 @@ function buildVideoGenerationProvider(): VideoGenerationProviderPlugin {
       "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2.0-fast",
       "bytedance/seedance-2.0",
+      "bytedance/seedance-2.5",
     ],
     capabilities: {
       maxVideos: 1,
@@ -2001,7 +2002,7 @@ const plugin: OpenClawPluginDefinition = {
         const parsed = parseGenArgs(ctx.args ?? "");
         if (!parsed.prompt) {
           return {
-            text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default — cheapest), `seedance-2-fast`, `seedance-2`, `grok-video`.\n\n⏱️  Generation takes 60–180 seconds. Payment settles only on success.",
+            text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default — cheapest), `seedance-2-fast`, `seedance-2`, `seedance-2.5` (720p + synced audio, long-form), `grok-video`.\n\n⏱️  Generation takes 60–180 seconds. Payment settles only on success.",
           };
         }
         const model = resolveModelAlias(parsed.model ?? "seedance");

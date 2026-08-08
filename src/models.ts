@@ -331,10 +331,17 @@ export const MODEL_ALIASES: Record<string, string> = {
 
   // Video generation
   "grok-video": "xai/grok-imagine-video",
+  // Bare `seedance` deliberately stays on 1.5-pro. It is the cheapest of the
+  // family ($0.070/s vs 2.5's $0.315/s) and `/videogen` documents it as
+  // "default — cheapest"; repointing it at the newest tier would 4.5x the
+  // quote for every caller who typed the short name expecting the default.
+  // Same reasoning that keeps `kimi` on K2.7. Pin 2.5 explicitly to opt in.
   seedance: "bytedance/seedance-1.5-pro",
   "seedance-1.5": "bytedance/seedance-1.5-pro",
   "seedance-2-fast": "bytedance/seedance-2.0-fast",
   "seedance-2": "bytedance/seedance-2.0",
+  "seedance-2.5": "bytedance/seedance-2.5",
+  "seedance-2-5": "bytedance/seedance-2.5",
 };
 
 /**
