@@ -205,8 +205,10 @@ Choose your routing strategy with `/model <profile>`:
 
 **100% local routing. <1ms latency. Zero external API calls.**
 
+The scorer weighs <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions of the request:
+
 ```
-Request → Weighted Scorer (<!-- br:clawrouter.dimensions -->14<!-- /br:clawrouter.dimensions --> dimensions) → Tier → Best Model → Response
+Request → Weighted Scorer → Tier → Best Model → Response
 ```
 
 | Tier      | ECO Model                               | AUTO Model                              | PREMIUM Model                |
