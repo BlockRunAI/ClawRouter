@@ -4,6 +4,23 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.243 — August 8, 2026
+
+Clears the last **high**-severity dependency alert. `npm audit` on this repo goes from 4 high / 17 low to **0 high / 17 low**.
+
+### Security — `bigint-buffer` is out of the tree
+
+- `bigint-buffer`'s native `toBigIntLE()` carries an unpatched buffer overflow ([GHSA-3gc7-fjrx-p6mg](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg)). There is no fixed release anywhere: 1.1.5 is the last publish, from 2019, and `@trufflesuite/bigint-buffer@1.1.10` ships a **byte-identical** `src/bigint-buffer.c`, so overriding onto the fork would launder the advisory without fixing anything.
+- It reached us four levels down: `@blockrun/llm` → `@solana/spl-token` → `@solana/buffer-layout-utils` → `bigint-buffer`. ClawRouter never executes that path — it imports the EVM `createPaymentPayload`, not `createSolanaPaymentPayload`, and Solana payments go through `@x402/svm`. The package still landed in every consumer's lockfile because `@solana/spl-token` was an **optional dependency** of `@blockrun/llm`, and npm installs those automatically.
+- Fixed upstream in [`@blockrun/llm@3.10.0`](https://github.com/BlockRunAI/blockrun-llm-ts/releases/tag/v3.10.0): the Solana packages are now optional **peer** dependencies, which npm does _not_ auto-install. Consumers who make Solana payments through that SDK install `@solana/web3.js` and `@solana/spl-token` explicitly and get an actionable error if they forget.
+- ClawRouter's floor moves to `@blockrun/llm@^3.10.0` and the lockfile is regenerated. Verified: `npm ls bigint-buffer` returns empty, and `dist/` still contains zero references to `spl-token`, `buffer-layout-utils`, or `toBigIntLE`.
+- **Trap worth remembering:** bumping the dependency alone did not drop it. `npm install @blockrun/llm@^3.10.0` updated the SDK but kept the stale transitive entry — the optional-dependency-to-optional-peer change only takes effect after a full `rm -rf node_modules package-lock.json` regeneration. Same class as the override staleness in v0.12.240.
+- `@solana/kit` re-verified at **5.5.1** after the regeneration (the v5-vs-v6 split is what broke Solana signing back in March).
+
+Remaining: 17 low from the `elliptic` chain under `@polymarket/*` (ethers v5). 6.6.1 is the latest release and is still in the advisory's range, so there is nothing to move to.
+
+---
+
 ## v0.12.242 — August 7, 2026
 
 Makes the deterministic **Router v3.4 portfolio strategy the default for Auto**, and moves the routing engine out of this repo into [`BlockRunAI/router-core`](https://github.com/BlockRunAI/router-core).
