@@ -92,7 +92,6 @@ var init_top_models = __esm({
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-chat",
       "deepseek/deepseek-reasoner",
-      "free/deepseek-v4-flash",
       "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "free/mistral-nemotron",
       "free/step-3.7-flash",
@@ -292,6 +291,14 @@ var init_models = __esm({
       "gpt-5.6-sol": "openai/gpt-5.6-sol",
       "gpt-5.6-terra": "openai/gpt-5.6-terra",
       "gpt-5.6-luna": "openai/gpt-5.6-luna",
+      // Pro reasoning tiers (2026-08-03). Explicit pins only — the generic
+      // shorthands above stay on standard Terra.
+      "gpt-5.6-sol-pro": "openai/gpt-5.6-sol-pro",
+      "gpt-5.6-terra-pro": "openai/gpt-5.6-terra-pro",
+      "gpt-5.6-luna-pro": "openai/gpt-5.6-luna-pro",
+      "sol-pro": "openai/gpt-5.6-sol-pro",
+      "terra-pro": "openai/gpt-5.6-terra-pro",
+      "luna-pro": "openai/gpt-5.6-luna-pro",
       "gpt-5.5": "openai/gpt-5.5",
       "gpt-5.5-pro": "openai/gpt-5.5-pro",
       // ChatGPT Instant. `chat-latest` is a rolling upstream id — pinning it means
@@ -343,6 +350,20 @@ var init_models = __esm({
       "qwen3.7-max": "qwen/qwen3.7-max",
       "qwen-3.7-max": "qwen/qwen3.7-max",
       "qwen3-7-max": "qwen/qwen3.7-max",
+      // Plus/Flash tiers (2026-08-03) — explicit pins, same rule as Max.
+      "qwen3.7-plus": "qwen/qwen3.7-plus",
+      "qwen-3.7-plus": "qwen/qwen3.7-plus",
+      "qwen3.7-flash": "qwen/qwen3.7-flash",
+      "qwen-3.7-flash": "qwen/qwen3.7-flash",
+      // Tencent + Xiaomi (2026-07-25) — each maker has exactly one model, so the
+      // bare maker names are safe to bind.
+      hy3: "tencent/hy3",
+      tencent: "tencent/hy3",
+      hunyuan: "tencent/hy3",
+      mimo: "xiaomi/mimo-v2.5-pro",
+      "mimo-v2.5-pro": "xiaomi/mimo-v2.5-pro",
+      "mimo-v2.5": "xiaomi/mimo-v2.5-pro",
+      xiaomi: "xiaomi/mimo-v2.5-pro",
       // Google
       // gemini-3-pro-preview delisted by Google 2026-06-06 — mirror the gateway
       // redirect to its successor so pinned callers land on 3.1-pro, not an error.
@@ -358,7 +379,10 @@ var init_models = __esm({
       flash: "google/gemini-2.5-flash",
       "gemini-3.1-pro-preview": "google/gemini-3.1-pro",
       "google/gemini-3.1-pro-preview": "google/gemini-3.1-pro",
+      "gemini-3.6-flash": "google/gemini-3.6-flash",
+      "gemini-3.6": "google/gemini-3.6-flash",
       "gemini-3.5-flash": "google/gemini-3.5-flash",
+      "gemini-3.5-flash-lite": "google/gemini-3.5-flash-lite",
       "gemini-3.1-flash-lite": "google/gemini-3.1-flash-lite",
       "gemini-2.5-flash-lite": "google/gemini-2.5-flash-lite",
       // xAI — grok-4.3 is the public flagship since 2026-06-04 (grok-3 and the
@@ -394,12 +418,17 @@ var init_models = __esm({
       "gpt-20b": "free/gpt-oss-20b",
       "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
       "nvidia/gpt-oss-20b": "free/gpt-oss-20b",
-      // deepseek family → v4-flash, matching blockrun's 2026-07-17 redirect map
-      // (v4-flash recovered in the live re-probe; v3.2/v4-pro stay dead upstream).
-      "nvidia/deepseek-v3.2": "free/deepseek-v4-flash",
-      "free/deepseek-v3.2": "free/deepseek-v4-flash",
-      "nvidia/deepseek-v4-pro": "free/deepseek-v4-flash",
-      "free/deepseek-v4-pro": "free/deepseek-v4-flash",
+      // deepseek free family: v4-flash EOL'd 2026-08-12 (HTTP 410 from NVIDIA on both
+      // probe passes; prod gate fired [ALERT][free-model-dead] kind=gone twice that
+      // morning). The whole nvidia/deepseek-* family is now dead upstream — blockrun
+      // hid flash and retargeted v3.2/v4-pro (whose redirects chained through flash)
+      // straight to gpt-oss-120b. Ids naming v4-flash itself keep the real id (the
+      // gateway redirects them); the v3.2/v4-pro ids follow blockrun's retarget
+      // rather than chaining through a second dead model.
+      "nvidia/deepseek-v3.2": "free/gpt-oss-120b",
+      "free/deepseek-v3.2": "free/gpt-oss-120b",
+      "nvidia/deepseek-v4-pro": "free/gpt-oss-120b",
+      "free/deepseek-v4-pro": "free/gpt-oss-120b",
       "nvidia/deepseek-v4-flash": "free/deepseek-v4-flash",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       // qwen3-coder-480b retired (NVIDIA EOL 2026-06-14). Its server-side redirect used
@@ -441,13 +470,16 @@ var init_models = __esm({
       "mistral-large-3-675b": "free/mistral-large-3-675b",
       "qwen3.5-122b": "free/qwen3.5-122b-a10b",
       "qwen3-122b": "free/qwen3.5-122b-a10b",
-      // Free model shorthand aliases (v4-flash recovered 2026-07-17 — live again)
-      "deepseek-free": "free/deepseek-v4-flash",
-      "deepseek-v4-pro": "free/deepseek-v4-flash",
-      // free shorthand → flash (pro still hung)
+      // Free model shorthand aliases. v4-flash EOL'd 2026-08-12 — no free DeepSeek
+      // is left anywhere, so the generic "a free deepseek" shorthand follows the
+      // gateway's retarget (blockrun's /free-deepseek page points at gpt-oss-120b
+      // too). Shorthands naming v4-flash itself stay on the real id — the gateway
+      // redirects them, same treatment as seed-oss/mistral-large pins.
+      "deepseek-free": "free/gpt-oss-120b",
+      "deepseek-v4-pro": "free/gpt-oss-120b",
+      // free shorthand; pro dead upstream (410)
       "deepseek-v4-flash": "free/deepseek-v4-flash",
-      "v4-pro": "free/deepseek-v4-flash",
-      // V4 Pro NVIDIA hung → flash
+      "v4-pro": "free/gpt-oss-120b",
       "v4-flash": "free/deepseek-v4-flash",
       "mistral-free": "free/mistral-nemotron",
       // mistral-large-3-675b EOL'd 2026-07-28 → last live free Mistral (blockrun demoted its /free-mistral primary the same way)
@@ -527,6 +559,10 @@ var init_models = __esm({
       banana: "google/nano-banana",
       "banana-pro": "google/nano-banana-pro",
       "nano-banana-pro": "google/nano-banana-pro",
+      // Nano Banana 2 (Gemini 3.1 Flash imagegen, 2026-08-03). Explicit pins —
+      // bare `nano-banana`/`banana` stay on the original.
+      "nano-banana-2": "google/nano-banana-2",
+      "banana-2": "google/nano-banana-2",
       seedream: "bytedance/seedream-5-pro",
       "grok-imagine": "xai/grok-imagine-image",
       "grok-imagine-pro": "xai/grok-imagine-image-pro",
@@ -543,7 +579,12 @@ var init_models = __esm({
       "seedance-2-fast": "bytedance/seedance-2.0-fast",
       "seedance-2": "bytedance/seedance-2.0",
       "seedance-2.5": "bytedance/seedance-2.5",
-      "seedance-2-5": "bytedance/seedance-2.5"
+      "seedance-2-5": "bytedance/seedance-2.5",
+      // Seedance 2.0 Mini (2026-08-12): 720p + synced audio at half the flagship
+      // rate. Note it is NOT cheaper than 1.5-pro, so bare `seedance` stays put.
+      "seedance-2-mini": "bytedance/seedance-2.0-mini",
+      "seedance-2.0-mini": "bytedance/seedance-2.0-mini",
+      "seedance-mini": "bytedance/seedance-2.0-mini"
     };
     BLOCKRUN_MODELS = [
       // Smart routing meta-models — proxy replaces with actual model
@@ -651,11 +692,12 @@ var init_models = __esm({
         toolCalling: true
       },
       {
+        // Terra/Luna repriced 2026-07-30 (OpenAI price cut, blockrun #326).
         id: "openai/gpt-5.6-terra",
         name: "GPT-5.6 Terra",
         version: "5.6",
-        inputPrice: 2.5,
-        outputPrice: 15,
+        inputPrice: 2,
+        outputPrice: 12,
         contextWindow: 105e4,
         maxOutput: 128e3,
         reasoning: true,
@@ -667,10 +709,52 @@ var init_models = __esm({
         id: "openai/gpt-5.6-luna",
         name: "GPT-5.6 Luna",
         version: "5.6",
+        inputPrice: 0.2,
+        outputPrice: 1.2,
+        contextWindow: 105e4,
+        maxOutput: 128e3,
+        vision: true,
+        agentic: true,
+        toolCalling: true
+      },
+      // GPT-5.6 Pro tiers (blockrun #329, 2026-08-03): each base tier with pro
+      // reasoning mode. Terra Pro lands at half the standard Terra rate; Luna Pro
+      // is the budget deep-reasoning tier.
+      {
+        id: "openai/gpt-5.6-sol-pro",
+        name: "GPT-5.6 Sol Pro",
+        version: "5.6",
+        inputPrice: 5,
+        outputPrice: 30,
+        contextWindow: 105e4,
+        maxOutput: 128e3,
+        reasoning: true,
+        vision: true,
+        agentic: true,
+        toolCalling: true
+      },
+      {
+        id: "openai/gpt-5.6-terra-pro",
+        name: "GPT-5.6 Terra Pro",
+        version: "5.6",
         inputPrice: 1,
         outputPrice: 6,
         contextWindow: 105e4,
         maxOutput: 128e3,
+        reasoning: true,
+        vision: true,
+        agentic: true,
+        toolCalling: true
+      },
+      {
+        id: "openai/gpt-5.6-luna-pro",
+        name: "GPT-5.6 Luna Pro",
+        version: "5.6",
+        inputPrice: 0.1,
+        outputPrice: 0.6,
+        contextWindow: 105e4,
+        maxOutput: 128e3,
+        reasoning: true,
         vision: true,
         agentic: true,
         toolCalling: true
@@ -1074,17 +1158,43 @@ var init_models = __esm({
         toolCalling: true
       },
       {
-        // Latest-generation Flash with built-in thinking mode (backend
-        // 2026-05-19) — frontier-class quality at Flash pricing.
-        id: "google/gemini-3.5-flash",
-        name: "Gemini 3.5 Flash",
-        version: "3.5",
-        inputPrice: 0.5,
-        outputPrice: 3,
+        // Newest-generation Flash with built-in thinking mode (blockrun #329,
+        // 2026-08-03). 17% cheaper output than 3.5 Flash.
+        id: "google/gemini-3.6-flash",
+        name: "Gemini 3.6 Flash",
+        version: "3.6",
+        inputPrice: 1.5,
+        outputPrice: 7.5,
         contextWindow: 1048576,
         maxOutput: 65536,
         reasoning: true,
         vision: true,
+        toolCalling: true
+      },
+      {
+        // Repriced 0.5/3.0 → 1.5/9.0 (blockrun #304: it was billed at 1/3 of
+        // Google's real rate).
+        id: "google/gemini-3.5-flash",
+        name: "Gemini 3.5 Flash",
+        version: "3.5",
+        inputPrice: 1.5,
+        outputPrice: 9,
+        contextWindow: 1048576,
+        maxOutput: 65536,
+        reasoning: true,
+        vision: true,
+        toolCalling: true
+      },
+      {
+        // Ultra-fast lightweight tier with thinking mode (blockrun #329).
+        id: "google/gemini-3.5-flash-lite",
+        name: "Gemini 3.5 Flash Lite",
+        version: "3.5",
+        inputPrice: 0.3,
+        outputPrice: 2.5,
+        contextWindow: 1048576,
+        maxOutput: 65536,
+        reasoning: true,
         toolCalling: true
       },
       {
@@ -1143,12 +1253,14 @@ var init_models = __esm({
       },
       // DeepSeek — V4 family (2026-04-24). The legacy deepseek-chat/reasoner
       // aliases are served upstream as V4 Flash non-thinking / thinking modes.
+      // Repriced 0.20/0.40 → 0.14/0.28 (blockrun #354: DeepSeek's published
+      // deepseek-v4-flash rate; the old numbers were 1.43x the real rate).
       {
         id: "deepseek/deepseek-chat",
         name: "DeepSeek V4 Flash Chat",
         version: "4-flash",
-        inputPrice: 0.2,
-        outputPrice: 0.4,
+        inputPrice: 0.14,
+        outputPrice: 0.28,
         contextWindow: 1e6,
         maxOutput: 8192,
         toolCalling: true
@@ -1157,8 +1269,8 @@ var init_models = __esm({
         id: "deepseek/deepseek-reasoner",
         name: "DeepSeek V4 Flash Reasoner",
         version: "4-flash",
-        inputPrice: 0.2,
-        outputPrice: 0.4,
+        inputPrice: 0.14,
+        outputPrice: 0.28,
         contextWindow: 1e6,
         maxOutput: 8192,
         reasoning: true,
@@ -1235,6 +1347,32 @@ var init_models = __esm({
         maxOutput: 65536,
         reasoning: true,
         agentic: true,
+        toolCalling: true
+      },
+      // Qwen3.7 Plus/Flash (blockrun #329, 2026-08-03): the balanced and
+      // latency tiers under Max. Plus genuinely caps output at 131072 while
+      // Flash and Max cap at 65536 (endpoint-probed upstream).
+      {
+        id: "qwen/qwen3.7-plus",
+        name: "Qwen3.7 Plus",
+        version: "3.7-plus",
+        inputPrice: 0.32,
+        outputPrice: 1.28,
+        contextWindow: 1e6,
+        maxOutput: 131072,
+        reasoning: true,
+        agentic: true,
+        toolCalling: true
+      },
+      {
+        id: "qwen/qwen3.7-flash",
+        name: "Qwen3.7 Flash",
+        version: "3.7-flash",
+        inputPrice: 0.03,
+        outputPrice: 0.13,
+        contextWindow: 1e6,
+        maxOutput: 65536,
+        reasoning: true,
         toolCalling: true
       },
       // Kimi K2.6 — superseded by K2.7 (2026-06-13), hidden on BlockRun but still routable.
@@ -1448,6 +1586,34 @@ var init_models = __esm({
         agentic: true,
         toolCalling: true
       },
+      // Tencent + Xiaomi (blockrun 2026-07-25): the two largest real demand gaps
+      // in the catalog — Hy3 held the #1 usage slot on the biggest public
+      // aggregator for 19 days; MiMo ran ~22% weekly share in April. Both are
+      // reasoning models resold via blockrun's OpenRouter pool. toolCalling
+      // LIVE-VERIFIED 2026-08-12: both returned a structured tool_calls array
+      // (name + valid JSON args, finish_reason "tool_calls") through the gateway.
+      {
+        id: "tencent/hy3",
+        name: "Tencent Hy3",
+        version: "hy3",
+        inputPrice: 0.132,
+        outputPrice: 0.528,
+        contextWindow: 262144,
+        maxOutput: 128e3,
+        reasoning: true,
+        toolCalling: true
+      },
+      {
+        id: "xiaomi/mimo-v2.5-pro",
+        name: "Xiaomi MiMo-V2.5 Pro",
+        version: "v2.5-pro",
+        inputPrice: 0.435,
+        outputPrice: 0.87,
+        contextWindow: 1048576,
+        maxOutput: 131072,
+        reasoning: true,
+        toolCalling: true
+      },
       // MiniMax
       {
         id: "minimax/minimax-m3",
@@ -1521,11 +1687,13 @@ var init_models = __esm({
         maxOutput: 16384
       },
       {
-        // V4 Flash: 284B / 13B active MoE, 1M context. ~5x faster than V4 Pro.
-        // Strong on chat/summarization (MMLU-Pro 86.2). Caveat: weaker factual
-        // recall (SimpleQA 34% vs Pro's 58%) — pick V4 Pro for fact-heavy loops.
-        // Recovered in blockrun's 2026-07-17 live re-probe (3.2s both passes) —
-        // un-hidden upstream and back in the advertised free 8.
+        // V4 Flash: 284B / 13B active MoE, 1M context. EOL'd 2026-08-12 — NVIDIA
+        // published 410 Gone ("has reached its end of life") on both probe passes
+        // and blockrun's prod gate fired [ALERT][free-model-dead] kind=gone twice
+        // that morning. The whole nvidia/deepseek-* family is dead upstream; there
+        // is no free DeepSeek left anywhere. Blockrun hid it and redirects calls to
+        // gpt-oss-120b. Entry kept so explicit pins stay routable; off the picker,
+        // the FREE_MODELS cascade, and the router fallback chains.
         id: "free/deepseek-v4-flash",
         name: "[Free] DeepSeek V4 Flash",
         version: "v4-flash",
@@ -1609,7 +1777,8 @@ var init_models = __esm({
       // 2026-06-16: BlockRun's 2026-06-14 free-tier refresh (self-healing health gate
       // + probe-verified lineup, blockrun commit 5817ecd) added these live NVIDIA free
       // models. Status per blockrun's 2026-07-17 live re-probe: qwen3-coder-480b and
-      // glm-4.7 stay dead (server-redirected); deepseek-v4-flash recovered (see above).
+      // glm-4.7 stay dead (server-redirected); deepseek-v4-flash recovered then
+      // EOL'd for good 2026-08-12 (see above).
       {
         // Qwen3-Next 80B (A3B active MoE): 262K context. DIED in the 2026-07-17
         // re-probe (">60s / DEGRADED") — hidden upstream, gateway redirects pinned
@@ -1714,11 +1883,12 @@ var init_models = __esm({
       },
       {
         // Flat-rate launch promo ended 2026-06-06 — backend bills per-token now.
+        // Repriced 0.60/1.92 → 1.00/3.20 (blockrun #354 correction).
         id: "zai/glm-5",
         name: "GLM-5",
         version: "5",
-        inputPrice: 0.6,
-        outputPrice: 1.92,
+        inputPrice: 1,
+        outputPrice: 3.2,
         contextWindow: 2e5,
         maxOutput: 128e3,
         reasoning: true,
@@ -37873,10 +38043,9 @@ ${value.slice(-(scanLimit - prefixLength))}`;
           fallback: [
             "free/gpt-oss-20b",
             // FREE — smaller, faster
-            "free/deepseek-v4-flash",
-            // FREE — 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
-            // seed-oss-36b sat here as the free coder until it EOL'd 2026-08-03 (HTTP 410).
-            // gpt-oss-120b/20b already head this chain, so the rung is dropped, not retargeted.
+            // deepseek-v4-flash and seed-oss-36b sat here until NVIDIA EOL'd them
+            // (410; 2026-08-12 and 2026-08-03 respectively). gpt-oss-120b/20b already
+            // head this chain, so the rungs are dropped, not retargeted.
             "google/gemini-3.1-flash-lite",
             // $0.25/$1.50 — newest flash-lite
             "openai/gpt-5.4-nano",
@@ -92407,8 +92576,6 @@ var init_proxy = __esm({
     FREE_MODELS = /* @__PURE__ */ new Set([
       "free/gpt-oss-120b",
       "free/gpt-oss-20b",
-      "free/deepseek-v4-flash",
-      // 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
       "free/mistral-nemotron",
       // strong instruction following
       "free/step-3.7-flash",
@@ -92505,6 +92672,8 @@ var init_proxy = __esm({
         sizes: { "1024x1024": 0.045, "2048x1024": 0.045, "2048x2048": 0.09 }
       },
       "google/nano-banana": { default: 0.05 },
+      // Nano Banana 2 (Gemini 3.1 Flash imagegen, blockrun #329): $0.09/image at 1K.
+      "google/nano-banana-2": { default: 0.09, sizes: { "1024x1024": 0.09 } },
       "google/nano-banana-pro": {
         default: 0.1,
         sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 }
@@ -92536,6 +92705,13 @@ var init_proxy = __esm({
       },
       "bytedance/seedance-2.0": {
         pricePerSecond: 0.227,
+        defaultDurationSeconds: 5
+      },
+      // Seedance 2.0 Mini (blockrun #366/#368, 2026-08-12): 720p + synced audio at
+      // half the flagship rate, 480p/720p only, 4–15s. blockrun signs the 3dp-floored
+      // per-second value (0.079, not the raw 0.0797) — mirror the signed number.
+      "bytedance/seedance-2.0-mini": {
+        pricePerSecond: 0.079,
         defaultDurationSeconds: 5
       },
       // Seedance 2.5: 720p with synced audio, up to 30s. Not a replacement for 2.0
@@ -225819,6 +225995,7 @@ function buildVideoGenerationProvider() {
       "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2.0-fast",
       "bytedance/seedance-2.0",
+      "bytedance/seedance-2.0-mini",
       "bytedance/seedance-2.5"
     ],
     capabilities: {
@@ -226319,7 +226496,7 @@ var init_index = __esm({
             const parsed = parseGenArgs(ctx.args ?? "");
             if (!parsed.prompt) {
               return {
-                text: "Usage: `/cr-imagegen <prompt> [--model=<alias>] [--size=1024x1024] [--n=1]`\n\nAliases: `nano-banana` (default), `banana-pro`, `dalle`, `gpt-image`, `flux`, `grok-imagine`, `grok-imagine-pro`, `cogview`."
+                text: "Usage: `/cr-imagegen <prompt> [--model=<alias>] [--size=1024x1024] [--n=1]`\n\nAliases: `nano-banana` (default), `banana-2` (Gemini 3.1 Flash quality), `banana-pro`, `dalle`, `gpt-image`, `flux`, `grok-imagine`, `grok-imagine-pro`, `cogview`."
               };
             }
             const model = resolveModelAlias(parsed.model ?? "nano-banana");
@@ -226371,7 +226548,7 @@ ${errText}`
             const parsed = parseGenArgs(ctx.args ?? "");
             if (!parsed.prompt) {
               return {
-                text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default \u2014 cheapest), `seedance-2-fast`, `seedance-2`, `seedance-2.5` (720p + synced audio, long-form), `grok-video`.\n\n\u23F1\uFE0F  Generation takes 60\u2013180 seconds. Payment settles only on success."
+                text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default \u2014 cheapest), `seedance-2-fast`, `seedance-2`, `seedance-2-mini` (720p + audio, half the flagship rate), `seedance-2.5` (720p + synced audio, long-form), `grok-video`.\n\n\u23F1\uFE0F  Generation takes 60\u2013180 seconds. Payment settles only on success."
               };
             }
             const model = resolveModelAlias(parsed.model ?? "seedance");

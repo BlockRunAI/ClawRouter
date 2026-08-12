@@ -4,6 +4,58 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.245 — August 12, 2026
+
+Catch-up sync to blockrun: one free-model EOL (today's), ten model additions that had never been mirrored, and six stale prices. Catalog is now 70 chat-visible / 5 free, matching blockrun exactly.
+
+### Removed — `free/deepseek-v4-flash` is dead upstream (blockrun #367)
+
+NVIDIA published EOL for the whole `nvidia/deepseek-*` family: HTTP 410 ("has reached its end of life") on both of blockrun's live probe passes this morning, prod gate fired `[ALERT][free-model-dead] kind=gone` twice. It was the last free DeepSeek — and the last 1M-context free model.
+
+- Dropped from the picker (`top-models.json`, 6 → 5 free — again exactly blockrun's visible free set), the `FREE_MODELS` auto-pick cascade (8 → 7), and router-core's eco SIMPLE chain ([`18bf4ab`](https://github.com/BlockRunAI/router-core/commit/18bf4ab), pin bumped). Same `/exclude`-defeating failure mode as seed-oss-36b in v0.12.241, same fix.
+- Pins naming the model itself (`deepseek-v4-flash`, `v4-flash`, `nvidia/deepseek-v4-flash`) stay routable — the gateway redirects them to gpt-oss-120b. Generic shorthands (`deepseek-free`, `v4-pro`, `deepseek-v4-pro`, and the `deepseek-v3.2` ids whose redirects chained through flash) follow blockrun's own retarget to `free/gpt-oss-120b` instead of chaining through a dead model.
+- Note bare `deepseek` still resolves to the **paid** `deepseek/deepseek-chat`, as before — no free alias was silently moved onto a paid SKU.
+
+### Added — ten models blockrun shipped that ClawRouter never mirrored
+
+Seven chat (blockrun #329, 2026-08-03), two chat from 2026-07-25, one image, one video:
+
+| model                          | price (in/out $/M) | notes                                                                                           |
+| ------------------------------ | ------------------ | ----------------------------------------------------------------------------------------------- |
+| `openai/gpt-5.6-sol-pro`       | 5.00 / 30.00       | pro reasoning mode of each 5.6 tier                                                             |
+| `openai/gpt-5.6-terra-pro`     | 1.00 / 6.00        | half the standard Terra rate                                                                    |
+| `openai/gpt-5.6-luna-pro`      | 0.10 / 0.60        | budget deep-reasoning tier                                                                      |
+| `google/gemini-3.6-flash`      | 1.50 / 7.50        | newest Flash, 17% output cut vs 3.5                                                             |
+| `google/gemini-3.5-flash-lite` | 0.30 / 2.50        | high-throughput thinking tier                                                                   |
+| `qwen/qwen3.7-plus`            | 0.32 / 1.28        | 1M ctx; genuinely 131072 max output                                                             |
+| `qwen/qwen3.7-flash`           | 0.03 / 0.13        | cheapest Qwen tier                                                                              |
+| `tencent/hy3`                  | 0.132 / 0.528      | #1-usage open model, 262K ctx                                                                   |
+| `xiaomi/mimo-v2.5-pro`         | 0.435 / 0.87       | 1M ctx reasoning                                                                                |
+| `google/nano-banana-2`         | $0.09/image        | Gemini 3.1 Flash imagegen                                                                       |
+| `bytedance/seedance-2.0-mini`  | $0.079/s           | 720p + audio, 4–15s; blockrun signs the 3dp-floored rate, so we mirror 0.079 not the raw 0.0797 |
+
+- **toolCalling LIVE-VERIFIED** on all seven new chat models that carry the flag: qwen3.7-plus, qwen3.7-flash, hy3, mimo-v2.5-pro, gemini-3.6-flash, gemini-3.5-flash-lite, and gpt-5.6-luna-pro each returned a structured `tool_calls` array (name + valid JSON args, `finish_reason: "tool_calls"`) through the live gateway (~$0.003/probe, the qwen3.7-max pattern).
+- Generic aliases untouched: `gpt5`/`gpt-5.6` stay on standard Terra, bare `qwen` stays unbound, bare `nano-banana` and `seedance` stay on their cheaper originals. New pins: `sol-pro`/`terra-pro`/`luna-pro` (+ full forms), `qwen3.7-plus`/`-flash`, `hy3`/`tencent`/`hunyuan`, `mimo`/`xiaomi`, `gemini-3.6-flash`, `banana-2`, `seedance-2-mini`.
+
+### Fixed — six stale prices (telemetry + cost-cap accounting)
+
+| model                        | was          | now              | source                                             |
+| ---------------------------- | ------------ | ---------------- | -------------------------------------------------- |
+| `openai/gpt-5.6-terra`       | 2.50 / 15.00 | **2.00 / 12.00** | OpenAI's 2026-07-30 cut (blockrun #326)            |
+| `openai/gpt-5.6-luna`        | 1.00 / 6.00  | **0.20 / 1.20**  | same                                               |
+| `deepseek/deepseek-chat`     | 0.20 / 0.40  | **0.14 / 0.28**  | blockrun #354 (old rate was 1.43× real)            |
+| `deepseek/deepseek-reasoner` | 0.20 / 0.40  | **0.14 / 0.28**  | same                                               |
+| `zai/glm-5`                  | 0.60 / 1.92  | **1.00 / 3.20**  | blockrun #354                                      |
+| `google/gemini-3.5-flash`    | 0.50 / 3.00  | **1.50 / 9.00**  | blockrun #304 (was billed at 1/3 of Google's rate) |
+
+Charges are server-dictated via 402 as always, but these numbers feed `logUsage` and the strict-mode `maxCostPerRun` gate, so the two-month-stale gemini-3.5-flash row was letting capped wallets underestimate by 3×. README pricing tables re-tiered to match (luna drops to the budget table, glm-5 and gemini-3.5-flash move up to mid-range).
+
+### Changed — brand numbers 71 → 70 chat, 6 → 5 free; aliases 204 → 229
+
+Markers refreshed from blockrun's live catalog, plus the two plain-text surfaces the markers can't reach (`package.json` description, SKILL.md frontmatter). The alias count moves in blockrun's `src/lib/brand-numbers.ts` via [blockrun #371](https://github.com/BlockRunAI/blockrun/pull/371) — the local snapshot leads prod until that merges.
+
+---
+
 ## v0.12.244 — August 8, 2026
 
 Syncs the Seedance video family to blockrun, which added a fourth model and repriced the other three.

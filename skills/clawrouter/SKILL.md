@@ -1,6 +1,6 @@
 ---
 name: clawrouter
-description: Hosted-gateway LLM router — save 88% on inference costs. A local proxy that forwards each request to the blockrun.ai gateway, which routes to the cheapest capable model across 71 models from OpenAI, Anthropic, Google, DeepSeek, xAI, NVIDIA, and more. 6 free NVIDIA models included. Also exposes realtime market data (global stocks, crypto, FX, commodities), Twitter/X intelligence, prediction-market data across Polymarket, Kalshi, Limitless, Opinion, Predict.Fun, dFlow + UMA oracle resolution + wallet identity & clustering, phone-number intelligence (carrier + SIM-swap fraud detection) plus AI-powered outbound voice calls (Twilio + Bland.ai), AND the Surf unified crypto data API (84 endpoints — CEX/DEX, on-chain SQL over 80+ ClickHouse tables, 100M+ labeled wallets, prediction markets, social/CT mindshare, news, VC fund intel) as built-in agent tools. Not a local-inference tool — prompts are sent to the blockrun.ai gateway.
+description: Hosted-gateway LLM router — save 88% on inference costs. A local proxy that forwards each request to the blockrun.ai gateway, which routes to the cheapest capable model across 70 models from OpenAI, Anthropic, Google, DeepSeek, xAI, NVIDIA, and more. 5 free NVIDIA models included. Also exposes realtime market data (global stocks, crypto, FX, commodities), Twitter/X intelligence, prediction-market data across Polymarket, Kalshi, Limitless, Opinion, Predict.Fun, dFlow + UMA oracle resolution + wallet identity & clustering, phone-number intelligence (carrier + SIM-swap fraud detection) plus AI-powered outbound voice calls (Twilio + Bland.ai), AND the Surf unified crypto data API (84 endpoints — CEX/DEX, on-chain SQL over 80+ ClickHouse tables, 100M+ labeled wallets, prediction markets, social/CT mindshare, news, VC fund intel) as built-in agent tools. Not a local-inference tool — prompts are sent to the blockrun.ai gateway.
 triggers:
   - "clawrouter"
   - "claw router"
@@ -53,7 +53,7 @@ metadata:
 
 # ClawRouter
 
-Hosted-gateway LLM router that saves <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% on inference costs by forwarding each request to the blockrun.ai gateway, which picks the cheapest model capable of handling it across <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models from 9 providers (<!-- br:models.free -->6<!-- /br:models.free --> free NVIDIA models). All billing flows through one USDC wallet; you do not hold provider API keys.
+Hosted-gateway LLM router that saves <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% on inference costs by forwarding each request to the blockrun.ai gateway, which picks the cheapest model capable of handling it across <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models from 9 providers (<!-- br:models.free -->5<!-- /br:models.free --> free NVIDIA models). All billing flows through one USDC wallet; you do not hold provider API keys.
 
 **This is not a local-inference tool.** ClawRouter is a thin local proxy. Your prompts are sent over HTTPS to the blockrun.ai gateway for model execution. If your workload requires inference that never leaves your machine, use a local runtime like Ollama — ClawRouter is not the right tool for that use case.
 
@@ -141,7 +141,7 @@ Rules handle ~~80% of requests in <1ms. Only ambiguous queries hit the LLM class
 
 ## Available Models
 
-<!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models including: gpt-5.6-terra [balanced, stable default], gpt-5.6-sol [flagship], gpt-5.6-luna [cost-efficient], gpt-5.5, gpt-5.5-pro [max compute], chat-latest [ChatGPT Instant], gpt-5.4, gpt-4o, o3, claude-fable-5, claude-opus-5 [Anthropic flagship, 1M ctx], claude-opus-4.8, claude-opus-4.7, claude-opus-4.5, claude-sonnet-5, claude-sonnet-4.6, gemini-3.1-pro, gemini-2.5-flash, deepseek-v4-pro, deepseek-chat, grok-4.5, grok-4.3, grok-build-0.1, kimi-k3 [1M ctx flagship], kimi-k2.7, qwen3.7-max [Qwen flagship, 1M ctx], and 6 free NVIDIA models (deepseek-v4-flash [1M context], nemotron-3-nano-omni-30b-a3b-reasoning [vision], mistral-nemotron, step-3.7-flash, nemotron-nano-9b-v2, nemotron-nano-12b-v2-vl [vision]).
+<!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models including: gpt-5.6-terra [balanced, stable default], gpt-5.6-sol [flagship], gpt-5.6-luna [cost-efficient], gpt-5.6-sol/terra/luna-pro [pro reasoning tiers], gpt-5.5, gpt-5.5-pro [max compute], chat-latest [ChatGPT Instant], gpt-5.4, gpt-4o, o3, claude-fable-5, claude-opus-5 [Anthropic flagship, 1M ctx], claude-opus-4.8, claude-opus-4.7, claude-opus-4.5, claude-sonnet-5, claude-sonnet-4.6, gemini-3.1-pro, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-2.5-flash, deepseek-v4-pro, deepseek-chat, grok-4.5, grok-4.3, grok-build-0.1, kimi-k3 [1M ctx flagship], kimi-k2.7, qwen3.7-max [Qwen flagship, 1M ctx], qwen3.7-plus, qwen3.7-flash, hy3 [Tencent], mimo [Xiaomi MiMo-V2.5 Pro, 1M ctx], and 5 free NVIDIA models (nemotron-3-nano-omni-30b-a3b-reasoning [vision], mistral-nemotron, step-3.7-flash, nemotron-nano-9b-v2, nemotron-nano-12b-v2-vl [vision]).
 
 ## Built-in Agent Tools
 

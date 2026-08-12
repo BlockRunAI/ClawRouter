@@ -140,12 +140,13 @@ const ROUTING_PROFILES = new Set([
 // them here would silently defeat /exclude); deepseek-v4-flash recovered.
 // 2026-08-02, following blockrun's 07-28 re-probe (baa967b): mistral-large-3-675b
 // is HTTP 410 Gone at NVIDIA (EOL, redirected to gpt-oss-120b) — dropped for the
-// same /exclude reason. deepseek-v4-flash completes but is slow on real prompts
-// (~10 tok/s); kept, since slow ≠ dead and it's the only 1M-ctx free model.
+// same /exclude reason.
+// 2026-08-12: deepseek-v4-flash EOL'd too (blockrun #367 — published 410 on both
+// probe passes, prod gate fired kind=gone; server-redirected to gpt-oss-120b) —
+// dropped for the same /exclude reason. That was the last 1M-ctx free model.
 const FREE_MODELS = new Set([
   "free/gpt-oss-120b",
   "free/gpt-oss-20b",
-  "free/deepseek-v4-flash", // 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
   "free/mistral-nemotron", // strong instruction following
   "free/step-3.7-flash", // reasoning-focused
   "free/nemotron-nano-9b-v2", // fast lightweight generalist
@@ -1587,6 +1588,8 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
     sizes: { "1024x1024": 0.045, "2048x1024": 0.045, "2048x2048": 0.09 },
   },
   "google/nano-banana": { default: 0.05 },
+  // Nano Banana 2 (Gemini 3.1 Flash imagegen, blockrun #329): $0.09/image at 1K.
+  "google/nano-banana-2": { default: 0.09, sizes: { "1024x1024": 0.09 } },
   "google/nano-banana-pro": {
     default: 0.1,
     sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 },
@@ -1638,6 +1641,13 @@ const VIDEO_PRICING: Record<
   },
   "bytedance/seedance-2.0": {
     pricePerSecond: 0.227,
+    defaultDurationSeconds: 5,
+  },
+  // Seedance 2.0 Mini (blockrun #366/#368, 2026-08-12): 720p + synced audio at
+  // half the flagship rate, 480p/720p only, 4–15s. blockrun signs the 3dp-floored
+  // per-second value (0.079, not the raw 0.0797) — mirror the signed number.
+  "bytedance/seedance-2.0-mini": {
+    pricePerSecond: 0.079,
     defaultDurationSeconds: 5,
   },
   // Seedance 2.5: 720p with synced audio, up to 30s. Not a replacement for 2.0

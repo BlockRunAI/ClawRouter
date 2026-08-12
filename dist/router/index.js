@@ -3008,10 +3008,9 @@ var DEFAULT_ROUTING_CONFIG = {
       fallback: [
         "free/gpt-oss-20b",
         // FREE — smaller, faster
-        "free/deepseek-v4-flash",
-        // FREE — 1M ctx; slow (~10 tok/s, 07-28 probe) but completes
-        // seed-oss-36b sat here as the free coder until it EOL'd 2026-08-03 (HTTP 410).
-        // gpt-oss-120b/20b already head this chain, so the rung is dropped, not retargeted.
+        // deepseek-v4-flash and seed-oss-36b sat here until NVIDIA EOL'd them
+        // (410; 2026-08-12 and 2026-08-03 respectively). gpt-oss-120b/20b already
+        // head this chain, so the rungs are dropped, not retargeted.
         "google/gemini-3.1-flash-lite",
         // $0.25/$1.50 — newest flash-lite
         "openai/gpt-5.4-nano",

@@ -222,7 +222,7 @@ OpenRouter doesn't always pass through provider-specific features correctly. Ima
 
 **Direct provider routing.** ClawRouter routes through BlockRun's API directly to providers — not through a second aggregator. One hop, not two. Provider-specific features work because there's no middleman translating them.
 
-![Guaranteed Feature Parity & Direct Connectivity — Three-panel diagram: Vision (image_url auto-detected → vision-capable models only), Tool Calling (toolCalling flag → agentic models only), Catalog (curated <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models with automatic legacy-to-modern redirects). Direct provider routing means no dropped payloads.](./assets/clawrouter-feature-parity-direct-connectivity.png)
+![Guaranteed Feature Parity & Direct Connectivity — Three-panel diagram: Vision (image_url auto-detected → vision-capable models only), Tool Calling (toolCalling flag → agentic models only), Catalog (curated <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models with automatic legacy-to-modern redirects). Direct provider routing means no dropped payloads.](./assets/clawrouter-feature-parity-direct-connectivity.png)
 
 ---
 
@@ -240,7 +240,7 @@ When new models launch, OpenRouter's catalog lags. Users configure a model that 
 
 ### How ClawRouter Solves This
 
-ClawRouter maintains a curated catalog of <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models across 9 providers (including 9 free models), updated with each release. Delisted models have automatic redirect aliases:
+ClawRouter maintains a curated catalog of <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models across 9 providers (including 9 free models), updated with each release. Delisted models have automatic redirect aliases:
 
 ```typescript
 // Delisted models redirect automatically
@@ -268,7 +268,7 @@ No silent drops. No stale catalog. Models are benchmarked for speed, quality, an
 | **Rate limits**     | Per-key, shared                  | Per-wallet, independent                                                                                  |
 | **Vision support**  | Images sometimes dropped         | Auto-detected, vision-only fallback                                                                      |
 | **Tool calling**    | Silent failures with some models | Flag-based filtering, guaranteed support                                                                 |
-| **Model catalog**   | Laggy, silent drops              | Curated <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, redirect aliases         |
+| **Model catalog**   | Laggy, silent drops              | Curated <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models, redirect aliases         |
 | **Budget control**  | Monthly invoice                  | Per-session cap (`maxCostPerRun`)                                                                        |
 | **Setup**           | Create account, paste key        | Agent generates wallet, auto-configured                                                                  |
 | **Average cost**    | $25/M tokens (Opus direct)       | auto-routed = **<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% savings** |
