@@ -110,6 +110,94 @@ const BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
 const IMAGE_DIR = join(homedir(), ".openclaw", "blockrun", "images");
 const AUDIO_DIR = join(homedir(), ".openclaw", "blockrun", "audio");
 const VIDEO_DIR = join(homedir(), ".openclaw", "blockrun", "videos");
+
+export const SPEECH_MODELS = [
+  "speech-2.8-hd",
+  "speech-2.8-turbo",
+  "speech-2.6-hd",
+  "speech-2.6-turbo",
+  "speech-02-hd",
+  "speech-02-turbo",
+  "speech-01-hd",
+  "speech-01-turbo",
+] as const;
+
+export const DEFAULT_SPEECH_MODEL = SPEECH_MODELS[0];
+
+const SPEECH_AUDIO_FORMATS = new Set(["mp3", "wav", "flac", "pcm"]);
+
+type SpeechRequestBody = {
+  model?: string;
+  text?: string;
+  stream?: boolean;
+  language_boost?: string;
+  output_format?: string;
+  voice_setting?: Record<string, unknown>;
+  pronunciation_dict?: Record<string, unknown>;
+  audio_setting?: { format?: string; [key: string]: unknown };
+  voice_modify?: Record<string, unknown>;
+  subtitle_enable?: boolean;
+};
+
+export function normalizeSpeechRequest(
+  input: unknown,
+): Required<Pick<SpeechRequestBody, "model" | "text">> & SpeechRequestBody {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Speech request body must be a JSON object");
+  }
+  const request = input as SpeechRequestBody;
+  const model = request.model ?? DEFAULT_SPEECH_MODEL;
+  const text = request.text?.trim();
+  if (!SPEECH_MODELS.includes(model as (typeof SPEECH_MODELS)[number])) {
+    throw new Error(`Unsupported speech model: ${model}`);
+  }
+  if (!text) throw new Error("Speech request requires text");
+
+  const format = request.audio_setting?.format ?? "mp3";
+  if (!SPEECH_AUDIO_FORMATS.has(format)) {
+    throw new Error(`Unsupported speech audio format: ${format}`);
+  }
+
+  return {
+    ...request,
+    model,
+    text,
+    stream: request.stream ?? false,
+    output_format: request.output_format ?? "hex",
+    audio_setting: { ...request.audio_setting, format },
+  };
+}
+
+export function parseSpeechResponse(input: unknown): {
+  audio: Buffer;
+  format: string;
+  status?: number;
+} {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Speech response must be a JSON object");
+  }
+  const response = input as {
+    data?: { audio?: string; status?: number };
+    base_resp?: { status_code?: number; status_msg?: string };
+    extra_info?: { audio_format?: string };
+  };
+  if (response.base_resp?.status_code && response.base_resp.status_code !== 0) {
+    throw new Error(response.base_resp.status_msg || "Speech generation failed");
+  }
+  if (!response.data?.audio) throw new Error("Speech response did not contain audio");
+
+  const audio = response.data.audio.trim();
+  const hex = audio.replace(/^0x/, "");
+  const isHex = hex.length > 0 && hex.length % 2 === 0 && /^[0-9a-f]+$/i.test(hex);
+  const decoded = Buffer.from(isHex ? hex : audio, isHex ? "hex" : "base64");
+  if (decoded.length === 0) throw new Error("Speech response contained empty audio");
+
+  return {
+    audio: decoded,
+    format: response.extra_info?.audio_format ?? "mp3",
+    status: response.data.status,
+  };
+}
 // Routing profile models - virtual models that trigger intelligent routing
 const AUTO_MODEL = "blockrun/auto";
 
@@ -2900,6 +2988,80 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           if (!res.headersSent) {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Audio generation failed", details: msg }));
+          }
+        }
+        return;
+      }
+
+      // --- Handle /v1/speech/generations through the wallet-backed speech gateway ---
+      if (req.url === "/v1/speech/generations" && req.method === "POST") {
+        const speechStartTime = Date.now();
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+
+        let request: ReturnType<typeof normalizeSpeechRequest>;
+        try {
+          request = normalizeSpeechRequest(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: err instanceof Error ? err.message : "Invalid speech request",
+            }),
+          );
+          return;
+        }
+
+        try {
+          const upstream = await payFetch(`${apiBase}/v1/t2a_v2`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "user-agent": USER_AGENT },
+            body: JSON.stringify(request),
+          });
+          const text = await upstream.text();
+          if (!upstream.ok) {
+            res.writeHead(upstream.status, { "Content-Type": "application/json" });
+            res.end(text);
+            return;
+          }
+
+          const speech = parseSpeechResponse(JSON.parse(text));
+          await mkdir(AUDIO_DIR, { recursive: true });
+          const format = SPEECH_AUDIO_FORMATS.has(speech.format) ? speech.format : "mp3";
+          const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${format}`;
+          await writeFile(join(AUDIO_DIR, filename), speech.audio);
+          const port = (server.address() as AddressInfo | null)?.port ?? 8402;
+          const actualCost = paymentStore.getStore()?.amountUsd ?? 0;
+          logUsage({
+            timestamp: new Date().toISOString(),
+            model: request.model,
+            tier: "SPEECH",
+            cost: actualCost,
+            baselineCost: actualCost,
+            savings: 0,
+            latencyMs: Date.now() - speechStartTime,
+          }).catch(() => {});
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              model: request.model,
+              data: [
+                {
+                  url: `http://localhost:${port}/audio/${filename}`,
+                  format,
+                  status: speech.status,
+                },
+              ],
+            }),
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ClawRouter] Speech generation error: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Speech generation failed", details: msg }));
           }
         }
         return;

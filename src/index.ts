@@ -2043,6 +2043,65 @@ const plugin: OpenClawPluginDefinition = {
       },
     });
 
+    // /cr-speech <text> [--model=speech-2.8-hd] [--format=mp3|wav|flac|pcm]
+    api.registerCommand({
+      name: "cr-speech",
+      description: "Generate speech audio (paid via wallet)",
+      acceptsArgs: true,
+      requireAuth: false,
+      handler: async (ctx: PluginCommandContext) => {
+        const tokens =
+          (ctx.args ?? "")
+            .match(/(?:[^\s"]+|"[^"]*")+/g)
+            ?.map((token) =>
+              token.startsWith('"') && token.endsWith('"') ? token.slice(1, -1) : token,
+            ) ?? [];
+        let model = "speech-2.8-hd";
+        let format = "mp3";
+        const textParts: string[] = [];
+        for (const token of tokens) {
+          const option = token.match(/^--(model|format)=(.+)$/);
+          if (option?.[1] === "model") model = option[2]!;
+          else if (option?.[1] === "format") format = option[2]!;
+          else textParts.push(token);
+        }
+        const text = textParts.join(" ").trim();
+        if (!text) {
+          return {
+            text: "Usage: `/cr-speech <text> [--model=speech-2.8-hd] [--format=mp3|wav|flac|pcm]`",
+          };
+        }
+
+        const port = getProxyPort();
+        try {
+          const resp = await fetch(`http://127.0.0.1:${port}/v1/speech/generations`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ model, text, audio_setting: { format } }),
+            signal: AbortSignal.timeout(180_000),
+          });
+          const responseText = await resp.text();
+          if (!resp.ok) {
+            if (resp.status === 402) {
+              return {
+                text: `Insufficient wallet balance for speech generation. Top up with \`/wallet\`.\n\n${responseText}`,
+              };
+            }
+            return { text: `Speech generation failed (${resp.status}): ${responseText}` };
+          }
+          const result = JSON.parse(responseText) as { data?: Array<{ url?: string }> };
+          const url = result.data?.[0]?.url;
+          return url
+            ? { text: `Speech audio: ${url}` }
+            : { text: "Speech generation returned no audio." };
+        } catch (err) {
+          return {
+            text: `Speech generation error: ${err instanceof Error ? err.message : String(err)}`,
+          };
+        }
+      },
+    });
+
     // /cr-call <+E.164> "<task>" [--voice nat] [--max-duration 5] [--from +1...] [--language en-US]
     // Places a REAL outbound AI voice call via BlockRun → Bland.ai. Returns
     // immediately with call_id + poll_url; the call itself runs in the cloud
@@ -2141,7 +2200,7 @@ const plugin: OpenClawPluginDefinition = {
     api.registerCommand(createExcludeCommand());
     if (shouldLogRegistration) {
       api.logger.info(
-        "Commands registered: /wallet, /blockrun, /stats, /exclude, /partners, /cr-imagegen, /videogen, /cr-call",
+        "Commands registered: /wallet, /blockrun, /stats, /exclude, /partners, /cr-imagegen, /videogen, /cr-speech, /cr-call",
       );
     }
 
