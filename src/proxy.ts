@@ -1609,6 +1609,17 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
   },
 };
 
+/**
+ * Image model ids the gateway can actually serve, in picker order.
+ *
+ * Derived from IMAGE_PRICING, which v0.12.227 re-synced against blockrun's
+ * IMAGE_MODELS — so an id missing here is an id the gateway will reject.
+ * Exported so the image picker advertised by buildImageGenerationProvider
+ * (index.ts) can be pinned against it: the picked id is forwarded to
+ * /v1/images/generations verbatim, with no alias resolution in between.
+ */
+export const IMAGE_MODEL_IDS: readonly string[] = Object.freeze(Object.keys(IMAGE_PRICING));
+
 // Video pricing (must match server's VIDEO_MODELS in blockrun/src/lib/models.ts).
 // pricePerSecond is the BASE rate (no margin). estimateVideoCost applies the
 // same 5% margin server-side uses, so values land on blockrun's quote.
@@ -3869,7 +3880,7 @@ async function proxyRequest(
       if (imagegenMatch) {
         const imageArgs = lastContent.slice(imagegenMatch.length).trim();
 
-        // Parse optional flags: /cr-imagegen --model dall-e-3 --size 1792x1024 a cute cat
+        // Parse optional flags: /cr-imagegen --model gpt-image-2 --size 1536x1024 a cute cat
         let imageModel = "google/nano-banana";
         let imageSize = "1024x1024";
         let imagePrompt = imageArgs;
@@ -4022,7 +4033,7 @@ async function proxyRequest(
                         `[ClawRouter] /imagegen: failed to upload data URI: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`,
                       );
                       lines.push(
-                        "Image generated but upload failed. Try again or use --model dall-e-3.",
+                        "Image generated but upload failed. Try again or use --model gpt-image-2.",
                       );
                     }
                   } else {
