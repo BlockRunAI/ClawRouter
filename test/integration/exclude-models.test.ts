@@ -29,10 +29,11 @@ describe("exclude-models e2e", () => {
   // Models to exclude for this test
   // Three exclusions, each exercising a different filter path: the eco-chain
   // member (nvidia/step-3.7-flash), a mid-chain paid model, and the proxy's
-  // product-side FREE_MODEL append target — free/gpt-oss-120b is dead at the
-  // gateway (400, 2026-08-21) but the proxy still appends it, so excluding it
-  // both exercises the append filter and keeps this suite green until the
-  // free-tier catch-up sync retargets that append.
+  // FREE_MODEL append target. free/gpt-oss-120b is ClawRouter's picker id for
+  // that append — the literal free/* id 400s at the gateway, but the proxy
+  // maps free/* to nvidia/* upstream and nvidia/gpt-oss-120b is served
+  // (hidden from the catalog, probed 200 on 2026-08-21), so the append path
+  // is healthy and excluding its id is purely about exercising the filter.
   const EXCLUDED_MODELS = new Set([
     "nvidia/step-3.7-flash",
     "google/gemini-2.5-flash-lite",

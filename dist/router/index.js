@@ -363,6 +363,21 @@ function applyPromotions(tierConfigs, promotions, profile, now = /* @__PURE__ */
   }
   return result;
 }
+function applyUnavailableModels(tierConfigs, unavailableModels) {
+  if (!unavailableModels || unavailableModels.length === 0) return tierConfigs;
+  const dead = new Set(unavailableModels);
+  let result = tierConfigs;
+  for (const tier of Object.keys(tierConfigs)) {
+    const config = tierConfigs[tier];
+    const alive = [config.primary, ...config.fallback].filter((model) => !dead.has(model));
+    if (alive.length === 0 || alive[0] === config.primary && alive.length === config.fallback.length + 1) {
+      continue;
+    }
+    if (result === tierConfigs) result = { ...tierConfigs };
+    result[tier] = { primary: alive[0], fallback: alive.slice(1) };
+  }
+  return result;
+}
 var RulesStrategy = class {
   name = "rules";
   route(prompt, systemPrompt, maxOutputTokens, options) {
@@ -414,6 +429,7 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       profile = useAgenticTiers ? "agentic" : "auto";
     }
     tierConfigs = applyPromotions(tierConfigs, config.promotions, profile, options.now);
+    tierConfigs = applyUnavailableModels(tierConfigs, options.unavailableModels);
     const agenticScoreValue = ruleResult.agenticScore;
     if (estimatedTokens > config.overrides.maxTokensForceComplex) {
       const decision2 = selectModel(
@@ -1732,9 +1748,12 @@ var PortfolioStrategy = class {
     const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base.tier === "SIMPLE" || base.tier === "MEDIUM") ? "REASONING" : base.tier;
     const tierConfig = tierConfigs[targetTier];
     const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
+    const unavailable = new Set(options.unavailableModels ?? []);
     const chain = [
       .../* @__PURE__ */ new Set([...configuredCandidates, ...evidenceCandidates(features.taskType)])
-    ].filter((model2) => typeof model2 === "string" && model2.length > 0);
+    ].filter(
+      (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
+    );
     const eligible = chain.filter(
       (model2) => isEligible(model2, features, maxOutputTokens, options)
     );
@@ -3270,6 +3289,7 @@ export {
   LIVE_MODEL_PROFILES,
   PortfolioStrategy,
   RulesStrategy,
+  applyUnavailableModels,
   calculateModelCost,
   classifyByRules,
   filterByExcludeList,

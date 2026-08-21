@@ -33594,6 +33594,21 @@ function applyPromotions(tierConfigs, promotions, profile, now2 = /* @__PURE__ *
   }
   return result;
 }
+function applyUnavailableModels(tierConfigs, unavailableModels) {
+  if (!unavailableModels || unavailableModels.length === 0) return tierConfigs;
+  const dead = new Set(unavailableModels);
+  let result = tierConfigs;
+  for (const tier of Object.keys(tierConfigs)) {
+    const config = tierConfigs[tier];
+    const alive = [config.primary, ...config.fallback].filter((model) => !dead.has(model));
+    if (alive.length === 0 || alive[0] === config.primary && alive.length === config.fallback.length + 1) {
+      continue;
+    }
+    if (result === tierConfigs) result = { ...tierConfigs };
+    result[tier] = { primary: alive[0], fallback: alive.slice(1) };
+  }
+  return result;
+}
 function getStrategy(name) {
   const strategy = registry.get(name);
   if (!strategy) {
@@ -34291,6 +34306,7 @@ ${value.slice(-(scanLimit - prefixLength))}`;
           profile = useAgenticTiers ? "agentic" : "auto";
         }
         tierConfigs = applyPromotions(tierConfigs, config.promotions, profile, options.now);
+        tierConfigs = applyUnavailableModels(tierConfigs, options.unavailableModels);
         const agenticScoreValue = ruleResult.agenticScore;
         if (estimatedTokens > config.overrides.maxTokensForceComplex) {
           const decision2 = selectModel(
@@ -34976,9 +34992,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base3.tier === "SIMPLE" || base3.tier === "MEDIUM") ? "REASONING" : base3.tier;
         const tierConfig = tierConfigs[targetTier];
         const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
+        const unavailable = new Set(options.unavailableModels ?? []);
         const chain3 = [
           .../* @__PURE__ */ new Set([...configuredCandidates, ...evidenceCandidates(features.taskType)])
-        ].filter((model2) => typeof model2 === "string" && model2.length > 0);
+        ].filter(
+          (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
+        );
         const eligible = chain3.filter(
           (model2) => isEligible(model2, features, maxOutputTokens, options)
         );
