@@ -36210,18 +36210,6 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: false,
         supportsVision: false
       },
-      "free/gpt-oss-120b": {
-        contextWindow: 128e3,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "free/gpt-oss-20b": {
-        contextWindow: 128e3,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
       "free/seed-oss-36b": {
         contextWindow: 131072,
         maxOutputTokens: 16384,
@@ -36293,6 +36281,18 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: true
+      },
+      "nvidia/nemotron-nano-9b-v2": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "nvidia/step-3.7-flash": {
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
       },
       "openai/gpt-4.1": {
         contextWindow: 128e3,
@@ -36846,13 +36846,7 @@ ${value.slice(-(scanLimit - prefixLength))}`;
           ...eligibleCandidates.filter(
             (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
           )
-        ] : features.taskType === "tool_agent" || features.taskType === "tool_agent_parallel" && features.agentDomain !== "other" ? [
-          ...scoredModels,
-          ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))
-        ] : [
-          ...scoredModels,
-          ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))
-        ];
+        ] : [...scoredModels, ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))];
         const model = ranked[0] ?? base3.model;
         const selectedTierConfigs = {
           ...tierConfigs,
@@ -37964,8 +37958,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             // $0.20/$1.25, 1M context
             "xai/grok-4-fast-non-reasoning",
             // 1,143ms, $0.20/$0.50 — fast fallback
-            "free/gpt-oss-120b"
-            // 1,252ms, FREE fallback (hidden from /v1/models but direct calls work)
+            "nvidia/step-3.7-flash"
+            // FREE backstop — new NVIDIA free tier (gpt-oss-120b now 400s; probed 2026-08-21)
           ]
         },
         MEDIUM: {
@@ -38038,14 +38032,15 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       // Eco tier configs - absolute cheapest (blockrun/eco)
       ecoTiers: {
         SIMPLE: {
-          primary: "free/gpt-oss-120b",
-          // FREE! $0.00/$0.00 — heavy user default
+          primary: "nvidia/step-3.7-flash",
+          // FREE! $0.00/$0.00 — new NVIDIA free tier flagship
           fallback: [
-            "free/gpt-oss-20b",
-            // FREE — smaller, faster
-            // deepseek-v4-flash and seed-oss-36b sat here until NVIDIA EOL'd them
-            // (410; 2026-08-12 and 2026-08-03 respectively). gpt-oss-120b/20b already
-            // head this chain, so the rungs are dropped, not retargeted.
+            "nvidia/nemotron-nano-9b-v2",
+            // FREE — compact + fast (~0.7s), high-volume light tasks
+            // This head keeps rotting with NVIDIA's free hosting: deepseek-v4-flash
+            // (410, 2026-08-12), seed-oss-36b (410, 2026-08-03), then gpt-oss-120b/20b
+            // (400 Unknown model, probed 2026-08-21). Each retirement retargets the
+            // two free rungs to the current free tier; the paid rungs below never move.
             "google/gemini-3.1-flash-lite",
             // $0.25/$1.50 — newest flash-lite
             "openai/gpt-5.4-nano",
@@ -38162,8 +38157,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             "openai/gpt-5.3-codex",
             "deepseek/deepseek-chat",
             // Cheap, reliable
-            "free/gpt-oss-120b"
-            // NVIDIA free ultimate backstop (was seed-oss-36b; EOL'd 2026-08-03)
+            "nvidia/step-3.7-flash"
+            // NVIDIA free ultimate backstop (was gpt-oss-120b; 400s since ~2026-08)
           ]
         },
         REASONING: {
@@ -38252,8 +38247,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             // Previous flagship — 6,213ms, reliable
             "deepseek/deepseek-chat",
             // 1,431ms — cheap, reliable
-            "free/gpt-oss-120b"
-            // NVIDIA free ultimate backstop (was seed-oss-36b; EOL'd 2026-08-03)
+            "nvidia/step-3.7-flash"
+            // NVIDIA free ultimate backstop (was gpt-oss-120b; 400s since ~2026-08)
           ]
         },
         REASONING: {

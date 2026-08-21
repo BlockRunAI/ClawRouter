@@ -27,7 +27,7 @@ describe("exclude-models e2e", () => {
   let originalLog: typeof console.log;
 
   // Models to exclude for this test
-  const EXCLUDED_MODELS = new Set(["free/gpt-oss-120b", "google/gemini-2.5-flash-lite"]);
+  const EXCLUDED_MODELS = new Set(["nvidia/step-3.7-flash", "google/gemini-2.5-flash-lite"]);
 
   beforeAll(async () => {
     // Capture console.log to inspect which models the proxy tries
@@ -68,7 +68,7 @@ describe("exclude-models e2e", () => {
   it("exclude filter log appears for excluded models in eco SIMPLE tier", async () => {
     // Verify excluded models ARE in the unfiltered eco SIMPLE chain
     const ecoSimpleChain = getFallbackChain("SIMPLE", DEFAULT_ROUTING_CONFIG.ecoTiers!);
-    expect(ecoSimpleChain).toContain("free/gpt-oss-120b");
+    expect(ecoSimpleChain).toContain("nvidia/step-3.7-flash");
 
     consoleLogs.length = 0;
 

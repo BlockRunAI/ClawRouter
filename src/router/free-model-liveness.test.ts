@@ -23,17 +23,23 @@ import { DEFAULT_ROUTING_CONFIG } from "@blockrun/router-core";
 import topModels from "../top-models.json" with { type: "json" };
 
 /**
- * gpt-oss-120b/20b are hidden in blockrun's public catalog but are deliberately
- * kept as ClawRouter's free defaults (heavy-use red line), so they are legitimate
- * chain members while absent from the picker. Every other free/* id must be live
- * in the picker.
+ * The free tier spans two namespaces: the picker lists `free/*` ids while the
+ * gateway's public catalog (and router-core's chains, since 9386c53) use
+ * `nvidia/*` for the same models. Liveness is therefore judged on the BASENAME:
+ * a chain id is live if the picker carries the same model under either prefix.
+ *
+ * The gpt-oss-120b/20b allowlist that used to sit here is gone: those ids were
+ * "hidden but served" until they weren't — the gateway answers 400 Unknown
+ * model for both (probed 2026-08-21). An allowlist of dead ids would wave the
+ * exact regression this suite exists to catch.
  */
-const DELIBERATE_NON_PICKER_FREE = new Set(["free/gpt-oss-120b", "free/gpt-oss-20b"]);
+const FREE_PREFIX = /^(?:free|nvidia)\//;
 
-const liveFreeModels = new Set<string>([
-  ...(topModels as string[]).filter((id) => id.startsWith("free/")),
-  ...DELIBERATE_NON_PICKER_FREE,
-]);
+const liveFreeBasenames = new Set<string>(
+  (topModels as string[])
+    .filter((id) => FREE_PREFIX.test(id))
+    .map((id) => id.split("/", 2)[1]),
+);
 
 type TierConfig = { primary?: string; fallback?: string[] };
 
@@ -56,11 +62,11 @@ function freeModelReferences(): Array<[string, string]> {
   const refs: Array<[string, string]> = [];
   for (const [profileKey, tiers] of Object.entries(tierContainers())) {
     for (const [tierName, tier] of Object.entries(tiers)) {
-      if (tier?.primary?.startsWith("free/")) {
+      if (tier?.primary && FREE_PREFIX.test(tier.primary)) {
         refs.push([`${profileKey}.${tierName}.primary`, tier.primary]);
       }
       (tier?.fallback ?? []).forEach((model, i) => {
-        if (model.startsWith("free/")) {
+        if (FREE_PREFIX.test(model)) {
           refs.push([`${profileKey}.${tierName}.fallback[${i}]`, model]);
         }
       });
@@ -78,7 +84,9 @@ describe("router free-model liveness", () => {
   });
 
   it("never routes to a free model that is absent from the live picker", () => {
-    const dead = freeModelReferences().filter(([, model]) => !liveFreeModels.has(model));
+    const dead = freeModelReferences().filter(
+      ([, model]) => !liveFreeBasenames.has(model.split("/", 2)[1]),
+    );
 
     expect(
       dead,
@@ -86,8 +94,8 @@ describe("router free-model liveness", () => {
         ? ""
         : `Router can serve free models that are no longer live:\n` +
             dead.map(([where, model]) => `  ${where} -> ${model}`).join("\n") +
-            `\n\nLive set (from src/top-models.json + the gpt-oss defaults):\n` +
-            `  ${[...liveFreeModels].join("\n  ")}\n\n` +
+            `\n\nLive basenames (from src/top-models.json):\n` +
+            `  ${[...liveFreeBasenames].join("\n  ")}\n\n` +
             `If a model was retired upstream, remove it from the router tiers in ` +
             `@blockrun/router-core and re-pin. Do NOT add it to this test.`,
     ).toEqual([]);
