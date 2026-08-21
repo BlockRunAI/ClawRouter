@@ -3937,6 +3937,7 @@ async function proxyRequest(
             "  gpt-image-2       OpenAI GPT Image 2 — $0.06/image",
             "  seedream          ByteDance Seedream 5 Pro — $0.045/image",
             "  grok-imagine      xAI Grok Imagine — $0.02/image",
+            "  grok-imagine-pro  xAI Grok Imagine Pro — $0.07/image",
             "  cogview           Zhipu CogView-4 — $0.015/image",
             "",
             "Examples:",
