@@ -36,9 +36,7 @@ import topModels from "../top-models.json" with { type: "json" };
 const FREE_PREFIX = /^(?:free|nvidia)\//;
 
 const liveFreeBasenames = new Set<string>(
-  (topModels as string[])
-    .filter((id) => FREE_PREFIX.test(id))
-    .map((id) => id.split("/", 2)[1]),
+  (topModels as string[]).filter((id) => FREE_PREFIX.test(id)).map((id) => id.split("/", 2)[1]),
 );
 
 type TierConfig = { primary?: string; fallback?: string[] };
