@@ -1,0 +1,51 @@
+# Vendored into every repo listed in blockrun's brand/consumers.json — the
+# fan-out half of the brand-numbers system. The vendored sync script keeps PR
+# CI deterministic and offline (--check never fetches); THIS workflow is where
+# freshness comes from: it re-fetches the canonical artifact weekly and lands
+# the marker rewrites, so numbers can't silently rot behind green CI again
+# (they did: 14 of 15 consumers sat stale, one 70→71 sweep touched 8 files in
+# this repo alone).
+#
+# Direct push to the default branch on purpose: these are docs/marker rewrites
+# generated from blockrun.ai/brand/numbers.json by the audited script in
+# scripts/. A PR queue nobody tends is how the staleness happened. If the
+# branch is protected the push fails and the fallback opens a PR instead.
+# No third-party actions beyond actions/checkout — supply-chain surface stays
+# at one GitHub-owned action.
+name: brand-sync
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC, offset from the top-of-hour crunch
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refresh brand numbers from the canonical artifact
+        run: node scripts/sync-brand-numbers.mjs --refresh
+      - name: Land the rewrite
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: sync brand numbers from blockrun.ai/brand/numbers.json"
+          if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+            echo "pushed to ${GITHUB_REF_NAME}"
+          else
+            BR="brand-sync/$(date +%Y%m%d)"
+            git push -f origin "HEAD:${BR}"
+            gh pr create --head "$BR" \
+              --title "chore: sync brand numbers" \
+              --body "Automated marker refresh from https://blockrun.ai/brand/numbers.json (scripts/sync-brand-numbers.mjs --refresh). Opened as a PR because the default branch is protected." \
+              || echo "PR creation unavailable — branch ${BR} pushed, needs manual PR"
+          fi

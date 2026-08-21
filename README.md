@@ -34,7 +34,7 @@ Agents can only sign transactions.<br><br>
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -61,7 +61,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 |                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**                                                         |
 | ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ---------------------------------------------------------------------- |
-| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->70<!-- /br:models.chatVisible -->**    |
+| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->71<!-- /br:models.chatVisible -->**    |
 | **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->5<!-- /br:models.free --> models, no signup** |
 | **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
 | **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature**                                                   |
@@ -107,7 +107,7 @@ openclaw gateway restart
 
 > **Using Claude Code?** Check out [BRCC](https://blockrun.ai/brcc.md) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
-> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
+> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
 
 No OpenClaw required. ClawRouter runs as a local proxy on port 8402.
 
@@ -393,7 +393,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Models & Pricing
 
-<!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->5<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->5<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
 > **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
@@ -654,7 +654,7 @@ npm test
 
 **The LLM router built for autonomous agents**
 
-You're here. <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
+You're here. <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
 
 `curl -fsSL https://blockrun.ai/ClawRouter-update | bash`
 
@@ -665,7 +665,7 @@ You're here. <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> mod
 
 **BlockRun for Claude Code**
 
-Run Claude Code with <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
+Run Claude Code with <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
 
 `curl -fsSL https://blockrun.ai/brcc-install | bash`
 
@@ -678,7 +678,7 @@ Run Claude Code with <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible
 
 **ClawRouter for NousResearch Hermes**
 
-Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
+Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
 
 `pip install hermes-plugin-clawrouter`
 

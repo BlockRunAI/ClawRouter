@@ -135,7 +135,7 @@ Less context repeated = fewer tokens = lower cost. Agents that need to recall ea
 
 ### 7. x402 Micropayments — Wallet-Based Budget Control
 
-<p align="center"><img src="assets/blockrun-clawrouter-x402-usdc-micropayment-wallet-budget-control.png" alt="Budget limits enforced by physical construction — wallet loaded via Base/Solana, pay per call across <!-- br:models.chatVisible -->70<!-- /br:models.chatVisible --> models, balance hits zero and the valve shuts cleanly" width="720"></p>
+<p align="center"><img src="assets/blockrun-clawrouter-x402-usdc-micropayment-wallet-budget-control.png" alt="Budget limits enforced by physical construction — wallet loaded via Base/Solana, pay per call across <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, balance hits zero and the valve shuts cleanly" width="720"></p>
 
 ClawRouter pays for inference via [x402](https://x402.org/) USDC micropayments (Base or Solana). You load a wallet. Each inference call costs exactly what it costs. When the wallet runs low, requests stop cleanly.
 
