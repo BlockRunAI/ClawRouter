@@ -25,9 +25,11 @@ describe("image generation provider model list", () => {
     expect(models.length).toBeGreaterThan(0);
   });
 
-  it("only advertises models the gateway can still serve", () => {
-    const unservable = models.filter((id) => !IMAGE_MODEL_IDS.includes(id));
-    expect(unservable).toEqual([]);
+  it("matches the gateway's image catalog exactly", () => {
+    // Both directions: an advertised id the gateway cannot serve is a
+    // guaranteed 400, and a servable id we never advertise is unreachable
+    // from the picker. The 2026-05 sweep left drift in both directions.
+    expect([...models].sort()).toEqual([...IMAGE_MODEL_IDS].sort());
   });
 
   it("does not advertise models delisted upstream", () => {
