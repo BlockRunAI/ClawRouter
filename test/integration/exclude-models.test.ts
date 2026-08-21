@@ -27,7 +27,17 @@ describe("exclude-models e2e", () => {
   let originalLog: typeof console.log;
 
   // Models to exclude for this test
-  const EXCLUDED_MODELS = new Set(["nvidia/step-3.7-flash", "google/gemini-2.5-flash-lite"]);
+  // Three exclusions, each exercising a different filter path: the eco-chain
+  // member (nvidia/step-3.7-flash), a mid-chain paid model, and the proxy's
+  // product-side FREE_MODEL append target — free/gpt-oss-120b is dead at the
+  // gateway (400, 2026-08-21) but the proxy still appends it, so excluding it
+  // both exercises the append filter and keeps this suite green until the
+  // free-tier catch-up sync retargets that append.
+  const EXCLUDED_MODELS = new Set([
+    "nvidia/step-3.7-flash",
+    "google/gemini-2.5-flash-lite",
+    "free/gpt-oss-120b",
+  ]);
 
   beforeAll(async () => {
     // Capture console.log to inspect which models the proxy tries
