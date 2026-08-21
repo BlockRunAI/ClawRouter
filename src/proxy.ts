@@ -1165,7 +1165,28 @@ function truncateMessages<T extends { role: string }>(messages: T[]): Truncation
 
   // Keep all system messages + most recent conversation messages
   const maxConversation = MAX_MESSAGES - systemMsgs.length;
-  const truncatedConversation = conversationMsgs.slice(-maxConversation);
+  let sliceStart = conversationMsgs.length - maxConversation;
+
+  // Avoid splitting tool_call / tool_result pairs at the slice boundary.
+  // If the first kept message is a tool response, walk backwards to include
+  // the assistant message that produced the tool_call it belongs to.
+  // Clamp to ensure we never exceed MAX_MESSAGES total.
+  if (sliceStart > 0 && sliceStart < conversationMsgs.length) {
+    const originalStart = sliceStart;
+    while (sliceStart > 0 && conversationMsgs[sliceStart].role === "tool") {
+      sliceStart--;
+    }
+    // If walking back would exceed MAX_MESSAGES, revert and drop the
+    // orphaned tool messages instead (move forward past them).
+    if (systemMsgs.length + (conversationMsgs.length - sliceStart) > MAX_MESSAGES) {
+      sliceStart = originalStart;
+      while (sliceStart < conversationMsgs.length && conversationMsgs[sliceStart].role === "tool") {
+        sliceStart++;
+      }
+    }
+  }
+
+  const truncatedConversation = conversationMsgs.slice(sliceStart);
 
   const result = [...systemMsgs, ...truncatedConversation];
 
@@ -2697,6 +2718,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // Accepts image as: data URI, local file path, ~/path, or HTTP(S) URL
       if (req.url === "/v1/images/image2image" && req.method === "POST") {
         const img2imgStartTime = Date.now();
+
+        // Cancel the upstream call (and its payment) if the client disconnects.
+        // Registered before preprocessing so source-image fetches also respect it.
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
+
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -2718,7 +2747,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               // Already a data URI — pass through
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
               // Download URL → data URI
-              const imgResp = await fetch(val);
+              const imgResp = await fetch(val, { signal: clientAbort.signal });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -2739,6 +2768,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
           reqBody = JSON.stringify(parsed);
         } catch (parseErr) {
+          if (clientAbort.signal.aborted) return; // client gone — nothing to report
           const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Invalid request", details: msg }));
@@ -2750,6 +2780,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
+            signal: clientAbort.signal,
           });
           const text = await upstream.text();
           if (!upstream.ok) {
