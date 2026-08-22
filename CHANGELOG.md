@@ -4,6 +4,21 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.246 — August 22, 2026
+
+### Changed — new installs default to the Solana payment chain
+
+Brand-new wallets now persist `payment-chain = solana` at generation time (`generateAndSaveWallet` in `src/auth.ts`), so first-run users start on the Solana gateway (`sol.blockrun.ai`). **Existing installs are completely unaffected** — the `loadPaymentChain()` fallback for an absent `~/.openclaw/blockrun/payment-chain` file stays `base`, which is where pre-existing wallets hold their USDC.
+
+- The default is written **only when Solana address derivation succeeds** (it dynamically imports `@solana/kit`, which plugin installers sometimes drop — see the reinstall workaround in `scripts/update.sh`). If derivation fails, the write is skipped and the user stays on the Base fallback rather than being defaulted onto a chain the proxy can't sign for.
+- Recovery/import flows deliberately do NOT change the chain: `BLOCKRUN_WALLET_KEY` env restore, `wallet recover`, and the legacy `setupSolana` opt-in path all bypass wallet generation, so a restored wallet keeps resolving to wherever its funds already live.
+- `CLAWROUTER_PAYMENT_CHAIN` still overrides the persisted selection in both directions; `/wallet base` switches a new install back at any time.
+- New wallet banner now states the Solana default and how to switch back.
+- Tests: `src/auth.payment-chain-default.test.ts` (fresh generate → solana; saved/env/explicit-base paths untouched; env override wins) + `src/auth.payment-chain-default-failure.test.ts` (derivation-failure guard), and `test/smoke-wallet-scenarios.ts` now asserts the chain file on real disk.
+- Docs: removed the `/chain` command from README and `docs/configuration.md` — it was never a registered slash command (use `/wallet solana` / `/wallet base`); documented the new-install default in README, `docs/configuration.md`, and `skills/clawrouter/SKILL.md`.
+
+---
+
 ## v0.12.245 — August 12, 2026
 
 Catch-up sync to blockrun: one free-model EOL (today's), ten model additions that had never been mirrored, and six stale prices. Catalog is now 70 chat-visible / 5 free, matching blockrun exactly.

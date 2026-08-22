@@ -57805,6 +57805,14 @@ Then run: npx @blockrun/clawrouter`
     solanaAddress = await getSolanaAddress(derived.solanaPrivateKeyBytes);
   } catch {
   }
+  let solanaDefaultSaved = false;
+  if (solanaAddress) {
+    try {
+      await savePaymentChain("solana");
+      solanaDefaultSaved = true;
+    } catch {
+    }
+  }
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter] \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
   console.log(`[ClawRouter]   NEW WALLET GENERATED \u2014 BACK UP YOUR KEY NOW`);
@@ -57817,6 +57825,12 @@ Then run: npx @blockrun/clawrouter`
   console.log(`[ClawRouter]   Mnemonic       : ${MNEMONIC_FILE}`);
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter]   Both EVM (Base) and Solana wallets are ready.`);
+  if (solanaDefaultSaved) {
+    console.log(
+      `[ClawRouter]   Default payment chain: Solana \u2014 fund the Solana address above with USDC.`
+    );
+    console.log(`[ClawRouter]   To switch to Base, run in OpenClaw: /wallet base`);
+  }
   console.log(`[ClawRouter]   To back up, run in OpenClaw:`);
   console.log(`[ClawRouter]     /wallet export`);
   console.log(`[ClawRouter]`);

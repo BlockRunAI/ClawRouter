@@ -85,7 +85,7 @@ ClawRouter does **not** collect or forward third-party provider API keys. You do
 | ----------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `walletKey` | Yes       | EVM private key used to sign USDC micropayments via x402. **Auto-generated locally on first run** — no user input required. Never transmitted over the network; only detached payment signatures are sent. |
 | `solanaKey` | Yes       | Solana keypair (BIP-44 `m/44'/501'/0'/0'`). Auto-derived from the same local mnemonic via `@scure/bip32` + `@scure/bip39`.                                                                                 |
-| `gateway`   | No        | Gateway URL. Defaults: `https://blockrun.ai/api` (Base) · `https://sol.blockrun.ai/api` (Solana).                                                                                                          |
+| `gateway`   | No        | Gateway URL. Defaults: `https://sol.blockrun.ai/api` (Solana, default chain for new installs) · `https://blockrun.ai/api` (Base, default for pre-existing installs).                                       |
 | `routing`   | No        | Optional override of the default four-tier router.                                                                                                                                                         |
 
 **How and where keys are stored:**

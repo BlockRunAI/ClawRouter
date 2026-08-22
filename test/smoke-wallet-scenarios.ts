@@ -17,7 +17,7 @@ mkdirSync(TEMP_HOME, { recursive: true });
 process.env.HOME = TEMP_HOME;
 
 // Now import auth (it reads homedir() at module load)
-const { resolveOrGenerateWalletKey, setupSolana, WALLET_FILE, MNEMONIC_FILE } =
+const { resolveOrGenerateWalletKey, setupSolana, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE } =
   await import("../src/auth.js");
 const { isValidMnemonic } = await import("../src/wallet.js");
 
@@ -67,6 +67,13 @@ clean();
   assert(existsSync(WALLET_FILE), `wallet.key exists on disk`);
   assert(existsSync(MNEMONIC_FILE), `mnemonic exists on disk`);
 
+  // New installs default to the Solana payment chain
+  assert(existsSync(CHAIN_FILE), `payment-chain file exists on disk`);
+  assert(
+    readFileSync(CHAIN_FILE, "utf8").trim() === "solana",
+    `payment-chain defaults to solana for fresh installs`,
+  );
+
   const diskKey = readFileSync(WALLET_FILE, "utf8").trim();
   assert(diskKey === result.key, `wallet.key content matches`);
 
@@ -106,6 +113,7 @@ clean();
   assert(result.address.startsWith("0x"), `EVM address: ${result.address}`);
   assert(result.mnemonic === undefined, `No mnemonic (EVM-only)`);
   assert(result.solanaPrivateKeyBytes === undefined, `No Solana key bytes (EVM-only)`);
+  assert(!existsSync(CHAIN_FILE), `Existing wallet: no payment-chain file created (stays base)`);
 }
 
 // ═══════════════════════════════════════════════════════════════

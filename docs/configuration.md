@@ -158,17 +158,10 @@ Response (dual-chain):
 
 ```bash
 /wallet solana    # Switch to Solana USDC payments
-/wallet base      # Switch back to Base (EVM) USDC payments
+/wallet base      # Switch to Base (EVM) USDC payments
 ```
 
-Or use the `/chain` command:
-
-```bash
-/chain solana
-/chain base
-```
-
-The selected chain is persisted across gateway restarts.
+The selected chain is persisted across gateway restarts (in `~/.openclaw/blockrun/payment-chain`). New installs default to **Solana** (persisted when the wallet is first generated); existing installs without a saved selection stay on **Base**, where their funds already live. The `CLAWROUTER_PAYMENT_CHAIN` environment variable (`solana` or `base`) overrides the persisted selection.
 
 ### Switch Wallets
 

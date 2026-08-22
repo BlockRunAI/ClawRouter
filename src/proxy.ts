@@ -1245,7 +1245,11 @@ export type PaymentChain = "base" | "solana";
 export type ProxyOptions = {
   wallet: WalletConfig;
   apiBase?: string;
-  /** Payment chain: "base" (default) or "solana". Can also be set via CLAWROUTER_PAYMENT_CHAIN env var. */
+  /**
+   * Payment chain: "base" or "solana". New installs persist "solana" at wallet
+   * generation; absent config resolves to "base" for pre-existing installs.
+   * Can also be set via CLAWROUTER_PAYMENT_CHAIN env var.
+   */
   paymentChain?: PaymentChain;
   /** Port to listen on (default: 8402) */
   port?: number;

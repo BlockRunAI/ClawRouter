@@ -8,7 +8,8 @@
  *   # Install the plugin
  *   openclaw plugins install @blockrun/clawrouter
  *
- *   # Fund your wallet with USDC on Base (address printed on install)
+ *   # Fund your wallet with USDC (Solana for new installs, Base for existing ones;
+ *   # the funding address is printed on install)
  *
  *   # Use smart routing (auto-picks cheapest model)
  *   openclaw models set blockrun/auto

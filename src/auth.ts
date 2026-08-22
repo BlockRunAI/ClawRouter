@@ -177,6 +177,19 @@ async function generateAndSaveWallet(): Promise<{
     // Non-fatal — Solana address display is best-effort
   }
 
+  // New installs default to Solana — but only if derivation succeeded above
+  // (it dynamically imports @solana/kit, which installers sometimes drop).
+  // Never default a user onto a chain the proxy can't sign for.
+  let solanaDefaultSaved = false;
+  if (solanaAddress) {
+    try {
+      await savePaymentChain("solana");
+      solanaDefaultSaved = true;
+    } catch {
+      // Non-fatal — user stays on the base fallback
+    }
+  }
+
   // Print prominent backup reminder after generating a new wallet
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter] ════════════════════════════════════════════════`);
@@ -190,6 +203,12 @@ async function generateAndSaveWallet(): Promise<{
   console.log(`[ClawRouter]   Mnemonic       : ${MNEMONIC_FILE}`);
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter]   Both EVM (Base) and Solana wallets are ready.`);
+  if (solanaDefaultSaved) {
+    console.log(
+      `[ClawRouter]   Default payment chain: Solana — fund the Solana address above with USDC.`,
+    );
+    console.log(`[ClawRouter]   To switch to Base, run in OpenClaw: /wallet base`);
+  }
   console.log(`[ClawRouter]   To back up, run in OpenClaw:`);
   console.log(`[ClawRouter]     /wallet export`);
   console.log(`[ClawRouter]`);
@@ -373,6 +392,8 @@ export async function savePaymentChain(chain: "base" | "solana"): Promise<void> 
 /**
  * Load the persisted payment chain selection from disk.
  * Returns "base" if no file exists or the file is invalid.
+ * New installs persist "solana" at wallet generation, so an absent file
+ * means a pre-existing install whose funds live on Base.
  */
 export async function loadPaymentChain(): Promise<"base" | "solana"> {
   try {

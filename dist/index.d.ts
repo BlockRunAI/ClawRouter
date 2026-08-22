@@ -767,7 +767,11 @@ type PaymentChain = "base" | "solana";
 type ProxyOptions = {
     wallet: WalletConfig;
     apiBase?: string;
-    /** Payment chain: "base" (default) or "solana". Can also be set via CLAWROUTER_PAYMENT_CHAIN env var. */
+    /**
+     * Payment chain: "base" or "solana". New installs persist "solana" at wallet
+     * generation; absent config resolves to "base" for pre-existing installs.
+     * Can also be set via CLAWROUTER_PAYMENT_CHAIN env var.
+     */
     paymentChain?: PaymentChain;
     /** Port to listen on (default: 8402) */
     port?: number;
@@ -895,6 +899,8 @@ declare function savePaymentChain(chain: "base" | "solana"): Promise<void>;
 /**
  * Load the persisted payment chain selection from disk.
  * Returns "base" if no file exists or the file is invalid.
+ * New installs persist "solana" at wallet generation, so an absent file
+ * means a pre-existing install whose funds live on Base.
  */
 declare function loadPaymentChain(): Promise<"base" | "solana">;
 /**
@@ -1488,7 +1494,8 @@ declare function buildPartnerTools(proxyBaseUrl: string): PartnerToolDefinition[
  *   # Install the plugin
  *   openclaw plugins install @blockrun/clawrouter
  *
- *   # Fund your wallet with USDC on Base (address printed on install)
+ *   # Fund your wallet with USDC (Solana for new installs, Base for existing ones;
+ *   # the funding address is printed on install)
  *
  *   # Use smart routing (auto-picks cheapest model)
  *   openclaw models set blockrun/auto

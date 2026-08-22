@@ -498,15 +498,14 @@ Request → 402 (price: $0.003) → wallet signs USDC → retry → response
 
 USDC stays in your wallet until spent — non-custodial. Price is visible in the 402 header before signing.
 
-**Dual-chain support:** Pay with **USDC** on **Base (EVM)** or **USDC on Solana**. Both wallets are derived from a single BIP-39 mnemonic on first run.
+**Dual-chain support:** Pay with **USDC** on **Base (EVM)** or **USDC on Solana**. Both wallets are derived from a single BIP-39 mnemonic on first run. New installs default to **Solana**; existing installs stay on **Base** unless switched with `/wallet solana`.
 
 ```bash
 /wallet              # Check balance and address (both chains)
 /wallet export       # Export mnemonic + keys for backup
 /wallet recover      # Restore wallet from mnemonic on a new machine
 /wallet solana       # Switch to Solana USDC payments
-/wallet base         # Switch back to Base (EVM) USDC payments
-/chain solana        # Alias for /wallet solana
+/wallet base         # Switch to Base (EVM) USDC payments
 /stats               # View usage and savings
 /stats clear         # Reset usage statistics
 /exclude             # Show excluded models
