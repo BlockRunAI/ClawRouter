@@ -636,12 +636,13 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
     name: "Image Generation",
     partner: "BlockRun",
     category: "Image & Video",
-    shortDescription: "8 image models (DALL-E, Flux, Grok, ...)",
+    shortDescription: "9 image models (Nano Banana, GPT Image, ...)",
     description:
       "Generate an image from a text prompt. Models available: google/nano-banana (default), " +
-      "google/nano-banana-pro (up to 4K), openai/gpt-image-1, openai/dall-e-3, " +
-      "black-forest/flux-1.1-pro, xai/grok-imagine-image, xai/grok-imagine-image-pro, " +
-      "zai/cogview-4. Returns a local http://localhost:8402/images/<file>.png URL.",
+      "google/nano-banana-2, google/nano-banana-pro (up to 4K), openai/gpt-image-1, " +
+      "openai/gpt-image-2, bytedance/seedream-5-pro, xai/grok-imagine-image, " +
+      "xai/grok-imagine-image-pro, zai/cogview-4. " +
+      "Returns a local http://localhost:8402/images/<file>.png URL.",
     proxyPath: "/images/generations",
     method: "POST",
     params: [
@@ -655,7 +656,7 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
         name: "model",
         type: "string",
         description:
-          "Full model ID (e.g. 'google/nano-banana', 'openai/dall-e-3'). Default: google/nano-banana.",
+          "Full model ID (e.g. 'google/nano-banana', 'openai/gpt-image-2'). Default: google/nano-banana.",
         required: false,
       },
       {

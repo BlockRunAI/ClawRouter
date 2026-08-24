@@ -1173,17 +1173,24 @@ function parseGenArgs(raw: string): {
  * with OpenClaw's native image generation UI.
  * Delegates to the local proxy (which handles x402 payment).
  */
-function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
+export function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
   return {
     id: "blockrun",
     label: "BlockRun",
     defaultModel: "google/nano-banana",
+    // Must stay in sync with IMAGE_PRICING (proxy.ts). OpenClaw sends the
+    // picked id straight to /v1/images/generations, which forwards the body
+    // verbatim with no alias resolution, so a retired id here is a guaranteed
+    // upstream 400. dall-e-3 (delisted 2026-05-25) and flux-1.1-pro (no
+    // gateway entry) were dropped in v0.12.227 and had lingered here.
+    // src/index.image-provider.test.ts pins the two lists together.
     models: [
       "google/nano-banana",
+      "google/nano-banana-2",
       "google/nano-banana-pro",
       "openai/gpt-image-1",
-      "openai/dall-e-3",
-      "black-forest/flux-1.1-pro",
+      "openai/gpt-image-2",
+      "bytedance/seedream-5-pro",
       "xai/grok-imagine-image",
       "xai/grok-imagine-image-pro",
       "zai/cogview-4",
