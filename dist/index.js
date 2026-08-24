@@ -90636,25 +90636,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         const modelMatch = imageArgs.match(/--model\s+(\S+)/);
         if (modelMatch) {
           const raw = modelMatch[1];
-          const IMAGE_MODEL_ALIASES = {
-            // dall-e-3 delisted upstream 2026-05-25 — legacy aliases route to
-            // the OpenAI successor instead of a guaranteed 400.
-            "dall-e-3": "openai/gpt-image-2",
-            dalle3: "openai/gpt-image-2",
-            dalle: "openai/gpt-image-2",
-            "gpt-image": "openai/gpt-image-1",
-            "gpt-image-1": "openai/gpt-image-1",
-            "gpt-image-2": "openai/gpt-image-2",
-            seedream: "bytedance/seedream-5-pro",
-            banana: "google/nano-banana",
-            "nano-banana": "google/nano-banana",
-            "banana-pro": "google/nano-banana-pro",
-            "nano-banana-pro": "google/nano-banana-pro",
-            "grok-imagine": "xai/grok-imagine-image",
-            "grok-imagine-pro": "xai/grok-imagine-image-pro",
-            cogview: "zai/cogview-4"
-          };
-          imageModel = IMAGE_MODEL_ALIASES[raw] ?? raw;
+          imageModel = Object.prototype.hasOwnProperty.call(IMAGE_MODEL_ALIASES, raw) ? IMAGE_MODEL_ALIASES[raw] : raw;
           imagePrompt = imagePrompt.replace(/--model\s+\S+/, "").trim();
         }
         const sizeMatch = imageArgs.match(/--size\s+(\d+x\d+)/);
@@ -90672,11 +90654,13 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             "",
             "Models:",
             "  nano-banana       Google Gemini Flash \u2014 $0.05/image",
+            "  banana-2          Google Nano Banana 2 \u2014 $0.09/image",
             "  banana-pro        Google Gemini Pro \u2014 $0.10/image (up to 4K)",
             "  gpt-image         OpenAI GPT Image 1 \u2014 $0.02/image",
             "  gpt-image-2       OpenAI GPT Image 2 \u2014 $0.06/image",
             "  seedream          ByteDance Seedream 5 Pro \u2014 $0.045/image",
             "  grok-imagine      xAI Grok Imagine \u2014 $0.02/image",
+            "  grok-imagine-pro  xAI Grok Imagine Pro \u2014 $0.07/image",
             "  cogview           Zhipu CogView-4 \u2014 $0.015/image",
             "",
             "Examples:",
@@ -90739,14 +90723,68 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             size: imageSize,
             n: 1
           });
+          const imagegenAbort = new AbortController();
+          res.on("close", () => {
+            if (!res.writableEnded) imagegenAbort.abort();
+          });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: imageBody
+            body: imageBody,
+            signal: imagegenAbort.signal
           });
-          const imageResult = await imageResponse.json();
+          let imageResult = await imageResponse.json();
+          let imageFailure;
+          if (imageResponse.ok && imageResult.poll_url && imageResult.id && !imageResult.data?.length) {
+            const apiOrigin = new URL(apiBase).origin;
+            const pollUrl = imageResult.poll_url.startsWith("http") ? imageResult.poll_url : `${apiOrigin}${imageResult.poll_url}`;
+            console.log(
+              `[ClawRouter] /imagegen job submitted (id=${imageResult.id}), polling upstream \u2014 typical 30\u2013120s...`
+            );
+            const pollDeadline = Date.now() + 3e5;
+            await new Promise((r2) => setTimeout(r2, 2e3));
+            let completed2 = false;
+            while (Date.now() < pollDeadline) {
+              if (imagegenAbort.signal.aborted) {
+                console.log(
+                  `[ClawRouter] Chat client disconnected \u2014 abandoning image poll (id=${imageResult.id})`
+                );
+                return;
+              }
+              const pollResp = await payFetch(pollUrl, {
+                method: "GET",
+                headers: { "user-agent": USER_AGENT },
+                signal: imagegenAbort.signal
+              });
+              const pollText = await pollResp.text();
+              let pollBody = {};
+              try {
+                pollBody = JSON.parse(pollText);
+              } catch {
+                imageFailure = `Non-JSON poll response (${pollResp.status}): ${pollText.slice(0, 200)}`;
+                break;
+              }
+              if (pollResp.status === 202 || pollBody.status === "queued" || pollBody.status === "in_progress") {
+                await new Promise((r2) => setTimeout(r2, 3e3));
+                continue;
+              }
+              if (pollBody.status === "failed" || !pollResp.ok) {
+                imageFailure = typeof pollBody.error === "string" ? pollBody.error : pollBody.error?.message ?? `Upstream image generation failed (HTTP ${pollResp.status})`;
+                break;
+              }
+              imageResult = pollBody;
+              completed2 = true;
+              break;
+            }
+            if (!completed2 && !imageFailure) {
+              imageFailure = "Image generation timed out after 5 minutes \u2014 the job may still complete upstream.";
+            }
+          }
           let responseText;
-          if (!imageResponse.ok || imageResult.error) {
+          if (imageFailure) {
+            responseText = `Image generation failed: ${imageFailure}`;
+            console.log(`[ClawRouter] /imagegen error: ${imageFailure}`);
+          } else if (!imageResponse.ok || imageResult.error) {
             const errMsg = typeof imageResult.error === "string" ? imageResult.error : imageResult.error?.message ?? `HTTP ${imageResponse.status}`;
             responseText = `Image generation failed: ${errMsg}`;
             console.log(`[ClawRouter] /imagegen error: ${errMsg}`);
@@ -90766,9 +90804,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
                       console.error(
                         `[ClawRouter] /imagegen: failed to upload data URI: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`
                       );
-                      lines.push(
-                        "Image generated but upload failed. Try again or use --model dall-e-3."
-                      );
+                      lines.push("Image generated but upload failed. Try again.");
                     }
                   } else {
                     lines.push(img.url);
@@ -92552,7 +92588,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -92697,9 +92733,20 @@ var init_proxy = __esm({
       },
       "bytedance/seedream-5-pro": {
         default: 0.045,
-        sizes: { "1024x1024": 0.045, "2048x1024": 0.045, "2048x2048": 0.09 }
+        // Full size list live-probed 2026-08-23 (gateway 402 quotes, base price):
+        // the 2K portrait/landscape tiers bill at the 2048x2048 rate.
+        sizes: {
+          "1024x1024": 0.045,
+          "1280x720": 0.045,
+          "2048x1024": 0.045,
+          "2048x2048": 0.09,
+          "2304x1728": 0.09,
+          "1728x2304": 0.09,
+          "2848x1600": 0.09,
+          "1600x2848": 0.09
+        }
       },
-      "google/nano-banana": { default: 0.05 },
+      "google/nano-banana": { default: 0.05, sizes: { "1024x1024": 0.05 } },
       // Nano Banana 2 (Gemini 3.1 Flash imagegen, blockrun #329): $0.09/image at 1K.
       "google/nano-banana-2": { default: 0.09, sizes: { "1024x1024": 0.09 } },
       "google/nano-banana-pro": {
@@ -92720,6 +92767,30 @@ var init_proxy = __esm({
         }
       }
     };
+    IMAGE_MODEL_IDS = Object.freeze(Object.keys(IMAGE_PRICING));
+    IMAGE_MODEL_SIZES = Object.freeze(
+      [...new Set(Object.values(IMAGE_PRICING).flatMap((p) => Object.keys(p.sizes ?? {})))].sort()
+    );
+    IMAGE_MODEL_ALIASES = Object.freeze({
+      // dall-e-3 delisted upstream 2026-05-25 — legacy aliases route to
+      // the OpenAI successor instead of a guaranteed 400.
+      "dall-e-3": "openai/gpt-image-2",
+      dalle3: "openai/gpt-image-2",
+      dalle: "openai/gpt-image-2",
+      "gpt-image": "openai/gpt-image-1",
+      "gpt-image-1": "openai/gpt-image-1",
+      "gpt-image-2": "openai/gpt-image-2",
+      seedream: "bytedance/seedream-5-pro",
+      banana: "google/nano-banana",
+      "nano-banana": "google/nano-banana",
+      "banana-2": "google/nano-banana-2",
+      "nano-banana-2": "google/nano-banana-2",
+      "banana-pro": "google/nano-banana-pro",
+      "nano-banana-pro": "google/nano-banana-pro",
+      "grok-imagine": "xai/grok-imagine-image",
+      "grok-imagine-pro": "xai/grok-imagine-image-pro",
+      cogview: "zai/cogview-4"
+    });
     VIDEO_PRICING = {
       "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 },
       // Seedance rates re-synced 2026-08-08 from blockrun's models.ts after the
@@ -93493,8 +93564,8 @@ var init_registry = __esm({
         name: "Image Generation",
         partner: "BlockRun",
         category: "Image & Video",
-        shortDescription: "8 image models (DALL-E, Flux, Grok, ...)",
-        description: "Generate an image from a text prompt. Models available: google/nano-banana (default), google/nano-banana-pro (up to 4K), openai/gpt-image-1, openai/dall-e-3, black-forest/flux-1.1-pro, xai/grok-imagine-image, xai/grok-imagine-image-pro, zai/cogview-4. Returns a local http://localhost:8402/images/<file>.png URL.",
+        shortDescription: "9 image models (Nano Banana, GPT Image, ...)",
+        description: "Generate an image from a text prompt. Models available: google/nano-banana (default), google/nano-banana-2, google/nano-banana-pro (up to 4K), openai/gpt-image-1, openai/gpt-image-2, bytedance/seedream-5-pro, xai/grok-imagine-image, xai/grok-imagine-image-pro, zai/cogview-4. Returns a local http://localhost:8402/images/<file>.png URL.",
         proxyPath: "/images/generations",
         method: "POST",
         params: [
@@ -93507,7 +93578,7 @@ var init_registry = __esm({
           {
             name: "model",
             type: "string",
-            description: "Full model ID (e.g. 'google/nano-banana', 'openai/dall-e-3'). Default: google/nano-banana.",
+            description: "Full model ID (e.g. 'google/nano-banana', 'openai/gpt-image-2'). Default: google/nano-banana.",
             required: false
           },
           {
@@ -225875,12 +225946,23 @@ function buildImageGenerationProvider() {
     id: "blockrun",
     label: "BlockRun",
     defaultModel: "google/nano-banana",
+    // Must stay in sync with IMAGE_PRICING (proxy.ts). OpenClaw sends the
+    // picked id straight to /v1/images/generations, which forwards the body
+    // verbatim with no alias resolution, so a retired id here is a guaranteed
+    // upstream 400. dall-e-3 (delisted 2026-05-25) and flux-1.1-pro (no
+    // gateway entry) were dropped in v0.12.227 and had lingered here.
+    // Kept as a hand-written array (not spread from IMAGE_MODEL_IDS) because
+    // this is the picker's curated display order — default model first, which
+    // IMAGE_PRICING declaration order does not give — and because the
+    // lifecycle tests fully mock ./proxy.js. Set-equality is enforced by
+    // src/index.image-provider.test.ts, which pins the two lists together.
     models: [
       "google/nano-banana",
+      "google/nano-banana-2",
       "google/nano-banana-pro",
       "openai/gpt-image-1",
-      "openai/dall-e-3",
-      "black-forest/flux-1.1-pro",
+      "openai/gpt-image-2",
+      "bytedance/seedream-5-pro",
       "xai/grok-imagine-image",
       "xai/grok-imagine-image-pro",
       "zai/cogview-4"
@@ -225895,20 +225977,28 @@ function buildImageGenerationProvider() {
       // Only openai/gpt-image-1 supports edit server-side; OpenClaw's UI picks a
       // compatible model at edit time via /v1/images/image2image.
       edit: { enabled: true },
+      // Union of every size the gateway accepts across the models above,
+      // live-probed 2026-08-23 (the gateway validates size per-model BEFORE
+      // payment and 400s unknown ones — 1216x832 / 1792x1024 / 1024x1792 were
+      // accepted by no model and are gone with dall-e-3). Pinned against
+      // IMAGE_MODEL_SIZES (proxy.ts) by src/index.image-provider.test.ts.
       geometry: {
         sizes: [
           "512x512",
           "768x768",
           "768x1344",
           "1024x1024",
-          "1216x832",
+          "1024x1536",
+          "1280x720",
           "1344x768",
           "1440x1440",
           "1536x1024",
-          "1024x1536",
-          "1792x1024",
-          "1024x1792",
+          "1600x2848",
+          "1728x2304",
+          "2048x1024",
           "2048x2048",
+          "2304x1728",
+          "2848x1600",
           "4096x4096"
         ]
       }
@@ -226874,6 +226964,7 @@ export {
   SpendControl,
   VISIBLE_OPENCLAW_MODELS,
   blockrunProvider,
+  buildImageGenerationProvider,
   buildPartnerTools,
   buildProviderModels,
   calculateModelCost,

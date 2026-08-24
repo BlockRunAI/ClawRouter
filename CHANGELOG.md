@@ -4,6 +4,29 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.247 — August 23, 2026
+
+### Fixed — OpenClaw image picker no longer advertises delisted models (#254)
+
+`buildImageGenerationProvider()` still advertised `openai/dall-e-3` (delisted upstream 2026-05-25) and `black-forest/flux-1.1-pro` (no gateway entry) — both dropped from `IMAGE_PRICING` in v0.12.227 but missed in the picker, where a pick is forwarded to `/v1/images/generations` verbatim (no alias resolution) and 400s upstream. The inverse gap too: `gpt-image-2`, `nano-banana-2`, and `seedream-5-pro` were priced but never advertised, so unreachable from the picker. Picker resynced to the 9 servable ids, `IMAGE_MODEL_IDS` exported as the pinning source of truth, partner-registry tool description refreshed, `banana-2`/`nano-banana-2` shorthands added to `/cr-imagegen`, and a regression test pins picker ↔ `IMAGE_PRICING` in both directions. Live-verified 2026-08-23: the gateway rejects both dead ids pre-payment (`400 Unknown image model`) and quotes all 9 advertised ones.
+
+- Thanks to @memosr for #254 (including the follow-up alias + help fixes from review).
+
+### Fixed — `/cr-imagegen` now completes slow-model (202) jobs
+
+The chat-prefix imagegen path treated a `202 + poll_url` response as success with empty `data` (`Response.ok` is true for 202), so any model exceeding the gateway's 30s inline window — `gpt-image-2` is the canonical case — surfaced as "Image generation returned no results" with the job abandoned. The path now polls the job like the `/v1/images/generations` handler does (3s interval, 5min budget, client-abort guard so a disconnected chat client stops the poll loop before it settles the payment). The upload-failure hint no longer steers users toward a specific model.
+
+### Fixed — advertised image sizes live-verified against the gateway
+
+The gateway validates `size` **per model before payment** and rejects unknown ones. The picker's global size list still carried `1216x832`, `1792x1024`, and `1024x1792` — accepted by no current model (the latter two were dall-e-3's native sizes) — and was missing six sizes Seedream 5 Pro actually serves. `geometry.sizes` is now exactly the live-probed union (16 sizes), pinned by test against the new `IMAGE_MODEL_SIZES` export; Seedream's `IMAGE_PRICING` size map filled in from 402 quotes (`1280x720`/`2048x1024` at $0.045, the 2K portrait/landscape tiers at $0.09).
+
+### Changed — image-catalog drift-proofing
+
+- `IMAGE_MODEL_ALIASES` hoisted to module scope and exported; tests now pin every alias target to a servable id and the partner-registry description to the exact catalog + count. A prototype-key lookup (`--model constructor`) can no longer resolve to a function and send a model-less body upstream.
+- Doc surfaces resynced: `skills/clawrouter/SKILL.md` (8 → 9 image models, Nano Banana 2 listed), `skills/imagegen/SKILL.md` (banana-2 row; removed recommended sizes that 400 — e.g. nano-banana `1216x832`, banana-pro `1024x1792`), README `banana-2` row, `docs/image-generation.md` (still documented dall-e-3/flux as live and mapped `dall-e-3` → `openai/dall-e-3`; full 9-model refresh with per-model size lists), `scripts/reinstall.sh` example.
+
+---
+
 ## v0.12.246 — August 22, 2026
 
 ### Changed — new installs default to the Solana payment chain
