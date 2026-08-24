@@ -57,8 +57,9 @@ Display inline: `![generated image](http://localhost:8402/images/abc123.png)`
 
 | Alias              | Full ID                      | Price        | Sizes                           | Best for                                                                                                           |
 | ------------------ | ---------------------------- | ------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `nano-banana`      | `google/nano-banana`         | $0.05        | 1024×1024, 1216×832, 1024×1792  | Default — fast, cheap, good quality                                                                                |
-| `banana-pro`       | `google/nano-banana-pro`     | $0.10–$0.15  | up to 4096×4096                 | High-res, large format                                                                                             |
+| `nano-banana`      | `google/nano-banana`         | $0.05        | 1024×1024                       | Default — fast, cheap, good quality                                                                                |
+| `banana-2`         | `google/nano-banana-2`       | $0.09        | 1024×1024                       | Gemini 3.1 Flash imagegen — sharper than nano-banana at 1K                                                         |
+| `banana-pro`       | `google/nano-banana-pro`     | $0.10–$0.15  | 1024×1024, 2048×2048, 4096×4096 | High-res, large format                                                                                             |
 | `gpt-image`        | `openai/gpt-image-1`         | $0.02–$0.04  | 1024×1024, 1536×1024, 1024×1536 | Budget option; supports editing                                                                                    |
 | `gpt-image-2`      | `openai/gpt-image-2`         | $0.06–$0.12  | 1024×1024, 1536×1024, 1024×1536 | Photorealistic, reasoning-driven, text rendering (slow — proxy polls up to 5min); legacy `dalle` alias routes here |
 | `seedream`         | `bytedance/seedream-5-pro`   | $0.045–$0.09 | up to 2848×1600 / 2304×1728     | Flagship quality, reference-image support                                                                          |
@@ -79,10 +80,11 @@ Display inline: `![generated image](http://localhost:8402/images/abc123.png)`
 
 **Choosing a size:**
 
-- Default: `1024x1024`
-- Portrait: `1024x1792`
-- Landscape: `1536x1024` (gpt-image / gpt-image-2) or `1216x832` (nano-banana)
-- High-res: `2048x2048` or `4096x4096` with `banana-pro` only
+- Default: `1024x1024` (the only size every model accepts)
+- Portrait: `1024x1536` (gpt-image / gpt-image-2) or `1728x2304` (seedream)
+- Landscape: `1536x1024` (gpt-image / gpt-image-2), `1344x768` (cogview), or `2048x1024` / `1280x720` (seedream)
+- High-res: `2048x2048` / `4096x4096` with `banana-pro`; `2848x1600` with `seedream`
+- The gateway validates size per model BEFORE payment and rejects unknown ones — do not invent sizes outside each model's list above
 
 ---
 
@@ -123,7 +125,7 @@ Response is identical to generation:
 → POST to `/v1/images/generations`, model `nano-banana`, prompt as given.
 
 **User:** Generate a high-res portrait of a samurai
-→ POST to `/v1/images/generations`, model `banana-pro`, size `1024x1792`.
+→ POST to `/v1/images/generations`, model `seedream`, size `1728x2304`.
 
 **User:** Edit this photo to add a sunset background: https://example.com/portrait.jpg
 → POST to `/v1/images/image2image`, model `gpt-image`, image = the URL, prompt = "add a warm sunset background".

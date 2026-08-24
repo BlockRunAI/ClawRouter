@@ -1589,9 +1589,20 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
   },
   "bytedance/seedream-5-pro": {
     default: 0.045,
-    sizes: { "1024x1024": 0.045, "2048x1024": 0.045, "2048x2048": 0.09 },
+    // Full size list live-probed 2026-08-23 (gateway 402 quotes, base price):
+    // the 2K portrait/landscape tiers bill at the 2048x2048 rate.
+    sizes: {
+      "1024x1024": 0.045,
+      "1280x720": 0.045,
+      "2048x1024": 0.045,
+      "2048x2048": 0.09,
+      "2304x1728": 0.09,
+      "1728x2304": 0.09,
+      "2848x1600": 0.09,
+      "1600x2848": 0.09,
+    },
   },
-  "google/nano-banana": { default: 0.05 },
+  "google/nano-banana": { default: 0.05, sizes: { "1024x1024": 0.05 } },
   // Nano Banana 2 (Gemini 3.1 Flash imagegen, blockrun #329): $0.09/image at 1K.
   "google/nano-banana-2": { default: 0.09, sizes: { "1024x1024": 0.09 } },
   "google/nano-banana-pro": {
@@ -1614,7 +1625,9 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
 };
 
 /**
- * Image model ids the gateway can actually serve, in picker order.
+ * Image model ids the gateway can actually serve, in IMAGE_PRICING declaration
+ * order (the picker in index.ts curates its own order — default model first —
+ * so the pinning test compares sorted copies).
  *
  * Derived from IMAGE_PRICING, which v0.12.227 re-synced against blockrun's
  * IMAGE_MODELS — so an id missing here is an id the gateway will reject.
@@ -1623,6 +1636,45 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
  * /v1/images/generations verbatim, with no alias resolution in between.
  */
 export const IMAGE_MODEL_IDS: readonly string[] = Object.freeze(Object.keys(IMAGE_PRICING));
+
+/**
+ * Union of every size the gateway accepts across all image models, live-probed
+ * 2026-08-23 (the gateway rejects invalid sizes pre-payment with the model's
+ * accepted list). Derived from the per-model `sizes` maps above, which mirror
+ * those probes — every model entry now carries its full accepted-size map.
+ * Pins the `geometry.sizes` list advertised by buildImageGenerationProvider
+ * (index.ts): a size listed there that no model accepts is a guaranteed 400.
+ */
+export const IMAGE_MODEL_SIZES: readonly string[] = Object.freeze(
+  [...new Set(Object.values(IMAGE_PRICING).flatMap((p) => Object.keys(p.sizes ?? {})))].sort(),
+);
+
+/**
+ * Shorthand → full-id aliases for the `/cr-imagegen` chat command. Module-scope
+ * and exported so tests can pin every target against IMAGE_MODEL_IDS — an alias
+ * pointing at a delisted id is the same guaranteed-400 drift class the picker
+ * test guards against.
+ */
+export const IMAGE_MODEL_ALIASES: Record<string, string> = Object.freeze({
+  // dall-e-3 delisted upstream 2026-05-25 — legacy aliases route to
+  // the OpenAI successor instead of a guaranteed 400.
+  "dall-e-3": "openai/gpt-image-2",
+  dalle3: "openai/gpt-image-2",
+  dalle: "openai/gpt-image-2",
+  "gpt-image": "openai/gpt-image-1",
+  "gpt-image-1": "openai/gpt-image-1",
+  "gpt-image-2": "openai/gpt-image-2",
+  seedream: "bytedance/seedream-5-pro",
+  banana: "google/nano-banana",
+  "nano-banana": "google/nano-banana",
+  "banana-2": "google/nano-banana-2",
+  "nano-banana-2": "google/nano-banana-2",
+  "banana-pro": "google/nano-banana-pro",
+  "nano-banana-pro": "google/nano-banana-pro",
+  "grok-imagine": "xai/grok-imagine-image",
+  "grok-imagine-pro": "xai/grok-imagine-image-pro",
+  cogview: "zai/cogview-4",
+});
 
 // Video pricing (must match server's VIDEO_MODELS in blockrun/src/lib/models.ts).
 // pricePerSecond is the BASE rate (no margin). estimateVideoCost applies the
@@ -3893,28 +3945,13 @@ async function proxyRequest(
         const modelMatch = imageArgs.match(/--model\s+(\S+)/);
         if (modelMatch) {
           const raw = modelMatch[1];
-          // Resolve shorthand aliases
-          const IMAGE_MODEL_ALIASES: Record<string, string> = {
-            // dall-e-3 delisted upstream 2026-05-25 — legacy aliases route to
-            // the OpenAI successor instead of a guaranteed 400.
-            "dall-e-3": "openai/gpt-image-2",
-            dalle3: "openai/gpt-image-2",
-            dalle: "openai/gpt-image-2",
-            "gpt-image": "openai/gpt-image-1",
-            "gpt-image-1": "openai/gpt-image-1",
-            "gpt-image-2": "openai/gpt-image-2",
-            seedream: "bytedance/seedream-5-pro",
-            banana: "google/nano-banana",
-            "nano-banana": "google/nano-banana",
-            "banana-2": "google/nano-banana-2",
-            "nano-banana-2": "google/nano-banana-2",
-            "banana-pro": "google/nano-banana-pro",
-            "nano-banana-pro": "google/nano-banana-pro",
-            "grok-imagine": "xai/grok-imagine-image",
-            "grok-imagine-pro": "xai/grok-imagine-image-pro",
-            cogview: "zai/cogview-4",
-          };
-          imageModel = IMAGE_MODEL_ALIASES[raw] ?? raw;
+          // Resolve shorthand aliases (module-scope map, pinned by tests).
+          // hasOwnProperty guard: a plain-object lookup would resolve prototype
+          // keys ("constructor", "toString") to functions, which JSON.stringify
+          // then drops — sending a model-less body upstream.
+          imageModel = Object.prototype.hasOwnProperty.call(IMAGE_MODEL_ALIASES, raw)
+            ? IMAGE_MODEL_ALIASES[raw]
+            : raw;
           imagePrompt = imagePrompt.replace(/--model\s+\S+/, "").trim();
         }
 
@@ -4003,20 +4040,105 @@ async function proxyRequest(
             size: imageSize,
             n: 1,
           });
+          // Stop upstream work (especially the slow-model poll loop below,
+          // whose first `completed` poll settles the x402 payment) if the
+          // chat client goes away mid-generation.
+          const imagegenAbort = new AbortController();
+          res.on("close", () => {
+            if (!res.writableEnded) imagegenAbort.abort();
+          });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: imageBody,
+            signal: imagegenAbort.signal,
           });
 
-          const imageResult = (await imageResponse.json()) as {
+          type ImagegenResult = {
             created?: number;
             data?: Array<{ url?: string; revised_prompt?: string }>;
             error?: string | { message?: string };
+            id?: string;
+            poll_url?: string;
+            status?: string;
           };
+          let imageResult = (await imageResponse.json()) as ImagegenResult;
+          let imageFailure: string | undefined;
+
+          // Slow path — BlockRun returned 202 + poll_url (model exceeded the
+          // 30s inline window, e.g. openai/gpt-image-2). Response.ok is true
+          // for 202 and data[] is absent, so without this branch the paid job
+          // would surface as "returned no results". Mirrors the poll loop in
+          // the /v1/images/generations handler above.
+          if (
+            imageResponse.ok &&
+            imageResult.poll_url &&
+            imageResult.id &&
+            !imageResult.data?.length
+          ) {
+            const apiOrigin = new URL(apiBase).origin;
+            const pollUrl = imageResult.poll_url.startsWith("http")
+              ? imageResult.poll_url
+              : `${apiOrigin}${imageResult.poll_url}`;
+            console.log(
+              `[ClawRouter] /imagegen job submitted (id=${imageResult.id}), polling upstream — typical 30–120s...`,
+            );
+            // Poll every 3s, bail after ~5min total. Server auth window is 10min.
+            const pollDeadline = Date.now() + 300_000;
+            await new Promise((r) => setTimeout(r, 2_000));
+            let completed = false;
+            while (Date.now() < pollDeadline) {
+              if (imagegenAbort.signal.aborted) {
+                console.log(
+                  `[ClawRouter] Chat client disconnected — abandoning image poll (id=${imageResult.id})`,
+                );
+                return;
+              }
+              const pollResp = await payFetch(pollUrl, {
+                method: "GET",
+                headers: { "user-agent": USER_AGENT },
+                signal: imagegenAbort.signal,
+              });
+              const pollText = await pollResp.text();
+              let pollBody: ImagegenResult = {};
+              try {
+                pollBody = JSON.parse(pollText) as ImagegenResult;
+              } catch {
+                imageFailure = `Non-JSON poll response (${pollResp.status}): ${pollText.slice(0, 200)}`;
+                break;
+              }
+              if (
+                pollResp.status === 202 ||
+                pollBody.status === "queued" ||
+                pollBody.status === "in_progress"
+              ) {
+                await new Promise((r) => setTimeout(r, 3_000));
+                continue;
+              }
+              if (pollBody.status === "failed" || !pollResp.ok) {
+                imageFailure =
+                  typeof pollBody.error === "string"
+                    ? pollBody.error
+                    : ((pollBody.error as { message?: string })?.message ??
+                      `Upstream image generation failed (HTTP ${pollResp.status})`);
+                break;
+              }
+              // completed, or OK with an unrecognized shape — hand through.
+              imageResult = pollBody;
+              completed = true;
+              break;
+            }
+            if (!completed && !imageFailure) {
+              imageFailure =
+                "Image generation timed out after 5 minutes — the job may still complete upstream.";
+            }
+          }
 
           let responseText: string;
-          if (!imageResponse.ok || imageResult.error) {
+          if (imageFailure) {
+            responseText = `Image generation failed: ${imageFailure}`;
+            console.log(`[ClawRouter] /imagegen error: ${imageFailure}`);
+          } else if (!imageResponse.ok || imageResult.error) {
             const errMsg =
               typeof imageResult.error === "string"
                 ? imageResult.error
@@ -4040,9 +4162,7 @@ async function proxyRequest(
                       console.error(
                         `[ClawRouter] /imagegen: failed to upload data URI: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`,
                       );
-                      lines.push(
-                        "Image generated but upload failed. Try again or use --model gpt-image-2.",
-                      );
+                      lines.push("Image generated but upload failed. Try again.");
                     }
                   } else {
                     lines.push(img.url);

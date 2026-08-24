@@ -51,15 +51,21 @@ The returned URL is a publicly hosted image, ready to use in Telegram, Discord, 
 
 ## Models & Pricing
 
-| Model ID                    | Shorthand     | Price       | Max Size  | Provider            |
-| --------------------------- | ------------- | ----------- | --------- | ------------------- |
-| `google/nano-banana`        | `nano-banana` | $0.05/image | 1024×1024 | Google Gemini Flash |
-| `google/nano-banana-pro`    | `banana-pro`  | $0.10/image | 4096×4096 | Google Gemini Pro   |
-| `openai/dall-e-3`           | `dall-e-3`    | $0.04/image | 1792×1024 | OpenAI DALL-E 3     |
-| `openai/gpt-image-1`        | `gpt-image`   | $0.02/image | 1536×1024 | OpenAI GPT Image    |
-| `black-forest/flux-1.1-pro` | `flux`        | $0.04/image | 1024×1024 | Black Forest Labs   |
+| Model ID                     | Shorthand          | Price               | Sizes                                                                              | Provider              |
+| ---------------------------- | ------------------ | ------------------- | ---------------------------------------------------------------------------------- | --------------------- |
+| `google/nano-banana`         | `nano-banana`      | $0.05/image         | 1024×1024                                                                          | Google Gemini Flash   |
+| `google/nano-banana-2`       | `banana-2`         | $0.09/image         | 1024×1024                                                                          | Google Nano Banana 2  |
+| `google/nano-banana-pro`     | `banana-pro`       | $0.10–$0.15/image   | 1024×1024, 2048×2048, 4096×4096                                                    | Google Gemini Pro     |
+| `openai/gpt-image-1`         | `gpt-image`        | $0.02–$0.04/image   | 1024×1024, 1536×1024, 1024×1536                                                    | OpenAI GPT Image 1    |
+| `openai/gpt-image-2`         | `gpt-image-2`      | $0.06–$0.12/image   | 1024×1024, 1536×1024, 1024×1536                                                    | OpenAI GPT Image 2    |
+| `bytedance/seedream-5-pro`   | `seedream`         | $0.045–$0.09/image  | 1024×1024, 1280×720, 2048×1024, 2048×2048, 2304×1728, 1728×2304, 2848×1600, 1600×2848 | ByteDance Seedream 5  |
+| `xai/grok-imagine-image`     | `grok-imagine`     | $0.02/image         | 1024×1024                                                                          | xAI Grok Imagine      |
+| `xai/grok-imagine-image-pro` | `grok-imagine-pro` | $0.07/image         | 1024×1024                                                                          | xAI Grok Imagine Pro  |
+| `zai/cogview-4`              | `cogview`          | $0.015–$0.02/image  | 512×512, 768×768, 1024×1024, 768×1344, 1344×768, 1440×1440                         | Zhipu CogView-4       |
 
 Default model: `google/nano-banana`.
+
+> `openai/dall-e-3` was delisted upstream on 2026-05-25 and `black-forest/flux-1.1-pro` is no longer served; the legacy `dall-e-3` / `dalle` shorthands now route to `openai/gpt-image-2`. The gateway validates `size` per model **before** payment — sizes outside the lists above return an error and cost nothing. Slow models (notably `gpt-image-2`) can take longer than 30s; the proxy transparently polls the job for up to 5 minutes and still returns a single blocking response.
 
 ---
 
@@ -85,7 +91,7 @@ OpenAI-compatible endpoint. Route via ClawRouter proxy (`http://localhost:8402`)
   created: number; // Unix timestamp
   data: Array<{
     url: string; // Publicly hosted image URL
-    revised_prompt?: string; // Model's rewritten prompt (dall-e-3 only)
+    revised_prompt?: string; // Model's rewritten prompt (when the model provides one)
   }>;
 }
 ```
@@ -146,13 +152,13 @@ curl -X POST http://localhost:8402/v1/images/generations \
     "n": 1
   }'
 
-# DALL-E 3 with landscape size ($0.04)
+# GPT Image 2 with landscape size ($0.12 — slow model, the proxy polls for you)
 curl -X POST http://localhost:8402/v1/images/generations \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "openai/dall-e-3",
+    "model": "openai/gpt-image-2",
     "prompt": "a serene Japanese garden in autumn",
-    "size": "1792x1024",
+    "size": "1536x1024",
     "n": 1
   }'
 ```
@@ -233,9 +239,9 @@ const response = await fetch(`${proxy.baseUrl}/v1/images/generations`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    model: "openai/dall-e-3",
+    model: "bytedance/seedream-5-pro",
     prompt: "a serene Japanese garden in autumn",
-    size: "1792x1024",
+    size: "2048x1024",
     n: 1,
   }),
 });
@@ -335,7 +341,7 @@ When using ClawRouter with OpenClaw, generate and edit images directly from any 
 
 ```
 /cr-imagegen a dog dancing on the beach
-/cr-imagegen --model dall-e-3 a futuristic city at sunset
+/cr-imagegen --model gpt-image-2 a futuristic city at sunset
 /cr-imagegen --model banana-pro --size 2048x2048 mountain landscape
 ```
 
@@ -363,13 +369,18 @@ When using ClawRouter with OpenClaw, generate and edit images directly from any 
 
 ### Model shorthands
 
-| Shorthand     | Full ID                     |
-| ------------- | --------------------------- |
-| `nano-banana` | `google/nano-banana`        |
-| `banana-pro`  | `google/nano-banana-pro`    |
-| `dall-e-3`    | `openai/dall-e-3`           |
-| `gpt-image`   | `openai/gpt-image-1`        |
-| `flux`        | `black-forest/flux-1.1-pro` |
+| Shorthand                            | Full ID                      |
+| ------------------------------------ | ---------------------------- |
+| `nano-banana`, `banana`              | `google/nano-banana`         |
+| `banana-2`, `nano-banana-2`          | `google/nano-banana-2`       |
+| `banana-pro`, `nano-banana-pro`      | `google/nano-banana-pro`     |
+| `gpt-image`, `gpt-image-1`           | `openai/gpt-image-1`         |
+| `gpt-image-2`                        | `openai/gpt-image-2`         |
+| `seedream`                           | `bytedance/seedream-5-pro`   |
+| `grok-imagine`                       | `xai/grok-imagine-image`     |
+| `grok-imagine-pro`                   | `xai/grok-imagine-image-pro` |
+| `cogview`                            | `zai/cogview-4`              |
+| `dall-e-3`, `dalle3`, `dalle` (legacy) | `openai/gpt-image-2`       |
 
 ---
 
@@ -377,6 +388,6 @@ When using ClawRouter with OpenClaw, generate and edit images directly from any 
 
 - **Local image caching** — All images (generated and edited) are cached locally at `~/.openclaw/blockrun/images/` and served via `http://localhost:8402/images/`. Both base64 data URIs and HTTP URLs from upstream are downloaded and replaced with localhost URLs.
 - **Payment** — Each image costs the listed price in USDC, deducted from your wallet via x402. Make sure your wallet is funded before generating or editing.
-- **No DALL-E content policy bypass** — DALL-E 3 and GPT Image 1 still apply OpenAI's content policy. Use `flux` or `nano-banana` for more flexibility with generation.
-- **Size limits** — Requesting a size larger than the model's max will return an error. Check the table above before setting `--size`.
+- **Content policy** — OpenAI image models (GPT Image 1/2) apply OpenAI's content policy. Use `nano-banana` or `grok-imagine` for more flexibility with generation.
+- **Size limits** — The gateway validates `size` per model before payment; a size outside the model's list returns an error and costs nothing. Check the table above before setting `--size`.
 - **Image editing** — The `/v1/images/image2image` endpoint currently supports `openai/gpt-image-1` (default). The `image` and `mask` fields accept local file paths (`~/photo.png`, `/abs/path.png`), HTTP/HTTPS URLs, or base64 data URIs. ClawRouter handles file reading and URL downloading automatically. Supported formats: PNG, JPG/JPEG, WebP.

@@ -244,6 +244,7 @@ Generate images directly from chat with `/cr-imagegen`:
 | Model                        | Provider             | Price        | Max Size  |
 | ---------------------------- | -------------------- | ------------ | --------- |
 | `nano-banana`                | Google Gemini Flash  | $0.05/image  | 1024x1024 |
+| `banana-2`                   | Google Nano Banana 2 | $0.09/image  | 1024x1024 |
 | `banana-pro`                 | Google Gemini Pro    | $0.10/image  | 4096x4096 |
 | `gpt-image`                  | OpenAI GPT Image 1   | $0.02/image  | 1536x1024 |
 | `gpt-image-2`                | OpenAI GPT Image 2   | $0.06/image  | 1536x1024 |

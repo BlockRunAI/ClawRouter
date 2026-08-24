@@ -1183,7 +1183,11 @@ export function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
     // verbatim with no alias resolution, so a retired id here is a guaranteed
     // upstream 400. dall-e-3 (delisted 2026-05-25) and flux-1.1-pro (no
     // gateway entry) were dropped in v0.12.227 and had lingered here.
-    // src/index.image-provider.test.ts pins the two lists together.
+    // Kept as a hand-written array (not spread from IMAGE_MODEL_IDS) because
+    // this is the picker's curated display order — default model first, which
+    // IMAGE_PRICING declaration order does not give — and because the
+    // lifecycle tests fully mock ./proxy.js. Set-equality is enforced by
+    // src/index.image-provider.test.ts, which pins the two lists together.
     models: [
       "google/nano-banana",
       "google/nano-banana-2",
@@ -1205,20 +1209,28 @@ export function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
       // Only openai/gpt-image-1 supports edit server-side; OpenClaw's UI picks a
       // compatible model at edit time via /v1/images/image2image.
       edit: { enabled: true },
+      // Union of every size the gateway accepts across the models above,
+      // live-probed 2026-08-23 (the gateway validates size per-model BEFORE
+      // payment and 400s unknown ones — 1216x832 / 1792x1024 / 1024x1792 were
+      // accepted by no model and are gone with dall-e-3). Pinned against
+      // IMAGE_MODEL_SIZES (proxy.ts) by src/index.image-provider.test.ts.
       geometry: {
         sizes: [
           "512x512",
           "768x768",
           "768x1344",
           "1024x1024",
-          "1216x832",
+          "1024x1536",
+          "1280x720",
           "1344x768",
           "1440x1440",
           "1536x1024",
-          "1024x1536",
-          "1792x1024",
-          "1024x1792",
+          "1600x2848",
+          "1728x2304",
+          "2048x1024",
           "2048x2048",
+          "2304x1728",
+          "2848x1600",
           "4096x4096",
         ],
       },

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { buildImageGenerationProvider } from "./index.js";
-import { IMAGE_MODEL_IDS } from "./proxy.js";
+import { PARTNER_SERVICES } from "./partners/registry.js";
+import { IMAGE_MODEL_ALIASES, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES } from "./proxy.js";
 
 /**
  * The OpenClaw image UI sends the picked entry from `provider.models` straight
@@ -48,5 +49,52 @@ describe("image generation provider model list", () => {
 
   it("advertises a default model that is itself advertised", () => {
     expect(models).toContain(provider.defaultModel);
+  });
+
+  it("advertises only sizes some gateway model accepts, and all of them", () => {
+    // The gateway validates size per-model BEFORE payment and 400s unknown
+    // ones (live-probed 2026-08-23), so a size here that no model accepts is
+    // a guaranteed failure from the size picker — that is how the orphaned
+    // dall-e-3 sizes (1792x1024 / 1024x1792) lingered until v0.12.247.
+    const sizes = provider.capabilities?.geometry?.sizes ?? [];
+    expect([...sizes].sort()).toEqual([...IMAGE_MODEL_SIZES].sort());
+  });
+});
+
+describe("/cr-imagegen model aliases", () => {
+  it("every alias target is a servable gateway id", () => {
+    // An alias pointing at a delisted id is the same guaranteed-400 drift
+    // class the picker test guards against — the resolved id is sent to the
+    // gateway verbatim.
+    for (const [alias, target] of Object.entries(IMAGE_MODEL_ALIASES)) {
+      expect(IMAGE_MODEL_IDS, `alias "${alias}" → "${target}"`).toContain(target);
+    }
+  });
+
+  it("keeps the legacy dall-e-3 shorthands routed to the OpenAI successor", () => {
+    expect(IMAGE_MODEL_ALIASES["dall-e-3"]).toBe("openai/gpt-image-2");
+    expect(IMAGE_MODEL_ALIASES["dalle"]).toBe("openai/gpt-image-2");
+  });
+});
+
+describe("partner registry image generation entry", () => {
+  const svc = PARTNER_SERVICES.find((s) => s.proxyPath === "/images/generations");
+
+  it("exists", () => {
+    expect(svc).toBeDefined();
+  });
+
+  it("enumerates every servable model id and no others", () => {
+    // This prose description is what agents read to pick a model — it drifted
+    // to advertising dall-e-3/flux once already (fixed in PR #254). Pin it.
+    for (const id of IMAGE_MODEL_IDS) {
+      expect(svc!.description).toContain(id);
+    }
+    expect(svc!.description).not.toContain("dall-e-3");
+    expect(svc!.description).not.toContain("flux");
+  });
+
+  it("states the correct model count", () => {
+    expect(svc!.shortDescription).toContain(`${IMAGE_MODEL_IDS.length} image models`);
   });
 });
