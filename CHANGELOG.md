@@ -4,6 +4,20 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.249 — August 25, 2026
+
+### Fixed — `/health?full=true` could hang forever on an unresponsive balance RPC
+
+The full health check awaited `balanceMonitor.checkBalance()` with no time bound. The surrounding `catch` covers a rejection but never a hang, so an unresponsive RPC held the response open indefinitely — on the one endpoint monitoring hits and the one that must always answer. The check is now bounded by the same `BALANCE_CHECK_TIMEOUT_MS` (2.5s) as the pre-request path and degrades to `balanceError`, which the response shape already carried.
+
+This is also why CI's `lifecycle` integration test had been failing: GitHub runners are slow enough to reach the RPC that the endpoint blew past the test's 5s limit. Covered by `src/proxy.health-balance-timeout.test.ts` (hanging monitor, asserts the answer lands well inside the RPC delay).
+
+### Fixed — `prettier --check` restored to green
+
+`docs/image-generation.md` and `skills/clawrouter/SKILL.md` landed unformatted in v0.12.247 (#254), leaving the Lint & Typecheck job red on every commit since. Formatting only.
+
+---
+
 ## v0.12.248 — August 25, 2026
 
 ### Fixed — agents went silent for the whole tool-using stretch of a conversation

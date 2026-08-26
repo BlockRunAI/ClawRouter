@@ -89368,7 +89368,15 @@ async function startProxy(options) {
         }
         if (full) {
           try {
-            const balanceInfo = await balanceMonitor.checkBalance();
+            const balanceInfo = await Promise.race([
+              balanceMonitor.checkBalance(),
+              new Promise(
+                (_, reject) => setTimeout(
+                  () => reject(new Error("balance check timed out")),
+                  BALANCE_CHECK_TIMEOUT_MS
+                ).unref()
+              )
+            ]);
             response.balance = balanceInfo.balanceUSD;
             response.isLow = balanceInfo.isLow;
             response.isEmpty = balanceInfo.isEmpty;

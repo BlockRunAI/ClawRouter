@@ -2287,8 +2287,18 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }
 
         if (full) {
+          // Time-bound the RPC: `catch` alone covers a rejection but not a
+          // hang, and health is the one endpoint that must always answer.
           try {
-            const balanceInfo = await balanceMonitor.checkBalance();
+            const balanceInfo = await Promise.race([
+              balanceMonitor.checkBalance(),
+              new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("balance check timed out")),
+                  BALANCE_CHECK_TIMEOUT_MS,
+                ).unref(),
+              ),
+            ]);
             response.balance = balanceInfo.balanceUSD;
             response.isLow = balanceInfo.isLow;
             response.isEmpty = balanceInfo.isEmpty;
