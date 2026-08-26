@@ -2451,7 +2451,9 @@ export {
 } from "./spend-control.js";
 export type {
   SpendWindow,
+  PolicyList,
   SpendLimits,
+  CounterpartyInfo,
   SpendRecord,
   SpendingStatus,
   CheckResult,

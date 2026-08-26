@@ -24,11 +24,34 @@ const DAY_MS = 24 * HOUR_MS;
 
 export type SpendWindow = "perRequest" | "hourly" | "daily" | "session";
 
+/**
+ * Counterparty/network/asset allow-or-deny lists. Default-off: a list only
+ * takes effect once configured via setPolicy(). `allowedPayees`/`blockedPayees`
+ * are both supported (block always wins if both are set); network and asset
+ * are allowlist-only, matching what a caller can realistically enumerate.
+ */
+export type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" | "allowedAssets";
+
 export interface SpendLimits {
   perRequest?: number;
   hourly?: number;
   daily?: number;
   session?: number;
+  allowedPayees?: string[];
+  blockedPayees?: string[];
+  allowedNetworks?: string[];
+  allowedAssets?: string[];
+}
+
+/**
+ * Counterparty details for a pending payment, passed to check() alongside
+ * the estimated cost. Exact string match — callers are responsible for any
+ * chain-specific normalization (e.g. EVM checksum casing).
+ */
+export interface CounterpartyInfo {
+  payTo?: string;
+  network?: string;
+  asset?: string;
 }
 
 export interface SpendRecord {
@@ -56,6 +79,7 @@ export interface SpendingStatus {
 export interface CheckResult {
   allowed: boolean;
   blockedBy?: SpendWindow;
+  blockedByPolicy?: PolicyList;
   remaining?: number;
   reason?: string;
   resetIn?: number;
@@ -84,6 +108,21 @@ export class FileSpendControlStorage implements SpendControlStorage {
         for (const key of ["perRequest", "hourly", "daily", "session"] as const) {
           const val = rawLimits[key];
           if (typeof val === "number" && val > 0 && Number.isFinite(val)) {
+            limits[key] = val;
+          }
+        }
+        for (const key of [
+          "allowedPayees",
+          "blockedPayees",
+          "allowedNetworks",
+          "allowedAssets",
+        ] as const) {
+          const val = rawLimits[key];
+          if (
+            Array.isArray(val) &&
+            val.length > 0 &&
+            val.every((v) => typeof v === "string" && v.length > 0)
+          ) {
             limits[key] = val;
           }
         }
@@ -182,11 +221,93 @@ export class SpendControl {
     this.save();
   }
 
+  setPolicy(list: PolicyList, values: string[]): void {
+    if (
+      !Array.isArray(values) ||
+      values.length === 0 ||
+      values.some((v) => typeof v !== "string" || v.length === 0)
+    ) {
+      throw new Error("Policy list must be a non-empty array of non-empty strings");
+    }
+    this.limits[list] = [...values];
+    this.save();
+  }
+
+  clearPolicy(list: PolicyList): void {
+    delete this.limits[list];
+    this.save();
+  }
+
   getLimits(): SpendLimits {
     return { ...this.limits };
   }
 
-  check(estimatedCost: number): CheckResult {
+  check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult {
+    const payeePolicySet =
+      (this.limits.blockedPayees && this.limits.blockedPayees.length > 0) ||
+      (this.limits.allowedPayees && this.limits.allowedPayees.length > 0);
+    if (payeePolicySet) {
+      if (counterparty?.payTo === undefined) {
+        return {
+          allowed: false,
+          blockedByPolicy: this.limits.blockedPayees?.length ? "blockedPayees" : "allowedPayees",
+          reason: "Payee policy is configured but no payTo was provided to check()",
+        };
+      }
+      if (this.limits.blockedPayees?.includes(counterparty.payTo)) {
+        return {
+          allowed: false,
+          blockedByPolicy: "blockedPayees",
+          reason: `Payee is blocked by policy: ${counterparty.payTo}`,
+        };
+      }
+      if (
+        this.limits.allowedPayees &&
+        this.limits.allowedPayees.length > 0 &&
+        !this.limits.allowedPayees.includes(counterparty.payTo)
+      ) {
+        return {
+          allowed: false,
+          blockedByPolicy: "allowedPayees",
+          reason: `Payee is not in the configured allowlist: ${counterparty.payTo}`,
+        };
+      }
+    }
+
+    if (this.limits.allowedNetworks && this.limits.allowedNetworks.length > 0) {
+      if (counterparty?.network === undefined) {
+        return {
+          allowed: false,
+          blockedByPolicy: "allowedNetworks",
+          reason: "Network policy is configured but no network was provided to check()",
+        };
+      }
+      if (!this.limits.allowedNetworks.includes(counterparty.network)) {
+        return {
+          allowed: false,
+          blockedByPolicy: "allowedNetworks",
+          reason: `Network is not in the configured allowlist: ${counterparty.network}`,
+        };
+      }
+    }
+
+    if (this.limits.allowedAssets && this.limits.allowedAssets.length > 0) {
+      if (counterparty?.asset === undefined) {
+        return {
+          allowed: false,
+          blockedByPolicy: "allowedAssets",
+          reason: "Asset policy is configured but no asset was provided to check()",
+        };
+      }
+      if (!this.limits.allowedAssets.includes(counterparty.asset)) {
+        return {
+          allowed: false,
+          blockedByPolicy: "allowedAssets",
+          reason: `Asset is not in the configured allowlist: ${counterparty.asset}`,
+        };
+      }
+    }
+
     const now = this.now();
 
     if (this.limits.perRequest !== undefined) {
