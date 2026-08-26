@@ -89132,6 +89132,9 @@ function stripThinkingTokens(content) {
   cleaned = cleaned.replace(THINKING_TAG_RE, "");
   return cleaned;
 }
+function forwardToolCallProse() {
+  return process.env.CLAWROUTER_TOOL_CALL_PROSE?.trim().toLowerCase() !== "off";
+}
 function buildModelPricing() {
   const map = /* @__PURE__ */ new Map();
   for (const m of BLOCKRUN_MODELS) {
@@ -92344,13 +92347,16 @@ data: [DONE]
               const endsWithToolCalls = choice.finish_reason === "tool_calls";
               let toolCalls = choice.message?.tool_calls ?? choice.delta?.tool_calls;
               const rawContent = choice.message?.content ?? choice.delta?.content ?? "";
+              let proseContent = rawContent;
               if (!endsWithToolCalls && (!toolCalls || toolCalls.length === 0) && rawContent) {
                 const extracted = extractTextualToolCalls(rawContent, { tools: requestTools });
                 if (extracted.toolCalls.length > 0) {
                   toolCalls = extracted.toolCalls;
+                  proseContent = extracted.cleanedContent;
                 }
               }
-              const content = endsWithToolCalls || toolCalls && toolCalls.length > 0 ? "" : stripThinkingTokens(rawContent);
+              const suppressProse = (endsWithToolCalls || toolCalls && toolCalls.length > 0) && !forwardToolCallProse();
+              const content = suppressProse ? "" : stripThinkingTokens(proseContent);
               const role = choice.message?.role ?? choice.delta?.role ?? "assistant";
               const index2 = choice.index ?? 0;
               if (content) {
@@ -92552,8 +92558,9 @@ data: [DONE]
             const message = choice.message;
             if (!message || typeof message.content !== "string") continue;
             if (choice.finish_reason === "tool_calls" || Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-              if (message.content !== "") {
-                message.content = "";
+              const next = forwardToolCallProse() ? stripThinkingTokens(message.content) : "";
+              if (message.content !== next) {
+                message.content = next;
                 changed = true;
               }
               continue;
@@ -92561,7 +92568,7 @@ data: [DONE]
             const extracted = extractTextualToolCalls(message.content, { tools: requestTools });
             if (extracted.toolCalls.length > 0) {
               message.tool_calls = extracted.toolCalls;
-              message.content = "";
+              message.content = forwardToolCallProse() ? stripThinkingTokens(extracted.cleanedContent) : "";
               choice.finish_reason = "tool_calls";
               changed = true;
               continue;

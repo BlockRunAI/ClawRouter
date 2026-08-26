@@ -4,6 +4,20 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.248 — August 25, 2026
+
+### Fixed — agents went silent for the whole tool-using stretch of a conversation
+
+Any assistant turn carrying `tool_calls` had its `content` blanked to `""` before it reached the client, on both the streaming and non-streaming paths. The turn kept its tool call and lost its voice: an operator watching a long-running agent saw an unbroken run of bare `[Called function "exec" ...]` lines, and a plain question typed into the chat ("did you send it yet?") came back as another bare tool call with the answer deleted en route. Re-asking only produced more tool calls, because every reply the model wrote was discarded by the proxy rather than never written.
+
+Three sites blanked it: the SSE synthesizer (which then skipped emitting the content chunk entirely), the non-streaming native-`tool_calls` branch, and the non-streaming branch that synthesizes tool calls out of text. The third is the sharpest case — `extractTextualToolCalls` already computes `cleanedContent`, the model's prose with the raw `<tool_call>` markup stripped out, and it is unit-tested to preserve exactly that prose; `proxy.ts` never read it.
+
+All three now forward the prose, still running it through `stripThinkingTokens`, so tagged chain-of-thought (`<think>`, Kimi `<｜...｜>`) is stripped as before and raw tool-call syntax still never leaks into chat. This matches what OpenAI-compatible clients already expect: `content` and `tool_calls` on the same message. Set `CLAWROUTER_TOOL_CALL_PROSE=off` to restore the old suppression for models that dump untagged planning prose into `content`.
+
+The four tests that asserted the blanking were rewritten to assert delivery; `src/proxy.tool-call-prose.test.ts` covers the native, textual, streaming, thinking-token, and opt-out paths.
+
+---
+
 ## v0.12.247 — August 23, 2026
 
 ### Fixed — OpenClaw image picker no longer advertises delisted models (#254)

@@ -1219,6 +1219,20 @@ function stripThinkingTokens(content: string): string {
   return cleaned;
 }
 
+/**
+ * Whether a turn that carries `tool_calls` may also carry prose to the user.
+ *
+ * Models routinely address the user on the same turn they call a tool ("not
+ * sent yet, checking first"), and OpenAI-compatible clients expect that text
+ * in `content` alongside `tool_calls`. Suppressing it mutes the agent for the
+ * whole tool-using stretch of a conversation. Set
+ * CLAWROUTER_TOOL_CALL_PROSE=off for models that dump untagged
+ * chain-of-thought into `content` rather than into a thinking block.
+ */
+function forwardToolCallProse(): boolean {
+  return process.env.CLAWROUTER_TOOL_CALL_PROSE?.trim().toLowerCase() !== "off";
+}
+
 /** Callback info for low balance warning */
 export type LowBalanceInfo = {
   balanceUSD: string;
@@ -6006,13 +6020,14 @@ async function proxyRequest(
           if (rsp.choices && Array.isArray(rsp.choices)) {
             for (const choice of rsp.choices) {
               const endsWithToolCalls = choice.finish_reason === "tool_calls";
-              // Some OpenAI-compatible providers include planning prose in content
-              // alongside tool_calls, or mark the turn as a tool-call turn via
-              // finish_reason before exposing the tool_calls array at the same
-              // object shape. Tool execution only needs tool_calls, so do not
-              // forward that prose to chat channels.
+              // A tool-calling turn can still be talking to the user, so the
+              // prose in `content` is forwarded alongside `tool_calls` rather
+              // than dropped. Thinking blocks are still stripped below, and
+              // CLAWROUTER_TOOL_CALL_PROSE=off restores full suppression for
+              // models that leak untagged chain-of-thought here.
               let toolCalls = choice.message?.tool_calls ?? choice.delta?.tool_calls;
               const rawContent = choice.message?.content ?? choice.delta?.content ?? "";
+              let proseContent = rawContent;
 
               // When upstream returns no structured tool_calls but the model emitted
               // tool calls as XML/text in `content` (e.g. OpenClaw-instructed
@@ -6025,14 +6040,17 @@ async function proxyRequest(
                 const extracted = extractTextualToolCalls(rawContent, { tools: requestTools });
                 if (extracted.toolCalls.length > 0) {
                   toolCalls = extracted.toolCalls;
+                  // Keep the prose the model wrapped around the call syntax;
+                  // the raw `<tool_call>` markup itself is already stripped out.
+                  proseContent = extracted.cleanedContent;
                 }
               }
 
               // Strip thinking tokens (Kimi <｜...｜> and standard <think> tags)
-              const content =
-                endsWithToolCalls || (toolCalls && toolCalls.length > 0)
-                  ? ""
-                  : stripThinkingTokens(rawContent);
+              const suppressProse =
+                (endsWithToolCalls || (toolCalls && toolCalls.length > 0)) &&
+                !forwardToolCallProse();
+              const content = suppressProse ? "" : stripThinkingTokens(proseContent);
               const role = choice.message?.role ?? choice.delta?.role ?? "assistant";
               const index = choice.index ?? 0;
 
@@ -6275,8 +6293,9 @@ async function proxyRequest(
               choice.finish_reason === "tool_calls" ||
               (Array.isArray(message.tool_calls) && message.tool_calls.length > 0)
             ) {
-              if (message.content !== "") {
-                message.content = "";
+              const next = forwardToolCallProse() ? stripThinkingTokens(message.content) : "";
+              if (message.content !== next) {
+                message.content = next;
                 changed = true;
               }
               continue;
@@ -6289,7 +6308,9 @@ async function proxyRequest(
             const extracted = extractTextualToolCalls(message.content, { tools: requestTools });
             if (extracted.toolCalls.length > 0) {
               message.tool_calls = extracted.toolCalls;
-              message.content = "";
+              message.content = forwardToolCallProse()
+                ? stripThinkingTokens(extracted.cleanedContent)
+                : "";
               choice.finish_reason = "tool_calls";
               changed = true;
               continue;
