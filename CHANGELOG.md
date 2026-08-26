@@ -12,6 +12,12 @@ The full health check awaited `balanceMonitor.checkBalance()` with no time bound
 
 This is also why CI's `lifecycle` integration test had been failing: GitHub runners are slow enough to reach the RPC that the endpoint blew past the test's 5s limit. Covered by `src/proxy.health-balance-timeout.test.ts` (hanging monitor, asserts the answer lands well inside the RPC delay).
 
+### Fixed — live-gateway integration tests no longer gate the npm publish
+
+There was no `vitest.config.ts`, so `npm test` fell back to vitest's default glob and swept in `test/integration/**` — seven suites that stand up a proxy and send real requests to the live BlockRun gateway. On a GitHub runner those hang past even their own declared 30s timeouts, which meant a release could be blocked by runner networking rather than by anything wrong with the code (v0.12.249 was blocked twice this way). Ironically `vitest.integration.config.ts` already existed with the right 30s/15s timeouts and was wired to nothing.
+
+`npm test` is now hermetic (716 tests) and `npm run test:integration` runs the gateway-dependent suites (26 tests) on demand. Same 742 total; nothing dropped.
+
 ### Fixed — `prettier --check` restored to green
 
 `docs/image-generation.md` and `skills/clawrouter/SKILL.md` landed unformatted in v0.12.247 (#254), leaving the Lint & Typecheck job red on every commit since. Formatting only.
