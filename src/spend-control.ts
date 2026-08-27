@@ -32,6 +32,17 @@ export type SpendWindow = "perRequest" | "hourly" | "daily" | "session";
  */
 export type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" | "allowedAssets";
 
+const POLICY_LISTS: readonly PolicyList[] = [
+  "allowedPayees",
+  "blockedPayees",
+  "allowedNetworks",
+  "allowedAssets",
+];
+
+function isPolicyList(value: string): value is PolicyList {
+  return (POLICY_LISTS as readonly string[]).includes(value);
+}
+
 export interface SpendLimits {
   perRequest?: number;
   hourly?: number;
@@ -41,6 +52,18 @@ export interface SpendLimits {
   blockedPayees?: string[];
   allowedNetworks?: string[];
   allowedAssets?: string[];
+}
+
+/** Defensive copy: the four policy fields are arrays, so a shallow `{...limits}` still shares them by reference. */
+function cloneLimits(limits: SpendLimits): SpendLimits {
+  const clone: SpendLimits = { ...limits };
+  for (const key of POLICY_LISTS) {
+    const val = limits[key];
+    if (val !== undefined) {
+      clone[key] = [...val];
+    }
+  }
+  return clone;
 }
 
 /**
@@ -175,7 +198,7 @@ export class InMemorySpendControlStorage implements SpendControlStorage {
   load(): { limits: SpendLimits; history: SpendRecord[] } | null {
     return this.data
       ? {
-          limits: { ...this.data.limits },
+          limits: cloneLimits(this.data.limits),
           history: this.data.history.map((r) => ({ ...r })),
         }
       : null;
@@ -183,7 +206,7 @@ export class InMemorySpendControlStorage implements SpendControlStorage {
 
   save(data: { limits: SpendLimits; history: SpendRecord[] }): void {
     this.data = {
-      limits: { ...data.limits },
+      limits: cloneLimits(data.limits),
       history: data.history.map((r) => ({ ...r })),
     };
   }
@@ -222,6 +245,9 @@ export class SpendControl {
   }
 
   setPolicy(list: PolicyList, values: string[]): void {
+    if (!isPolicyList(list)) {
+      throw new Error(`Unknown policy list: ${String(list)}`);
+    }
     if (
       !Array.isArray(values) ||
       values.length === 0 ||
@@ -234,12 +260,15 @@ export class SpendControl {
   }
 
   clearPolicy(list: PolicyList): void {
+    if (!isPolicyList(list)) {
+      throw new Error(`Unknown policy list: ${String(list)}`);
+    }
     delete this.limits[list];
     this.save();
   }
 
   getLimits(): SpendLimits {
-    return { ...this.limits };
+    return cloneLimits(this.limits);
   }
 
   check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult {
@@ -421,7 +450,7 @@ export class SpendControl {
     const dailySpent = this.getSpendingInWindow(now - DAY_MS, now);
 
     return {
-      limits: { ...this.limits },
+      limits: cloneLimits(this.limits),
       spending: {
         hourly: hourlySpent,
         daily: dailySpent,

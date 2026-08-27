@@ -367,6 +367,41 @@ describe("counterparty policy", () => {
       expect(() => control.setPolicy("allowedPayees", [123])).toThrow();
       expect(() => control.setPolicy("allowedPayees", [""])).toThrow();
     });
+
+    it("rejects a SpendWindow name passed as a policy list, and does not touch that limit", () => {
+      const { control } = createControl();
+      control.setLimit("perRequest", 0.5);
+      // @ts-expect-error deliberately invalid list, for a runtime validation test
+      expect(() => control.setPolicy("perRequest", ["0xgood"])).toThrow();
+      expect(control.getLimits().perRequest).toBe(0.5);
+    });
+
+    it("clearPolicy rejects a SpendWindow name and does not clear that limit", () => {
+      const { control } = createControl();
+      control.setLimit("hourly", 1.0);
+      // @ts-expect-error deliberately invalid list, for a runtime validation test
+      expect(() => control.clearPolicy("hourly")).toThrow();
+      expect(control.getLimits().hourly).toBe(1.0);
+    });
+  });
+
+  describe("defensive copies", () => {
+    it("mutating the array returned by getLimits() does not affect live policy", () => {
+      const { control } = createControl();
+      control.setPolicy("allowedPayees", ["0xgood"]);
+      const limits = control.getLimits();
+      limits.allowedPayees?.push("0xsneaky");
+      expect(control.check(0.01, { payTo: "0xsneaky" }).allowed).toBe(false);
+      expect(control.getLimits().allowedPayees).toEqual(["0xgood"]);
+    });
+
+    it("mutating the array returned by getStatus().limits does not affect live policy", () => {
+      const { control } = createControl();
+      control.setPolicy("blockedPayees", ["0xbad"]);
+      const status = control.getStatus();
+      status.limits.blockedPayees?.push("0xalsogood");
+      expect(control.check(0.01, { payTo: "0xalsogood" }).allowed).toBe(true);
+    });
   });
 
   describe("amount checks still run after policy passes", () => {
