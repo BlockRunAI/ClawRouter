@@ -58,8 +58,25 @@ function stripTimestamps(obj: unknown): unknown {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
     if (key === "content" && typeof value === "string") {
-      // Strip timestamp prefix from message content
+      // Strip timestamp prefix from plain-string message content
       result[key] = value.replace(TIMESTAMP_PATTERN, "");
+    } else if (key === "content" && Array.isArray(value)) {
+      // Anthropic-style content blocks (e.g. [{type: "text", text: "..."}, {type: "image_url", ...}]).
+      // The timestamp lives in the leading text block's `text` field, not in `content` itself,
+      // so the plain-string branch above never fires for these — leaving the injected
+      // timestamp in the hash input and breaking dedup on every retry of a multimodal message.
+      result[key] = value.map((block) => {
+        if (
+          block &&
+          typeof block === "object" &&
+          (block as { type?: unknown }).type === "text" &&
+          typeof (block as { text?: unknown }).text === "string"
+        ) {
+          const b = block as { text: string };
+          return { ...b, text: b.text.replace(TIMESTAMP_PATTERN, "") };
+        }
+        return stripTimestamps(block);
+      });
     } else {
       result[key] = stripTimestamps(value);
     }

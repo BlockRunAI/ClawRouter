@@ -89,6 +89,25 @@ function normalizeForCache(obj: Record<string, unknown>): Record<string, unknown
           if (typeof m.content === "string") {
             return { ...m, content: m.content.replace(TIMESTAMP_PATTERN, "") };
           }
+          if (Array.isArray(m.content)) {
+            // Anthropic-style content blocks — the timestamp lives in the leading
+            // text block's `text` field. Without this, a retried multimodal message
+            // (vision, image attachments) gets a fresh injected timestamp each time
+            // and never hits the cache, so it's billed as a brand-new request.
+            const newContent = m.content.map((block: unknown) => {
+              if (
+                block &&
+                typeof block === "object" &&
+                (block as { type?: unknown }).type === "text" &&
+                typeof (block as { text?: unknown }).text === "string"
+              ) {
+                const b = block as { text: string };
+                return { ...b, text: b.text.replace(TIMESTAMP_PATTERN, "") };
+              }
+              return block;
+            });
+            return { ...m, content: newContent };
+          }
         }
         return msg;
       });
