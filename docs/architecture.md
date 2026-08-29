@@ -96,7 +96,7 @@ if (inflight) {
 // Extract user's last message
 const prompt = messages.findLast((m) => m.role === "user")?.content;
 
-// Router Core V3.4 (@blockrun/router-core): 15-dimension scorer → hard
+// Router Core V3.5 (@blockrun/router-core): 15-dimension scorer → hard
 // capability filters → portfolio ranking. Model capabilities come from the
 // live catalog, injected at proxy startup.
 const decision = route(prompt, systemPrompt, maxTokens, {
@@ -247,7 +247,7 @@ data: [DONE]
 
 ## Routing Engine
 
-The routing engine lives in [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.4), a product-neutral package shared by ClawRouter, Franklin, the `@blockrun/llm` SDKs and ClawRouter-Hermes. `src/router/index.ts` is a single `export * from "@blockrun/router-core"`; the package is a `devDependency` inlined by tsup at build time and pinned to an immutable commit SHA. Nothing in the decision path touches the network.
+The routing engine lives in [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.5), a product-neutral package shared by ClawRouter, Franklin, the `@blockrun/llm` SDKs and ClawRouter-Hermes. `src/router/index.ts` is a single `export * from "@blockrun/router-core"`; the package is a `devDependency` inlined by tsup at build time and pinned to an immutable commit SHA. Nothing in the decision path touches the network.
 
 ### 1. Classify — 15-dimension weighted scorer
 
@@ -554,7 +554,7 @@ src/
 ├── retry.ts              # Fetch retry with exponential backoff
 ├── version.ts            # Version from package.json
 └── router/
-    ├── index.ts                     # export * from "@blockrun/router-core" (Router Core V3.4)
+    ├── index.ts                     # export * from "@blockrun/router-core" (Router Core V3.5)
     ├── free-model-liveness.test.ts  # build-time guard: no chain names a dead free model
     └── brand-numbers.test.ts        # README/SKILL brand markers stay in sync
 ```

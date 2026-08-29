@@ -203,7 +203,7 @@ Choose your routing strategy with `/model <profile>`:
 
 **100% local routing. <1ms latency. Zero external API calls.**
 
-Routing decisions come from [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) — Router Core **V3.4**, the constraint-first portfolio router shared by every BlockRun product (ClawRouter, Franklin, the `@blockrun/llm` SDKs, ClawRouter-Hermes). ClawRouter inlines it at build time, pinned to an exact commit, and injects its live model catalog at startup.
+Routing decisions come from [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) — Router Core **V3.5**, the constraint-first portfolio router shared by every BlockRun product (ClawRouter, Franklin, the `@blockrun/llm` SDKs, ClawRouter-Hermes). ClawRouter inlines it at build time, pinned to an exact commit, and injects its live model catalog at startup.
 
 ```
 Request → 15-dimension scorer → tier + task shape
@@ -217,17 +217,17 @@ Request → 15-dimension scorer → tier + task shape
 3. **Rank** — survivors are scored on task quality, capability, estimated cost, speed and reliability, with per-profile weights (`eco` leans on cost, `premium` on quality and reliability).
 4. **Recover** — the whole ranked list rides along as the fallback chain, so a provider timeout or 5xx costs a retry, not the task.
 
-| Tier      | ECO Model                               | AUTO Model                              | PREMIUM Model                | AGENTIC Model ‡            |
-| --------- | --------------------------------------- | --------------------------------------- | ---------------------------- | -------------------------- |
-| SIMPLE    | step-3.7-flash (**FREE**)               | gemini-2.5-flash ($0.30/$2.50)          | kimi-k2.7 † ($0.95/$4.00)    | gpt-4o-mini ($0.15/$0.60)  |
-| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)     | kimi-k2.7 † ($0.95/$4.00)               | gpt-5.3-codex ($1.75/$14.00) | kimi-k2.7 † ($0.95/$4.00)  |
-| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)     | gemini-3.1-pro ($2/$12)                 | claude-fable-5 ($10/$50)     | claude-sonnet-4.6 ($3/$15) |
-| REASONING | grok-4-1-fast-reasoning † ($0.20/$0.50) | grok-4-1-fast-reasoning † ($0.20/$0.50) | claude-sonnet-4.6 ($3/$15)   | claude-sonnet-4.6 ($3/$15) |
+| Tier      | ECO Model                       | AUTO Model                      | PREMIUM Model                | AGENTIC Model ‡           |
+| --------- | ------------------------------- | ------------------------------- | ---------------------------- | ------------------------- |
+| SIMPLE    | step-3.7-flash (**FREE**)       | gemini-2.5-flash ($0.30/$2.50)  | gemini-3.5-flash ($1.50/$9)  | gpt-4o-mini ($0.15/$0.60) |
+| MEDIUM    | glm-5.3-flash ($0.15/$0.50)     | gemini-3.5-flash ($1.50/$9)     | gpt-5.3-codex ($1.75/$14.00) | gpt-5-mini ($0.25/$2)     |
+| COMPLEX   | glm-5.3-flash ($0.15/$0.50)     | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     | claude-sonnet-5 ($3/$15)  |
+| REASONING | deepseek-reasoner ($0.14/$0.28) | deepseek-reasoner ($0.14/$0.28) | claude-sonnet-5 ($3/$15)     | claude-sonnet-5 ($3/$15)  |
 
-† Withheld from `/v1/models` — the router still calls it by direct ID, but you will not find it on the public pricing page. See [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json), which prices the published savings claim on visible models only.
+† Withheld from `/v1/models` — since Router Core V3.5 no chain names such a model: every primary and every fallback rung above is a model you can find on the public pricing page. [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) prices the published savings claim on the same visible models.
 ‡ Auto-selected in any profile when the turn actually needs its attached tools; prefers models that keep going instead of stopping to ask.
 
-These are the curated primaries; every tier carries a benchmark-ordered fallback chain — full chains and per-profile ranking weights in [docs/routing-profiles.md](docs/routing-profiles.md). On router-core's frozen three-arm agent benchmark (τ-bench, BrowseComp, Terminal-Bench) the V3.4 policy completed **57%** of tasks vs **49%** for the previous rules router, at **6.4%** lower cost per successful task — and spent **8.9%** of the tokens a pinned flagship would have.
+These are the curated primaries; every tier carries a benchmark-ordered fallback chain — full chains and per-profile ranking weights in [docs/routing-profiles.md](docs/routing-profiles.md). On router-core's frozen three-arm agent benchmark (τ-bench, BrowseComp, Terminal-Bench) the V3.4 policy (the last one benchmarked; V3.5 is a catalog refresh on the same scorer and weights) completed **57%** of tasks vs **49%** for the previous rules router, at **6.4%** lower cost per successful task — and spent **8.9%** of the tokens a pinned flagship would have.
 
 **<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5** for the same traffic, on `auto`; **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** on `eco`.
 

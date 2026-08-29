@@ -4,6 +4,30 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.251 — August 29, 2026
+
+Repins the routing engine to Router Core **V3.5** (`@blockrun/router-core` @ `5d91187`). No ClawRouter code changed; the decision path did.
+
+### Changed — every chain names a model you can see on blockrun.ai/models
+
+V3.4's chains still leaned on ids the gateway had withheld from `/v1/models`: `moonshot/kimi-k2.7` was the MEDIUM primary in the auto, premium-SIMPLE and agentic sets, `xai/grok-4-1-fast-reasoning` opened both REASONING tiers, and the grok-4-fast pair closed half the fallback chains. V3.5 removes every hidden id from every rung and admits the current generation the catalog already sells — GPT-5.6 Terra/Luna, Gemini 3.6 Flash and 3.5 Flash-Lite, GLM-5.3 and 5.3-Flash, Grok 4.3, Kimi K3, Qwen 3.7 Plus, MiniMax M3 — as fallback rungs. Primaries moved only where router-core carries calibration evidence for the successor:
+
+| Tier / profile              | V3.4                           | V3.5                         |
+| --------------------------- | ------------------------------ | ---------------------------- |
+| AUTO MEDIUM                 | `moonshot/kimi-k2.7`           | `google/gemini-3.5-flash`    |
+| AUTO / ECO REASONING        | `xai/grok-4-1-fast-reasoning`  | `deepseek/deepseek-reasoner` |
+| ECO MEDIUM / COMPLEX        | `google/gemini-3.1-flash-lite` | `zai/glm-5.3-flash`          |
+| PREMIUM SIMPLE              | `moonshot/kimi-k2.7`           | `google/gemini-3.5-flash`    |
+| PREMIUM REASONING           | `anthropic/claude-sonnet-4.6`  | `anthropic/claude-sonnet-5`  |
+| AGENTIC MEDIUM              | `moonshot/kimi-k2.7`           | `openai/gpt-5-mini`          |
+| AGENTIC COMPLEX / REASONING | `anthropic/claude-sonnet-4.6`  | `anthropic/claude-sonnet-5`  |
+
+The capability snapshot behind the hard filters was regenerated from the public catalog (70 models; Haiku 4.5 was capped at 8K output and Sonnet 4.6 at 200K context) and the speed/reliability priors from a fresh 2026-08-29 gateway probe (66 models). `README.md`, `docs/routing-profiles.md`, `docs/configuration.md` and `docs/architecture.md` now describe the V3.5 chains; `brand-numbers.test.ts` pins the README tier table to the pinned config, as before.
+
+The `kimi` / `kimi-k2.7` aliases and `/model` pins are untouched — the gateway still serves those ids by direct name; only automatic routing stops choosing them.
+
+---
+
 ## v0.12.250 — August 29, 2026
 
 Realigns every routing surface — code and docs — to Router Core V3.4 (`@blockrun/router-core` @ `d7bc10c`, already the pinned engine since v0.12.242) and the current model catalog.

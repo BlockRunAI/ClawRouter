@@ -438,12 +438,12 @@ plugins:
 
 Curated primaries from router-core's `DEFAULT_ROUTING_CONFIG.tiers`; chains truncated. The full chains for every profile — and the eco / premium / agentic tier sets — are in [routing-profiles.md](./routing-profiles.md).
 
-| Tier      | Primary Model                 | Fallback Chain (head)                                        |
-| --------- | ----------------------------- | ------------------------------------------------------------ |
-| SIMPLE    | `google/gemini-2.5-flash`     | `google/gemini-3-flash-preview`, `deepseek/deepseek-chat`, … |
-| MEDIUM    | `moonshot/kimi-k2.7`          | `moonshot/kimi-k2.6`, `moonshot/kimi-k2.5`, …                |
-| COMPLEX   | `google/gemini-3.1-pro`       | `google/gemini-3-flash-preview`, `xai/grok-4-0709`, …        |
-| REASONING | `xai/grok-4-1-fast-reasoning` | `xai/grok-4-fast-reasoning`, `deepseek/deepseek-reasoner`, … |
+| Tier      | Primary Model                | Fallback Chain (head)                                              |
+| --------- | ---------------------------- | ------------------------------------------------------------------ |
+| SIMPLE    | `google/gemini-2.5-flash`    | `google/gemini-3-flash-preview`, `google/gemini-3.5-flash-lite`, … |
+| MEDIUM    | `google/gemini-3.5-flash`    | `google/gemini-3.6-flash`, `zai/glm-5.3-flash`, …                  |
+| COMPLEX   | `google/gemini-3.1-pro`      | `google/gemini-3.6-flash`, `google/gemini-3.5-flash`, …            |
+| REASONING | `deepseek/deepseek-reasoner` | `deepseek/deepseek-v4-pro`, `xai/grok-4.3`, …                      |
 
 ### Fallback Chain
 
