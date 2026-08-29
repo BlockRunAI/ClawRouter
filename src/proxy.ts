@@ -144,12 +144,15 @@ const ROUTING_PROFILES = new Set([
 // 2026-08-12: deepseek-v4-flash EOL'd too (blockrun #367 — published 410 on both
 // probe passes, prod gate fired kind=gone; server-redirected to gpt-oss-120b) —
 // dropped for the same /exclude reason. That was the last 1M-ctx free model.
+// Insertion order IS the cascade order (pickFreeModel walks it). The head must
+// match router-core's ecoTiers.SIMPLE primary and the `free` alias in models.ts.
+// gpt-oss-120b/20b were dropped 2026-08-29: dead upstream since 2026-08-16 (a
+// completion hangs; the gateway 400s the `free/` id) and hidden from the
+// public catalog over NVIDIA's prompt-retention terms since 2026-04-28.
 const FREE_MODELS = new Set([
-  "free/gpt-oss-120b",
-  "free/gpt-oss-20b",
+  "free/step-3.7-flash", // reasoning-focused — free-tier flagship
+  "free/nemotron-nano-9b-v2", // fast lightweight generalist (~0.7s)
   "free/mistral-nemotron", // strong instruction following
-  "free/step-3.7-flash", // reasoning-focused
-  "free/nemotron-nano-9b-v2", // fast lightweight generalist
   "free/nemotron-3-nano-omni-30b-a3b-reasoning", // vision (text/image/video/audio)
   "free/nemotron-nano-12b-v2-vl", // vision-language (text + image)
 ]);
@@ -161,7 +164,7 @@ function pickFreeModel(excludeList?: Set<string>): string | undefined {
   return undefined; // all free models excluded
 }
 // Keep backward-compat constant for places that don't have excludeList in scope
-const FREE_MODEL = "free/gpt-oss-120b";
+const FREE_MODEL = "free/step-3.7-flash";
 /**
  * Map free/xxx model IDs to nvidia/xxx for upstream BlockRun API.
  * The "free/" prefix is a ClawRouter convention for the /model picker;

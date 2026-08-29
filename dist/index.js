@@ -409,12 +409,16 @@ var init_models = __esm({
       "xai/grok-3-fast": "xai/grok-4-fast-reasoning",
       // delisted (too expensive)
       // NVIDIA — backward compat aliases (nvidia/xxx → free/xxx)
-      // Default free model is gpt-oss-120b (heavy user demand). New free models
-      // added 2026-04-29 — deepseek-v4-pro/flash, nemotron-omni — are additions,
-      // not replacements. Retired-with-redirect entries below mirror BlockRun
-      // server-side decommissioning of slow models (nemotron family, etc.).
-      nvidia: "free/gpt-oss-120b",
+      // Default free model is step-3.7-flash — the same model @blockrun/router-core
+      // opens the eco SIMPLE tier on. It replaced gpt-oss-120b on 2026-08-29:
+      // gpt-oss-120b went dead upstream on 2026-08-16 (NVIDIA still LISTS it, but a
+      // completion hangs until the client gives up — blockrun #391 retargeted its
+      // whole free cascade off it, and the gateway now answers 400 Unknown model
+      // for the `free/` id). Pins that NAME gpt-oss stay routable below — the
+      // gateway server-redirects them — but nothing generic may land on it.
+      nvidia: "free/step-3.7-flash",
       "gpt-120b": "free/gpt-oss-120b",
+      // names the model itself — gateway redirects
       "gpt-20b": "free/gpt-oss-20b",
       "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
       "nvidia/gpt-oss-20b": "free/gpt-oss-20b",
@@ -489,9 +493,10 @@ var init_models = __esm({
       // no live free Llama left (maverick died 2026-07)
       // qwen3-coder-480b retired 2026-06-14 → seed-oss-36b, which then EOL'd 2026-08-03.
       // Follow the gateway's own retarget rather than chaining to a second dead model.
-      "qwen-coder": "free/gpt-oss-120b",
-      "qwen-coder-free": "free/gpt-oss-120b",
-      "qwen-thinking": "free/gpt-oss-120b",
+      "qwen-coder": "free/step-3.7-flash",
+      // no live free Qwen; follows the free default
+      "qwen-coder-free": "free/step-3.7-flash",
+      "qwen-thinking": "free/step-3.7-flash",
       // qwen3-next died 2026-07-17; no live free Qwen left
       "qwen3-next": "free/qwen3-next-80b-a3b-instruct",
       // explicit-ish pin — gateway redirects
@@ -502,8 +507,8 @@ var init_models = __esm({
       // seed-oss pins name the model itself — kept routable, the gateway redirects them.
       "seed-oss": "free/seed-oss-36b",
       "seed-oss-36b": "free/seed-oss-36b",
-      "coder-free": "free/gpt-oss-120b",
-      // generic "a free coder" → follows the gateway retarget
+      "coder-free": "free/step-3.7-flash",
+      // generic "a free coder" → follows the free default
       "mistral-nemotron": "free/mistral-nemotron",
       "step-flash": "free/step-3.7-flash",
       "step-3.7-flash": "free/step-3.7-flash",
@@ -515,21 +520,25 @@ var init_models = __esm({
       "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
-      // Retired shorthand aliases redirect to live successors (2026-07-17 map:
-      // llama-4-maverick died, so the old catch-all target moved to gpt-oss-120b)
+      // Retired shorthand aliases redirect to live successors. The catch-all target
+      // moved llama-4-maverick → gpt-oss-120b (2026-07-17) → step-3.7-flash
+      // (2026-08-29, gpt-oss-120b hung upstream; see the NVIDIA block above).
       nemotron: "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       // strongest live Nemotron
-      "nemotron-ultra": "free/gpt-oss-120b",
-      "nemotron-253b": "free/gpt-oss-120b",
-      "nemotron-super": "free/gpt-oss-120b",
-      "nemotron-49b": "free/gpt-oss-120b",
-      "nemotron-120b": "free/gpt-oss-120b",
-      devstral: "free/gpt-oss-120b",
-      // seed-oss-36b EOL'd 2026-08-03; matches blockrun's own retarget
-      "devstral-2": "free/gpt-oss-120b",
+      "nemotron-ultra": "free/step-3.7-flash",
+      "nemotron-253b": "free/step-3.7-flash",
+      "nemotron-super": "free/step-3.7-flash",
+      "nemotron-49b": "free/step-3.7-flash",
+      "nemotron-120b": "free/step-3.7-flash",
+      devstral: "free/step-3.7-flash",
+      // seed-oss-36b EOL'd 2026-08-03
+      "devstral-2": "free/step-3.7-flash",
       maverick: "free/llama-4-maverick",
       // explicit-ish pin — gateway redirects
-      free: "free/gpt-oss-120b",
+      // `free` = the free-tier default. Must equal router-core's ecoTiers.SIMPLE
+      // primary and the head of proxy.ts FREE_MODELS so `/model free`, the eco
+      // profile and the budget-cap free fallback all agree on one live model.
+      free: "free/step-3.7-flash",
       // MiniMax (minimax → current flagship: M3)
       minimax: "minimax/minimax-m3",
       "minimax-m3": "minimax/minimax-m3",
@@ -599,7 +608,7 @@ var init_models = __esm({
       },
       {
         id: "free",
-        name: "Free \u2192 GPT-OSS 120B",
+        name: "Free \u2192 Step 3.7 Flash",
         inputPrice: 0,
         outputPrice: 0,
         contextWindow: 131072,
@@ -92653,20 +92662,18 @@ var init_proxy = __esm({
       "premium"
     ]);
     FREE_MODELS = /* @__PURE__ */ new Set([
-      "free/gpt-oss-120b",
-      "free/gpt-oss-20b",
+      "free/step-3.7-flash",
+      // reasoning-focused — free-tier flagship
+      "free/nemotron-nano-9b-v2",
+      // fast lightweight generalist (~0.7s)
       "free/mistral-nemotron",
       // strong instruction following
-      "free/step-3.7-flash",
-      // reasoning-focused
-      "free/nemotron-nano-9b-v2",
-      // fast lightweight generalist
       "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       // vision (text/image/video/audio)
       "free/nemotron-nano-12b-v2-vl"
       // vision-language (text + image)
     ]);
-    FREE_MODEL = "free/gpt-oss-120b";
+    FREE_MODEL = "free/step-3.7-flash";
     MAX_MESSAGES = 200;
     CONTEXT_LIMIT_KB = 5120;
     HEARTBEAT_INTERVAL_MS = 2e3;

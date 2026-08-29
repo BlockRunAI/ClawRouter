@@ -4,6 +4,34 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.250 — August 29, 2026
+
+Realigns every routing surface — code and docs — to Router Core V3.4 (`@blockrun/router-core` @ `d7bc10c`, already the pinned engine since v0.12.242) and the current model catalog.
+
+### Fixed — `/model free` was pinned to a model that has been dead upstream for two weeks
+
+`free` resolved to `free/gpt-oss-120b`. That model stopped completing on 2026-08-16 (NVIDIA still lists it; a completion hangs until the client gives up — blockrun #391 retargeted its whole free cascade off it the same day) and the gateway now answers `400 Unknown model` for the `free/` id. Every `/model free` call, the budget-cap free fallback (`FREE_MODEL`) and the head of the proxy's `FREE_MODELS` cascade all opened on it, and the picker label still promised "GPT-OSS 120B".
+
+All three now agree on **`free/step-3.7-flash`** — the same model router-core opens the eco SIMPLE tier on, live-probed 200 through the gateway. The cascade is now step-3.7-flash → nemotron-nano-9b-v2 → mistral-nemotron → nemotron-omni (vision) → nemotron-nano-12b-v2-vl (vision), mirroring router-core's free rungs; gpt-oss-120b/20b are dropped from it (dead, and hidden from the public catalog over NVIDIA's prompt-retention terms since 2026-04-28). Generic shorthands that had been parked on gpt-oss-120b (`nvidia`, `coder-free`, `qwen-coder`, `qwen-thinking`, `devstral`, `nemotron-ultra/-super/-49b/-120b/-253b`) follow the free default; pins that _name_ gpt-oss (`gpt-120b`, `gpt-oss-120b`, `nvidia/gpt-oss-120b`) stay routable and rely on the gateway redirect, as before.
+
+Invariant, now written down at all three sites: the `free` alias, `FREE_MODELS[0]` and router-core's `ecoTiers.SIMPLE.primary` must be one live model. `src/router/free-model-liveness.test.ts` already guards the router side; the alias/label tests in `models.test.ts` and `exclude-models.test.ts` were repointed.
+
+### Changed — routing docs describe the router that actually ships
+
+Since v0.12.242 the README, `docs/routing-profiles.md`, `docs/configuration.md`, `docs/architecture.md` and the OpenClaw skill still described the pre-extraction rules router: "Weighted Scorer → Tier → Best Model", a tier table with `kimi-k2.6` and `free/gpt-oss-120b`, a `src/router/config.ts` that no longer exists, a "Default Tier Mappings" table (`deepseek-chat` as MEDIUM primary, `o3-mini` for REASONING) that never matched any shipped config, an `agenticTask` weight of 0.10 (it is 0.04), a `reasoningConfidence` knob that does not exist, and a claim that ambiguous queries "hit the LLM classifier" — nothing in the proxy calls one. The README's Routing Profiles table had also been corrupted by a footnote spliced into the `auto` row.
+
+Rewritten against router-core's config and README:
+
+- **README** — "How It Works" now walks the four constraint-first stages (classify → hard filters → rank → recovery chain), the tier table gains the AGENTIC column with its ‡ footnote, the profiles table is repaired, and the V3.4 three-arm benchmark numbers (57% vs 49% task success, −6.4% cost per successful task, 8.9% of a pinned flagship's tokens) are cited with the caveat that they come from a frozen agent benchmark. `kimi-k3` moved out of the "Budget" table (it is $3/$15). The "1M-context DeepSeek V4 Flash" free-tier bullet — EOL'd 2026-08-12 — is gone.
+- **docs/routing-profiles.md** — full chains for AUTO / ECO / PREMIUM / AGENTIC straight from `DEFAULT_ROUTING_CONFIG`, the per-profile ranking weights and affinity floors, the `free` alias semantics, and the `strategy: "rules"` / `shadow` levers.
+- **docs/configuration.md** — `routing.strategy`, `routing.shadow`, per-tier merge semantics, `ecoTiers` / `premiumTiers` / `agenticTiers: null`, the real `overrides` keys (`maxTokensForceComplex`, `structuredOutputMinTier`, `ambiguousDefaultTier`, `agenticMode`), corrected scorer weights and sigmoid parameters, and a `route()` example that shows the V3 decision shape (`taskType`, `candidates`, `candidateScores`, `routerVersion`).
+- **docs/architecture.md** — Routing Engine section rewritten around router-core's four stages; file tree and key-files table no longer list `router/{rules,selector,config,types}.ts`.
+- **skills/clawrouter/SKILL.md** — "How Routing Works" matches the above; the `routing` config row says what it actually overrides.
+
+`docs/smart-llm-router-14-dimension-classifier.md` is a dated benchmark write-up and is deliberately untouched.
+
+---
+
 ## v0.12.249 — August 25, 2026
 
 ### Fixed — `/health?full=true` could hang forever on an unresponsive balance RPC
