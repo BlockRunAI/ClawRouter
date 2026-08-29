@@ -2963,6 +2963,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // --- Handle /v1/audio/generations: proxy with x402 payment + save audio locally ---
       if (req.url === "/v1/audio/generations" && req.method === "POST") {
         const audioStartTime = Date.now();
+        // Same class as #251: abort the paid upstream call if the client goes
+        // away so the x402 payment doesn't settle for audio nobody receives.
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -2980,6 +2986,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
+            signal: clientAbort.signal,
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -3006,7 +3013,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             for (const track of result.data) {
               if (track.url?.startsWith("https://") || track.url?.startsWith("http://")) {
                 try {
-                  const audioResp = await fetch(track.url);
+                  const audioResp = await fetch(track.url, { signal: clientAbort.signal });
                   if (audioResp.ok) {
                     const contentType = audioResp.headers.get("content-type") ?? "audio/mpeg";
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
@@ -3037,6 +3044,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return; // client gone — nothing to report
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Audio generation error: ${msg}`);
           if (!res.headersSent) {
@@ -4419,6 +4427,12 @@ async function proxyRequest(
           `[ClawRouter] /img2img → ${img2imgModel} (${img2imgSize}): ${img2imgPrompt.slice(0, 80)}`,
         );
 
+        // Same class as #251: abort the paid upstream call if the chat
+        // client goes away, mirroring the /imagegen handler above.
+        const img2imgAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) img2imgAbort.abort();
+        });
         try {
           const img2imgBody = JSON.stringify({
             model: img2imgModel,
@@ -4433,6 +4447,7 @@ async function proxyRequest(
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: img2imgBody,
+            signal: img2imgAbort.signal,
           });
 
           const img2imgResult = (await img2imgResponse.json()) as {
@@ -4494,6 +4509,7 @@ async function proxyRequest(
 
           sendImg2ImgText(responseText);
         } catch (err) {
+          if (img2imgAbort.signal.aborted) return; // client gone — nothing to report
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /img2img error: ${errMsg}`);
           if (!res.headersSent) {

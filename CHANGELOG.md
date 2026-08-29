@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.253 — August 29, 2026
+
+### Fixed — the last two paid handlers without a client-abort signal
+
+v0.12.252 fixed `/v1/images/image2image` charging the wallet after the caller disconnected (#251). Two more handlers had the same shape and were closed out here: `/v1/audio/generations`, and the chat-side `/img2img` command that reaches the same image2image endpoint. Both now create an `AbortController` on the response's `close` event and thread its signal through the paid upstream call (and, for audio, the post-generation track download), and swallow the resulting abort instead of logging a bogus 502. Every paid x402 handler in the proxy now carries this wiring. Covered by `src/proxy.audio-abort.test.ts`.
+
+---
+
 ## v0.12.252 — August 29, 2026
 
 Two proxy fixes from community bug reports. Thanks to @Sertug17 for both (#251, #252).

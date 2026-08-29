@@ -90607,6 +90607,10 @@ async function startProxy(options) {
       }
       if (req.url === "/v1/audio/generations" && req.method === "POST") {
         const audioStartTime = Date.now();
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -90622,7 +90626,8 @@ async function startProxy(options) {
           const upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: reqBody
+            body: reqBody,
+            signal: clientAbort.signal
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -90644,7 +90649,7 @@ async function startProxy(options) {
             for (const track of result.data) {
               if (track.url?.startsWith("https://") || track.url?.startsWith("http://")) {
                 try {
-                  const audioResp = await fetch(track.url);
+                  const audioResp = await fetch(track.url, { signal: clientAbort.signal });
                   if (audioResp.ok) {
                     const contentType = audioResp.headers.get("content-type") ?? "audio/mpeg";
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
@@ -90676,6 +90681,7 @@ async function startProxy(options) {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Audio generation error: ${msg}`);
           if (!res.headersSent) {
@@ -91695,6 +91701,10 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         console.log(
           `[ClawRouter] /img2img \u2192 ${img2imgModel} (${img2imgSize}): ${img2imgPrompt.slice(0, 80)}`
         );
+        const img2imgAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) img2imgAbort.abort();
+        });
         try {
           const img2imgBody = JSON.stringify({
             model: img2imgModel,
@@ -91707,7 +91717,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           const img2imgResponse = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: img2imgBody
+            body: img2imgBody,
+            signal: img2imgAbort.signal
           });
           const img2imgResult = await img2imgResponse.json();
           let responseText;
@@ -91757,6 +91768,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           }
           sendImg2ImgText(responseText);
         } catch (err) {
+          if (img2imgAbort.signal.aborted) return;
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /img2img error: ${errMsg}`);
           if (!res.headersSent) {
