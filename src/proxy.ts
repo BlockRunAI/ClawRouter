@@ -2645,7 +2645,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 console.log(`[ClawRouter] Image saved → ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext =
@@ -2697,6 +2697,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // Accepts image as: data URI, local file path, ~/path, or HTTP(S) URL
       if (req.url === "/v1/images/image2image" && req.method === "POST") {
         const img2imgStartTime = Date.now();
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -2718,7 +2722,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               // Already a data URI — pass through
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
               // Download URL → data URI
-              const imgResp = await fetch(val);
+              const imgResp = await fetch(val, { signal: clientAbort.signal });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -2750,6 +2754,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
+            signal: clientAbort.signal,
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -2781,7 +2786,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 console.log(`[ClawRouter] Image saved → ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext =
@@ -3072,7 +3077,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             for (const clip of finalResult.data) {
               if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
                 try {
-                  const videoResp = await fetch(clip.url);
+                  const videoResp = await fetch(clip.url, { signal: clientAbort.signal });
                   if (videoResp.ok) {
                     const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
                     const ext = contentType.includes("webm")
@@ -3976,6 +3981,10 @@ async function proxyRequest(
         console.log(
           `[ClawRouter] /imagegen command → ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`,
         );
+        const imagegenAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) imagegenAbort.abort();
+        });
         try {
           const imageUpstreamUrl = `${apiBase}/v1/images/generations`;
           const imageBody = JSON.stringify({
@@ -3988,6 +3997,7 @@ async function proxyRequest(
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: imageBody,
+            signal: imagegenAbort.signal,
           });
 
           const imageResult = (await imageResponse.json()) as {
@@ -4086,6 +4096,7 @@ async function proxyRequest(
             );
           }
         } catch (err) {
+          if (imagegenAbort.signal.aborted) return; // client gone — nothing to report
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /imagegen error: ${errMsg}`);
           if (!res.headersSent) {
