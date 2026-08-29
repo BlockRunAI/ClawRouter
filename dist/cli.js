@@ -89597,6 +89597,15 @@ function debrandSystemMessages(messages, resolvedModel) {
   });
   return hasChanges ? result : messages;
 }
+function isToolResultMessage(msg) {
+  if (msg.role === "tool") return true;
+  if (Array.isArray(msg.content)) {
+    return msg.content.some(
+      (b) => b && typeof b === "object" && b.type === "tool_result"
+    );
+  }
+  return false;
+}
 function truncateMessages(messages) {
   if (!messages || messages.length <= MAX_MESSAGES) {
     return {
@@ -89609,7 +89618,11 @@ function truncateMessages(messages) {
   const systemMsgs = messages.filter((m) => m.role === "system");
   const conversationMsgs = messages.filter((m) => m.role !== "system");
   const maxConversation = MAX_MESSAGES - systemMsgs.length;
-  const truncatedConversation = conversationMsgs.slice(-maxConversation);
+  let start = Math.max(0, conversationMsgs.length - maxConversation);
+  while (start < conversationMsgs.length && isToolResultMessage(conversationMsgs[start])) {
+    start++;
+  }
+  const truncatedConversation = conversationMsgs.slice(start);
   const result = [...systemMsgs, ...truncatedConversation];
   console.log(
     `[ClawRouter] Truncated messages: ${messages.length} \u2192 ${result.length} (kept ${systemMsgs.length} system + ${truncatedConversation.length} recent)`
@@ -90472,6 +90485,10 @@ async function startProxy(options) {
       }
       if (req.url === "/v1/images/image2image" && req.method === "POST") {
         const img2imgStartTime = Date.now();
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -90487,7 +90504,7 @@ async function startProxy(options) {
             if (typeof val !== "string" || !val) continue;
             if (val.startsWith("data:")) {
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
-              const imgResp = await fetch(val);
+              const imgResp = await fetch(val, { signal: clientAbort.signal });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -90515,7 +90532,8 @@ async function startProxy(options) {
           const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: reqBody
+            body: reqBody,
+            signal: clientAbort.signal
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -90577,6 +90595,7 @@ async function startProxy(options) {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Image editing error: ${msg}`);
           if (!res.headersSent) {

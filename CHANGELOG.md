@@ -4,6 +4,22 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.252 — August 29, 2026
+
+Two proxy fixes from community bug reports. Thanks to @Sertug17 for both (#251, #252).
+
+### Fixed — message truncation no longer splits a tool call from its results (#252)
+
+BlockRun caps a request at 200 messages, and `truncateMessages()` enforced that with a raw `slice(-N)` over the non-system turns. When the cut landed between an assistant `tool_calls` turn and the `role: "tool"` results that answer it, the request went upstream with orphaned results and the provider rejected it — Anthropic with `tool_use block without matching tool_result`, OpenAI with `tool_calls referenced but tool response missing`. A long agentic session would start 400ing exactly as it crossed the limit, at the point it had the most state to lose.
+
+The boundary now walks **forward** past any leading tool results (OpenAI `role: "tool"`, and Anthropic-style `tool_result` content blocks in a `user` turn), so a straddled exchange is dropped whole instead of half-kept. Walking forward rather than back keeps the result under the 200 cap in every case, including a parallel tool call with several contiguous results. Covered by `src/proxy.truncate-tool-pairs.test.ts` (boundary on a single result, mid-parallel-exchange, tool-heavy windows, system-message preservation).
+
+### Fixed — `/v1/images/image2image` cancels upstream when the client disconnects (#251)
+
+`/v1/images/generations` already carried a `clientAbort` controller so a caller that hung up mid-request stopped the upstream call before the x402 payment could settle. The img2img handler never got the same wiring: the upstream request ran to completion and the wallet was charged for an image nobody received. The handler now creates the controller before reading the body and threads its signal through both the source-image URL download and the paid upstream call; an abort is swallowed instead of logged as a 502. Covered by `src/proxy.img2img-abort.test.ts` (upstream socket observes the abort after the client destroys its request).
+
+---
+
 ## v0.12.251 — August 29, 2026
 
 Repins the routing engine to Router Core **V3.5** (`@blockrun/router-core` @ `5d91187`). No ClawRouter code changed; the decision path did.

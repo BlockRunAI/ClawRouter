@@ -1148,11 +1148,27 @@ type TruncationResult<T> = {
 };
 
 /**
+ * True for a message that answers a prior assistant tool call and therefore
+ * cannot stand alone at the head of a conversation: OpenAI-style
+ * `role: "tool"`, or an Anthropic-in-OpenAI-wrapper `user` turn whose content
+ * blocks are `tool_result`s.
+ */
+function isToolResultMessage(msg: { role: string; content?: unknown }): boolean {
+  if (msg.role === "tool") return true;
+  if (Array.isArray(msg.content)) {
+    return (msg.content as ContentBlock[]).some(
+      (b) => b && typeof b === "object" && b.type === "tool_result",
+    );
+  }
+  return false;
+}
+
+/**
  * Truncate messages to stay under BlockRun's MAX_MESSAGES limit.
  * Keeps all system messages and the most recent conversation history.
  * Returns the messages and whether truncation occurred.
  */
-function truncateMessages<T extends { role: string }>(messages: T[]): TruncationResult<T> {
+export function truncateMessages<T extends { role: string }>(messages: T[]): TruncationResult<T> {
   if (!messages || messages.length <= MAX_MESSAGES) {
     return {
       messages,
@@ -1168,7 +1184,20 @@ function truncateMessages<T extends { role: string }>(messages: T[]): Truncation
 
   // Keep all system messages + most recent conversation messages
   const maxConversation = MAX_MESSAGES - systemMsgs.length;
-  const truncatedConversation = conversationMsgs.slice(-maxConversation);
+  let start = Math.max(0, conversationMsgs.length - maxConversation);
+
+  // #252: never open the kept window on a tool result whose parent assistant
+  // `tool_calls` turn was just dropped — providers 400 on the orphan
+  // (Anthropic: "tool_use block without matching tool_result"; OpenAI:
+  // "tool_calls referenced but tool response missing"). Walk the boundary
+  // FORWARD past the orphaned results so the whole exchange is dropped
+  // together; walking backward could exceed MAX_MESSAGES. A parallel tool
+  // call's results are contiguous, so this also handles the multi-result
+  // case where the slice landed mid-exchange.
+  while (start < conversationMsgs.length && isToolResultMessage(conversationMsgs[start])) {
+    start++;
+  }
+  const truncatedConversation = conversationMsgs.slice(start);
 
   const result = [...systemMsgs, ...truncatedConversation];
 
@@ -2791,6 +2820,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // Accepts image as: data URI, local file path, ~/path, or HTTP(S) URL
       if (req.url === "/v1/images/image2image" && req.method === "POST") {
         const img2imgStartTime = Date.now();
+        // #251: mirror /v1/images/generations — if the client goes away, abort
+        // the upstream call so the x402 payment doesn't settle for a result
+        // nobody will receive.
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -2812,7 +2848,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               // Already a data URI — pass through
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
               // Download URL → data URI
-              const imgResp = await fetch(val);
+              const imgResp = await fetch(val, { signal: clientAbort.signal });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -2844,6 +2880,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
+            signal: clientAbort.signal,
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -2912,6 +2949,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return; // client gone — nothing to report
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Image editing error: ${msg}`);
           if (!res.headersSent) {
