@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.255 — August 30, 2026
+
+### Fixed — img2img no longer misreports a client cancel as "Invalid request"
+
+The `/v1/images/image2image` parse path downloads source/mask URLs with the client-abort signal (v0.12.252), so a caller hanging up mid-download rejects that fetch with an `AbortError` — which the parse catch then misclassified as invalid input and answered with a 400 on the dead socket. The catch now returns silently when `clientAbort.signal.aborted` is set, and the paid upstream is never contacted. Covered by a new case in `src/proxy.img2img-abort.test.ts` (download socket observes the abort, no response is written, zero upstream hits). Closes #277.
+
+Also landed the remainder of PR #276 (same lineage): the three post-payment result-asset downloads — generations and img2img result images, video clips — now carry `clientAbort.signal` so a hung download is cancelled when the client leaves instead of running to the 5-minute fetch ceiling, and the chat-path `/imagegen` outer catch gained the same silent-return abort guard its `/img2img` sibling got in v0.12.253.
+
+- Thanks to @Sertug17 for both fixes (#276, #278) — rebased onto main, where the bulk of each had already landed in v0.12.252–253.
+
+---
+
 ## v0.12.254 — August 30, 2026
 
 ### Fixed — the chat path now cancels its paid upstream when the client disconnects

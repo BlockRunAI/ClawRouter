@@ -2776,7 +2776,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 console.log(`[ClawRouter] Image saved → ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext =
@@ -2877,6 +2877,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
           reqBody = JSON.stringify(parsed);
         } catch (parseErr) {
+          // #277: an aborted source/mask download rejects here — the client is
+          // gone, so don't misreport it as invalid input on a dead socket.
+          if (clientAbort.signal.aborted) return;
           const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Invalid request", details: msg }));
@@ -2920,7 +2923,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 console.log(`[ClawRouter] Image saved → ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext =
@@ -3220,7 +3223,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             for (const clip of finalResult.data) {
               if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
                 try {
-                  const videoResp = await fetch(clip.url);
+                  const videoResp = await fetch(clip.url, { signal: clientAbort.signal });
                   if (videoResp.ok) {
                     const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
                     const ext = contentType.includes("webm")
@@ -4113,6 +4116,14 @@ async function proxyRequest(
         console.log(
           `[ClawRouter] /imagegen command → ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`,
         );
+        // Stop upstream work (especially the slow-model poll loop below,
+        // whose first `completed` poll settles the x402 payment) if the
+        // chat client goes away mid-generation. Declared outside the try so
+        // the catch below can tell a client abort from a real failure.
+        const imagegenAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) imagegenAbort.abort();
+        });
         try {
           const imageUpstreamUrl = `${apiBase}/v1/images/generations`;
           const imageBody = JSON.stringify({
@@ -4120,13 +4131,6 @@ async function proxyRequest(
             prompt: imagePrompt,
             size: imageSize,
             n: 1,
-          });
-          // Stop upstream work (especially the slow-model poll loop below,
-          // whose first `completed` poll settles the x402 payment) if the
-          // chat client goes away mid-generation.
-          const imagegenAbort = new AbortController();
-          res.on("close", () => {
-            if (!res.writableEnded) imagegenAbort.abort();
           });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
@@ -4306,6 +4310,7 @@ async function proxyRequest(
             );
           }
         } catch (err) {
+          if (imagegenAbort.signal.aborted) return; // client gone — nothing to report
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /imagegen error: ${errMsg}`);
           if (!res.headersSent) {

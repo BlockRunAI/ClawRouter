@@ -90261,7 +90261,7 @@ async function startProxy(options) {
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
@@ -90343,6 +90343,7 @@ async function startProxy(options) {
           img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
           reqBody = JSON.stringify(parsed);
         } catch (parseErr) {
+          if (clientAbort.signal.aborted) return;
           const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Invalid request", details: msg }));
@@ -90383,7 +90384,7 @@ async function startProxy(options) {
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
@@ -90629,7 +90630,7 @@ async function startProxy(options) {
             for (const clip of finalResult.data) {
               if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
                 try {
-                  const videoResp = await fetch(clip.url);
+                  const videoResp = await fetch(clip.url, { signal: clientAbort.signal });
                   if (videoResp.ok) {
                     const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
                     const ext = contentType.includes("webm") ? "webm" : contentType.includes("quicktime") ? "mov" : "mp4";
@@ -91248,6 +91249,10 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         console.log(
           `[ClawRouter] /imagegen command \u2192 ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`
         );
+        const imagegenAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) imagegenAbort.abort();
+        });
         try {
           const imageUpstreamUrl = `${apiBase}/v1/images/generations`;
           const imageBody = JSON.stringify({
@@ -91255,10 +91260,6 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             prompt: imagePrompt,
             size: imageSize,
             n: 1
-          });
-          const imagegenAbort = new AbortController();
-          res.on("close", () => {
-            if (!res.writableEnded) imagegenAbort.abort();
           });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
@@ -91401,6 +91402,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             );
           }
         } catch (err) {
+          if (imagegenAbort.signal.aborted) return;
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /imagegen error: ${errMsg}`);
           if (!res.headersSent) {

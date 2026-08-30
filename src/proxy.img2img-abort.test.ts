@@ -89,4 +89,76 @@ describe("image2image upstream call on client abort", () => {
     expect(upstreamHits).toBe(1);
     expect(upstreamAborted).toBe(1);
   }, 10_000);
+
+  // #277 (PR #278, @Sertug17): a client disconnect during the source-image URL
+  // download used to land in the parse catch as an AbortError and be
+  // misreported as a 400 "Invalid request" on the dead socket. The guard now
+  // returns silently, and the paid upstream is never contacted.
+  it("returns silently when the client disconnects during the source download", async () => {
+    upstreamHits = 0;
+
+    // Image host that never answers — the download hangs until aborted.
+    let downloadHits = 0;
+    let downloadAborted = 0;
+    const imageHost = createServer((req: IncomingMessage, res: ServerResponse) => {
+      downloadHits++;
+      res.on("close", () => {
+        if (!res.writableEnded) downloadAborted++;
+      });
+      // Hold the socket open; the proxy's clientAbort signal must cancel it.
+    });
+    await new Promise<void>((resolve) => imageHost.listen(0, "127.0.0.1", resolve));
+    const imgAddr = imageHost.address() as AddressInfo;
+
+    try {
+      const url = new URL(`${proxy.baseUrl}/v1/images/image2image`);
+      const body = JSON.stringify({
+        model: "openai/gpt-image-1",
+        prompt: "make it blue",
+        image: `http://127.0.0.1:${imgAddr.port}/slow.png`,
+      });
+
+      let clientStatus: number | undefined;
+      await new Promise<void>((resolve) => {
+        const clientReq = request({
+          host: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method: "POST",
+          headers: { "content-type": "application/json", "content-length": String(body.length) },
+        });
+        clientReq.on("response", (rsp) => {
+          clientStatus = rsp.statusCode;
+          rsp.resume();
+        });
+        clientReq.on("error", () => resolve());
+        clientReq.on("close", () => resolve());
+        clientReq.end(body);
+        // Walk away once the proxy has actually started the download.
+        const start = Date.now();
+        const tick = setInterval(() => {
+          if (downloadHits > 0 || Date.now() - start > 5_000) {
+            clearInterval(tick);
+            clientReq.destroy();
+          }
+        }, 10);
+      });
+
+      // Poll briefly for the download socket to observe the abort.
+      const deadline = Date.now() + 3_000;
+      while (downloadAborted === 0 && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      expect(downloadHits).toBe(1);
+      expect(downloadAborted).toBe(1);
+      // The parse catch must not have written the bogus 400, and the paid
+      // upstream must never have been contacted.
+      expect(clientStatus).toBeUndefined();
+      expect(upstreamHits).toBe(0);
+    } finally {
+      imageHost.closeAllConnections?.();
+      await new Promise<void>((resolve) => imageHost.close(() => resolve()));
+    }
+  }, 15_000);
 });
