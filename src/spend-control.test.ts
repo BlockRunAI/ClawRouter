@@ -6,7 +6,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { SpendControl, InMemorySpendControlStorage, formatDuration } from "./spend-control.js";
+import { x402Client } from "@x402/fetch";
+import {
+  SpendControl,
+  InMemorySpendControlStorage,
+  formatDuration,
+  registerSpendPolicyHook,
+  CAIP2_BASE,
+  CAIP2_SOLANA_MAINNET,
+} from "./spend-control.js";
 
 function createControl(nowMs = Date.now()) {
   let clock = nowMs;
@@ -292,6 +300,26 @@ describe("counterparty policy", () => {
       expect(result.blockedByPolicy).toBe("allowedPayees");
     });
 
+    it("matches checksummed EVM denylist entries case-insensitively", () => {
+      const { control } = createControl();
+      const checksummed = "0xAbcDef0123456789AbcDef0123456789AbcDef01";
+      control.setPolicy("blockedPayees", [checksummed]);
+      const result = control.check(0.01, { payTo: checksummed.toLowerCase() });
+      expect(result.allowed).toBe(false);
+      expect(result.blockedByPolicy).toBe("blockedPayees");
+    });
+
+    it("leaves Solana base58 payees case-sensitive", () => {
+      const { control } = createControl();
+      control.setPolicy("blockedPayees", ["SoLanaPayee1111111111111111111111111111111"]);
+      expect(
+        control.check(0.01, { payTo: "SoLanaPayee1111111111111111111111111111111" }).allowed,
+      ).toBe(false);
+      expect(
+        control.check(0.01, { payTo: "solanapayee1111111111111111111111111111111" }).allowed,
+      ).toBe(true);
+    });
+
     it("clearPolicy removes a configured list", () => {
       const { control } = createControl();
       control.setPolicy("allowedPayees", ["0xgood"]);
@@ -318,21 +346,29 @@ describe("counterparty policy", () => {
 
     it("allows a network in the allowlist", () => {
       const { control } = createControl();
-      control.setPolicy("allowedNetworks", ["base"]);
-      expect(control.check(0.01, { network: "base" }).allowed).toBe(true);
+      control.setPolicy("allowedNetworks", [CAIP2_BASE]);
+      expect(control.check(0.01, { network: CAIP2_BASE }).allowed).toBe(true);
     });
 
     it("blocks a network not in the allowlist", () => {
       const { control } = createControl();
-      control.setPolicy("allowedNetworks", ["base"]);
-      const result = control.check(0.01, { network: "solana" });
+      control.setPolicy("allowedNetworks", [CAIP2_BASE]);
+      const result = control.check(0.01, { network: CAIP2_SOLANA_MAINNET });
+      expect(result.allowed).toBe(false);
+      expect(result.blockedByPolicy).toBe("allowedNetworks");
+    });
+
+    it("does not treat the nickname 'base' as eip155:8453", () => {
+      const { control } = createControl();
+      control.setPolicy("allowedNetworks", [CAIP2_BASE]);
+      const result = control.check(0.01, { network: "base" });
       expect(result.allowed).toBe(false);
       expect(result.blockedByPolicy).toBe("allowedNetworks");
     });
 
     it("fails closed when configured but no network is given", () => {
       const { control } = createControl();
-      control.setPolicy("allowedNetworks", ["base"]);
+      control.setPolicy("allowedNetworks", [CAIP2_BASE]);
       const result = control.check(0.01);
       expect(result.allowed).toBe(false);
       expect(result.blockedByPolicy).toBe("allowedNetworks");
@@ -439,7 +475,7 @@ describe("FileSpendControlStorage persistence", () => {
         perRequest: 0.5,
         allowedPayees: ["0xgood"],
         blockedPayees: ["0xbad"],
-        allowedNetworks: ["base"],
+        allowedNetworks: [CAIP2_BASE],
         allowedAssets: ["USDC"],
       },
       history: [],
@@ -449,11 +485,11 @@ describe("FileSpendControlStorage persistence", () => {
     expect(loaded?.limits.perRequest).toBe(0.5);
     expect(loaded?.limits.allowedPayees).toEqual(["0xgood"]);
     expect(loaded?.limits.blockedPayees).toEqual(["0xbad"]);
-    expect(loaded?.limits.allowedNetworks).toEqual(["base"]);
+    expect(loaded?.limits.allowedNetworks).toEqual([CAIP2_BASE]);
     expect(loaded?.limits.allowedAssets).toEqual(["USDC"]);
   });
 
-  it("drops malformed policy entries instead of throwing", async () => {
+  it("refuses to load when a policy list has a malformed entry", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
     vi.resetModules();
@@ -466,8 +502,47 @@ describe("FileSpendControlStorage persistence", () => {
       JSON.stringify({ limits: { allowedPayees: ["ok", 123, ""] }, history: [] }),
     );
 
-    const loaded = storage.load();
-    expect(loaded?.limits.allowedPayees).toBeUndefined();
+    expect(() => storage.load()).toThrow(/refusing to load spending.json/);
+  });
+});
+
+describe("x402 onBeforePaymentCreation spend policy", () => {
+  const blocked = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+  it("aborts before the scheme signer is invoked", async () => {
+    let signerCalls = 0;
+    const storage = new InMemorySpendControlStorage();
+    const control = new SpendControl({ storage });
+    control.setPolicy("blockedPayees", [blocked]);
+
+    const client = new x402Client();
+    registerSpendPolicyHook(client, control);
+    client.register(CAIP2_BASE, {
+      scheme: "exact",
+      async createPaymentPayload() {
+        signerCalls += 1;
+        return { x402Version: 2, payload: {} };
+      },
+    });
+
+    await expect(
+      client.createPaymentPayload({
+        x402Version: 2,
+        resource: { url: "https://example.invalid/pay" },
+        accepts: [
+          {
+            scheme: "exact",
+            network: CAIP2_BASE,
+            amount: "1000",
+            asset: "USDC",
+            payTo: blocked,
+            maxTimeoutSeconds: 60,
+            extra: {},
+          },
+        ],
+      }),
+    ).rejects.toThrow(/Payment creation aborted/);
+    expect(signerCalls).toBe(0);
   });
 });
 

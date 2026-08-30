@@ -78,6 +78,7 @@ import type { SolanaBalanceMonitor } from "./solana-balance.js";
 /** Union type for chain-agnostic balance monitoring */
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
 import { resolvePaymentChain } from "./auth.js";
+import { registerSpendPolicyHook, SpendControl } from "./spend-control.js";
 import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
 // Error classes available for programmatic use but not used in proxy
 // (universal free fallback means we don't throw balance errors anymore)
@@ -1334,6 +1335,11 @@ export type ProxyOptions = {
   /** Called when balance is insufficient for a request (request fails) */
   onInsufficientFunds?: (info: InsufficientFundsInfo) => void;
   /**
+   * Spend / counterparty policy. Default: FileSpendControlStorage at
+   * ~/.openclaw/blockrun/spending.json. Inject in tests.
+   */
+  spendControl?: SpendControl;
+  /**
    * Upstream proxy URL for all outgoing requests.
    * Supports http://, https://, and socks5:// schemes.
    * Also readable via BLOCKRUN_UPSTREAM_PROXY environment variable.
@@ -2145,6 +2151,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const evmPublicClient = createPublicClient({ chain: base, transport: http() });
   const evmSigner = toClientEvmSigner(account, evmPublicClient);
   const x402 = new x402Client();
+  const spendControl = options.spendControl ?? new SpendControl();
+  registerSpendPolicyHook(x402, spendControl);
   registerExactEvmScheme(x402, { signer: evmSigner });
 
   // Register Solana scheme if key is available

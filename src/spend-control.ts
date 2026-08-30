@@ -32,12 +32,24 @@ export type SpendWindow = "perRequest" | "hourly" | "daily" | "session";
  */
 export type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" | "allowedAssets";
 
+/** Base mainnet, as carried on x402 `selectedRequirements.network`. */
+export const CAIP2_BASE = "eip155:8453";
+/** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
+export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+
 const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",
   "blockedPayees",
   "allowedNetworks",
   "allowedAssets",
 ];
+const PAYEE_LISTS = ["allowedPayees", "blockedPayees"] as const;
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+/** Lowercase a 20-byte EVM address; leave Solana base58 and other strings alone. */
+export function normalizePayee(value: string): string {
+  return EVM_ADDRESS.test(value) ? value.toLowerCase() : value;
+}
 
 function isPolicyList(value: string): value is PolicyList {
   return (POLICY_LISTS as readonly string[]).includes(value);
@@ -50,6 +62,11 @@ export interface SpendLimits {
   session?: number;
   allowedPayees?: string[];
   blockedPayees?: string[];
+  /**
+   * CAIP-2 identifiers matching x402 `selectedRequirements.network`
+   * (e.g. `eip155:8453`, `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`).
+   * Nicknames such as `base` or `solana` do not match and fail closed.
+   */
   allowedNetworks?: string[];
   allowedAssets?: string[];
 }
@@ -68,8 +85,8 @@ function cloneLimits(limits: SpendLimits): SpendLimits {
 
 /**
  * Counterparty details for a pending payment, passed to check() alongside
- * the estimated cost. Exact string match — callers are responsible for any
- * chain-specific normalization (e.g. EVM checksum casing).
+ * the estimated cost. EVM `payTo` values matching `0x` + 40 hex are compared
+ * case-insensitively; anything else (including Solana base58) is exact-match.
  */
 export interface CounterpartyInfo {
   payTo?: string;
@@ -134,20 +151,21 @@ export class FileSpendControlStorage implements SpendControlStorage {
             limits[key] = val;
           }
         }
-        for (const key of [
-          "allowedPayees",
-          "blockedPayees",
-          "allowedNetworks",
-          "allowedAssets",
-        ] as const) {
+        for (const key of POLICY_LISTS) {
+          if (!Object.prototype.hasOwnProperty.call(rawLimits, key)) continue;
           const val = rawLimits[key];
           if (
-            Array.isArray(val) &&
-            val.length > 0 &&
-            val.every((v) => typeof v === "string" && v.length > 0)
+            !Array.isArray(val) ||
+            val.length === 0 ||
+            val.some((v) => typeof v !== "string" || v.length === 0)
           ) {
-            limits[key] = val;
+            throw new Error(
+              `[ClawRouter] refusing to load spending.json: ${key} is malformed; a corrupted policy file must not widen what the agent may pay`,
+            );
           }
+          limits[key] = PAYEE_LISTS.includes(key as (typeof PAYEE_LISTS)[number])
+            ? val.map(normalizePayee)
+            : [...val];
         }
 
         const history: SpendRecord[] = [];
@@ -173,6 +191,9 @@ export class FileSpendControlStorage implements SpendControlStorage {
         return { limits, history };
       }
     } catch (err) {
+      if (err instanceof Error && err.message.includes("refusing to load spending.json")) {
+        throw err;
+      }
       console.error(`[ClawRouter] Failed to load spending data, starting fresh: ${err}`);
     }
     return null;
@@ -255,7 +276,9 @@ export class SpendControl {
     ) {
       throw new Error("Policy list must be a non-empty array of non-empty strings");
     }
-    this.limits[list] = [...values];
+    this.limits[list] = PAYEE_LISTS.includes(list as (typeof PAYEE_LISTS)[number])
+      ? values.map(normalizePayee)
+      : [...values];
     this.save();
   }
 
@@ -283,7 +306,8 @@ export class SpendControl {
           reason: "Payee policy is configured but no payTo was provided to check()",
         };
       }
-      if (this.limits.blockedPayees?.includes(counterparty.payTo)) {
+      const payTo = normalizePayee(counterparty.payTo);
+      if (this.limits.blockedPayees?.includes(payTo)) {
         return {
           allowed: false,
           blockedByPolicy: "blockedPayees",
@@ -293,7 +317,7 @@ export class SpendControl {
       if (
         this.limits.allowedPayees &&
         this.limits.allowedPayees.length > 0 &&
-        !this.limits.allowedPayees.includes(counterparty.payTo)
+        !this.limits.allowedPayees.includes(payTo)
       ) {
         return {
           allowed: false,
@@ -482,7 +506,7 @@ export class SpendControl {
 
   private save(): void {
     this.storage.save({
-      limits: { ...this.limits },
+      limits: cloneLimits(this.limits),
       history: [...this.history],
     });
   }
@@ -490,11 +514,52 @@ export class SpendControl {
   private load(): void {
     const data = this.storage.load();
     if (data) {
-      this.limits = data.limits;
+      this.limits = cloneLimits(data.limits);
       this.history = data.history;
       this.cleanup();
     }
   }
+}
+
+export type SpendPolicyAbort = { abort: true; reason: string };
+
+/**
+ * Return an x402 `onBeforePaymentCreation` abort when policy or amount
+ * windows refuse. Call this before the scheme signer runs.
+ */
+export function abortIfSpendPolicyBlocks(
+  control: SpendControl,
+  selected: { payTo?: string; network?: string; asset?: string; amount?: string },
+): SpendPolicyAbort | undefined {
+  const micros = Number.parseInt(selected.amount ?? "0", 10);
+  const estimatedCost = Number.isFinite(micros) ? micros / 1_000_000 : 0;
+  const result = control.check(estimatedCost, {
+    payTo: selected.payTo,
+    network: selected.network,
+    asset: selected.asset,
+  });
+  if (result.allowed) return undefined;
+  return { abort: true, reason: result.reason ?? "blocked by spend policy" };
+}
+
+export function registerSpendPolicyHook(
+  x402: {
+    onBeforePaymentCreation(
+      hook: (ctx: {
+        selectedRequirements: {
+          payTo?: string;
+          network?: string;
+          asset?: string;
+          amount?: string;
+        };
+      }) => Promise<void | SpendPolicyAbort>,
+    ): unknown;
+  },
+  control: SpendControl,
+): void {
+  x402.onBeforePaymentCreation(async (ctx) =>
+    abortIfSpendPolicyBlocks(control, ctx.selectedRequirements),
+  );
 }
 
 export function formatDuration(seconds: number): string {
