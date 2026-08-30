@@ -509,6 +509,24 @@ describe("FileSpendControlStorage persistence", () => {
 describe("x402 onBeforePaymentCreation spend policy", () => {
   const blocked = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
+  function payment(client: x402Client, amount: string, payTo = blocked) {
+    return client.createPaymentPayload({
+      x402Version: 2,
+      resource: { url: "https://example.invalid/pay" },
+      accepts: [
+        {
+          scheme: "exact",
+          network: CAIP2_BASE,
+          amount,
+          asset: "USDC",
+          payTo,
+          maxTimeoutSeconds: 60,
+          extra: {},
+        },
+      ],
+    });
+  }
+
   it("aborts before the scheme signer is invoked", async () => {
     let signerCalls = 0;
     const storage = new InMemorySpendControlStorage();
@@ -525,24 +543,30 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
       },
     });
 
-    await expect(
-      client.createPaymentPayload({
-        x402Version: 2,
-        resource: { url: "https://example.invalid/pay" },
-        accepts: [
-          {
-            scheme: "exact",
-            network: CAIP2_BASE,
-            amount: "1000",
-            asset: "USDC",
-            payTo: blocked,
-            maxTimeoutSeconds: 60,
-            extra: {},
-          },
-        ],
-      }),
-    ).rejects.toThrow(/Payment creation aborted/);
+    await expect(payment(client, "1000")).rejects.toThrow(/Payment creation aborted/);
     expect(signerCalls).toBe(0);
+  });
+
+  it("reserves aggregate budget before signing the next payment", async () => {
+    let signerCalls = 0;
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    control.setLimit("hourly", 0.015);
+    const client = new x402Client();
+    registerSpendPolicyHook(client, control);
+    client.register(CAIP2_BASE, {
+      scheme: "exact",
+      async createPaymentPayload() {
+        signerCalls += 1;
+        return { x402Version: 2, payload: {} };
+      },
+    });
+
+    await payment(client, "10000", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    await expect(
+      payment(client, "10000", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+    ).rejects.toThrow(/Payment creation aborted/);
+    expect(signerCalls).toBe(1);
+    expect(control.getSpending("hourly")).toBe(0.01);
   });
 });
 

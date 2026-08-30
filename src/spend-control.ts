@@ -525,7 +525,10 @@ export type SpendPolicyAbort = { abort: true; reason: string };
 
 /**
  * Return an x402 `onBeforePaymentCreation` abort when policy or amount
- * windows refuse. Call this before the scheme signer runs.
+ * windows refuse. Aggregate-window amounts are reserved synchronously before
+ * the scheme signer runs so concurrent requests cannot all pass against the
+ * same remaining budget. The conservative reservation remains if a later
+ * signer or transport step fails.
  */
 export function abortIfSpendPolicyBlocks(
   control: SpendControl,
@@ -538,10 +541,17 @@ export function abortIfSpendPolicyBlocks(
     network: selected.network,
     asset: selected.asset,
   });
-  if (result.allowed) return undefined;
-  return { abort: true, reason: result.reason ?? "blocked by spend policy" };
+  if (!result.allowed) {
+    return { abort: true, reason: result.reason ?? "blocked by spend policy" };
+  }
+  const limits = control.getLimits();
+  if (limits.hourly !== undefined || limits.daily !== undefined || limits.session !== undefined) {
+    control.record(estimatedCost, { action: "x402 pre-sign reservation" });
+  }
+  return undefined;
 }
 
+/** Register the fail-closed spend-policy hook on an x402 client. */
 export function registerSpendPolicyHook(
   x402: {
     onBeforePaymentCreation(
