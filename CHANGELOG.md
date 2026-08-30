@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.256 — August 30, 2026
+
+### Fixed — multimodal retries now dedupe and cache-hit like text-only ones
+
+Timestamp stripping in the dedup and response-cache key functions only handled plain-string message `content`. For Anthropic-style array content (`[{type: "text", text}, {type: "image_url", …}]` — vision/multimodal messages), the OpenClaw-injected `[DAY YYYY-MM-DD HH:MM TZ]` prefix lives in the leading text block, so it stayed in the hash input: a retried multimodal request (timeout, network blip) never matched its original — the same request could be **paid twice** past the dedup window's protection, and every retry re-hit the upstream LLM instead of the response cache.
+
+Both key functions now strip the injected timestamp from array content — scoped to the **first** text block only, where OpenClaw actually injects. Later text blocks are user data (a pasted log line can legitimately start with a bracketed timestamp), and stripping those would have collided genuinely different requests onto one key — serving the wrong cached response for up to 10 minutes or wrongly deduping a distinct paid request. The shared logic (pattern + block stripper) moved to `src/timestamp-strip.ts` so dedup and cache normalization can't drift apart. Covered by the new `src/dedup.test.ts` and extended `src/response-cache.test.ts`, including regression tests pinning that non-leading text blocks are left untouched.
+
+- Thanks to @ygd58 for finding the gap, the isolated repro, and the core fix (#273) — the first-text-block scoping and shared helper were added in review.
+
+---
+
 ## v0.12.255 — August 30, 2026
 
 ### Fixed — img2img no longer misreports a client cancel as "Invalid request"

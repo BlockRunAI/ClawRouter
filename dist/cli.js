@@ -39252,6 +39252,26 @@ var init_stats = __esm({
   }
 });
 
+// src/timestamp-strip.ts
+function stripLeadingTextBlockTimestamp(blocks) {
+  let stripped = false;
+  return blocks.map((block) => {
+    if (!stripped && block !== null && typeof block === "object" && block.type === "text" && typeof block.text === "string") {
+      stripped = true;
+      const b = block;
+      return { ...b, text: b.text.replace(TIMESTAMP_PATTERN, "") };
+    }
+    return block;
+  });
+}
+var TIMESTAMP_PATTERN;
+var init_timestamp_strip = __esm({
+  "src/timestamp-strip.ts"() {
+    "use strict";
+    TIMESTAMP_PATTERN = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
+  }
+});
+
 // src/dedup.ts
 import { createHash } from "crypto";
 function canonicalize(obj) {
@@ -39278,19 +39298,21 @@ function stripTimestamps(obj) {
   for (const [key2, value] of Object.entries(obj)) {
     if (key2 === "content" && typeof value === "string") {
       result[key2] = value.replace(TIMESTAMP_PATTERN, "");
+    } else if (key2 === "content" && Array.isArray(value)) {
+      result[key2] = stripLeadingTextBlockTimestamp(value.map(stripTimestamps));
     } else {
       result[key2] = stripTimestamps(value);
     }
   }
   return result;
 }
-var DEFAULT_TTL_MS2, MAX_BODY_SIZE, TIMESTAMP_PATTERN, RequestDeduplicator;
+var DEFAULT_TTL_MS2, MAX_BODY_SIZE, RequestDeduplicator;
 var init_dedup = __esm({
   "src/dedup.ts"() {
     "use strict";
+    init_timestamp_strip();
     DEFAULT_TTL_MS2 = 3e4;
     MAX_BODY_SIZE = 1048576;
-    TIMESTAMP_PATTERN = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
     RequestDeduplicator = class {
       inflight = /* @__PURE__ */ new Map();
       completed = /* @__PURE__ */ new Map();
@@ -39408,7 +39430,10 @@ function normalizeForCache(obj) {
         if (typeof msg === "object" && msg !== null) {
           const m = msg;
           if (typeof m.content === "string") {
-            return { ...m, content: m.content.replace(TIMESTAMP_PATTERN2, "") };
+            return { ...m, content: m.content.replace(TIMESTAMP_PATTERN, "") };
+          }
+          if (Array.isArray(m.content)) {
+            return { ...m, content: stripLeadingTextBlockTimestamp(m.content) };
           }
         }
         return msg;
@@ -39419,10 +39444,11 @@ function normalizeForCache(obj) {
   }
   return result;
 }
-var DEFAULT_CONFIG, TIMESTAMP_PATTERN2, ResponseCache;
+var DEFAULT_CONFIG, ResponseCache;
 var init_response_cache = __esm({
   "src/response-cache.ts"() {
     "use strict";
+    init_timestamp_strip();
     DEFAULT_CONFIG = {
       maxSize: 200,
       defaultTTL: 600,
@@ -39430,7 +39456,6 @@ var init_response_cache = __esm({
       // 1MB
       enabled: true
     };
-    TIMESTAMP_PATTERN2 = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
     ResponseCache = class {
       cache = /* @__PURE__ */ new Map();
       expirationHeap = [];
