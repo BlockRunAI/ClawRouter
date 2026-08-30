@@ -56,6 +56,30 @@ describe("RequestDeduplicator.hash", () => {
     expect(RequestDeduplicator.hash(body1)).toBe(RequestDeduplicator.hash(body2));
   });
 
+  it("preserves timestamp-shaped prefixes in non-leading text blocks (user data, not injected)", () => {
+    // OpenClaw only injects into the FIRST text block. A bracketed timestamp at the
+    // start of a later text block is the user's own content (e.g. a pasted log line) —
+    // stripping it would make two genuinely different requests collide on one key,
+    // wrongly deduping a distinct paid request.
+    const mk = (day: string) =>
+      Buffer.from(
+        JSON.stringify({
+          model: "blockrun/auto",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "[Mon 2024-01-15 10:30 PST] explain this log line" },
+                { type: "text", text: `[${day} 2024-01-16 09:15 UTC] connection refused` },
+              ],
+            },
+          ],
+        }),
+      );
+
+    expect(RequestDeduplicator.hash(mk("Tue"))).not.toBe(RequestDeduplicator.hash(mk("Wed")));
+  });
+
   it("still produces different keys when array content actually differs", () => {
     const body1 = Buffer.from(
       JSON.stringify({

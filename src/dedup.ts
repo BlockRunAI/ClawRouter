@@ -7,6 +7,8 @@
 
 import { createHash } from "node:crypto";
 
+import { TIMESTAMP_PATTERN, stripLeadingTextBlockTimestamp } from "./timestamp-strip.js";
+
 export type CachedResponse = {
   status: number;
   headers: Record<string, string>;
@@ -46,8 +48,6 @@ function canonicalize(obj: unknown): unknown {
  *
  * This ensures requests with different timestamps but same content hash identically.
  */
-const TIMESTAMP_PATTERN = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
-
 function stripTimestamps(obj: unknown): unknown {
   if (obj === null || typeof obj !== "object") {
     return obj;
@@ -62,21 +62,12 @@ function stripTimestamps(obj: unknown): unknown {
       result[key] = value.replace(TIMESTAMP_PATTERN, "");
     } else if (key === "content" && Array.isArray(value)) {
       // Anthropic-style content blocks (e.g. [{type: "text", text: "..."}, {type: "image_url", ...}]).
-      // The timestamp lives in the leading text block's `text` field, not in `content` itself,
-      // so the plain-string branch above never fires for these — leaving the injected
-      // timestamp in the hash input and breaking dedup on every retry of a multimodal message.
-      result[key] = value.map((block) => {
-        if (
-          block &&
-          typeof block === "object" &&
-          (block as { type?: unknown }).type === "text" &&
-          typeof (block as { text?: unknown }).text === "string"
-        ) {
-          const b = block as { text: string };
-          return { ...b, text: b.text.replace(TIMESTAMP_PATTERN, "") };
-        }
-        return stripTimestamps(block);
-      });
+      // OpenClaw injects its timestamp into the FIRST text block only — the plain-string
+      // branch above never fires for these, so without this the injected timestamp stays
+      // in the hash input and breaks dedup on every retry of a multimodal message.
+      // Later text blocks are user data; a bracketed timestamp there must be preserved
+      // so genuinely different requests keep different keys.
+      result[key] = stripLeadingTextBlockTimestamp(value.map(stripTimestamps));
     } else {
       result[key] = stripTimestamps(value);
     }

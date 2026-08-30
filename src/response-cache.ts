@@ -14,6 +14,8 @@
 
 import { createHash } from "node:crypto";
 
+import { TIMESTAMP_PATTERN, stripLeadingTextBlockTimestamp } from "./timestamp-strip.js";
+
 export type CachedLLMResponse = {
   body: Buffer;
   status: number;
@@ -70,8 +72,6 @@ function canonicalize(obj: unknown): unknown {
  * separate cache slots — otherwise the first one's response is served to the
  * second, which breaks the client.
  */
-const TIMESTAMP_PATTERN = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
-
 function normalizeForCache(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
@@ -90,23 +90,13 @@ function normalizeForCache(obj: Record<string, unknown>): Record<string, unknown
             return { ...m, content: m.content.replace(TIMESTAMP_PATTERN, "") };
           }
           if (Array.isArray(m.content)) {
-            // Anthropic-style content blocks — the timestamp lives in the leading
-            // text block's `text` field. Without this, a retried multimodal message
-            // (vision, image attachments) gets a fresh injected timestamp each time
-            // and never hits the cache, so it's billed as a brand-new request.
-            const newContent = m.content.map((block: unknown) => {
-              if (
-                block &&
-                typeof block === "object" &&
-                (block as { type?: unknown }).type === "text" &&
-                typeof (block as { text?: unknown }).text === "string"
-              ) {
-                const b = block as { text: string };
-                return { ...b, text: b.text.replace(TIMESTAMP_PATTERN, "") };
-              }
-              return block;
-            });
-            return { ...m, content: newContent };
+            // Anthropic-style content blocks — the injected timestamp lives in the
+            // FIRST text block's `text` field. Without this, a retried multimodal
+            // message (vision, image attachments) gets a fresh injected timestamp
+            // each time and never hits the cache, so it's billed as a brand-new
+            // request. Later text blocks are user data and are left untouched so
+            // genuinely different requests keep different cache keys.
+            return { ...m, content: stripLeadingTextBlockTimestamp(m.content) };
           }
         }
         return msg;
