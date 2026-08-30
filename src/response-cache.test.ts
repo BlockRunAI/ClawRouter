@@ -79,6 +79,77 @@ describe("ResponseCache", () => {
       expect(ResponseCache.generateKey(body1)).toBe(ResponseCache.generateKey(body2));
     });
 
+    it("should strip timestamps from Anthropic-style array content blocks", () => {
+      // Multimodal/vision messages use content: [{type: "text", text}, ...] instead
+      // of a plain string. A retried request gets a fresh injected timestamp on the
+      // leading text block each time — the key must still match or every retry of a
+      // vision message misses the cache and gets billed as a brand-new request.
+      const body1 = JSON.stringify({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "[Mon 2024-01-15 10:30 PST] describe this" },
+              { type: "image_url", image_url: { url: "https://example.com/a.png" } },
+            ],
+          },
+        ],
+      });
+      const body2 = JSON.stringify({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "[Mon 2024-01-15 10:31 PST] describe this" },
+              { type: "image_url", image_url: { url: "https://example.com/a.png" } },
+            ],
+          },
+        ],
+      });
+
+      expect(ResponseCache.generateKey(body1)).toBe(ResponseCache.generateKey(body2));
+    });
+
+    it("should preserve timestamp-shaped prefixes in non-leading text blocks", () => {
+      // Only the first text block carries the injected timestamp; a bracketed
+      // timestamp starting a later block is user data. Stripping it would give two
+      // different requests the same cache key and serve the wrong cached response.
+      const mk = (day: string) =>
+        JSON.stringify({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "[Mon 2024-01-15 10:30 PST] explain this log line" },
+                { type: "text", text: `[${day} 2024-01-16 09:15 UTC] connection refused` },
+              ],
+            },
+          ],
+        });
+
+      expect(ResponseCache.generateKey(mk("Tue"))).not.toBe(ResponseCache.generateKey(mk("Wed")));
+    });
+
+    it("should generate different keys when array content actually differs", () => {
+      const mk = (text: string) =>
+        JSON.stringify({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: `[Mon 2024-01-15 10:30 PST] ${text}` }],
+            },
+          ],
+        });
+
+      expect(ResponseCache.generateKey(mk("describe image A"))).not.toBe(
+        ResponseCache.generateKey(mk("describe image B")),
+      );
+    });
+
     it("should handle Buffer input", () => {
       const body = Buffer.from(
         JSON.stringify({
