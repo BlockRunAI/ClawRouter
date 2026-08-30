@@ -10,6 +10,13 @@ All notable changes to ClawRouter.
 
 The media handlers all abort their upstream on client disconnect (#251, v0.12.252–253), but the main `/v1/chat/completions` path — the highest-traffic one — never did. `proxyRequest` wired its abort to `req.on("close")`, and on Node (verified on v24.15.0) an `IncomingMessage` emits `"close"` when the request-body readable finishes, not when the client hangs up. The body is fully drained near the top of `proxyRequest`, so that event had already passed by the time the listener was attached far below — `onClientClose` never ran, the `globalController` was only ever aborted by the request timeout, and a caller that hung up mid-request left the paid x402 upstream running to completion for a response nobody would receive. The abort now hangs off `res.on("close")` (guarded by `!res.writableEnded`), exactly like every media handler. Covered by `src/proxy.chat-abort.test.ts` (upstream socket observes the abort after the client destroys its request).
 
+Two follow-ups landed in review on top of the contributed fix:
+
+- **Disconnects in the pre-attach window are caught too.** Several awaits (context compression, the up-to-2.5s balance check) run between draining the body and attaching the listener; a client that hung up in that window had already emitted `"close"`, so the listener alone would never fire. `proxyRequest` now also checks `res.destroyed` right after attaching and aborts immediately.
+- **A client cancel is no longer reported as a 300s timeout.** Once the abort path was live, every disconnect surfaced through the shared abort exits as `Request timed out after 300000ms` — hitting `onError`, printing a phantom timeout in the CLI, and invalidating the balance cache (an extra RPC read on the next request). The proxy now tells the two apart (`ClientDisconnectedError`), logs `Request cancelled — client disconnected`, and returns quietly. The regression test also asserts `onError` stays silent, and gates its disconnect on the upstream actually being reached instead of a fixed 500ms timer.
+
+- Thanks to @erhnysr for the diagnosis, fix and regression test (#279).
+
 ---
 
 ## v0.12.253 — August 29, 2026

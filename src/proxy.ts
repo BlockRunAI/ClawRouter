@@ -203,6 +203,14 @@ const PORT_RETRY_DELAY_MS = 1_000; // Delay between retry attempts
 const MODEL_BODY_READ_TIMEOUT_MS = 300_000; // 5 minutes for model responses (reasoning models are slow)
 const ERROR_BODY_READ_TIMEOUT_MS = 30_000; // 30 seconds for error/partner body reads
 
+/** Thrown inside proxyRequest when the upstream was aborted because the client hung up. */
+class ClientDisconnectedError extends Error {
+  constructor() {
+    super("Client disconnected");
+    this.name = "ClientDisconnectedError";
+  }
+}
+
 async function readBodyWithTimeout(
   body: ReadableStream<Uint8Array> | null,
   timeoutMs: number = MODEL_BODY_READ_TIMEOUT_MS,
@@ -5317,6 +5325,14 @@ async function proxyRequest(
   // when the client hangs up. The body is fully drained above, so a `req`
   // listener would fire at body-end (or never, having missed the event) rather
   // than on disconnect. The media handlers all use `res.on("close")` for this.
+  // True once the client is gone: the response socket is destroyed without us
+  // having finished it. Used to tell a client disconnect apart from the global
+  // timeout — both surface as `globalController.signal.aborted`.
+  const clientDisconnected = () => res.destroyed && !res.writableEnded;
+  const abortError = () =>
+    clientDisconnected()
+      ? new ClientDisconnectedError()
+      : new Error(`Request timed out after ${timeoutMs}ms`);
   const onClientClose = () => {
     if (!res.writableEnded && !globalController.signal.aborted) {
       console.log(`[ClawRouter] Client disconnected — aborting upstream request`);
@@ -5324,6 +5340,11 @@ async function proxyRequest(
     }
   };
   res.on("close", onClientClose);
+  // The body was drained ~1,500 lines above and several awaits ran since
+  // (context compression, the balance check). If the client hung up in that
+  // window, `res` "close" has already fired and the listener above will never
+  // run — check the socket state now so that disconnect still aborts.
+  if (res.destroyed) onClientClose();
 
   try {
     // --- Build fallback chain ---
@@ -5582,9 +5603,9 @@ async function proxyRequest(
       const tryModel = modelsToTry[i];
       const isLastAttempt = i === modelsToTry.length - 1;
 
-      // Abort immediately if global deadline has already fired
+      // Abort immediately if global deadline has already fired (or the client left)
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
 
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
@@ -5611,9 +5632,9 @@ async function proxyRequest(
       );
       clearTimeout(modelTimeoutId);
 
-      // If the global deadline fired during this attempt, bail out entirely
+      // If the global deadline fired during this attempt (or the client left), bail out entirely
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
 
       // If the per-model timeout fired (but not global), treat as fallback-worthy error
@@ -6596,6 +6617,17 @@ async function proxyRequest(
 
     // Remove in-flight entry so retries aren't blocked
     deduplicator.removeInflight(dedupKey);
+
+    // Client hung up and we aborted the upstream on purpose: nobody is
+    // listening for a response, the balance cache is not suspect, and
+    // reporting this as a 300s timeout to onError would be a lie.
+    if (
+      err instanceof ClientDisconnectedError ||
+      (err instanceof Error && err.name === "AbortError" && clientDisconnected())
+    ) {
+      console.log(`[ClawRouter] Request cancelled — client disconnected`);
+      return;
+    }
 
     // Invalidate balance cache on payment failure (might be out of date)
     balanceMonitor.invalidate();

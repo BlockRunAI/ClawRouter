@@ -24,6 +24,7 @@ describe("chat completions upstream call on client abort", () => {
   let proxy: ProxyHandle;
   let upstreamHits = 0;
   let upstreamAborted = 0;
+  const onErrorCalls: string[] = [];
 
   beforeAll(async () => {
     upstream = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -51,6 +52,7 @@ describe("chat completions upstream call on client abort", () => {
       apiBase: `http://127.0.0.1:${addr.port}`,
       port: 0,
       skipBalanceCheck: true,
+      onError: (err) => onErrorCalls.push(err.message),
     });
   }, 10_000);
 
@@ -61,6 +63,7 @@ describe("chat completions upstream call on client abort", () => {
   });
 
   it("aborts the upstream request when the client disconnects", async () => {
+    onErrorCalls.length = 0;
     upstreamHits = 0;
     upstreamAborted = 0;
 
@@ -83,8 +86,15 @@ describe("chat completions upstream call on client abort", () => {
       clientReq.on("error", () => resolve());
       clientReq.on("close", () => resolve());
       clientReq.end(body);
-      // Give the proxy time to forward upstream, then walk away.
-      setTimeout(() => clientReq.destroy(), 500);
+      // Walk away as soon as the proxy has actually reached the upstream
+      // (a fixed delay is a flake on slow CI runners).
+      const start = Date.now();
+      const tick = setInterval(() => {
+        if (upstreamHits > 0 || Date.now() - start > 5_000) {
+          clearInterval(tick);
+          clientReq.destroy();
+        }
+      }, 10);
     });
 
     // Poll briefly for the upstream socket to observe the abort.
@@ -95,5 +105,10 @@ describe("chat completions upstream call on client abort", () => {
 
     expect(upstreamHits).toBe(1);
     expect(upstreamAborted).toBe(1);
+
+    // A deliberate client-side cancel must not be reported as a proxy error
+    // (it used to surface as "Request timed out after 300000ms").
+    await new Promise((r) => setTimeout(r, 200));
+    expect(onErrorCalls).toEqual([]);
   }, 10_000);
 });

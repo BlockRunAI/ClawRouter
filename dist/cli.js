@@ -92320,6 +92320,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const globalController = new AbortController();
   const timeoutId = setTimeout(() => globalController.abort(), timeoutMs);
+  const clientDisconnected = () => res.destroyed && !res.writableEnded;
+  const abortError = () => clientDisconnected() ? new ClientDisconnectedError() : new Error(`Request timed out after ${timeoutMs}ms`);
   const onClientClose = () => {
     if (!res.writableEnded && !globalController.signal.aborted) {
       console.log(`[ClawRouter] Client disconnected \u2014 aborting upstream request`);
@@ -92327,6 +92329,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
     }
   };
   res.on("close", onClientClose);
+  if (res.destroyed) onClientClose();
   try {
     let modelsToTry;
     const excludeList = options.excludeModels ?? loadExcludeList();
@@ -92515,7 +92518,7 @@ data: [DONE]
       const tryModel = modelsToTry[i];
       const isLastAttempt = i === modelsToTry.length - 1;
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
       const perAttemptTimeoutMs = timeoutForModel(tryModel);
@@ -92535,7 +92538,7 @@ data: [DONE]
       );
       clearTimeout(modelTimeoutId);
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
       if (!result.success && modelController.signal.aborted && !isLastAttempt) {
         console.log(
@@ -93256,6 +93259,10 @@ data: [DONE]
       heartbeatInterval = void 0;
     }
     deduplicator.removeInflight(dedupKey);
+    if (err instanceof ClientDisconnectedError || err instanceof Error && err.name === "AbortError" && clientDisconnected()) {
+      console.log(`[ClawRouter] Request cancelled \u2014 client disconnected`);
+      return;
+    }
     balanceMonitor.invalidate();
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Request timed out after ${timeoutMs}ms`, { cause: err });
@@ -93311,7 +93318,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -93391,6 +93398,12 @@ var init_proxy = __esm({
     PORT_RETRY_DELAY_MS = 1e3;
     MODEL_BODY_READ_TIMEOUT_MS = 3e5;
     ERROR_BODY_READ_TIMEOUT_MS = 3e4;
+    ClientDisconnectedError = class extends Error {
+      constructor() {
+        super("Client disconnected");
+        this.name = "ClientDisconnectedError";
+      }
+    };
     rateLimitedModels = /* @__PURE__ */ new Map();
     overloadedModels = /* @__PURE__ */ new Map();
     perProviderErrors = /* @__PURE__ */ new Map();
