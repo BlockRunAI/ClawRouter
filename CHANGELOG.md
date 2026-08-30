@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.254 — August 30, 2026
+
+### Fixed — the chat path now cancels its paid upstream when the client disconnects
+
+The media handlers all abort their upstream on client disconnect (#251, v0.12.252–253), but the main `/v1/chat/completions` path — the highest-traffic one — never did. `proxyRequest` wired its abort to `req.on("close")`, and on Node (verified on v24.15.0) an `IncomingMessage` emits `"close"` when the request-body readable finishes, not when the client hangs up. The body is fully drained near the top of `proxyRequest`, so that event had already passed by the time the listener was attached far below — `onClientClose` never ran, the `globalController` was only ever aborted by the request timeout, and a caller that hung up mid-request left the paid x402 upstream running to completion for a response nobody would receive. The abort now hangs off `res.on("close")` (guarded by `!res.writableEnded`), exactly like every media handler. Covered by `src/proxy.chat-abort.test.ts` (upstream socket observes the abort after the client destroys its request).
+
+---
+
 ## v0.12.253 — August 29, 2026
 
 ### Fixed — the last two paid handlers without a client-abort signal

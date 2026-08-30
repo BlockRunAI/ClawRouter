@@ -5312,13 +5312,18 @@ async function proxyRequest(
   // Abort in-flight upstream requests when the client disconnects.
   // OpenClaw 2026.4.7+ aborts gateway requests on client disconnect;
   // without this, ClawRouter would leave orphan upstream fetches running.
+  // Must hang off `res` "close", not `req`: on Node (verified on v24.15.0) an
+  // IncomingMessage emits "close" when the request-body readable finishes, not
+  // when the client hangs up. The body is fully drained above, so a `req`
+  // listener would fire at body-end (or never, having missed the event) rather
+  // than on disconnect. The media handlers all use `res.on("close")` for this.
   const onClientClose = () => {
-    if (!globalController.signal.aborted) {
+    if (!res.writableEnded && !globalController.signal.aborted) {
       console.log(`[ClawRouter] Client disconnected — aborting upstream request`);
       globalController.abort();
     }
   };
-  req.on("close", onClientClose);
+  res.on("close", onClientClose);
 
   try {
     // --- Build fallback chain ---
@@ -5393,7 +5398,7 @@ async function proxyRequest(
         completed = true;
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
 
@@ -5540,7 +5545,7 @@ async function proxyRequest(
         // This return exits before the shared cleanup below — release the
         // global timeout + close listener so they don't outlive the request.
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
 
@@ -5871,7 +5876,7 @@ async function proxyRequest(
 
     // Clear timeout and client-close listener — request attempts completed
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
 
     // Clear heartbeat — real data is about to flow
     if (heartbeatInterval) {
@@ -6581,7 +6586,7 @@ async function proxyRequest(
   } catch (err) {
     // Clear timeout and client-close listener on error
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
 
     // Clear heartbeat on error
     if (heartbeatInterval) {

@@ -92321,12 +92321,12 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   const globalController = new AbortController();
   const timeoutId = setTimeout(() => globalController.abort(), timeoutMs);
   const onClientClose = () => {
-    if (!globalController.signal.aborted) {
+    if (!res.writableEnded && !globalController.signal.aborted) {
       console.log(`[ClawRouter] Client disconnected \u2014 aborting upstream request`);
       globalController.abort();
     }
   };
-  req.on("close", onClientClose);
+  res.on("close", onClientClose);
   try {
     let modelsToTry;
     const excludeList = options.excludeModels ?? loadExcludeList();
@@ -92385,7 +92385,7 @@ data: [DONE]
         completed = true;
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
       const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
@@ -92484,7 +92484,7 @@ data: [DONE]
         }
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
       if (excluded.length > 0) {
@@ -92747,7 +92747,7 @@ data: [DONE]
       break;
     }
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = void 0;
@@ -93250,7 +93250,7 @@ data: [DONE]
     completed = true;
   } catch (err) {
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = void 0;
