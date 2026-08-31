@@ -7,11 +7,11 @@
 <p>Agents can't sign up for accounts. Agents can't enter credit cards.<br>
 Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
-<em><!-- br:models.free -->5<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em></p>
+<em><!-- br:models.free -->7<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em></p>
 
 <br>
 
-<img src="https://img.shields.io/badge/🆓_5_Free_Models-success?style=for-the-badge" alt="5 free models">&nbsp;
+<img src="https://img.shields.io/badge/🆓_7_Free_Models-success?style=for-the-badge" alt="7 free models">&nbsp;
 <img src="https://img.shields.io/badge/🤖_Agent--Native-black?style=for-the-badge" alt="Agent native">&nbsp;
 <img src="https://img.shields.io/badge/🔑_Zero_API_Keys-blue?style=for-the-badge" alt="No API keys">&nbsp;
 <img src="https://img.shields.io/badge/⚡_Local_Routing-yellow?style=for-the-badge" alt="Local routing">&nbsp;
@@ -34,7 +34,7 @@ Agents can only sign transactions.<br><br>
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -46,7 +46,7 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — <!-- br:models.free -->5<!-- /br:models.free --> NVIDIA models are free forever (incl. reasoning-grade Step 3.7 Flash + a vision-capable Nemotron Omni)
+- **Starts at $0** — <!-- br:models.free -->7<!-- /br:models.free --> open-weight models are free forever (incl. a 1M-context reasoner, the vision-capable Nemotron Omni, and two sub-second coders)
 - **No accounts** — a wallet is generated locally, no signup
 - **No API keys** — your wallet signature IS authentication
 - **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring + constraint-first ranking ([router-core](https://github.com/BlockRunAI/router-core)) picks the right model automatically
@@ -61,8 +61,8 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 |                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**                                                         |
 | ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ---------------------------------------------------------------------- |
-| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->71<!-- /br:models.chatVisible -->**    |
-| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->5<!-- /br:models.free --> models, no signup** |
+| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->73<!-- /br:models.chatVisible -->**    |
+| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->7<!-- /br:models.free --> models, no signup** |
 | **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
 | **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature**                                                   |
 | **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request**                                                   |
@@ -78,7 +78,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ## Quick Start
 
-> **No wallet? <!-- br:models.free -->5<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/mistral-nemotron` (or any of the <!-- br:models.free -->5<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+> **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
 ### Option A — OpenClaw Agent
 
@@ -107,7 +107,7 @@ openclaw gateway restart
 
 > **Using Claude Code?** Check out [BRCC](https://github.com/BlockRunAI/brcc) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
-> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
+> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
 
 No OpenClaw required. ClawRouter runs as a local proxy on port 8402.
 
@@ -118,7 +118,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->5<!-- /br:models.free --> free models (e.g. `free/mistral-nemotron`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->7<!-- /br:models.free --> free models (e.g. `free/nemotron-3.5-lightning`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -217,12 +217,12 @@ Request → 15-dimension scorer → tier + task shape
 3. **Rank** — survivors are scored on task quality, capability, estimated cost, speed and reliability, with per-profile weights (`eco` leans on cost, `premium` on quality and reliability).
 4. **Recover** — the whole ranked list rides along as the fallback chain, so a provider timeout or 5xx costs a retry, not the task.
 
-| Tier      | ECO Model                       | AUTO Model                      | PREMIUM Model                | AGENTIC Model ‡           |
-| --------- | ------------------------------- | ------------------------------- | ---------------------------- | ------------------------- |
-| SIMPLE    | step-3.7-flash (**FREE**)       | gemini-2.5-flash ($0.30/$2.50)  | gemini-3.5-flash ($1.50/$9)  | gpt-4o-mini ($0.15/$0.60) |
-| MEDIUM    | glm-5.3-flash ($0.15/$0.50)     | gemini-3.5-flash ($1.50/$9)     | gpt-5.3-codex ($1.75/$14.00) | gpt-5-mini ($0.25/$2)     |
-| COMPLEX   | glm-5.3-flash ($0.15/$0.50)     | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     | claude-sonnet-5 ($3/$15)  |
-| REASONING | deepseek-reasoner ($0.14/$0.28) | deepseek-reasoner ($0.14/$0.28) | claude-sonnet-5 ($3/$15)     | claude-sonnet-5 ($3/$15)  |
+| Tier      | ECO Model                         | AUTO Model                      | PREMIUM Model                | AGENTIC Model ‡           |
+| --------- | --------------------------------- | ------------------------------- | ---------------------------- | ------------------------- |
+| SIMPLE    | nemotron-3.5-lightning (**FREE**) | gemini-2.5-flash ($0.30/$2.50)  | gemini-3.5-flash ($1.50/$9)  | gpt-4o-mini ($0.15/$0.60) |
+| MEDIUM    | glm-5.3-flash ($0.15/$0.50)       | gemini-3.5-flash ($1.50/$9)     | gpt-5.3-codex ($1.75/$14.00) | gpt-5-mini ($0.25/$2)     |
+| COMPLEX   | glm-5.3-flash ($0.15/$0.50)       | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     | claude-sonnet-5 ($3/$15)  |
+| REASONING | deepseek-reasoner ($0.14/$0.28)   | deepseek-reasoner ($0.14/$0.28) | claude-sonnet-5 ($3/$15)     | claude-sonnet-5 ($3/$15)  |
 
 † Withheld from `/v1/models` — since Router Core V3.5 no chain names such a model: every primary and every fallback rung above is a model you can find on the public pricing page. [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) prices the published savings claim on the same visible models.
 ‡ Auto-selected in any profile when the turn actually needs its attached tools; prefers models that keep going instead of stopping to ask.
@@ -407,7 +407,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Models & Pricing
 
-<!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->5<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->7<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
 > **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
@@ -415,11 +415,13 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 | Model                                       | Input $/M | Output $/M | ~$/request | Context | Features                                     |
 | ------------------------------------------- | --------: | ---------: | ---------: | ------- | -------------------------------------------- |
+| free/nemotron-3.5-lightning                 |  **FREE** |   **FREE** |     **$0** | 1M      | reasoning (thinking mode) — the free default |
+| free/nemotron-3-nano-30b                    |  **FREE** |   **FREE** |     **$0** | 131K    | fastest free model (~121 tok/s)              |
+| free/laguna-xs-2.1                          |  **FREE** |   **FREE** |     **$0** | 131K    | coding (Poolside, ~161 tok/s)                |
+| free/north-mini-code                        |  **FREE** |   **FREE** |     **$0** | 256K    | coding (Cohere, sub-second)                  |
 | free/nemotron-3-nano-omni-30b-a3b-reasoning |  **FREE** |   **FREE** |     **$0** | 256K    | reasoning, **vision** (text+img+video+audio) |
-| free/mistral-nemotron                       |  **FREE** |   **FREE** |     **$0** | 131K    | instruction following                        |
-| free/step-3.7-flash                         |  **FREE** |   **FREE** |     **$0** | 131K    | reasoning                                    |
-| free/nemotron-nano-9b-v2                    |  **FREE** |   **FREE** |     **$0** | 131K    | fast lightweight generalist                  |
-| free/nemotron-nano-12b-v2-vl                |  **FREE** |   **FREE** |     **$0** | 131K    | vision (text + image)                        |
+| free/nemotron-3-ultra-550b                  |  **FREE** |   **FREE** |     **$0** | 1M      | largest free model (550B/55B MoE)            |
+| free/llama-3.2-11b-vision                   |  **FREE** |   **FREE** |     **$0** | 128K    | Meta Llama, image input                      |
 | qwen/qwen3.7-flash                          |     $0.03 |      $0.13 |    $0.0001 | 1M      | reasoning, tools (fastest Qwen tier)         |
 | openai/gpt-5-nano                           |     $0.05 |      $0.40 |    $0.0002 | 128K    | tools                                        |
 | openai/gpt-5.6-luna-pro                     |     $0.10 |      $0.60 |    $0.0004 | 1M      | reasoning, vision, agentic, tools            |
@@ -497,7 +499,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | openai/gpt-5.4-pro          |    $30.00 |    $180.00 |    $0.1050 | 400K    | reasoning, tools                  |
 | openai/gpt-5.5-pro          |    $30.00 |    $180.00 |    $0.1050 | 1M      | reasoning, vision, tools          |
 
-> **Free tier:** <!-- br:models.free -->5<!-- /br:models.free --> NVIDIA-hosted models cost nothing — `/model free` pins the free default (`step-3.7-flash`, with the other four as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model step-flash` for reasoning, `/model mistral-nemotron` for instruction following).
+> **Free tier:** <!-- br:models.free -->7<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other six as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model lightning` for 1M-context reasoning, `/model north-mini` or `/model laguna` for fast coding, `/model llama-vision` for Meta Llama).
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
 
 ---
@@ -573,7 +575,7 @@ For basic usage, no configuration needed. For advanced options:
 Block specific models from being routed to. Useful if a model doesn't follow your agent instructions or you want to control costs.
 
 ```bash
-/exclude add free/step-3.7-flash   # Block a free model (e.g. not for your workload)
+/exclude add free/nemotron-3.5-lightning   # Block a free model (e.g. not for your workload)
 /exclude add grok-4                # Aliases work — blocks all grok-4 variants
 /exclude add gpt-5.4               # Skip expensive models
 /exclude                           # Show current exclusions
@@ -667,7 +669,7 @@ npm test
 
 **The LLM router built for autonomous agents**
 
-You're here. <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
+You're here. <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
 
 `curl -fsSL https://blockrun.ai/ClawRouter-update | bash`
 
@@ -678,7 +680,7 @@ You're here. <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> mod
 
 **BlockRun for Claude Code**
 
-Run Claude Code with <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
+Run Claude Code with <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
 
 `curl -fsSL https://blockrun.ai/brcc-install | bash`
 
@@ -691,7 +693,7 @@ Run Claude Code with <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible
 
 **ClawRouter for NousResearch Hermes**
 
-Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
+Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
 
 `pip install hermes-plugin-clawrouter`
 
@@ -755,7 +757,7 @@ ClawRouter works with any tool that makes OpenAI-compatible API calls — point 
 
 ### Is ClawRouter free?
 
-ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several NVIDIA-hosted models (`nemotron-3-nano-omni-30b-a3b-reasoning`, `mistral-nemotron`, `step-3.7-flash`, `nemotron-nano-9b-v2`, `nemotron-nano-12b-v2-vl`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
+ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several open-weight models (`nemotron-3.5-lightning`, `nemotron-3-nano-30b`, `laguna-xs-2.1`, `north-mini-code`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3-ultra-550b`, `llama-3.2-11b-vision`) are completely free. Use `/model free` to smart-route across them, or pick any by name.
 
 ---
 

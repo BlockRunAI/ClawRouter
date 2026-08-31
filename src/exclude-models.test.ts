@@ -81,12 +81,12 @@ describe("ExcludeModels", () => {
     expect(set.size).toBe(1);
   });
 
-  it("resolves aliases — 'nvidia' becomes 'free/step-3.7-flash'", () => {
+  it("resolves aliases — 'nvidia' becomes 'free/nemotron-3.5-lightning'", () => {
     const resolved = addExclusion("nvidia", filePath);
-    expect(resolved).toBe("free/step-3.7-flash");
+    expect(resolved).toBe("free/nemotron-3.5-lightning");
 
     const set = loadExcludeList(filePath);
-    expect(set.has("free/step-3.7-flash")).toBe(true);
+    expect(set.has("free/nemotron-3.5-lightning")).toBe(true);
     expect(set.size).toBe(1);
   });
 
@@ -99,8 +99,8 @@ describe("ExcludeModels", () => {
   });
 
   it("remove resolves aliases too", () => {
-    addExclusion("nvidia", filePath); // "nvidia" alias → "free/step-3.7-flash"
-    const removed = removeExclusion("step-flash", filePath); // different alias for same model
+    addExclusion("nvidia", filePath); // "nvidia" alias → "free/nemotron-3.5-lightning"
+    const removed = removeExclusion("lightning", filePath); // different alias for same model
     expect(removed).toBe(true);
 
     const set = loadExcludeList(filePath);

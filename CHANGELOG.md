@@ -4,9 +4,58 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.258 — August 31, 2026
+
+### Fixed — the free tier was dead and nothing said so
+
+NVIDIA retired **four of the five visible free models in one sweep** (blockrun #448, 2026-08-30). `step-3.7-flash`, `nemotron-nano-9b-v2` and `nemotron-nano-12b-v2-vl` published HTTP 410 Gone; `mistral-nemotron` went the quiet way — still listed upstream, >150s and zero bytes. Only `nemotron-3-nano-omni` survived. `step-3.7-flash` was ClawRouter's `free` alias, `FREE_MODEL`, the head of the `FREE_MODELS` cascade **and** router-core's `ecoTiers.SIMPLE` primary.
+
+Nothing looked broken, and that is the point: BlockRun server-redirects retired free ids, so callers kept getting answers — from a different model. That is worse than a hard failure. It **silently defeats `/exclude`** (you exclude the id you can see, the router hands the request to it anyway, and the gateway answers from the redirect target), and it misreports the envelope — `free` advertised 131K while the model actually serving has 1M.
+
+The tier is rebuilt to blockrun's seven, each verified with a real completion through a locally-run proxy (non-streaming and streaming, `model` echoed back) rather than a catalog lookup:
+
+| Cascade order | Model                                         | Context | Why it sits there                                                                                                            |
+| ------------- | --------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1             | `free/nemotron-3.5-lightning`                 | 1M      | the free default — blockrun's own redirect target for the old head, so the proxy and the gateway never name different models |
+| 2             | `free/nemotron-3-nano-30b`                    | 131K    | fastest in the tier (~121 tok/s)                                                                                             |
+| 3             | `free/laguna-xs-2.1`                          | 131K    | coding, ~161 tok/s — on our own NVIDIA key                                                                                   |
+| 4             | `free/north-mini-code`                        | 256K    | coding, 607ms median — OpenRouter's $0 pool                                                                                  |
+| 5             | `free/nemotron-3-nano-omni-30b-a3b-reasoning` | 256K    | the only vision-capable free model                                                                                           |
+| 6             | `free/nemotron-3-ultra-550b`                  | 1M      | largest free model listed, but slow and 3/15 calls return an upstream error object                                           |
+| 7             | `free/llama-3.2-11b-vision`                   | 128K    | the only free Llama NVIDIA still serves; slowest, so last                                                                    |
+
+Rungs 3 and 4 are adjacent on purpose: they run on **different capacity pools**, so one provider's outage cannot take both coding rungs.
+
+**The free tier is no longer NVIDIA-only.** Two of the seven are hosted under their own maker's namespace upstream, which the blanket `free/X → nvidia/X` rewrite could not express — `free/north-mini-code` would have become `nvidia/north-mini-code` and 400'd on every request, quietly, because a failing rung just falls through to the next one. `toUpstreamModelId()` now consults `FREE_UPSTREAM_OVERRIDES` first, and `src/proxy.free-upstream-ids.test.ts` pins both entries.
+
+The four dead ids keep their catalog entries so pins stay routable (the gateway redirects them); they are gone from the picker, the cascade and every generic alias. `llama-free` points at a real free Llama again. `mistral-free` no longer advertises a Mistral — there is no free one left anywhere, which is what blockrun's own `/free-mistral` page now says.
+
+### Fixed — an uncatalogued routing target was bypassing `maxCostPerRun`
+
+router-core V3.5 made `zai/glm-5.3-flash` the eco **MEDIUM and COMPLEX primary**, but neither it nor `zai/glm-5.3` existed in `BLOCKRUN_MODELS`. `estimateAmount()` returns `undefined` for an id we do not carry, and both consumers fail open — the budget filter keeps the model (`if (!est) return true`) and the success path skips accounting (`if (costEst)`). So every eco user with a cost cap set had **no cap on their primary model, and its spend never entered the session total**. Same shape as the v0.12.232 `max_completion_tokens` bug: a telemetry-looking gap that is actually a money bug.
+
+Both models are added with blockrun's pricing, and `src/router/chain-models-in-catalog.test.ts` now fails the build if any model router-core can pick is one this repo cannot price.
+
+### Fixed — 36 stale context/output envelopes
+
+Prices were already correct; the envelopes had drifted across three blockrun releases. The ones that were truncating real requests: `claude-sonnet-4.6` 200K → **1M** context (and 64K → 128K output), `gpt-5.4`/`-pro` 400K → 1.05M, the four `grok-4*-fast` SKUs 131K → 2M, `deepseek-chat`/`-reasoner` 8192 → 65536 output, `gemini-3.1-flash-lite` 8192 → 65536. Every `gemini-*` context normalised to the real 1048576.
+
+### Changed — bare `glm` promoted 5.2 → 5.3
+
+Same rule as `opus` 4.8 → 5: the cost tradeoff is zero — identical $1.40/$4.40 and an identical 1M / 131072 envelope — so nothing can bill or truncate differently for a caller who never typed a version, and blockrun's own copy already names 5.3 the Z.AI flagship. `glm-5.2` and every other version pin still resolve to their own model.
+
+### Changed
+
+- `@blockrun/router-core` pinned to `5ee7c23`: eco SIMPLE opens on `nemotron-3.5-lightning` with `nemotron-3-nano-30b` behind it, three free backstop rungs retargeted, `model-capabilities.ts` regenerated from the live catalog.
+- Published counts: 73 chat models, 7 free (was 71 / 5); 253 aliases (was 229).
+- `docs/9-free-ai-models-zero-cost-blockrun.md` rebuilt — every model it named was dead. The slug is kept so existing links do not break.
+- The capacity-filter test fixture moved off `openai/gpt-5.3`, whose output cap rose to 128K in this resync and quietly stopped exercising the filter.
+
+---
+
 ## v0.12.257 — August 31, 2026
 
-### Added — counterparty policy: control *who* the agent may pay, not just how much
+### Added — counterparty policy: control _who_ the agent may pay, not just how much
 
 `SpendLimits` already bounded how much an agent could spend per request, hour, day and session. It said nothing about **whom** it paid, or on which network and asset. Four optional, default-off lists close that: `allowedPayees`, `blockedPayees`, `allowedNetworks` and `allowedAssets`, with a block always beating an allow when an address is on both.
 

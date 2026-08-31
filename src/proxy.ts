@@ -150,12 +150,41 @@ const ROUTING_PROFILES = new Set([
 // gpt-oss-120b/20b were dropped 2026-08-29: dead upstream since 2026-08-16 (a
 // completion hangs; the gateway 400s the `free/` id) and hidden from the
 // public catalog over NVIDIA's prompt-retention terms since 2026-04-28.
+// (They RECOVERED on blockrun's 2026-08-30 probe, but stay withheld from the
+// public catalog over those same terms — so they stay off this cascade and only
+// remain reachable through the pins that name them.)
+//
+// 2026-08-30 REBUILD (blockrun #448). NVIDIA retired FOUR of the five visible
+// free models in one sweep — step-3.7-flash (the head), nemotron-nano-9b-v2 and
+// nemotron-nano-12b-v2-vl published 410 Gone; mistral-nemotron went the quiet
+// way, still listed but >150s and zero bytes. Only nano-omni survived. Nothing
+// looked broken because blockrun server-redirects retired free ids: the caller
+// kept getting answers, from a different model — which is exactly the shape that
+// silently defeats /exclude.
+//
+// Order below is deliberate, from blockrun's measurements plus a 2026-08-30
+// gateway probe of every rung:
+//   1. lightning  — blockrun's own retarget of the old head, so the proxy and
+//                   the gateway name the same model. 1M ctx, 1.3s with tools.
+//   2. nano-30b   — fastest in the tier (~121 tok/s).
+//   3/4. laguna + north-mini — both sub-second coders, and deliberately adjacent
+//                   because they sit on DIFFERENT capacity pools (our NVIDIA key
+//                   vs OpenRouter's $0 pool), so one pool's outage does not take
+//                   both rungs.
+//   5. nano-omni  — the only vision-capable free model left.
+//   6. ultra-550b — 1M ctx and the largest we list, but 16.8s and blockrun
+//                   measured 3 of 15 calls returning an HTTP 200 that carried an
+//                   upstream 502/503 error object instead of choices.
+//   7. llama-vision — slowest (~18 tok/s), so last; it is here because it is the
+//                   only free Llama NVIDIA still serves.
 const FREE_MODELS = new Set([
-  "free/step-3.7-flash", // reasoning-focused — free-tier flagship
-  "free/nemotron-nano-9b-v2", // fast lightweight generalist (~0.7s)
-  "free/mistral-nemotron", // strong instruction following
+  "free/nemotron-3.5-lightning", // free-tier default — 1M ctx, thinking mode
+  "free/nemotron-3-nano-30b", // fastest free model (~121 tok/s)
+  "free/laguna-xs-2.1", // coding, ~161 tok/s — on our NVIDIA key
+  "free/north-mini-code", // coding, 607ms median — OpenRouter $0 pool
   "free/nemotron-3-nano-omni-30b-a3b-reasoning", // vision (text/image/video/audio)
-  "free/nemotron-nano-12b-v2-vl", // vision-language (text + image)
+  "free/nemotron-3-ultra-550b", // largest free model, 1M ctx — but slow + flaky
+  "free/llama-3.2-11b-vision", // only free Llama left; slowest, so last
 ]);
 /** Pick the best available free model that isn't excluded. */
 function pickFreeModel(excludeList?: Set<string>): string | undefined {
@@ -165,13 +194,32 @@ function pickFreeModel(excludeList?: Set<string>): string | undefined {
   return undefined; // all free models excluded
 }
 // Keep backward-compat constant for places that don't have excludeList in scope
-const FREE_MODEL = "free/step-3.7-flash";
+const FREE_MODEL = "free/nemotron-3.5-lightning";
 /**
- * Map free/xxx model IDs to nvidia/xxx for upstream BlockRun API.
- * The "free/" prefix is a ClawRouter convention for the /model picker;
- * BlockRun server expects "nvidia/" prefix.
+ * Free models whose upstream id is NOT `nvidia/<basename>`.
+ *
+ * The free tier stopped being NVIDIA-only on 2026-08-30 (blockrun #448): two of
+ * the seven are hosted under their own maker's namespace upstream. The `free/`
+ * prefix stays ClawRouter's picker convention for all of them — a picker row
+ * reading `cohere/north-mini-code` gives a user no way to tell it is free — so
+ * the exceptions are named here instead of leaking into the id.
+ *
+ * A wrong value here is a 400 on every request to that model, so each one is
+ * covered by a unit test.
  */
-function toUpstreamModelId(modelId: string): string {
+const FREE_UPSTREAM_OVERRIDES: Record<string, string> = {
+  "free/north-mini-code": "cohere/north-mini-code",
+  "free/laguna-xs-2.1": "poolside/laguna-xs-2.1",
+};
+
+/**
+ * Map free/xxx model IDs to their upstream BlockRun ID.
+ * The "free/" prefix is a ClawRouter convention for the /model picker; upstream
+ * they are `nvidia/xxx` by default, or whatever FREE_UPSTREAM_OVERRIDES says.
+ */
+export function toUpstreamModelId(modelId: string): string {
+  const override = FREE_UPSTREAM_OVERRIDES[modelId];
+  if (override) return override;
   if (modelId.startsWith("free/")) {
     return "nvidia/" + modelId.slice("free/".length);
   }

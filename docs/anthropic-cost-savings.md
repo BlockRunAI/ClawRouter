@@ -50,7 +50,7 @@ This is where you're paying for real value:
 
 ## The Solution: ClawRouter
 
-[ClawRouter](https://github.com/BlockRunAI/ClawRouter) is an open-source local proxy that sits between your app and <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> AI models. It saves you money in three ways: **smart routing**, **token optimization**, and **response caching**.
+[ClawRouter](https://github.com/BlockRunAI/ClawRouter) is an open-source local proxy that sits between your app and <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> AI models. It saves you money in three ways: **smart routing**, **token optimization**, and **response caching**.
 
 ```
 ┌─────────────┐     ┌──────────────────────────────┐     ┌──────────────────┐
@@ -73,10 +73,10 @@ ClawRouter scores every prompt against 15 dimensions in <1ms and routes it to th
 
 ```
 "What is the capital of France?"
-  → SIMPLE → nvidia/gpt-oss-120b (FREE)
+  → SIMPLE → free/nemotron-3.5-lightning (FREE)
 
 "Extract JSON from this text"
-  → SIMPLE → nvidia/gpt-oss-120b (FREE)
+  → SIMPLE → free/nemotron-3.5-lightning (FREE)
 
 "Refactor this auth module with OAuth2 + PKCE"
   → COMPLEX → anthropic/claude-sonnet-4.6 ($3/$15)
@@ -271,7 +271,7 @@ const response = await client.chat.completions.create({
 - `blockrun/auto` — Balanced cost/quality (default)
 - `blockrun/eco` — Maximum savings (free tier aggressively)
 - `blockrun/premium` — Best quality (Opus/Sonnet/GPT-5)
-- `blockrun/free` — Free tier only (gpt-oss-120b)
+- `blockrun/free` — Free tier only (nemotron-3.5-lightning)
 
 ### Step 3: Fund (optional)
 

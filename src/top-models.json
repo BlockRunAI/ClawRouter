@@ -27,6 +27,8 @@
   "xai/grok-4.5",
   "xai/grok-4.3",
   "xai/grok-build-0.1",
+  "zai/glm-5.3",
+  "zai/glm-5.3-flash",
   "zai/glm-5.2",
   "zai/glm-5.1",
   "zai/glm-5-turbo",
@@ -38,9 +40,11 @@
   "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",
+  "free/nemotron-3.5-lightning",
+  "free/nemotron-3-nano-30b",
+  "free/laguna-xs-2.1",
+  "free/north-mini-code",
   "free/nemotron-3-nano-omni-30b-a3b-reasoning",
-  "free/mistral-nemotron",
-  "free/step-3.7-flash",
-  "free/nemotron-nano-9b-v2",
-  "free/nemotron-nano-12b-v2-vl"
+  "free/nemotron-3-ultra-550b",
+  "free/llama-3.2-11b-vision"
 ]

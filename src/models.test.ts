@@ -86,7 +86,7 @@ describe("resolveModelAlias", () => {
   it("strips openai/ prefix from virtual routing profiles (issue #78)", () => {
     // OpenClaw sends virtual profiles as "openai/eco", "openai/auto", etc.
     expect(resolveModelAlias("openai/eco")).toBe("eco");
-    expect(resolveModelAlias("openai/free")).toBe("free/step-3.7-flash"); // "free" is an alias, not a virtual profile
+    expect(resolveModelAlias("openai/free")).toBe("free/nemotron-3.5-lightning"); // "free" is an alias, not a virtual profile
     expect(resolveModelAlias("openai/auto")).toBe("auto");
     expect(resolveModelAlias("openai/premium")).toBe("premium");
   });
@@ -255,8 +255,12 @@ describe("capability flags vs blockrun's catalog", () => {
   it("marks thinking-capable models as reasoning so they get the 180s timeout", () => {
     for (const id of [
       "google/gemini-3-flash-preview",
-      "free/nemotron-nano-9b-v2",
-      "free/nemotron-nano-12b-v2-vl",
+      "free/nemotron-3.5-lightning",
+      "free/nemotron-3-nano-30b",
+      "free/nemotron-3-ultra-550b",
+      "free/north-mini-code",
+      "zai/glm-5.3",
+      "zai/glm-5.3-flash",
       "zai/glm-5",
       "zai/glm-5.1",
       "zai/glm-5.2",
@@ -301,10 +305,11 @@ describe("OPENCLAW_MODELS integrity", () => {
   it("shows exactly one truthful `free` picker entry", () => {
     const freeEntries = VISIBLE_OPENCLAW_MODELS.filter((m) => m.id === "free");
     expect(freeEntries).toHaveLength(1);
-    // The `free` alias resolves to step-3.7-flash; the picker label must agree
-    // (the retired "Nemotron Ultra 253B" label shadowed it until v0.12.206, and
-    // "GPT-OSS 120B" outlived that model's death by two weeks until v0.12.250).
-    expect(freeEntries[0]!.name).toContain("Step 3.7 Flash");
+    // The `free` alias resolves to nemotron-3.5-lightning; the picker label must
+    // agree (the retired "Nemotron Ultra 253B" label shadowed it until v0.12.206,
+    // "GPT-OSS 120B" outlived that model's death by two weeks until v0.12.250,
+    // and "Step 3.7 Flash" outlived NVIDIA's 2026-08-30 sweep until v0.12.258).
+    expect(freeEntries[0]!.name).toContain("Nemotron 3.5 Lightning");
   });
 
   it("advertises visible models in top-models order", () => {

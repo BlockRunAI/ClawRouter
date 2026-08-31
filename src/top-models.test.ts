@@ -11,7 +11,7 @@ describe("TOP_MODELS", () => {
     expect(TOP_MODELS).toContain("xai/grok-4.5");
     expect(TOP_MODELS).toContain("anthropic/claude-fable-5");
     expect(TOP_MODELS).toContain("deepseek/deepseek-reasoner");
-    expect(TOP_MODELS).toContain("free/step-3.7-flash");
+    expect(TOP_MODELS).toContain("free/nemotron-3.5-lightning");
     // Retired from the advertised catalog 2026-07 — must not reappear.
     expect(TOP_MODELS).not.toContain("xai/grok-4-0709");
     expect(TOP_MODELS).not.toContain("xai/grok-3");
@@ -24,5 +24,15 @@ describe("TOP_MODELS", () => {
     // HTTP 410 Gone at NVIDIA 2026-08-12 (blockrun #367) — the last free
     // DeepSeek; hidden + redirected to gpt-oss-120b upstream; must not reappear.
     expect(TOP_MODELS).not.toContain("free/deepseek-v4-flash");
+    // 2026-08-30 (blockrun #448): NVIDIA retired FOUR of the five visible free
+    // models in one sweep. The first three published 410 Gone; mistral-nemotron
+    // went the quiet way — still listed, >150s and zero bytes. All four are
+    // hidden and server-redirected upstream, which is precisely why a stale
+    // picker entry looks healthy: the caller gets an answer, from another model,
+    // and /exclude on the id they can see does nothing.
+    expect(TOP_MODELS).not.toContain("free/step-3.7-flash");
+    expect(TOP_MODELS).not.toContain("free/nemotron-nano-9b-v2");
+    expect(TOP_MODELS).not.toContain("free/nemotron-nano-12b-v2-vl");
+    expect(TOP_MODELS).not.toContain("free/mistral-nemotron");
   });
 });

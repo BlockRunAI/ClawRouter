@@ -39,7 +39,7 @@ MODELS = [
     # MiniMax
     "minimax/minimax-m2.5",
     # NVIDIA
-    "nvidia/gpt-oss-120b",
+    "nvidia/nemotron-3.5-lightning",
 ]
 
 PROMPTS = [
@@ -146,7 +146,7 @@ PRICING = {
     "xai/grok-4-1-fast-reasoning": (0.2, 0.5), "xai/grok-4-1-fast-non-reasoning": (0.2, 0.5),
     "xai/grok-4-0709": (0.2, 1.5),
     "minimax/minimax-m2.5": (0.3, 1.1),
-    "nvidia/gpt-oss-120b": (0, 0),
+    "nvidia/nemotron-3.5-lightning": (0, 0),
 }
 
 

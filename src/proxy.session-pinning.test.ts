@@ -363,7 +363,12 @@ describe("proxy session pinning", () => {
   });
 
   it("does not reinsert a sticky model removed by a hard capacity filter", async () => {
-    const capacityLimitedModel = "openai/gpt-5.3";
+    // Needs a catalog model whose maxOutput is under the 20_000 max_tokens
+    // requested below. This was openai/gpt-5.3 until the 2026-08-30 catalog
+    // resync raised its maxOutput to 128_000 to match blockrun — which quietly
+    // made the fixture stop exercising the filter. gpt-4o's 16_384 cap has been
+    // stable since it was listed.
+    const capacityLimitedModel = "openai/gpt-4o";
     const receivedModels: string[] = [];
     const upstreamSetup = await createUpstream((body, _req, res) => {
       const model = String(body.model ?? "");
@@ -415,7 +420,7 @@ describe("proxy session pinning", () => {
       res.end(JSON.stringify({ choices: [] }));
     });
     upstream = upstreamSetup.server;
-    const tooSmall = "openai/gpt-5.3";
+    const tooSmall = "openai/gpt-4o"; // maxOutput 16_384 < the 20_000 requested below
     const tooSmallConfig = {
       ...createRoutingConfig(),
       tiers: {

@@ -176,18 +176,19 @@ This prevents wasted API calls and faster fallback to capable models.
 Use short aliases instead of full model paths:
 
 ```bash
-/model free      # gpt-oss-120b (FREE!)
+/model free      # free/nemotron-3.5-lightning (FREE!)
 /model br-sonnet # anthropic/claude-sonnet-4.6
-/model br-opus   # anthropic/claude-opus-4
-/model br-haiku  # anthropic/claude-haiku-4.5
+/model opus      # anthropic/claude-opus-5
+/model haiku     # anthropic/claude-haiku-4.5
 /model gpt       # openai/gpt-4o
-/model gpt5      # openai/gpt-5.2
+/model gpt5      # openai/gpt-5.6-terra
 /model deepseek  # deepseek/deepseek-chat
 /model reasoner  # deepseek/deepseek-reasoner
-/model kimi      # nvidia/kimi-k2.5 (reliable); /model kimi-k2.6 for Moonshot flagship
+/model kimi      # moonshot/kimi-k2.7; /model kimi-k3 for the 1M-ctx flagship
+/model glm       # zai/glm-5.3
 /model gemini    # google/gemini-2.5-pro
 /model flash     # google/gemini-2.5-flash
-/model grok      # xai/grok-3
+/model grok      # xai/grok-4.5
 /model grok-fast # xai/grok-4-fast-reasoning
 ```
 
@@ -197,12 +198,12 @@ All aliases work with `/model blockrun/xxx` or just `/model xxx`.
 
 ## Free Tier Fallback
 
-When your wallet balance hits $0, ClawRouter automatically falls back to the free model (`gpt-oss-120b`):
+When your wallet balance hits $0, ClawRouter automatically falls back to the free model (`nemotron-3.5-lightning`):
 
 ```
 Wallet: $0.00
 Request: "Help me write a function"
-→ Routes to gpt-oss-120b (FREE)
+→ Routes to nemotron-3.5-lightning (FREE)
 → No "insufficient funds" error
 → Keep building while you top up
 ```

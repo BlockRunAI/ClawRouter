@@ -139,7 +139,7 @@ To verify failover works:
 ```bash
 openclaw models fallbacks add blockrun/google/gemini-2.5-flash  # Fast & cheap
 openclaw models fallbacks add blockrun/deepseek/deepseek-chat   # Even cheaper
-openclaw models fallbacks add blockrun/nvidia/gpt-oss-120b      # Free tier
+openclaw models fallbacks add blockrun/free/nemotron-3.5-lightning  # Free tier
 ```
 
 #### Per-Agent Configuration

@@ -217,14 +217,20 @@ export const MODEL_ALIASES: Record<string, string> = {
   "xai/grok-3-fast": "xai/grok-4-fast-reasoning", // delisted (too expensive)
 
   // NVIDIA — backward compat aliases (nvidia/xxx → free/xxx)
-  // Default free model is step-3.7-flash — the same model @blockrun/router-core
-  // opens the eco SIMPLE tier on. It replaced gpt-oss-120b on 2026-08-29:
-  // gpt-oss-120b went dead upstream on 2026-08-16 (NVIDIA still LISTS it, but a
-  // completion hangs until the client gives up — blockrun #391 retargeted its
-  // whole free cascade off it, and the gateway now answers 400 Unknown model
-  // for the `free/` id). Pins that NAME gpt-oss stay routable below — the
-  // gateway server-redirects them — but nothing generic may land on it.
-  nvidia: "free/step-3.7-flash",
+  // Default free model is nemotron-3.5-lightning — the same model
+  // @blockrun/router-core opens the eco SIMPLE tier on. It replaced
+  // step-3.7-flash on 2026-08-30, when NVIDIA retired FOUR of the five visible
+  // free models in a single sweep (blockrun #448): step-3.7-flash,
+  // nemotron-nano-9b-v2 and nemotron-nano-12b-v2-vl all published 410 Gone, and
+  // mistral-nemotron went the quiet way — still listed, >150s and zero bytes.
+  // We follow blockrun's own retarget of step-3.7-flash rather than picking a
+  // different survivor, so the proxy and the gateway name the same model.
+  //
+  // gpt-oss-120b/20b RECOVERED on the same probe run and are reachable again,
+  // but they stay withheld from blockrun's public catalog over NVIDIA's
+  // prompt-retention terms — so pins that NAME gpt-oss stay routable below and
+  // nothing generic may land on it.
+  nvidia: "free/nemotron-3.5-lightning",
   "gpt-120b": "free/gpt-oss-120b", // names the model itself — gateway redirects
   "gpt-20b": "free/gpt-oss-20b",
   "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
@@ -236,10 +242,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // straight to gpt-oss-120b. Ids naming v4-flash itself keep the real id (the
   // gateway redirects them); the v3.2/v4-pro ids follow blockrun's retarget
   // rather than chaining through a second dead model.
-  "nvidia/deepseek-v3.2": "free/gpt-oss-120b",
-  "free/deepseek-v3.2": "free/gpt-oss-120b",
-  "nvidia/deepseek-v4-pro": "free/gpt-oss-120b",
-  "free/deepseek-v4-pro": "free/gpt-oss-120b",
+  "nvidia/deepseek-v3.2": "free/nemotron-3.5-lightning",
+  "free/deepseek-v3.2": "free/nemotron-3.5-lightning",
+  "nvidia/deepseek-v4-pro": "free/nemotron-3.5-lightning",
+  "free/deepseek-v4-pro": "free/nemotron-3.5-lightning",
   "nvidia/deepseek-v4-flash": "free/deepseek-v4-flash",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   // qwen3-coder-480b retired (NVIDIA EOL 2026-06-14). Its server-side redirect used
@@ -266,16 +272,16 @@ export const MODEL_ALIASES: Record<string, string> = {
   // Retired free IDs → successors (mirror blockrun's 2026-07-17 redirect map:
   // ultra-253b redirects to gpt-oss-120b; the two supers have NO server redirect —
   // they stay hidden-but-routable, so their pins pass through to the real ids).
-  "nvidia/nemotron-ultra-253b": "free/gpt-oss-120b",
+  "nvidia/nemotron-ultra-253b": "free/nemotron-3.5-lightning",
   // mistral-large-3-675b un-retired 2026-06-14, then EOL'd for good 2026-07-28:
   // blockrun's re-probe got HTTP 410 Gone from NVIDIA on both passes (baa967b).
   // Pin stays routable — the gateway redirects it to gpt-oss-120b.
   "nvidia/mistral-large-3-675b": "free/mistral-large-3-675b",
   "nvidia/qwen3.5-122b-a10b": "free/qwen3.5-122b-a10b",
   // devstral-2-123b died upstream; blockrun redirects it to gpt-oss-120b (2026-07-17 map)
-  "nvidia/devstral-2-123b": "free/gpt-oss-120b",
-  "free/nemotron-ultra-253b": "free/gpt-oss-120b",
-  "free/devstral-2-123b": "free/gpt-oss-120b",
+  "nvidia/devstral-2-123b": "free/nemotron-3.5-lightning",
+  "free/nemotron-ultra-253b": "free/nemotron-3.5-lightning",
+  "free/devstral-2-123b": "free/nemotron-3.5-lightning",
   // Explicit-ish pins — dead upstream since 2026-07-28, gateway redirects to gpt-oss-120b
   "mistral-large": "free/mistral-large-3-675b",
   "mistral-large-3-675b": "free/mistral-large-3-675b",
@@ -286,54 +292,94 @@ export const MODEL_ALIASES: Record<string, string> = {
   // gateway's retarget (blockrun's /free-deepseek page points at gpt-oss-120b
   // too). Shorthands naming v4-flash itself stay on the real id — the gateway
   // redirects them, same treatment as seed-oss/mistral-large pins.
-  "deepseek-free": "free/gpt-oss-120b",
-  "deepseek-v4-pro": "free/gpt-oss-120b", // free shorthand; pro dead upstream (410)
+  "deepseek-free": "free/nemotron-3.5-lightning",
+  "deepseek-v4-pro": "free/nemotron-3.5-lightning", // free shorthand; pro dead upstream (410)
   "deepseek-v4-flash": "free/deepseek-v4-flash",
-  "v4-pro": "free/gpt-oss-120b",
+  "v4-pro": "free/nemotron-3.5-lightning",
   "v4-flash": "free/deepseek-v4-flash",
-  "mistral-free": "free/mistral-nemotron", // mistral-large-3-675b EOL'd 2026-07-28 → last live free Mistral (blockrun demoted its /free-mistral primary the same way)
-  "glm-free": "free/gpt-oss-120b", // seed-oss-36b (the prior target) EOL'd 2026-08-03
-  "llama-free": "free/gpt-oss-120b", // no live free Llama left (maverick died 2026-07)
+  // mistral-nemotron died 2026-08-30 and it was the LAST free Mistral anywhere —
+  // blockrun's own /free-mistral page now says so plainly instead of naming one.
+  // Point the generic shorthand at the free default rather than advertise a
+  // Mistral we cannot serve.
+  "mistral-free": "free/nemotron-3.5-lightning",
+  "glm-free": "free/nemotron-3.5-lightning", // seed-oss-36b (the prior target) EOL'd 2026-08-03
+  // A free Llama exists again: nemotron-super-49b (Llama-3.3-based) hit 410 on
+  // 2026-08-30, and a 12-model sweep of what NVIDIA still serves found Llama 3.2
+  // 11B Vision as the only one that finishes a real completion.
+  "llama-free": "free/llama-3.2-11b-vision",
   // qwen3-coder-480b retired 2026-06-14 → seed-oss-36b, which then EOL'd 2026-08-03.
   // Follow the gateway's own retarget rather than chaining to a second dead model.
-  "qwen-coder": "free/step-3.7-flash", // no live free Qwen; follows the free default
-  "qwen-coder-free": "free/step-3.7-flash",
-  "qwen-thinking": "free/step-3.7-flash", // qwen3-next died 2026-07-17; no live free Qwen left
+  "qwen-coder": "free/nemotron-3.5-lightning", // no live free Qwen; follows the free default
+  "qwen-coder-free": "free/nemotron-3.5-lightning",
+  "qwen-thinking": "free/nemotron-3.5-lightning", // qwen3-next died 2026-07-17; no live free Qwen left
   "qwen3-next": "free/qwen3-next-80b-a3b-instruct", // explicit-ish pin — gateway redirects
   "qwen3-next-80b": "free/qwen3-next-80b-a3b-instruct",
-  "mistral-small": "free/mistral-nemotron", // closest live Mistral-family free model
+  "mistral-small": "free/nemotron-3.5-lightning", // no free Mistral left upstream (2026-08-30)
   // New live free models (2026-06-14 BlockRun free-tier refresh)
   // seed-oss pins name the model itself — kept routable, the gateway redirects them.
   "seed-oss": "free/seed-oss-36b",
   "seed-oss-36b": "free/seed-oss-36b",
-  "coder-free": "free/step-3.7-flash", // generic "a free coder" → follows the free default
+  // A free coder exists again — two of them, both sub-second. north-mini-code is
+  // the faster (607ms median) and 256K ctx against laguna's 131K.
+  "coder-free": "free/north-mini-code",
   "mistral-nemotron": "free/mistral-nemotron",
   "step-flash": "free/step-3.7-flash",
   "step-3.7-flash": "free/step-3.7-flash",
-  "nemotron-nano-9b": "free/nemotron-nano-9b-v2",
-  "nemotron-nano": "free/nemotron-nano-9b-v2",
-  "nemotron-nano-vl": "free/nemotron-nano-12b-v2-vl",
-  "nano-vl": "free/nemotron-nano-12b-v2-vl",
+  // nemotron-nano-9b-v2 hit 410 on 2026-08-30; the generic shorthands follow
+  // blockrun's redirect to its replacement, while the 9b-naming pins above stay
+  // on the real id (the gateway resolves them).
+  "nemotron-nano-9b": "free/nemotron-3-nano-30b",
+  "nemotron-nano": "free/nemotron-3-nano-30b",
+  // nemotron-nano-12b-v2-vl hit 410 the same day; vision in, vision out — the
+  // target is blockrun's own, and nano-omni is the only vision-capable free
+  // model left.
+  "nemotron-nano-vl": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "nano-vl": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   // Vision-capable free models
   "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   // Retired shorthand aliases redirect to live successors. The catch-all target
   // moved llama-4-maverick → gpt-oss-120b (2026-07-17) → step-3.7-flash
-  // (2026-08-29, gpt-oss-120b hung upstream; see the NVIDIA block above).
-  nemotron: "free/nemotron-3-nano-omni-30b-a3b-reasoning", // strongest live Nemotron
-  "nemotron-ultra": "free/step-3.7-flash",
-  "nemotron-253b": "free/step-3.7-flash",
-  "nemotron-super": "free/step-3.7-flash",
-  "nemotron-49b": "free/step-3.7-flash",
-  "nemotron-120b": "free/step-3.7-flash",
-  devstral: "free/step-3.7-flash", // seed-oss-36b EOL'd 2026-08-03
-  "devstral-2": "free/step-3.7-flash",
+  // (2026-08-29) → nemotron-3.5-lightning (2026-08-30, blockrun #448).
+  nemotron: "free/nemotron-3.5-lightning", // strongest live Nemotron
+  "nemotron-ultra": "free/nemotron-3.5-lightning",
+  "nemotron-253b": "free/nemotron-3.5-lightning",
+  "nemotron-super": "free/nemotron-3.5-lightning",
+  "nemotron-49b": "free/nemotron-3.5-lightning",
+  "nemotron-120b": "free/nemotron-3.5-lightning",
+  devstral: "free/nemotron-3.5-lightning", // seed-oss-36b EOL'd 2026-08-03
+  "devstral-2": "free/nemotron-3.5-lightning",
   maverick: "free/llama-4-maverick", // explicit-ish pin — gateway redirects
+  // ── The 2026-08-30 free lineup (blockrun #448) ────────────────────────────
+  // nvidia/* bridges for the four NVIDIA-hosted additions.
+  "nvidia/nemotron-3.5-lightning": "free/nemotron-3.5-lightning",
+  "nvidia/nemotron-3-nano-30b": "free/nemotron-3-nano-30b",
+  "nvidia/nemotron-3-ultra-550b": "free/nemotron-3-ultra-550b",
+  "nvidia/llama-3.2-11b-vision": "free/llama-3.2-11b-vision",
+  // The two non-NVIDIA free models keep the `free/` picker convention; their
+  // real upstream ids are accepted as pins and rewritten in toUpstreamModelId
+  // (see FREE_UPSTREAM_OVERRIDES in proxy.ts).
+  "cohere/north-mini-code": "free/north-mini-code",
+  "poolside/laguna-xs-2.1": "free/laguna-xs-2.1",
+  // Shorthands.
+  lightning: "free/nemotron-3.5-lightning",
+  "nemotron-lightning": "free/nemotron-3.5-lightning",
+  "nemotron-3.5-lightning": "free/nemotron-3.5-lightning",
+  "nano-30b": "free/nemotron-3-nano-30b",
+  "nemotron-nano-30b": "free/nemotron-3-nano-30b",
+  "ultra-550b": "free/nemotron-3-ultra-550b",
+  "nemotron-ultra-550b": "free/nemotron-3-ultra-550b",
+  "llama-vision": "free/llama-3.2-11b-vision",
+  "llama-3.2-vision": "free/llama-3.2-11b-vision",
+  "north-mini": "free/north-mini-code",
+  "north-mini-code": "free/north-mini-code",
+  laguna: "free/laguna-xs-2.1",
+  "laguna-xs": "free/laguna-xs-2.1",
   // `free` = the free-tier default. Must equal router-core's ecoTiers.SIMPLE
   // primary and the head of proxy.ts FREE_MODELS so `/model free`, the eco
   // profile and the budget-cap free fallback all agree on one live model.
-  free: "free/step-3.7-flash",
+  free: "free/nemotron-3.5-lightning",
 
   // MiniMax (minimax → current flagship: M3)
   minimax: "minimax/minimax-m3",
@@ -342,7 +388,21 @@ export const MODEL_ALIASES: Record<string, string> = {
   "minimax-m2.5": "minimax/minimax-m2.5",
 
   // Z.AI GLM-5
-  glm: "zai/glm-5.2", // bare alias tracks newest flagship (launched 2026-06-16)
+  // Bare `glm` PROMOTED 5.2 → 5.3 (2026-08-30). Same rule as `opus` 4.8 → 5: the
+  // cost tradeoff is zero — identical $1.40/$4.40 AND an identical 1M ctx /
+  // 131072 maxOutput envelope, so nothing can bill or truncate differently for a
+  // caller who never typed a version. blockrun's own copy already names glm-5.3
+  // the Z.AI flagship, so leaving `glm` on 5.2 would make the proxy disagree
+  // with the gateway it fronts. `glm-5.2` and every other version pin still
+  // resolve to their own model.
+  glm: "zai/glm-5.3",
+  "glm-5.3": "zai/glm-5.3",
+  "glm-5-3": "zai/glm-5.3",
+  // GLM-5.3 Flash — Z.AI's first natively multimodal GLM-5. Also router-core's
+  // eco MEDIUM and COMPLEX primary.
+  "glm-5.3-flash": "zai/glm-5.3-flash",
+  "glm-5-3-flash": "zai/glm-5.3-flash",
+  "glm-flash": "zai/glm-5.3-flash",
   "glm-5.2": "zai/glm-5.2",
   "glm-5": "zai/glm-5",
   "glm-5.1": "zai/glm-5.1", // explicit pin: 200K-ctx predecessor, same price
@@ -501,10 +561,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   {
     id: "free",
-    name: "Free → Step 3.7 Flash",
+    name: "Free → Nemotron 3.5 Lightning",
     inputPrice: 0,
     outputPrice: 0,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     maxOutput: 16_384,
     reasoning: true,
   },
@@ -546,7 +606,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.25,
     outputPrice: 2.0,
     contextWindow: 200000,
-    maxOutput: 65536,
+    maxOutput: 128000,
     toolCalling: true,
   },
   {
@@ -556,7 +616,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.05,
     outputPrice: 0.4,
     contextWindow: 128000,
-    maxOutput: 32768,
+    maxOutput: 128000,
     toolCalling: true,
     deprecated: true,
     fallbackModel: "openai/gpt-5.4-nano",
@@ -718,7 +778,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "5.4",
     inputPrice: 2.5,
     outputPrice: 15.0,
-    contextWindow: 400000,
+    contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,
     vision: true,
@@ -743,7 +803,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "5.4",
     inputPrice: 30.0,
     outputPrice: 180.0,
-    contextWindow: 400000,
+    contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,
     vision: true,
@@ -756,7 +816,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.2,
     outputPrice: 1.25,
     contextWindow: 1050000,
-    maxOutput: 32768,
+    maxOutput: 128000,
     toolCalling: true,
   },
 
@@ -768,7 +828,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 1.75,
     outputPrice: 14.0,
     contextWindow: 128000,
-    maxOutput: 16000,
+    maxOutput: 128000,
     reasoning: true,
     vision: true,
     agentic: true,
@@ -796,7 +856,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 2.0,
     outputPrice: 8.0,
     contextWindow: 128000,
-    maxOutput: 16384,
+    maxOutput: 32768,
     vision: true,
     toolCalling: true,
   },
@@ -807,7 +867,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.4,
     outputPrice: 1.6,
     contextWindow: 128000,
-    maxOutput: 16384,
+    maxOutput: 32768,
     toolCalling: true,
   },
   {
@@ -817,7 +877,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.1,
     outputPrice: 0.4,
     contextWindow: 128000,
-    maxOutput: 16384,
+    maxOutput: 32768,
     toolCalling: true,
   },
   {
@@ -884,7 +944,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 1.1,
     outputPrice: 4.4,
     contextWindow: 128000,
-    maxOutput: 65536,
+    maxOutput: 100000,
     reasoning: true,
     toolCalling: true,
   },
@@ -895,7 +955,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 1.1,
     outputPrice: 4.4,
     contextWindow: 128000,
-    maxOutput: 65536,
+    maxOutput: 100000,
     reasoning: true,
     toolCalling: true,
   },
@@ -909,7 +969,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 1.0,
     outputPrice: 5.0,
     contextWindow: 200000,
-    maxOutput: 8192,
+    maxOutput: 64000,
     vision: true,
     agentic: true,
     toolCalling: true,
@@ -933,8 +993,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4.6",
     inputPrice: 3.0,
     outputPrice: 15.0,
-    contextWindow: 200000,
-    maxOutput: 64000,
+    contextWindow: 1000000,
+    maxOutput: 128000,
     reasoning: true,
     vision: true,
     agentic: true,
@@ -964,7 +1024,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 5.0,
     outputPrice: 25.0,
     contextWindow: 200000,
-    maxOutput: 32000,
+    maxOutput: 64000,
     reasoning: true,
     vision: true,
     agentic: true,
@@ -1049,7 +1109,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "3.1",
     inputPrice: 2.0,
     outputPrice: 12.0,
-    contextWindow: 1050000,
+    contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
     vision: true,
@@ -1061,7 +1121,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "3.0",
     inputPrice: 2.0,
     outputPrice: 12.0,
-    contextWindow: 1050000,
+    contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
     vision: true,
@@ -1113,7 +1173,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "3.0",
     inputPrice: 0.5,
     outputPrice: 3.0,
-    contextWindow: 1000000,
+    contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
     vision: true,
@@ -1124,7 +1184,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "2.5",
     inputPrice: 1.25,
     outputPrice: 10.0,
-    contextWindow: 1050000,
+    contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
     vision: true,
@@ -1136,7 +1196,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "2.5",
     inputPrice: 0.3,
     outputPrice: 2.5,
-    contextWindow: 1000000,
+    contextWindow: 1048576,
     maxOutput: 65536,
     vision: true,
     toolCalling: true,
@@ -1147,7 +1207,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "2.5",
     inputPrice: 0.1,
     outputPrice: 0.4,
-    contextWindow: 1000000,
+    contextWindow: 1048576,
     maxOutput: 65536,
     toolCalling: true,
   },
@@ -1157,8 +1217,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "3.1",
     inputPrice: 0.25,
     outputPrice: 1.5,
-    contextWindow: 1000000,
-    maxOutput: 8192,
+    contextWindow: 1048576,
+    maxOutput: 65536,
     toolCalling: true,
   },
 
@@ -1172,8 +1232,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4-flash",
     inputPrice: 0.14,
     outputPrice: 0.28,
-    contextWindow: 1000000,
-    maxOutput: 8192,
+    contextWindow: 1048576,
+    maxOutput: 65536,
     toolCalling: true,
   },
   {
@@ -1182,8 +1242,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4-flash",
     inputPrice: 0.14,
     outputPrice: 0.28,
-    contextWindow: 1000000,
-    maxOutput: 8192,
+    contextWindow: 1048576,
+    maxOutput: 65536,
     reasoning: true,
     toolCalling: true,
   },
@@ -1314,7 +1374,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.6,
     outputPrice: 3.0,
     contextWindow: 262144,
-    maxOutput: 16384,
+    maxOutput: 65536,
     reasoning: true,
     vision: true,
     agentic: true,
@@ -1327,7 +1387,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 0.6,
     outputPrice: 3.0,
     contextWindow: 262144,
-    maxOutput: 8192,
+    maxOutput: 16384,
     reasoning: true,
     vision: true,
     agentic: true,
@@ -1367,7 +1427,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4",
     inputPrice: 0.2,
     outputPrice: 0.5,
-    contextWindow: 131072,
+    contextWindow: 2000000,
     maxOutput: 16384,
     reasoning: true,
     toolCalling: true,
@@ -1378,7 +1438,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4",
     inputPrice: 0.2,
     outputPrice: 0.5,
-    contextWindow: 131072,
+    contextWindow: 2000000,
     maxOutput: 16384,
     toolCalling: true,
   },
@@ -1388,7 +1448,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4.1",
     inputPrice: 0.2,
     outputPrice: 0.5,
-    contextWindow: 131072,
+    contextWindow: 2000000,
     maxOutput: 16384,
     reasoning: true,
     toolCalling: true,
@@ -1399,7 +1459,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4.1",
     inputPrice: 0.2,
     outputPrice: 0.5,
-    contextWindow: 131072,
+    contextWindow: 2000000,
     maxOutput: 16384,
     toolCalling: true,
   },
@@ -1411,7 +1471,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4-0709",
     inputPrice: 3.0,
     outputPrice: 15.0,
-    contextWindow: 131072,
+    contextWindow: 256000,
     maxOutput: 16384,
     reasoning: true,
     toolCalling: true,
@@ -1422,7 +1482,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "2",
     inputPrice: 2.0,
     outputPrice: 10.0,
-    contextWindow: 131072,
+    contextWindow: 32768,
     maxOutput: 16384,
     vision: true,
     toolCalling: true,
@@ -1733,7 +1793,13 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 16384,
   },
   {
-    // Mistral × NVIDIA hybrid: strong instruction following, 131K context.
+    // Mistral × NVIDIA hybrid, 131K context. DEAD 2026-08-30 — the QUIET kind:
+    // NVIDIA still LISTS it but a completion returns zero bytes after >150s on
+    // both of blockrun's probe passes (blockrun #448, the #391 shape). Upstream
+    // hid it and redirects callers to a live workhorse. Entry kept so explicit
+    // pins stay routable; off the picker and the FREE_MODELS cascade.
+    // There is no free Mistral left on NVIDIA — do not point a generic
+    // "a free mistral" shorthand at one.
     id: "free/mistral-nemotron",
     name: "[Free] Mistral Nemotron",
     version: "nemotron",
@@ -1743,7 +1809,13 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 16384,
   },
   {
-    // StepFun Step 3.7 Flash: reasoning-focused, 131K context.
+    // StepFun Step 3.7 Flash: reasoning-focused, 131K context. EOL'd 2026-08-30
+    // — NVIDIA published 410 Gone on both of blockrun's probe passes (#448), in
+    // the same sweep that took nemotron-nano-9b-v2, nemotron-nano-12b-v2-vl and
+    // (hidden) nemotron-super-49b. It had been ClawRouter's free default since
+    // 2026-08-29; the gateway redirects it to nemotron-3.5-lightning, which is
+    // exactly why nothing looked broken. Entry kept so explicit pins stay
+    // routable; off the picker and the FREE_MODELS cascade.
     id: "free/step-3.7-flash",
     name: "[Free] StepFun Step 3.7 Flash",
     version: "3.7-flash",
@@ -1755,6 +1827,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   {
     // NVIDIA Nemotron Nano 9B v2: fast lightweight generalist, 131K context.
+    // EOL'd 2026-08-30 (410 Gone, same sweep). Gateway redirects it to
+    // nemotron-3-nano-30b. Entry kept for pins; off the picker and the cascade.
     id: "free/nemotron-nano-9b-v2",
     name: "[Free] Nemotron Nano 9B v2",
     version: "nano-9b-v2",
@@ -1766,6 +1840,9 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   {
     // NVIDIA Nemotron Nano 12B v2 VL: vision-language (text + image), 131K context.
+    // EOL'd 2026-08-30 (410 Gone, same sweep). Gateway redirects it to
+    // nemotron-3-nano-omni, the only vision-capable free model left. Entry kept
+    // for pins; off the picker and the cascade.
     id: "free/nemotron-nano-12b-v2-vl",
     name: "[Free] Nemotron Nano 12B v2 VL",
     version: "nano-12b-v2-vl",
@@ -1777,9 +1854,156 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     vision: true,
   },
 
+  // ── 2026-08-30 free-tier rebuild (blockrun #448) ─────────────────────────
+  // NVIDIA retired FOUR of the five VISIBLE free models in one sweep. blockrun
+  // replaced them and moved two survivors onto OpenRouter's $0 ":free" pool,
+  // taking the visible free set from 5 to 7 and spanning three hosts for the
+  // first time (NVIDIA, OpenRouter, and two non-NVIDIA makers).
+  //
+  // All seven live free models were tool-probed through the gateway on
+  // 2026-08-30 and every one returned a structured `tool_calls` array with
+  // valid JSON args and finish_reason: "tool_calls" (nemotron-3-nano-30b looked
+  // like a textual leak at max_tokens:120 — that was truncation; at 300 it is
+  // structured). The evidence is recorded here on purpose, but `toolCalling` is
+  // deliberately NOT set: no free entry has ever carried it, filterByToolCalling
+  // keeps the free tier out of tool-bearing requests, and the budget pre-check
+  // at proxy.ts:5217 is written on the same assumption. Flipping the tier into
+  // agentic eligibility is its own change with its own evidence bar.
+  {
+    // Nemotron 3.5 Lightning 30B-A3B — the new free default. blockrun's own
+    // redirect target for the retired step-3.7-flash, so following it keeps the
+    // proxy and the gateway naming the same model. Served from OpenRouter's $0
+    // pool (4.9s median vs 16.3s direct) which also publishes a 1M window
+    // against the 131K the NVIDIA NIM path gives; blockrun carries a hidden
+    // "-nim" twin as its fallback. Probed 1.3s with tools.
+    id: "free/nemotron-3.5-lightning",
+    name: "[Free] Nemotron 3.5 Lightning",
+    version: "3.5-lightning",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 1000000,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    // Nemotron 3 Nano 30B-A3B — the fastest free model in the catalog
+    // (~121 tok/s on a realistic workload, not a 16-token ping). Returns
+    // reasoning_content. Also the tertiary rung of blockrun's own free cascade.
+    id: "free/nemotron-3-nano-30b",
+    name: "[Free] Nemotron 3 Nano 30B",
+    version: "3-nano-30b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    // Nemotron 3 Ultra 550B-A55B — the largest free model ever listed, 1M ctx,
+    // reachable ONLY through OpenRouter's $0 pool (build.nvidia.com answers 503).
+    // Deliberately LOW in the cascade: 16.8s on the tools probe, and blockrun
+    // measured 3 of 15 calls coming back as an HTTP 200 carrying an upstream
+    // 502/503 error object instead of choices.
+    id: "free/nemotron-3-ultra-550b",
+    name: "[Free] Nemotron 3 Ultra 550B",
+    version: "3-ultra-550b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 1000000,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    // Meta Llama 3.2 11B Vision — restores a free Llama after nemotron-super-49b
+    // (Llama-3.3-based) hit NVIDIA's 410 EOL. A 12-model sweep found exactly two
+    // survivors and only the 11B finishes a real completion. Older than the rest
+    // of the tier and deliberately so: it is a real Llama that actually answers.
+    // Slowest in the tier (~18 tok/s) — last rung of the cascade.
+    id: "free/llama-3.2-11b-vision",
+    name: "[Free] Llama 3.2 11B Vision",
+    version: "3.2-11b-vision",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 128000,
+    maxOutput: 16384,
+    vision: true,
+  },
+  {
+    // Cohere North Mini Code, on OpenRouter's $0 pool — 607ms median, the
+    // fastest thing in the tier. Emits reasoning_content (content is clean once
+    // the budget is large enough to finish, verified live).
+    // NOTE: NOT an nvidia/* id upstream — see FREE_UPSTREAM_OVERRIDES in proxy.ts.
+    id: "free/north-mini-code",
+    name: "[Free] Cohere North Mini Code",
+    version: "north-mini-code",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 256000,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    // Poolside Laguna XS 2.1 on OUR NVIDIA key (~161 tok/s). Deliberately not
+    // the OpenRouter twin, which 429s on every attempt — so this rung and
+    // north-mini-code sit on DIFFERENT capacity pools, which is why they are
+    // adjacent in the cascade.
+    // NOTE: NOT an nvidia/* id upstream — see FREE_UPSTREAM_OVERRIDES in proxy.ts.
+    id: "free/laguna-xs-2.1",
+    name: "[Free] Poolside Laguna XS 2.1",
+    version: "xs-2.1",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+
   // Z.AI GLM-5 Models
   {
-    // Launched 2026-06-16 — Z.AI's newest flagship. 1M-token context,
+    // Z.AI's flagship, live-probed by blockrun 2026-08-19 against api.z.ai
+    // (real completion in 2s, content alongside reasoning tokens). $1.40/$4.40,
+    // cached input $0.26, off the international USD price list.
+    // maxOutput is 131072, NOT the 1M context: that is the hard ceiling the API
+    // enforces (error 1210 above it), the same on every GLM-5 SKU.
+    // Thinking is ALWAYS ON here and cannot be disabled.
+    id: "zai/glm-5.3",
+    name: "GLM-5.3",
+    version: "5.3",
+    inputPrice: 1.4,
+    outputPrice: 4.4,
+    contextWindow: 1000000,
+    maxOutput: 131072,
+    reasoning: true,
+    toolCalling: true,
+  },
+  {
+    // Z.AI's first natively multimodal GLM-5 — 320B/18B MoE. blockrun probed
+    // text, vision (base64 data URL → correct answer), tools
+    // (finish_reason=tool_calls with well-formed arguments) and streaming live
+    // on 2026-08-27 before listing it.
+    //
+    // MUST be in this catalog, not just router-core's: it is router-core's eco
+    // MEDIUM and COMPLEX primary, and estimateAmount() returns undefined for an
+    // id we do not carry — which makes the request skip the maxCostPerRun filter
+    // AND never accumulate into session cost. An uncatalogued routing target is
+    // a cost-cap hole, not a logging gap.
+    //
+    // Price is the LIST rate. Z.AI is running a 50% launch promo ($0.075/$0.25)
+    // that ENDS 2026-09-09; listing the promo rate would put us under COGS the
+    // morning it lapses. Thinking is always on, as on glm-5.3.
+    id: "zai/glm-5.3-flash",
+    name: "GLM-5.3 Flash",
+    version: "5.3-flash",
+    inputPrice: 0.15,
+    outputPrice: 0.5,
+    contextWindow: 1000000,
+    maxOutput: 131072,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // Launched 2026-06-16. Was Z.AI's flagship until glm-5.3 (above) took the
+    // slot on 2026-08-19. 1M-token context,
     // beats GPT-5.5 on long-horizon coding at a fraction of the cost.
     // Paid per-token at $1.40/$4.40 (same as glm-5.1, cached $0.26).
     id: "zai/glm-5.2",
@@ -1788,7 +2012,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     inputPrice: 1.4,
     outputPrice: 4.4,
     contextWindow: 1000000,
-    maxOutput: 262144,
+    maxOutput: 131072,
     reasoning: true,
     toolCalling: true,
   },
