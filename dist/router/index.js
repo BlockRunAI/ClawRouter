@@ -1,6 +1,6 @@
 import { createRequire as __blockrun_createRequire } from 'node:module'; const require = __blockrun_createRequire(import.meta.url);
 
-// node_modules/@blockrun/router-core/dist/index.js
+// ../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/@blockrun/router-core/dist/index.js
 function scoreTokenCount(estimatedTokens, thresholds) {
   if (estimatedTokens < thresholds.simple) {
     return { name: "tokenCount", score: -1, signal: `short (${estimatedTokens} tokens)` };
