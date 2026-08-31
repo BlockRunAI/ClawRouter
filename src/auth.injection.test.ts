@@ -30,8 +30,10 @@ describe("injectAuthProfile", () => {
     return { mod, homeDir };
   }
 
-  const agentDir = (home: string, agent: string) => join(home, ".openclaw", "agents", agent, "agent");
-  const authPath = (home: string, agent: string) => join(agentDir(home, agent), "auth-profiles.json");
+  const agentDir = (home: string, agent: string) =>
+    join(home, ".openclaw", "agents", agent, "agent");
+  const authPath = (home: string, agent: string) =>
+    join(agentDir(home, agent), "auth-profiles.json");
 
   it("still bootstraps the legacy JSON when no SQLite store exists", async () => {
     const { mod, homeDir } = await withHome();
@@ -99,7 +101,11 @@ describe("injectAuthProfile", () => {
       JSON.stringify({
         version: 1,
         profiles: {
-          "blockrun:default": { type: "api_key", provider: "blockrun", key: "x402-proxy-handles-auth" },
+          "blockrun:default": {
+            type: "api_key",
+            provider: "blockrun",
+            key: "x402-proxy-handles-auth",
+          },
           "anthropic:default": { type: "api_key", provider: "anthropic", key: "sk-real-key" },
         },
       }),
