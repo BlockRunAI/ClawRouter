@@ -12,6 +12,8 @@ import {
   InMemorySpendControlStorage,
   formatDuration,
   registerSpendPolicyHook,
+  assertSpendPolicyAllows,
+  SpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
 } from "./spend-control.js";
@@ -504,6 +506,73 @@ describe("FileSpendControlStorage persistence", () => {
 
     expect(() => storage.load()).toThrow(/refusing to load spending.json/);
   });
+
+  it("treats an empty policy array as cleared, not corrupted", async () => {
+    // Hand-editing a list to [] is how an operator clears it. Refusing to load
+    // would take the proxy down over a legal edit.
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
+    process.env.HOME = tmpHome;
+    vi.resetModules();
+    const mod = await import("./spend-control.js");
+    const storage = new mod.FileSpendControlStorage();
+    const spendingFile = path.join(tmpHome, ".openclaw", "blockrun", "spending.json");
+    fs.mkdirSync(path.dirname(spendingFile), { recursive: true });
+    fs.writeFileSync(
+      spendingFile,
+      JSON.stringify({ limits: { blockedPayees: [], hourly: 1 }, history: [] }),
+    );
+
+    const loaded = storage.load();
+    expect(loaded?.limits.blockedPayees).toBeUndefined();
+    expect(loaded?.limits.hourly).toBe(1);
+  });
+
+  it("normalizes persisted checksummed payees on load", async () => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
+    process.env.HOME = tmpHome;
+    vi.resetModules();
+    const mod = await import("./spend-control.js");
+    const storage = new mod.FileSpendControlStorage();
+    const spendingFile = path.join(tmpHome, ".openclaw", "blockrun", "spending.json");
+    fs.mkdirSync(path.dirname(spendingFile), { recursive: true });
+    fs.writeFileSync(
+      spendingFile,
+      JSON.stringify({
+        limits: { blockedPayees: ["0xAbcDef0123456789AbcDef0123456789AbcDef01"] },
+        history: [],
+      }),
+    );
+
+    expect(storage.load()?.limits.blockedPayees).toEqual([
+      "0xabcdef0123456789abcdef0123456789abcdef01",
+    ]);
+  });
+
+  it("recording spend does not overwrite a policy edit made on disk", async () => {
+    // The proxy loads limits once at startup. Writing its in-memory copy back
+    // on every payment would erase an operator's hand-edit seconds later.
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
+    process.env.HOME = tmpHome;
+    vi.resetModules();
+    const mod = await import("./spend-control.js");
+    const spendingFile = path.join(tmpHome, ".openclaw", "blockrun", "spending.json");
+    fs.mkdirSync(path.dirname(spendingFile), { recursive: true });
+    fs.writeFileSync(spendingFile, JSON.stringify({ limits: {}, history: [] }));
+
+    const control = new mod.SpendControl({ storage: new mod.FileSpendControlStorage() });
+
+    // Operator blocks a payee while the proxy is already running.
+    fs.writeFileSync(
+      spendingFile,
+      JSON.stringify({ limits: { blockedPayees: ["0xdead"] }, history: [] }),
+    );
+
+    control.record(0.01, { action: "x402 payment" });
+
+    const onDisk = JSON.parse(fs.readFileSync(spendingFile, "utf8"));
+    expect(onDisk.limits.blockedPayees).toEqual(["0xdead"]);
+    expect(onDisk.history).toHaveLength(1);
+  });
 });
 
 describe("x402 onBeforePaymentCreation spend policy", () => {
@@ -567,6 +636,147 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
     ).rejects.toThrow(/Payment creation aborted/);
     expect(signerCalls).toBe(1);
     expect(control.getSpending("hourly")).toBe(0.01);
+  });
+
+  it("only one of two concurrent payments clears the same remaining budget", async () => {
+    let signerCalls = 0;
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    control.setLimit("hourly", 0.015);
+    const client = new x402Client();
+    registerSpendPolicyHook(client, control);
+    client.register(CAIP2_BASE, {
+      scheme: "exact",
+      async createPaymentPayload() {
+        signerCalls += 1;
+        return { x402Version: 2, payload: {} };
+      },
+    });
+
+    const payee = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const results = await Promise.allSettled([
+      payment(client, "10000", payee),
+      payment(client, "10000", payee),
+    ]);
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(signerCalls).toBe(1);
+  });
+
+  describe("amount parsing is fail-closed", () => {
+    // parseInt(v, 10) stops at the first non-decimal character while the EVM
+    // scheme signs BigInt(v), which accepts radix prefixes:
+    //   parseInt("0x1DCD6500", 10) === 0   BigInt("0x1DCD6500") === 500000000n
+    // A gateway quoting hex would otherwise read as $0 against every cap and
+    // still get a $500 authorization signed.
+    const nonCanonical = ["0x1DCD6500", "0X10", "0b1010", "0o17", "1e9", "abc", "-1000", ""];
+
+    for (const amount of nonCanonical) {
+      it(`refuses to sign a quote of ${JSON.stringify(amount)} when a limit is set`, async () => {
+        let signerCalls = 0;
+        const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+        control.setLimit("perRequest", 0.01);
+        const client = new x402Client();
+        registerSpendPolicyHook(client, control);
+        client.register(CAIP2_BASE, {
+          scheme: "exact",
+          async createPaymentPayload() {
+            signerCalls += 1;
+            return { x402Version: 2, payload: {} };
+          },
+        });
+
+        await expect(
+          payment(client, amount, "0xcccccccccccccccccccccccccccccccccccccccc"),
+        ).rejects.toThrow(/no usable amount/);
+        expect(signerCalls).toBe(0);
+      });
+    }
+
+    it("still signs a canonical decimal quote", async () => {
+      let signerCalls = 0;
+      const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+      control.setLimit("perRequest", 0.02);
+      const client = new x402Client();
+      registerSpendPolicyHook(client, control);
+      client.register(CAIP2_BASE, {
+        scheme: "exact",
+        async createPaymentPayload() {
+          signerCalls += 1;
+          return { x402Version: 2, payload: {} };
+        },
+      });
+
+      await payment(client, "10000", "0xcccccccccccccccccccccccccccccccccccccccc");
+      expect(signerCalls).toBe(1);
+    });
+
+    it("reads the v1 maxAmountRequired field, which carries no `amount`", () => {
+      const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+      control.setLimit("perRequest", 0.005);
+
+      // v1 quote for $0.01 — over the $0.005 cap, so it must be refused on
+      // amount rather than sail through as an unparseable $0.
+      expect(() =>
+        assertSpendPolicyAllows(control, {
+          payTo: "0xcccccccccccccccccccccccccccccccccccccccc",
+          network: CAIP2_BASE,
+          maxAmountRequired: "10000",
+        }),
+      ).toThrow(/Per-request limit exceeded/);
+    });
+
+    it("allows an unparseable amount through when no amount window is configured", () => {
+      // Policy-only setups never compare an amount, so a missing quote is not
+      // a reason to refuse — the payee allowlist still decides.
+      const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+      control.setPolicy("allowedPayees", ["0xcccccccccccccccccccccccccccccccccccccccc"]);
+
+      expect(() =>
+        assertSpendPolicyAllows(control, {
+          payTo: "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          network: CAIP2_BASE,
+        }),
+      ).not.toThrow();
+    });
+  });
+
+  it("releases the reservation when the signer fails, instead of draining the window", async () => {
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    control.setLimit("hourly", 0.015);
+    const client = new x402Client();
+    registerSpendPolicyHook(client, control);
+    client.register(CAIP2_BASE, {
+      scheme: "exact",
+      async createPaymentPayload() {
+        throw new Error("signer boom");
+      },
+    });
+
+    await expect(
+      payment(client, "10000", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+    ).rejects.toThrow(/signer boom/);
+
+    // Nothing was signed, so nothing was spent — a failed payment must not
+    // consume budget, or a burst of failures locks the window with no money moved.
+    expect(control.getSpending("hourly")).toBe(0);
+    expect(control.getHistory()).toHaveLength(0);
+  });
+
+  it("throws a typed SpendPolicyError so callers can tell refusal from an upstream fault", async () => {
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    control.setPolicy("blockedPayees", [blocked]);
+    const client = new x402Client();
+    registerSpendPolicyHook(client, control);
+    client.register(CAIP2_BASE, {
+      scheme: "exact",
+      async createPaymentPayload() {
+        return { x402Version: 2, payload: {} };
+      },
+    });
+
+    const err = await payment(client, "1000").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SpendPolicyError);
+    expect((err as SpendPolicyError).blockedByPolicy).toBe("blockedPayees");
   });
 });
 

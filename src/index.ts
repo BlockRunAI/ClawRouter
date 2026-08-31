@@ -2448,9 +2448,9 @@ export {
   FileSpendControlStorage,
   InMemorySpendControlStorage,
   formatDuration,
-  abortIfSpendPolicyBlocks,
   registerSpendPolicyHook,
-  normalizePayee,
+  SpendPolicyError,
+  MalformedSpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
 } from "./spend-control.js";
@@ -2464,7 +2464,6 @@ export type {
   CheckResult,
   SpendControlStorage,
   SpendControlOptions,
-  SpendPolicyAbort,
 } from "./spend-control.js";
 export {
   generateWalletMnemonic,

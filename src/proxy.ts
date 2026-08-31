@@ -78,7 +78,7 @@ import type { SolanaBalanceMonitor } from "./solana-balance.js";
 /** Union type for chain-agnostic balance monitoring */
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
 import { resolvePaymentChain } from "./auth.js";
-import { registerSpendPolicyHook, SpendControl } from "./spend-control.js";
+import { registerSpendPolicyHook, SpendControl, SpendPolicyError } from "./spend-control.js";
 import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
 // Error classes available for programmatic use but not used in proxy
 // (universal free fallback means we don't throw balance errors anymore)
@@ -3730,6 +3730,21 @@ async function tryModelRequest(
     return { success: true, response };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    if (err instanceof SpendPolicyError) {
+      // A local refusal, not an upstream fault. Retrying it walks every paid
+      // model in the chain (a wasted 402 round trip each) and then lands on a
+      // free model, returning HTTP 200 — so the caller never learns their
+      // spend policy blocked the payment. Stop the chain here and say so.
+      return {
+        success: false,
+        errorBody: JSON.stringify({
+          error: { message: errorMsg, type: "spend_policy_denied", status: 403 },
+        }),
+        errorStatus: 403,
+        isProviderError: false,
+        errorCategory: "payment_error",
+      };
+    }
     return {
       success: false,
       errorBody: errorMsg,
