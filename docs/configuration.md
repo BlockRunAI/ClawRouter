@@ -307,12 +307,18 @@ const decision = route("Prove sqrt(2) is irrational", undefined, 4096, {
 
 console.log(decision);
 // {
-//   model: "deepseek/deepseek-reasoner",
+//   model: "xai/grok-4-1-fast-reasoning",
 //   tier: "REASONING",
+//   taskType: "reasoning_math",
 //   confidence: 0.97,
-//   method: "rules",
-//   savings: 0.994,
-//   costEstimate: 0.002,
+//   method: "portfolio",
+//   routerVersion: "v3-portfolio",
+//   profile: "auto",
+//   candidates: ["xai/grok-4-1-fast-reasoning", "xai/grok-4-fast-reasoning", "deepseek/deepseek-reasoner", ...],
+//   candidateScores: [{ model, score, quality, cost, speed, reliability }, ...],
+//   savings: 0.99,
+//   costEstimate: 0.0007,
+//   reasoning: "…",
 // }
 ```
 
@@ -354,6 +360,8 @@ const proxy = await startProxy({
 
 ## Routing Configuration
 
+Routing decisions are made by [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.4). The `routing` block is merged over router-core's `DEFAULT_ROUTING_CONFIG`: tier maps are merged per tier (override just `COMPLEX` without redefining the other three), `classifier` / `scoring` / `overrides` are merged per key, and `null` disables a tier set.
+
 ### Via openclaw.yaml
 
 ```yaml
@@ -378,22 +386,33 @@ plugins:
       # Their cost is charged via x402 micropayment directly and is not tracked per-session.
 
       routing:
-        # Override tier assignments
-        tiers:
-          SIMPLE:
-            primary: "google/gemini-2.5-flash"
-            fallback: ["deepseek/deepseek-chat"]
-          MEDIUM:
-            primary: "deepseek/deepseek-chat"
-            fallback: ["openai/gpt-4o-mini"]
-          COMPLEX:
-            primary: "anthropic/claude-sonnet-4.6"
-            fallback: ["openai/gpt-4o"]
-          REASONING:
-            primary: "deepseek/deepseek-reasoner"
-            fallback: ["openai/o3-mini"]
+        # Strategy. Default: portfolio (Router Core V3.4 — constraint-first ranking
+        # over the tier's chain). "rules" is the one-line rollback to the V2
+        # primary-first selector.
+        strategy: portfolio
 
-        # Override scoring parameters
+        # Optional shadow evaluation: recompute a comparison decision locally on a
+        # sample of requests and report it on the x-clawrouter-* debug headers.
+        # Never issues a second paid completion, never persists prompt content.
+        # shadow:
+        #   strategy: rules
+        #   sampleRate: 0.1
+
+        # Override tier chains (auto profile). Each tier is merged individually,
+        # so you can override just COMPLEX. Under the portfolio strategy the
+        # chain is the candidate pool: primary is the curated head, the ranker
+        # still enforces tool/vision/context constraints and may pick a fallback.
+        tiers:
+          COMPLEX:
+            primary: "anthropic/claude-sonnet-5"
+            fallback: ["google/gemini-3.1-pro", "openai/gpt-5.6-terra"]
+
+        # Same shape for the other tier sets:
+        # ecoTiers: { ... }
+        # premiumTiers: { ... }
+        # agenticTiers: { ... }   # or `null` to disable agentic switching entirely
+
+        # Override scoring keywords
         scoring:
           reasoningKeywords: ["prove", "theorem", "formal", "derive"]
           codeKeywords: ["function", "class", "async", "import"]
@@ -402,38 +421,41 @@ plugins:
         # Override thresholds
         classifier:
           confidenceThreshold: 0.7
-          reasoningConfidence: 0.97
 
         # Context-based overrides
         overrides:
-          largeContextTokens: 100000 # Force COMPLEX above this
-          structuredOutput: true # Bump to min MEDIUM for JSON/YAML
+          maxTokensForceComplex: 100000 # Force COMPLEX above this many tokens
+          structuredOutputMinTier: MEDIUM # Bump to at least MEDIUM for JSON/YAML
+          ambiguousDefaultTier: MEDIUM # Where low-confidence requests land
+          # agenticMode: true | false   # force / disable the agentic tier set (default: auto-detect)
 ```
 
 ---
 
 ## Tier Overrides
 
-### Default Tier Mappings
+### Default Tier Mappings (auto profile)
 
-| Tier      | Primary Model                 | Fallback Chain                                  |
-| --------- | ----------------------------- | ----------------------------------------------- |
-| SIMPLE    | `google/gemini-2.5-flash`     | `deepseek/deepseek-chat`                        |
-| MEDIUM    | `deepseek/deepseek-chat`      | `openai/gpt-4o-mini`, `google/gemini-2.5-flash` |
-| COMPLEX   | `anthropic/claude-sonnet-4.6` | `openai/gpt-4o`, `google/gemini-2.5-pro`        |
-| REASONING | `deepseek/deepseek-reasoner`  | `openai/o3-mini`, `anthropic/claude-sonnet-4.6` |
+Curated primaries from router-core's `DEFAULT_ROUTING_CONFIG.tiers`; chains truncated. The full chains for every profile — and the eco / premium / agentic tier sets — are in [routing-profiles.md](./routing-profiles.md).
+
+| Tier      | Primary Model                | Fallback Chain (head)                                              |
+| --------- | ---------------------------- | ------------------------------------------------------------------ |
+| SIMPLE    | `google/gemini-2.5-flash`    | `google/gemini-3-flash-preview`, `google/gemini-3.5-flash-lite`, … |
+| MEDIUM    | `google/gemini-3.5-flash`    | `google/gemini-3.6-flash`, `zai/glm-5.3-flash`, …                  |
+| COMPLEX   | `google/gemini-3.1-pro`      | `google/gemini-3.6-flash`, `google/gemini-3.5-flash`, …            |
+| REASONING | `deepseek/deepseek-reasoner` | `deepseek/deepseek-v4-pro`, `xai/grok-4.3`, …                      |
 
 ### Fallback Chain
 
-When the primary model fails (rate limits, billing errors, provider outages), ClawRouter tries the next model in the fallback chain:
+The ranked candidate list is returned on every decision (`decision.candidates`). When the selected model fails (rate limits, billing errors, provider outages, timeouts), ClawRouter tries the next candidate:
 
 ```
-Request → gemini-2.5-flash (rate limited)
-       → deepseek-chat (billing error)
-       → gpt-4o-mini (success)
+Request → gemini-3.1-pro (503)
+       → gemini-3-flash-preview (rate limited)
+       → grok-4-0709 (success)
 ```
 
-Max fallback attempts: 3 models per request.
+Candidates that fail a hard constraint (no tool calling on a tool turn, no vision on image input, too small a context window) are removed before ranking, so a fallback never lands on a model that cannot serve the request.
 
 ### Custom Tier Configuration
 
@@ -441,10 +463,10 @@ Max fallback attempts: 3 models per request.
 routing:
   tiers:
     COMPLEX:
-      primary: "openai/gpt-4o" # Use GPT-4o instead of Claude
+      primary: "openai/gpt-5.6-terra" # Use GPT-5.6 Terra instead of Gemini 3.1 Pro
       fallback:
-        - "anthropic/claude-sonnet-4.6"
-        - "google/gemini-2.5-pro"
+        - "anthropic/claude-sonnet-5"
+        - "google/gemini-3.1-pro"
 ```
 
 ---
@@ -458,12 +480,12 @@ The 15-dimension weighted scorer determines query complexity:
 | `reasoningMarkers`    | 0.18   | "prove", "theorem", "step by step"       |
 | `codePresence`        | 0.15   | "function", "async", "import", "```"     |
 | `multiStepPatterns`   | 0.12   | "first...then", "step 1", numbered lists |
-| `agenticTask`         | 0.10   | "run", "test", "fix", "deploy", "edit"   |
 | `technicalTerms`      | 0.10   | "algorithm", "kubernetes", "distributed" |
 | `tokenCount`          | 0.08   | short (<50) vs long (>500)               |
 | `creativeMarkers`     | 0.05   | "story", "poem", "brainstorm"            |
 | `questionComplexity`  | 0.05   | Multiple question marks                  |
 | `constraintCount`     | 0.04   | "at most", "O(n)", "maximum"             |
+| `agenticTask`         | 0.04   | "run", "test", "fix", "deploy", "edit"   |
 | `imperativeVerbs`     | 0.03   | "build", "create", "implement"           |
 | `outputFormat`        | 0.03   | "json", "yaml", "schema"                 |
 | `simpleIndicators`    | 0.02   | "what is", "define", "translate"         |
@@ -500,10 +522,12 @@ The classifier uses sigmoid calibration to convert raw scores to confidence valu
 confidence = 1 / (1 + exp(-k * (score - midpoint)))
 ```
 
-Parameters:
+Parameters (router-core `classifier`):
 
-- `k = 8` — steepness of the sigmoid curve
-- `midpoint = 0.5` — score at which confidence = 50%
+- `confidenceSteepness = 12` — steepness of the sigmoid curve
+- `confidenceThreshold = 0.7` — below this the request is ambiguous and lands on `overrides.ambiguousDefaultTier` (MEDIUM)
+
+Tier boundaries on the weighted-score axis: `mediumComplex = 0.3`, `complexReasoning = 0.5`.
 
 ### Override Thresholds
 
@@ -512,9 +536,6 @@ routing:
   classifier:
     # Require higher confidence for tier assignment
     confidenceThreshold: 0.8 # Default: 0.7
-
-    # Force REASONING tier at lower confidence
-    reasoningConfidence: 0.90 # Default: 0.97
 ```
 
 ---

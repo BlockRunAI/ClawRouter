@@ -46,10 +46,10 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — <!-- br:models.free -->5<!-- /br:models.free --> NVIDIA models are free forever (incl. 1M-context DeepSeek V4 Flash + a vision-capable Nemotron Omni)
+- **Starts at $0** — <!-- br:models.free -->5<!-- /br:models.free --> NVIDIA models are free forever (incl. reasoning-grade Step 3.7 Flash + a vision-capable Nemotron Omni)
 - **No accounts** — a wallet is generated locally, no signup
 - **No API keys** — your wallet signature IS authentication
-- **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring picks the right model automatically
+- **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring + constraint-first ranking ([router-core](https://github.com/BlockRunAI/router-core)) picks the right model automatically
 - **No credit cards** — agents pay per-request with USDC via [x402](https://x402.org)
 - **No trust required** — runs locally, <1ms routing, zero external dependencies
 
@@ -105,7 +105,7 @@ openclaw gateway restart
 
 ### Option B — Standalone (continue.dev, Cursor, VS Code, any OpenAI-compatible client)
 
-> **Using Claude Code?** Check out [BRCC](https://blockrun.ai/brcc.md) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
+> **Using Claude Code?** Check out [BRCC](https://github.com/BlockRunAI/brcc) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
 > **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
 
@@ -188,14 +188,12 @@ response = client.chat.completions.create(model="blockrun/auto", messages=[...])
 
 Choose your routing strategy with `/model <profile>`:
 
-| Profile       | Strategy           | Savings                                                                                                                                                                                                                                                                                           | Best For             |
-| ------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| `/model free` | Free NVIDIA models | **100%**                                                                                                                                                                                                                                                                                          | $0 balance, learning |
-| `/model auto` | Balanced (default) | † Withheld from `/v1/models` — the router still calls it by direct ID, but you will not find it on the public pricing page. See [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json), which prices the published savings claim on visible models only. |
-
-**<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%** | General use |
-| `/model eco` | Cheapest possible | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** | Maximum savings |
-| `/model premium` | Best quality | 0% | Mission-critical |
+| Profile          | Strategy           | Savings                                                                            | Best For             |
+| ---------------- | ------------------ | ---------------------------------------------------------------------------------- | -------------------- |
+| `/model free`    | Free NVIDIA models | **100%**                                                                           | $0 balance, learning |
+| `/model auto`    | Balanced (default) | **<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->%** | General use          |
+| `/model eco`     | Cheapest possible  | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%**   | Maximum savings      |
+| `/model premium` | Best quality       | 0%                                                                                 | Mission-critical     |
 
 **Shortcuts:** `/model grok`, `/model br-sonnet`, `/model gpt5`, `/model o3`
 
@@ -205,18 +203,31 @@ Choose your routing strategy with `/model <profile>`:
 
 **100% local routing. <1ms latency. Zero external API calls.**
 
-The scorer weighs <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions of the request:
+Routing decisions come from [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) — Router Core **V3.5**, the constraint-first portfolio router shared by every BlockRun product (ClawRouter, Franklin, the `@blockrun/llm` SDKs, ClawRouter-Hermes). ClawRouter inlines it at build time, pinned to an exact commit, and injects its live model catalog at startup.
 
 ```
-Request → Weighted Scorer → Tier → Best Model → Response
+Request → 15-dimension scorer → tier + task shape
+        → hard filters (tools · vision · context · max-output · structured output)
+        → rank survivors (quality · capability · cost · speed · reliability)
+        → winner + ordered fallback chain → Response
 ```
 
-| Tier      | ECO Model                               | AUTO Model                              | PREMIUM Model                |
-| --------- | --------------------------------------- | --------------------------------------- | ---------------------------- |
-| SIMPLE    | step-3.7-flash (**FREE**)               | gemini-2.5-flash ($0.30/$2.50)          | kimi-k2.7 † ($0.95/$4.00)    |
-| MEDIUM    | gemini-3.1-flash-lite ($0.25/$1.50)     | kimi-k2.7 ($0.95/$4.00)                 | gpt-5.3-codex ($1.75/$14.00) |
-| COMPLEX   | gemini-3.1-flash-lite ($0.25/$1.50)     | gemini-3.1-pro ($2/$12)                 | claude-fable-5 ($10/$50)     |
-| REASONING | grok-4-1-fast-reasoning † ($0.20/$0.50) | grok-4-1-fast-reasoning † ($0.20/$0.50) | claude-sonnet-4.6 ($3/$15)   |
+1. **Classify** — a <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension weighted scorer picks a tier (`SIMPLE` / `MEDIUM` / `COMPLEX` / `REASONING`); a task classifier labels the shape of the work (`code_agent`, `tool_agent`, `reasoning_math`, `long_context`, `vision`, …). Turns that actually need their tools switch to agent-tuned tiers automatically.
+2. **Filter** — every model that cannot satisfy the request is dropped _before_ anything is scored. A model that can't call tools, can't read the image, or can't hold the conversation never gets to win on price.
+3. **Rank** — survivors are scored on task quality, capability, estimated cost, speed and reliability, with per-profile weights (`eco` leans on cost, `premium` on quality and reliability).
+4. **Recover** — the whole ranked list rides along as the fallback chain, so a provider timeout or 5xx costs a retry, not the task.
+
+| Tier      | ECO Model                       | AUTO Model                      | PREMIUM Model                | AGENTIC Model ‡           |
+| --------- | ------------------------------- | ------------------------------- | ---------------------------- | ------------------------- |
+| SIMPLE    | step-3.7-flash (**FREE**)       | gemini-2.5-flash ($0.30/$2.50)  | gemini-3.5-flash ($1.50/$9)  | gpt-4o-mini ($0.15/$0.60) |
+| MEDIUM    | glm-5.3-flash ($0.15/$0.50)     | gemini-3.5-flash ($1.50/$9)     | gpt-5.3-codex ($1.75/$14.00) | gpt-5-mini ($0.25/$2)     |
+| COMPLEX   | glm-5.3-flash ($0.15/$0.50)     | gemini-3.1-pro ($2/$12)         | claude-fable-5 ($10/$50)     | claude-sonnet-5 ($3/$15)  |
+| REASONING | deepseek-reasoner ($0.14/$0.28) | deepseek-reasoner ($0.14/$0.28) | claude-sonnet-5 ($3/$15)     | claude-sonnet-5 ($3/$15)  |
+
+† Withheld from `/v1/models` — since Router Core V3.5 no chain names such a model: every primary and every fallback rung above is a model you can find on the public pricing page. [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) prices the published savings claim on the same visible models.
+‡ Auto-selected in any profile when the turn actually needs its attached tools; prefers models that keep going instead of stopping to ask.
+
+These are the curated primaries; every tier carries a benchmark-ordered fallback chain — full chains and per-profile ranking weights in [docs/routing-profiles.md](docs/routing-profiles.md). On router-core's frozen three-arm agent benchmark (τ-bench, BrowseComp, Terminal-Bench) the V3.4 policy (the last one benchmarked; V3.5 is a catalog refresh on the same scorer and weights) completed **57%** of tasks vs **49%** for the previous rules router, at **6.4%** lower cost per successful task — and spent **8.9%** of the tokens a pinned flagship would have.
 
 **<!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5** for the same traffic, on `auto`; **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%** on `eco`.
 
@@ -226,6 +237,8 @@ priced against the live catalog, so anyone can recompute it and get the same
 answer. Models withheld from `/v1/models` are excluded from the mix — pricing a
 public claim on a model you cannot look up is not defensible — which makes the
 number conservative.
+
+Rollback lever: `routing.strategy: "rules"` restores the V2 primary-first selector; `routing.shadow` compares both locally without a second paid call.
 
 ---
 
@@ -434,7 +447,6 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | google/gemini-3-flash-preview               |     $0.50 |      $3.00 |    $0.0018 | 1M      | vision                                       |
 | moonshot/kimi-k2.5                          |     $0.60 |      $3.00 |    $0.0018 | 262K    | reasoning, vision, agentic, tools            |
 | moonshot/kimi-k2.7                          |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools            |
-| moonshot/kimi-k3                            |     $3.00 |     $15.00 |    $0.0110 | 1M      | reasoning, vision, agentic, tools            |
 
 ### Mid-Range Models ($0.001–$0.01/request)
 
@@ -478,13 +490,14 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | openai/gpt-5.6-sol          |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.6-sol-pro      |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
 | openai/gpt-5.5              |     $5.00 |     $30.00 |    $0.0175 | 1M      | reasoning, vision, agentic, tools |
+| moonshot/kimi-k3            |     $3.00 |     $15.00 |    $0.0110 | 1M      | reasoning, vision, agentic, tools |
 | openai/chat-latest          |     $5.00 |     $30.00 |    $0.0175 | 128K    | vision, tools                     |
 | openai/o1                   |    $15.00 |     $60.00 |    $0.0375 | 200K    | reasoning, tools                  |
 | openai/gpt-5.2-pro          |    $21.00 |    $168.00 |    $0.0945 | 400K    | reasoning, tools                  |
 | openai/gpt-5.4-pro          |    $30.00 |    $180.00 |    $0.1050 | 400K    | reasoning, tools                  |
 | openai/gpt-5.5-pro          |    $30.00 |    $180.00 |    $0.1050 | 1M      | reasoning, vision, tools          |
 
-> **Free tier:** several NVIDIA-hosted models cost nothing — `/model free` smart-routes across them, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model step-flash` for reasoning, `/model mistral-nemotron` for instruction following).
+> **Free tier:** <!-- br:models.free -->5<!-- /br:models.free --> NVIDIA-hosted models cost nothing — `/model free` pins the free default (`step-3.7-flash`, with the other four as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model nemotron-omni` for vision, `/model step-flash` for reasoning, `/model mistral-nemotron` for instruction following).
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
 
 ---
@@ -661,7 +674,7 @@ You're here. <!-- br:models.chatVisible -->71<!-- /br:models.chatVisible --> mod
 </td>
 <td width="50%">
 
-### 🤖 [BRCC](https://blockrun.ai/brcc.md)
+### 🤖 [BRCC](https://github.com/BlockRunAI/brcc)
 
 **BlockRun for Claude Code**
 
@@ -700,7 +713,7 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:m
 | [Documentation](https://blockrun.ai/docs)              | Full docs                                                               |
 | [Model Pricing](https://blockrun.ai/models)            | All models & prices                                                     |
 | [Image Generation & Editing](docs/image-generation.md) | API examples, <!-- br:models.image -->9<!-- /br:models.image --> models |
-| [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM details                                                |
+| [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM/AGENTIC tiers, fallback chains, ranking weights        |
 | [Architecture](docs/architecture.md)                   | Technical deep dive                                                     |
 | [Configuration](docs/configuration.md)                 | Environment variables                                                   |
 | [Troubleshooting](docs/troubleshooting.md)             | Common issues                                                           |

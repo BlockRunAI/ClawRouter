@@ -4,6 +4,121 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.256 — August 30, 2026
+
+### Fixed — multimodal retries now dedupe and cache-hit like text-only ones
+
+Timestamp stripping in the dedup and response-cache key functions only handled plain-string message `content`. For Anthropic-style array content (`[{type: "text", text}, {type: "image_url", …}]` — vision/multimodal messages), the OpenClaw-injected `[DAY YYYY-MM-DD HH:MM TZ]` prefix lives in the leading text block, so it stayed in the hash input: a retried multimodal request (timeout, network blip) never matched its original — the same request could be **paid twice** past the dedup window's protection, and every retry re-hit the upstream LLM instead of the response cache.
+
+Both key functions now strip the injected timestamp from array content — scoped to the **first** text block only, where OpenClaw actually injects. Later text blocks are user data (a pasted log line can legitimately start with a bracketed timestamp), and stripping those would have collided genuinely different requests onto one key — serving the wrong cached response for up to 10 minutes or wrongly deduping a distinct paid request. The shared logic (pattern + block stripper) moved to `src/timestamp-strip.ts` so dedup and cache normalization can't drift apart. Covered by the new `src/dedup.test.ts` and extended `src/response-cache.test.ts`, including regression tests pinning that non-leading text blocks are left untouched.
+
+- Thanks to @ygd58 for finding the gap, the isolated repro, and the core fix (#273) — the first-text-block scoping and shared helper were added in review.
+
+---
+
+## v0.12.255 — August 30, 2026
+
+### Fixed — img2img no longer misreports a client cancel as "Invalid request"
+
+The `/v1/images/image2image` parse path downloads source/mask URLs with the client-abort signal (v0.12.252), so a caller hanging up mid-download rejects that fetch with an `AbortError` — which the parse catch then misclassified as invalid input and answered with a 400 on the dead socket. The catch now returns silently when `clientAbort.signal.aborted` is set, and the paid upstream is never contacted. Covered by a new case in `src/proxy.img2img-abort.test.ts` (download socket observes the abort, no response is written, zero upstream hits). Closes #277.
+
+Also landed the remainder of PR #276 (same lineage): the three post-payment result-asset downloads — generations and img2img result images, video clips — now carry `clientAbort.signal` so a hung download is cancelled when the client leaves instead of running to the 5-minute fetch ceiling, and the chat-path `/imagegen` outer catch gained the same silent-return abort guard its `/img2img` sibling got in v0.12.253.
+
+- Thanks to @Sertug17 for both fixes (#276, #278) — rebased onto main, where the bulk of each had already landed in v0.12.252–253.
+
+---
+
+## v0.12.254 — August 30, 2026
+
+### Fixed — the chat path now cancels its paid upstream when the client disconnects
+
+The media handlers all abort their upstream on client disconnect (#251, v0.12.252–253), but the main `/v1/chat/completions` path — the highest-traffic one — never did. `proxyRequest` wired its abort to `req.on("close")`, and on Node (verified on v24.15.0) an `IncomingMessage` emits `"close"` when the request-body readable finishes, not when the client hangs up. The body is fully drained near the top of `proxyRequest`, so that event had already passed by the time the listener was attached far below — `onClientClose` never ran, the `globalController` was only ever aborted by the request timeout, and a caller that hung up mid-request left the paid x402 upstream running to completion for a response nobody would receive. The abort now hangs off `res.on("close")` (guarded by `!res.writableEnded`), exactly like every media handler. Covered by `src/proxy.chat-abort.test.ts` (upstream socket observes the abort after the client destroys its request).
+
+Two follow-ups landed in review on top of the contributed fix:
+
+- **Disconnects in the pre-attach window are caught too.** Several awaits (context compression, the up-to-2.5s balance check) run between draining the body and attaching the listener; a client that hung up in that window had already emitted `"close"`, so the listener alone would never fire. `proxyRequest` now also checks `res.destroyed` right after attaching and aborts immediately.
+- **A client cancel is no longer reported as a 300s timeout.** Once the abort path was live, every disconnect surfaced through the shared abort exits as `Request timed out after 300000ms` — hitting `onError`, printing a phantom timeout in the CLI, and invalidating the balance cache (an extra RPC read on the next request). The proxy now tells the two apart (`ClientDisconnectedError`), logs `Request cancelled — client disconnected`, and returns quietly. The regression test also asserts `onError` stays silent, and gates its disconnect on the upstream actually being reached instead of a fixed 500ms timer.
+
+- Thanks to @erhnysr for the diagnosis, fix and regression test (#279).
+
+---
+
+## v0.12.253 — August 29, 2026
+
+### Fixed — the last two paid handlers without a client-abort signal
+
+v0.12.252 fixed `/v1/images/image2image` charging the wallet after the caller disconnected (#251). Two more handlers had the same shape and were closed out here: `/v1/audio/generations`, and the chat-side `/img2img` command that reaches the same image2image endpoint. Both now create an `AbortController` on the response's `close` event and thread its signal through the paid upstream call (and, for audio, the post-generation track download), and swallow the resulting abort instead of logging a bogus 502. Every paid x402 handler in the proxy now carries this wiring. Covered by `src/proxy.audio-abort.test.ts`.
+
+---
+
+## v0.12.252 — August 29, 2026
+
+Two proxy fixes from community bug reports. Thanks to @Sertug17 for both (#251, #252).
+
+### Fixed — message truncation no longer splits a tool call from its results (#252)
+
+BlockRun caps a request at 200 messages, and `truncateMessages()` enforced that with a raw `slice(-N)` over the non-system turns. When the cut landed between an assistant `tool_calls` turn and the `role: "tool"` results that answer it, the request went upstream with orphaned results and the provider rejected it — Anthropic with `tool_use block without matching tool_result`, OpenAI with `tool_calls referenced but tool response missing`. A long agentic session would start 400ing exactly as it crossed the limit, at the point it had the most state to lose.
+
+The boundary now walks **forward** past any leading tool results (OpenAI `role: "tool"`, and Anthropic-style `tool_result` content blocks in a `user` turn), so a straddled exchange is dropped whole instead of half-kept. Walking forward rather than back keeps the result under the 200 cap in every case, including a parallel tool call with several contiguous results. Covered by `src/proxy.truncate-tool-pairs.test.ts` (boundary on a single result, mid-parallel-exchange, tool-heavy windows, system-message preservation).
+
+### Fixed — `/v1/images/image2image` cancels upstream when the client disconnects (#251)
+
+`/v1/images/generations` already carried a `clientAbort` controller so a caller that hung up mid-request stopped the upstream call before the x402 payment could settle. The img2img handler never got the same wiring: the upstream request ran to completion and the wallet was charged for an image nobody received. The handler now creates the controller before reading the body and threads its signal through both the source-image URL download and the paid upstream call; an abort is swallowed instead of logged as a 502. Covered by `src/proxy.img2img-abort.test.ts` (upstream socket observes the abort after the client destroys its request).
+
+---
+
+## v0.12.251 — August 29, 2026
+
+Repins the routing engine to Router Core **V3.5** (`@blockrun/router-core` @ `5d91187`). No ClawRouter code changed; the decision path did.
+
+### Changed — every chain names a model you can see on blockrun.ai/models
+
+V3.4's chains still leaned on ids the gateway had withheld from `/v1/models`: `moonshot/kimi-k2.7` was the MEDIUM primary in the auto, premium-SIMPLE and agentic sets, `xai/grok-4-1-fast-reasoning` opened both REASONING tiers, and the grok-4-fast pair closed half the fallback chains. V3.5 removes every hidden id from every rung and admits the current generation the catalog already sells — GPT-5.6 Terra/Luna, Gemini 3.6 Flash and 3.5 Flash-Lite, GLM-5.3 and 5.3-Flash, Grok 4.3, Kimi K3, Qwen 3.7 Plus, MiniMax M3 — as fallback rungs. Primaries moved only where router-core carries calibration evidence for the successor:
+
+| Tier / profile              | V3.4                           | V3.5                         |
+| --------------------------- | ------------------------------ | ---------------------------- |
+| AUTO MEDIUM                 | `moonshot/kimi-k2.7`           | `google/gemini-3.5-flash`    |
+| AUTO / ECO REASONING        | `xai/grok-4-1-fast-reasoning`  | `deepseek/deepseek-reasoner` |
+| ECO MEDIUM / COMPLEX        | `google/gemini-3.1-flash-lite` | `zai/glm-5.3-flash`          |
+| PREMIUM SIMPLE              | `moonshot/kimi-k2.7`           | `google/gemini-3.5-flash`    |
+| PREMIUM REASONING           | `anthropic/claude-sonnet-4.6`  | `anthropic/claude-sonnet-5`  |
+| AGENTIC MEDIUM              | `moonshot/kimi-k2.7`           | `openai/gpt-5-mini`          |
+| AGENTIC COMPLEX / REASONING | `anthropic/claude-sonnet-4.6`  | `anthropic/claude-sonnet-5`  |
+
+The capability snapshot behind the hard filters was regenerated from the public catalog (70 models; Haiku 4.5 was capped at 8K output and Sonnet 4.6 at 200K context) and the speed/reliability priors from a fresh 2026-08-29 gateway probe (66 models). `README.md`, `docs/routing-profiles.md`, `docs/configuration.md` and `docs/architecture.md` now describe the V3.5 chains; `brand-numbers.test.ts` pins the README tier table to the pinned config, as before.
+
+The `kimi` / `kimi-k2.7` aliases and `/model` pins are untouched — the gateway still serves those ids by direct name; only automatic routing stops choosing them.
+
+---
+
+## v0.12.250 — August 29, 2026
+
+Realigns every routing surface — code and docs — to Router Core V3.4 (`@blockrun/router-core` @ `d7bc10c`, already the pinned engine since v0.12.242) and the current model catalog.
+
+### Fixed — `/model free` was pinned to a model that has been dead upstream for two weeks
+
+`free` resolved to `free/gpt-oss-120b`. That model stopped completing on 2026-08-16 (NVIDIA still lists it; a completion hangs until the client gives up — blockrun #391 retargeted its whole free cascade off it the same day) and the gateway now answers `400 Unknown model` for the `free/` id. Every `/model free` call, the budget-cap free fallback (`FREE_MODEL`) and the head of the proxy's `FREE_MODELS` cascade all opened on it, and the picker label still promised "GPT-OSS 120B".
+
+All three now agree on **`free/step-3.7-flash`** — the same model router-core opens the eco SIMPLE tier on, live-probed 200 through the gateway. The cascade is now step-3.7-flash → nemotron-nano-9b-v2 → mistral-nemotron → nemotron-omni (vision) → nemotron-nano-12b-v2-vl (vision), mirroring router-core's free rungs; gpt-oss-120b/20b are dropped from it (dead, and hidden from the public catalog over NVIDIA's prompt-retention terms since 2026-04-28). Generic shorthands that had been parked on gpt-oss-120b (`nvidia`, `coder-free`, `qwen-coder`, `qwen-thinking`, `devstral`, `nemotron-ultra/-super/-49b/-120b/-253b`) follow the free default; pins that _name_ gpt-oss (`gpt-120b`, `gpt-oss-120b`, `nvidia/gpt-oss-120b`) stay routable and rely on the gateway redirect, as before.
+
+Invariant, now written down at all three sites: the `free` alias, `FREE_MODELS[0]` and router-core's `ecoTiers.SIMPLE.primary` must be one live model. `src/router/free-model-liveness.test.ts` already guards the router side; the alias/label tests in `models.test.ts` and `exclude-models.test.ts` were repointed.
+
+### Changed — routing docs describe the router that actually ships
+
+Since v0.12.242 the README, `docs/routing-profiles.md`, `docs/configuration.md`, `docs/architecture.md` and the OpenClaw skill still described the pre-extraction rules router: "Weighted Scorer → Tier → Best Model", a tier table with `kimi-k2.6` and `free/gpt-oss-120b`, a `src/router/config.ts` that no longer exists, a "Default Tier Mappings" table (`deepseek-chat` as MEDIUM primary, `o3-mini` for REASONING) that never matched any shipped config, an `agenticTask` weight of 0.10 (it is 0.04), a `reasoningConfidence` knob that does not exist, and a claim that ambiguous queries "hit the LLM classifier" — nothing in the proxy calls one. The README's Routing Profiles table had also been corrupted by a footnote spliced into the `auto` row.
+
+Rewritten against router-core's config and README:
+
+- **README** — "How It Works" now walks the four constraint-first stages (classify → hard filters → rank → recovery chain), the tier table gains the AGENTIC column with its ‡ footnote, the profiles table is repaired, and the V3.4 three-arm benchmark numbers (57% vs 49% task success, −6.4% cost per successful task, 8.9% of a pinned flagship's tokens) are cited with the caveat that they come from a frozen agent benchmark. `kimi-k3` moved out of the "Budget" table (it is $3/$15). The "1M-context DeepSeek V4 Flash" free-tier bullet — EOL'd 2026-08-12 — is gone.
+- **docs/routing-profiles.md** — full chains for AUTO / ECO / PREMIUM / AGENTIC straight from `DEFAULT_ROUTING_CONFIG`, the per-profile ranking weights and affinity floors, the `free` alias semantics, and the `strategy: "rules"` / `shadow` levers.
+- **docs/configuration.md** — `routing.strategy`, `routing.shadow`, per-tier merge semantics, `ecoTiers` / `premiumTiers` / `agenticTiers: null`, the real `overrides` keys (`maxTokensForceComplex`, `structuredOutputMinTier`, `ambiguousDefaultTier`, `agenticMode`), corrected scorer weights and sigmoid parameters, and a `route()` example that shows the V3 decision shape (`taskType`, `candidates`, `candidateScores`, `routerVersion`).
+- **docs/architecture.md** — Routing Engine section rewritten around router-core's four stages; file tree and key-files table no longer list `router/{rules,selector,config,types}.ts`.
+- **skills/clawrouter/SKILL.md** — "How Routing Works" matches the above; the `routing` config row says what it actually overrides.
+
+`docs/smart-llm-router-14-dimension-classifier.md` is a dated benchmark write-up and is deliberately untouched.
+
+---
+
 ## v0.12.249 — August 25, 2026
 
 ### Fixed — `/health?full=true` could hang forever on an unresponsive balance RPC

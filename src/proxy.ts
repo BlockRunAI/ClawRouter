@@ -145,12 +145,15 @@ const ROUTING_PROFILES = new Set([
 // 2026-08-12: deepseek-v4-flash EOL'd too (blockrun #367 — published 410 on both
 // probe passes, prod gate fired kind=gone; server-redirected to gpt-oss-120b) —
 // dropped for the same /exclude reason. That was the last 1M-ctx free model.
+// Insertion order IS the cascade order (pickFreeModel walks it). The head must
+// match router-core's ecoTiers.SIMPLE primary and the `free` alias in models.ts.
+// gpt-oss-120b/20b were dropped 2026-08-29: dead upstream since 2026-08-16 (a
+// completion hangs; the gateway 400s the `free/` id) and hidden from the
+// public catalog over NVIDIA's prompt-retention terms since 2026-04-28.
 const FREE_MODELS = new Set([
-  "free/gpt-oss-120b",
-  "free/gpt-oss-20b",
+  "free/step-3.7-flash", // reasoning-focused — free-tier flagship
+  "free/nemotron-nano-9b-v2", // fast lightweight generalist (~0.7s)
   "free/mistral-nemotron", // strong instruction following
-  "free/step-3.7-flash", // reasoning-focused
-  "free/nemotron-nano-9b-v2", // fast lightweight generalist
   "free/nemotron-3-nano-omni-30b-a3b-reasoning", // vision (text/image/video/audio)
   "free/nemotron-nano-12b-v2-vl", // vision-language (text + image)
 ]);
@@ -162,7 +165,7 @@ function pickFreeModel(excludeList?: Set<string>): string | undefined {
   return undefined; // all free models excluded
 }
 // Keep backward-compat constant for places that don't have excludeList in scope
-const FREE_MODEL = "free/gpt-oss-120b";
+const FREE_MODEL = "free/step-3.7-flash";
 /**
  * Map free/xxx model IDs to nvidia/xxx for upstream BlockRun API.
  * The "free/" prefix is a ClawRouter convention for the /model picker;
@@ -200,6 +203,14 @@ const PORT_RETRY_ATTEMPTS = 5; // Max attempts to bind port (handles TIME_WAIT)
 const PORT_RETRY_DELAY_MS = 1_000; // Delay between retry attempts
 const MODEL_BODY_READ_TIMEOUT_MS = 300_000; // 5 minutes for model responses (reasoning models are slow)
 const ERROR_BODY_READ_TIMEOUT_MS = 30_000; // 30 seconds for error/partner body reads
+
+/** Thrown inside proxyRequest when the upstream was aborted because the client hung up. */
+class ClientDisconnectedError extends Error {
+  constructor() {
+    super("Client disconnected");
+    this.name = "ClientDisconnectedError";
+  }
+}
 
 async function readBodyWithTimeout(
   body: ReadableStream<Uint8Array> | null,
@@ -1146,11 +1157,27 @@ type TruncationResult<T> = {
 };
 
 /**
+ * True for a message that answers a prior assistant tool call and therefore
+ * cannot stand alone at the head of a conversation: OpenAI-style
+ * `role: "tool"`, or an Anthropic-in-OpenAI-wrapper `user` turn whose content
+ * blocks are `tool_result`s.
+ */
+function isToolResultMessage(msg: { role: string; content?: unknown }): boolean {
+  if (msg.role === "tool") return true;
+  if (Array.isArray(msg.content)) {
+    return (msg.content as ContentBlock[]).some(
+      (b) => b && typeof b === "object" && b.type === "tool_result",
+    );
+  }
+  return false;
+}
+
+/**
  * Truncate messages to stay under BlockRun's MAX_MESSAGES limit.
  * Keeps all system messages and the most recent conversation history.
  * Returns the messages and whether truncation occurred.
  */
-function truncateMessages<T extends { role: string }>(messages: T[]): TruncationResult<T> {
+export function truncateMessages<T extends { role: string }>(messages: T[]): TruncationResult<T> {
   if (!messages || messages.length <= MAX_MESSAGES) {
     return {
       messages,
@@ -1166,7 +1193,20 @@ function truncateMessages<T extends { role: string }>(messages: T[]): Truncation
 
   // Keep all system messages + most recent conversation messages
   const maxConversation = MAX_MESSAGES - systemMsgs.length;
-  const truncatedConversation = conversationMsgs.slice(-maxConversation);
+  let start = Math.max(0, conversationMsgs.length - maxConversation);
+
+  // #252: never open the kept window on a tool result whose parent assistant
+  // `tool_calls` turn was just dropped — providers 400 on the orphan
+  // (Anthropic: "tool_use block without matching tool_result"; OpenAI:
+  // "tool_calls referenced but tool response missing"). Walk the boundary
+  // FORWARD past the orphaned results so the whole exchange is dropped
+  // together; walking backward could exceed MAX_MESSAGES. A parallel tool
+  // call's results are contiguous, so this also handles the multi-result
+  // case where the slice landed mid-exchange.
+  while (start < conversationMsgs.length && isToolResultMessage(conversationMsgs[start])) {
+    start++;
+  }
+  const truncatedConversation = conversationMsgs.slice(start);
 
   const result = [...systemMsgs, ...truncatedConversation];
 
@@ -2744,7 +2784,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 console.log(`[ClawRouter] Image saved → ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext =
@@ -2796,6 +2836,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // Accepts image as: data URI, local file path, ~/path, or HTTP(S) URL
       if (req.url === "/v1/images/image2image" && req.method === "POST") {
         const img2imgStartTime = Date.now();
+        // #251: mirror /v1/images/generations — if the client goes away, abort
+        // the upstream call so the x402 payment doesn't settle for a result
+        // nobody will receive.
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -2817,7 +2864,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               // Already a data URI — pass through
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
               // Download URL → data URI
-              const imgResp = await fetch(val);
+              const imgResp = await fetch(val, { signal: clientAbort.signal });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -2838,6 +2885,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
           reqBody = JSON.stringify(parsed);
         } catch (parseErr) {
+          // #277: an aborted source/mask download rejects here — the client is
+          // gone, so don't misreport it as invalid input on a dead socket.
+          if (clientAbort.signal.aborted) return;
           const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Invalid request", details: msg }));
@@ -2849,6 +2899,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
+            signal: clientAbort.signal,
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -2880,7 +2931,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 console.log(`[ClawRouter] Image saved → ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext =
@@ -2917,6 +2968,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return; // client gone — nothing to report
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Image editing error: ${msg}`);
           if (!res.headersSent) {
@@ -2930,6 +2982,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // --- Handle /v1/audio/generations: proxy with x402 payment + save audio locally ---
       if (req.url === "/v1/audio/generations" && req.method === "POST") {
         const audioStartTime = Date.now();
+        // Same class as #251: abort the paid upstream call if the client goes
+        // away so the x402 payment doesn't settle for audio nobody receives.
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -2947,6 +3005,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
+            signal: clientAbort.signal,
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -2973,7 +3032,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             for (const track of result.data) {
               if (track.url?.startsWith("https://") || track.url?.startsWith("http://")) {
                 try {
-                  const audioResp = await fetch(track.url);
+                  const audioResp = await fetch(track.url, { signal: clientAbort.signal });
                   if (audioResp.ok) {
                     const contentType = audioResp.headers.get("content-type") ?? "audio/mpeg";
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
@@ -3004,6 +3063,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return; // client gone — nothing to report
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Audio generation error: ${msg}`);
           if (!res.headersSent) {
@@ -3171,7 +3231,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             for (const clip of finalResult.data) {
               if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
                 try {
-                  const videoResp = await fetch(clip.url);
+                  const videoResp = await fetch(clip.url, { signal: clientAbort.signal });
                   if (videoResp.ok) {
                     const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
                     const ext = contentType.includes("webm")
@@ -4064,6 +4124,14 @@ async function proxyRequest(
         console.log(
           `[ClawRouter] /imagegen command → ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`,
         );
+        // Stop upstream work (especially the slow-model poll loop below,
+        // whose first `completed` poll settles the x402 payment) if the
+        // chat client goes away mid-generation. Declared outside the try so
+        // the catch below can tell a client abort from a real failure.
+        const imagegenAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) imagegenAbort.abort();
+        });
         try {
           const imageUpstreamUrl = `${apiBase}/v1/images/generations`;
           const imageBody = JSON.stringify({
@@ -4071,13 +4139,6 @@ async function proxyRequest(
             prompt: imagePrompt,
             size: imageSize,
             n: 1,
-          });
-          // Stop upstream work (especially the slow-model poll loop below,
-          // whose first `completed` poll settles the x402 payment) if the
-          // chat client goes away mid-generation.
-          const imagegenAbort = new AbortController();
-          res.on("close", () => {
-            if (!res.writableEnded) imagegenAbort.abort();
           });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
@@ -4257,6 +4318,7 @@ async function proxyRequest(
             );
           }
         } catch (err) {
+          if (imagegenAbort.signal.aborted) return; // client gone — nothing to report
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /imagegen error: ${errMsg}`);
           if (!res.headersSent) {
@@ -4386,6 +4448,12 @@ async function proxyRequest(
           `[ClawRouter] /img2img → ${img2imgModel} (${img2imgSize}): ${img2imgPrompt.slice(0, 80)}`,
         );
 
+        // Same class as #251: abort the paid upstream call if the chat
+        // client goes away, mirroring the /imagegen handler above.
+        const img2imgAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) img2imgAbort.abort();
+        });
         try {
           const img2imgBody = JSON.stringify({
             model: img2imgModel,
@@ -4400,6 +4468,7 @@ async function proxyRequest(
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: img2imgBody,
+            signal: img2imgAbort.signal,
           });
 
           const img2imgResult = (await img2imgResponse.json()) as {
@@ -4461,6 +4530,7 @@ async function proxyRequest(
 
           sendImg2ImgText(responseText);
         } catch (err) {
+          if (img2imgAbort.signal.aborted) return; // client gone — nothing to report
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /img2img error: ${errMsg}`);
           if (!res.headersSent) {
@@ -5263,13 +5333,31 @@ async function proxyRequest(
   // Abort in-flight upstream requests when the client disconnects.
   // OpenClaw 2026.4.7+ aborts gateway requests on client disconnect;
   // without this, ClawRouter would leave orphan upstream fetches running.
+  // Must hang off `res` "close", not `req`: on Node (verified on v24.15.0) an
+  // IncomingMessage emits "close" when the request-body readable finishes, not
+  // when the client hangs up. The body is fully drained above, so a `req`
+  // listener would fire at body-end (or never, having missed the event) rather
+  // than on disconnect. The media handlers all use `res.on("close")` for this.
+  // True once the client is gone: the response socket is destroyed without us
+  // having finished it. Used to tell a client disconnect apart from the global
+  // timeout — both surface as `globalController.signal.aborted`.
+  const clientDisconnected = () => res.destroyed && !res.writableEnded;
+  const abortError = () =>
+    clientDisconnected()
+      ? new ClientDisconnectedError()
+      : new Error(`Request timed out after ${timeoutMs}ms`);
   const onClientClose = () => {
-    if (!globalController.signal.aborted) {
+    if (!res.writableEnded && !globalController.signal.aborted) {
       console.log(`[ClawRouter] Client disconnected — aborting upstream request`);
       globalController.abort();
     }
   };
-  req.on("close", onClientClose);
+  res.on("close", onClientClose);
+  // The body was drained ~1,500 lines above and several awaits ran since
+  // (context compression, the balance check). If the client hung up in that
+  // window, `res` "close" has already fired and the listener above will never
+  // run — check the socket state now so that disconnect still aborts.
+  if (res.destroyed) onClientClose();
 
   try {
     // --- Build fallback chain ---
@@ -5344,7 +5432,7 @@ async function proxyRequest(
         completed = true;
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
 
@@ -5491,7 +5579,7 @@ async function proxyRequest(
         // This return exits before the shared cleanup below — release the
         // global timeout + close listener so they don't outlive the request.
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
 
@@ -5528,9 +5616,9 @@ async function proxyRequest(
       const tryModel = modelsToTry[i];
       const isLastAttempt = i === modelsToTry.length - 1;
 
-      // Abort immediately if global deadline has already fired
+      // Abort immediately if global deadline has already fired (or the client left)
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
 
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
@@ -5557,9 +5645,9 @@ async function proxyRequest(
       );
       clearTimeout(modelTimeoutId);
 
-      // If the global deadline fired during this attempt, bail out entirely
+      // If the global deadline fired during this attempt (or the client left), bail out entirely
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
 
       // If the per-model timeout fired (but not global), treat as fallback-worthy error
@@ -5822,7 +5910,7 @@ async function proxyRequest(
 
     // Clear timeout and client-close listener — request attempts completed
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
 
     // Clear heartbeat — real data is about to flow
     if (heartbeatInterval) {
@@ -6532,7 +6620,7 @@ async function proxyRequest(
   } catch (err) {
     // Clear timeout and client-close listener on error
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
 
     // Clear heartbeat on error
     if (heartbeatInterval) {
@@ -6542,6 +6630,17 @@ async function proxyRequest(
 
     // Remove in-flight entry so retries aren't blocked
     deduplicator.removeInflight(dedupKey);
+
+    // Client hung up and we aborted the upstream on purpose: nobody is
+    // listening for a response, the balance cache is not suspect, and
+    // reporting this as a 300s timeout to onError would be a lie.
+    if (
+      err instanceof ClientDisconnectedError ||
+      (err instanceof Error && err.name === "AbortError" && clientDisconnected())
+    ) {
+      console.log(`[ClawRouter] Request cancelled — client disconnected`);
+      return;
+    }
 
     // Invalidate balance cache on payment failure (might be out of date)
     balanceMonitor.invalidate();

@@ -86,7 +86,7 @@ describe("resolveModelAlias", () => {
   it("strips openai/ prefix from virtual routing profiles (issue #78)", () => {
     // OpenClaw sends virtual profiles as "openai/eco", "openai/auto", etc.
     expect(resolveModelAlias("openai/eco")).toBe("eco");
-    expect(resolveModelAlias("openai/free")).toBe("free/gpt-oss-120b"); // "free" is now an alias, not a virtual profile
+    expect(resolveModelAlias("openai/free")).toBe("free/step-3.7-flash"); // "free" is an alias, not a virtual profile
     expect(resolveModelAlias("openai/auto")).toBe("auto");
     expect(resolveModelAlias("openai/premium")).toBe("premium");
   });
@@ -301,9 +301,10 @@ describe("OPENCLAW_MODELS integrity", () => {
   it("shows exactly one truthful `free` picker entry", () => {
     const freeEntries = VISIBLE_OPENCLAW_MODELS.filter((m) => m.id === "free");
     expect(freeEntries).toHaveLength(1);
-    // The `free` alias resolves to gpt-oss-120b; the picker label must agree
-    // (the retired "Nemotron Ultra 253B" label shadowed it until v0.12.206).
-    expect(freeEntries[0]!.name).toContain("GPT-OSS 120B");
+    // The `free` alias resolves to step-3.7-flash; the picker label must agree
+    // (the retired "Nemotron Ultra 253B" label shadowed it until v0.12.206, and
+    // "GPT-OSS 120B" outlived that model's death by two weeks until v0.12.250).
+    expect(freeEntries[0]!.name).toContain("Step 3.7 Flash");
   });
 
   it("advertises visible models in top-models order", () => {

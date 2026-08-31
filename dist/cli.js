@@ -34087,7 +34087,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         match(["gpt-5.3-codex"], 1),
         match(["claude-sonnet-4.6"], 0.94),
         match(["glm-5.2"], 0.9),
-        match(["kimi-k2.7", "deepseek-v4-pro"], 0.86)
+        match(["deepseek-v4-pro"], 0.86)
       );
     case "reasoning":
       return Math.max(
@@ -34111,14 +34111,13 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         base3,
         match(["gemini-3.5-flash"], 1),
         match(["grok-4.5"], 0.93),
-        match(["claude-sonnet-5", "deepseek-v4-pro", "kimi-k3"], 0.9),
-        match(["kimi-k2.7"], 0.84)
+        match(["claude-sonnet-5", "deepseek-v4-pro", "kimi-k3"], 0.9)
       );
     case "vision":
       return Math.max(
         base3,
         match(["gemini-3.1-pro"], 0.96),
-        match(["qwen3.7-max", "claude-sonnet-4.6", "kimi-k2.7", "grok-4.3"], 0.9)
+        match(["qwen3.7-max", "claude-sonnet-4.6", "kimi-k3", "grok-4.3"], 0.9)
       );
     case "long_context":
       return Math.max(
@@ -34130,17 +34129,18 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       );
     case "extraction": {
       const kimiExtractionAffinity = language === "zh" ? 1 : 0.9;
+      const otherExtractionAffinity = language === "zh" ? 0.88 : 0.9;
       return Math.max(
         base3,
-        match(["gemini-3.5-flash", "gemini-2.5-flash", "gpt-4o-mini"], 0.9),
-        match(["claude-sonnet-5", "claude-sonnet-4.6"], 0.9),
-        match(["kimi-k3", "kimi-k2.7"], kimiExtractionAffinity)
+        match(["gemini-3.5-flash", "gemini-2.5-flash", "gpt-4o-mini"], otherExtractionAffinity),
+        match(["claude-sonnet-5", "claude-sonnet-4.6"], otherExtractionAffinity),
+        match(["kimi-k3"], kimiExtractionAffinity)
       );
     }
     default:
       return Math.max(
         base3,
-        match(["gemini-3.5-flash", "gemini-2.5-flash", "kimi-k3", "kimi-k2.7"], 0.86)
+        match(["gemini-3.5-flash", "gemini-2.5-flash", "kimi-k3"], 0.86)
       );
   }
 }
@@ -34198,6 +34198,9 @@ function evidenceCandidates(task) {
       "anthropic/claude-sonnet-5",
       "deepseek/deepseek-v4-pro"
     ];
+  }
+  if (task === "extraction") {
+    return ["moonshot/kimi-k3", "google/gemini-3.5-flash", "anthropic/claude-sonnet-5"];
   }
   if (task === "reasoning_math") {
     return [
@@ -34370,14 +34373,15 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsVision: true
       },
       "anthropic/claude-haiku-4.5": {
+        // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
         contextWindow: 2e5,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 64e3,
         supportsTools: true,
         supportsVision: true
       },
-      "anthropic/claude-opus-4.6": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
+      "anthropic/claude-opus-4.5": {
+        contextWindow: 2e5,
+        maxOutputTokens: 64e3,
         supportsTools: true,
         supportsVision: true
       },
@@ -34399,9 +34403,16 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
-      "anthropic/claude-sonnet-4.6": {
+      "anthropic/claude-sonnet-4.5": {
         contextWindow: 2e5,
         maxOutputTokens: 64e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-4.6": {
+        // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
         supportsTools: true,
         supportsVision: true
       },
@@ -34412,14 +34423,14 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsVision: true
       },
       "deepseek/deepseek-chat": {
-        contextWindow: 1e6,
-        maxOutputTokens: 8192,
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: false
       },
       "deepseek/deepseek-reasoner": {
-        contextWindow: 1e6,
-        maxOutputTokens: 8192,
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: false
       },
@@ -34429,50 +34440,38 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: false
       },
-      "free/deepseek-v4-flash": {
-        contextWindow: 1e6,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "free/seed-oss-36b": {
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
       "google/gemini-2.5-flash": {
-        contextWindow: 1e6,
+        contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: true
       },
       "google/gemini-2.5-flash-lite": {
-        contextWindow: 1e6,
+        contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: false
       },
       "google/gemini-2.5-pro": {
-        contextWindow: 105e4,
+        contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: true
       },
       "google/gemini-3-flash-preview": {
-        contextWindow: 1e6,
+        contextWindow: 1048576,
         maxOutputTokens: 65536,
-        supportsTools: false,
+        supportsTools: true,
         supportsVision: true
       },
       "google/gemini-3.1-flash-lite": {
-        contextWindow: 1e6,
-        maxOutputTokens: 8192,
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: false
       },
       "google/gemini-3.1-pro": {
-        contextWindow: 105e4,
+        contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: true
@@ -34483,28 +34482,54 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
-      "moonshot/kimi-k2.5": {
-        contextWindow: 262144,
+      "google/gemini-3.5-flash-lite": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-3.6-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "minimax/minimax-m2.7": {
+        contextWindow: 204800,
         maxOutputTokens: 16384,
         supportsTools: true,
-        supportsVision: true
+        supportsVision: false
       },
-      "moonshot/kimi-k2.6": {
-        contextWindow: 262144,
+      "minimax/minimax-m3": {
+        contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
-        supportsVision: true
-      },
-      "moonshot/kimi-k2.7": {
-        contextWindow: 262144,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
+        supportsVision: false
       },
       "moonshot/kimi-k3": {
         contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
+        supportsVision: true
+      },
+      "nvidia/mistral-nemotron": {
+        // supportsTools: gateway unavailable at probe time — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+        contextWindow: 256e3,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "nvidia/nemotron-nano-12b-v2-vl": {
+        // supportsTools: gateway unavailable at probe time — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
         supportsVision: true
       },
       "nvidia/nemotron-nano-9b-v2": {
@@ -34519,7 +34544,31 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: false,
         supportsVision: false
       },
+      "openai/chat-latest": {
+        contextWindow: 128e3,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
       "openai/gpt-4.1": {
+        contextWindow: 128e3,
+        maxOutputTokens: 32768,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-4.1-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 32768,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-4.1-nano": {
+        contextWindow: 128e3,
+        maxOutputTokens: 32768,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-4o": {
         contextWindow: 128e3,
         maxOutputTokens: 16384,
         supportsTools: true,
@@ -34533,17 +34582,44 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       },
       "openai/gpt-5-mini": {
         contextWindow: 2e5,
-        maxOutputTokens: 65536,
+        maxOutputTokens: 128e3,
         supportsTools: true,
         supportsVision: false
       },
+      "openai/gpt-5.2": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.2-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.3": {
+        // supportsTools: gateway unavailable at probe time — fails closed
+        contextWindow: 128e3,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
       "openai/gpt-5.3-codex": {
+        // supportsTools: gateway unavailable at probe time — fails closed; override: 2026-08-29 probe: every request (6 plain + 3 tool attempts) returned a gateway 500, so the probe measured an incident, not the model. Codex's function calling is established by the 2026-07 Terminal-Bench / tau2 calibration trajectories in portfolio.ts. Hosts observing the 500s should drop it with RouterOptions.unavailableModels rather than this snapshot claiming the model cannot call tools.
         contextWindow: 4e5,
         maxOutputTokens: 128e3,
         supportsTools: true,
         supportsVision: false
       },
       "openai/gpt-5.4": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.4-mini": {
         contextWindow: 4e5,
         maxOutputTokens: 128e3,
         supportsTools: true,
@@ -34551,11 +34627,49 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       },
       "openai/gpt-5.4-nano": {
         contextWindow: 105e4,
-        maxOutputTokens: 32768,
+        maxOutputTokens: 128e3,
         supportsTools: true,
         supportsVision: false
       },
+      "openai/gpt-5.4-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
       "openai/gpt-5.5": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.5-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-luna": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-luna-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-sol": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-sol-pro": {
         contextWindow: 105e4,
         maxOutputTokens: 128e3,
         supportsTools: true,
@@ -34567,14 +34681,38 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
+      "openai/gpt-5.6-terra-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/o1": {
+        contextWindow: 2e5,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
       "openai/o3": {
         contextWindow: 2e5,
         maxOutputTokens: 1e5,
         supportsTools: true,
         supportsVision: false
       },
+      "openai/o3-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
       "openai/o4-mini": {
         contextWindow: 128e3,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "qwen/qwen3.7-flash": {
+        contextWindow: 1e6,
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: false
@@ -34585,47 +34723,53 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: false
       },
-      "xai/grok-3-mini": {
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
+      "qwen/qwen3.7-plus": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
         supportsTools: true,
         supportsVision: false
       },
-      "xai/grok-4-0709": {
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
+      "tencent/hy3": {
+        contextWindow: 262144,
+        maxOutputTokens: 128e3,
         supportsTools: true,
         supportsVision: false
       },
-      "xai/grok-4-1-fast-non-reasoning": {
-        contextWindow: 131072,
+      "xai/grok-4.3": {
+        contextWindow: 1e6,
         maxOutputTokens: 16384,
         supportsTools: true,
-        supportsVision: false
-      },
-      "xai/grok-4-1-fast-reasoning": {
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "xai/grok-4-fast-non-reasoning": {
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "xai/grok-4-fast-reasoning": {
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: false
+        supportsVision: true
       },
       "xai/grok-4.5": {
         contextWindow: 5e5,
         maxOutputTokens: 16384,
         supportsTools: true,
         supportsVision: true
+      },
+      "xai/grok-build-0.1": {
+        contextWindow: 256e3,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xiaomi/mimo-v2.5-pro": {
+        contextWindow: 1048576,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5-turbo": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
       },
       "zai/glm-5.1": {
         contextWindow: 2e5,
@@ -34635,249 +34779,549 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       },
       "zai/glm-5.2": {
         contextWindow: 1e6,
-        maxOutputTokens: 262144,
+        maxOutputTokens: 131072,
         supportsTools: true,
         supportsVision: false
+      },
+      "zai/glm-5.3": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5.3-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: true
       }
     });
     model_profiles_generated_default = {
-      "openai/gpt-5.5": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 6243.1,
-        p95LatencyMs: 9865,
-        outputTokensPerSecond: 12.53,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.4-pro": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 13015.5,
-        p95LatencyMs: 23976.4,
-        outputTokensPerSecond: 6.42,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.4-mini": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 5550,
-        p95LatencyMs: 6595.7,
-        outputTokensPerSecond: 11.96,
-        errorRate: 0.3333,
-        samples: 3
-      },
-      "openai/gpt-5.3-codex": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4617.1,
-        p95LatencyMs: 5800.7,
-        outputTokensPerSecond: 12.48,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-opus-4.8": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 3915.1,
-        p95LatencyMs: 6130.8,
-        outputTokensPerSecond: 16.33,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-opus-4.6": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 3765.5,
-        p95LatencyMs: 4257.2,
-        outputTokensPerSecond: 14.18,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-sonnet-4.6": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 3860.6,
-        p95LatencyMs: 5093.5,
-        outputTokensPerSecond: 13.85,
+      "anthropic/claude-fable-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9298.5,
+        p95LatencyMs: 9873.4,
+        outputTokensPerSecond: 55.17,
         errorRate: 0,
         samples: 3
       },
       "anthropic/claude-haiku-4.5": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 2734.9,
-        p95LatencyMs: 3181.6,
-        outputTokensPerSecond: 19.58,
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3157.4,
+        p95LatencyMs: 3170.7,
+        outputTokensPerSecond: 162.16,
         errorRate: 0,
         samples: 3
       },
-      "google/gemini-3.1-pro": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 13935.7,
-        p95LatencyMs: 26675.3,
-        outputTokensPerSecond: 77.47,
+      "anthropic/claude-opus-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6497.7,
+        p95LatencyMs: 6953.7,
+        outputTokensPerSecond: 78.99,
         errorRate: 0,
         samples: 3
       },
-      "google/gemini-3.5-flash": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4608.7,
-        p95LatencyMs: 8420.9,
-        outputTokensPerSecond: 57.88,
+      "anthropic/claude-opus-4.7": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5316.5,
+        p95LatencyMs: 6121.5,
+        outputTokensPerSecond: 97.34,
         errorRate: 0,
         samples: 3
       },
-      "google/gemini-3.1-flash-lite": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4619.7,
-        p95LatencyMs: 9927.1,
-        outputTokensPerSecond: 42.01,
+      "anthropic/claude-opus-4.8": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6216.1,
+        p95LatencyMs: 6847.7,
+        outputTokensPerSecond: 82.81,
         errorRate: 0,
         samples: 3
       },
-      "google/gemini-2.5-flash": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 5506.9,
-        p95LatencyMs: 11462.5,
-        outputTokensPerSecond: 65.19,
+      "anthropic/claude-opus-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7309,
+        p95LatencyMs: 7745.2,
+        outputTokensPerSecond: 70.17,
         errorRate: 0,
         samples: 3
       },
-      "deepseek/deepseek-v4-pro": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 6044.8,
-        p95LatencyMs: 10782.3,
-        outputTokensPerSecond: 22.47,
+      "anthropic/claude-sonnet-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6330.4,
+        p95LatencyMs: 6631.6,
+        outputTokensPerSecond: 81.03,
         errorRate: 0,
         samples: 3
       },
-      "deepseek/deepseek-reasoner": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4111.9,
-        p95LatencyMs: 5305.7,
-        outputTokensPerSecond: 16.46,
+      "anthropic/claude-sonnet-4.6": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6508,
+        p95LatencyMs: 6698.3,
+        outputTokensPerSecond: 78.6,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-sonnet-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6165.4,
+        p95LatencyMs: 6582.9,
+        outputTokensPerSecond: 83.62,
         errorRate: 0,
         samples: 3
       },
       "deepseek/deepseek-chat": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 2648.6,
-        p95LatencyMs: 3524.1,
-        outputTokensPerSecond: 16.73,
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4351.4,
+        p95LatencyMs: 4543.7,
+        outputTokensPerSecond: 117.78,
         errorRate: 0,
         samples: 3
       },
-      "moonshot/kimi-k2.7": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4295.4,
-        p95LatencyMs: 6153.8,
-        outputTokensPerSecond: 18.54,
+      "deepseek/deepseek-reasoner": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5201.2,
+        p95LatencyMs: 6079.6,
+        outputTokensPerSecond: 99.77,
         errorRate: 0,
         samples: 3
       },
-      "qwen/qwen3.7-max": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 30729.4,
-        p95LatencyMs: 39622,
-        outputTokensPerSecond: 36.89,
-        errorRate: 0.3333,
-        samples: 3
-      },
-      "xai/grok-4.3": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 6946.1,
-        p95LatencyMs: 9495.4,
-        outputTokensPerSecond: 65.3,
+      "deepseek/deepseek-v4-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 8781.2,
+        p95LatencyMs: 9881.1,
+        outputTokensPerSecond: 58.98,
         errorRate: 0,
         samples: 3
       },
-      "xai/grok-4.20-reasoning": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 3472.4,
-        p95LatencyMs: 5332.4,
-        outputTokensPerSecond: 13.27,
+      "google/gemini-2.5-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5416.4,
+        p95LatencyMs: 6442.8,
+        outputTokensPerSecond: 213.07,
         errorRate: 0,
         samples: 3
       },
-      "xai/grok-4.20-non-reasoning": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 5174.4,
-        p95LatencyMs: 6081.7,
-        outputTokensPerSecond: 10.21,
-        errorRate: 0.3333,
-        samples: 3
-      },
-      "xai/grok-4-1-fast-reasoning": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 13148.2,
-        p95LatencyMs: 19104.2,
-        outputTokensPerSecond: 4.28,
+      "google/gemini-2.5-flash-lite": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5002.6,
+        p95LatencyMs: 5780.3,
+        outputTokensPerSecond: 408.43,
         errorRate: 0,
         samples: 3
       },
-      "minimax/minimax-m3": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 3385,
-        p95LatencyMs: 4247.2,
-        outputTokensPerSecond: 15.16,
+      "google/gemini-2.5-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 28169.5,
+        p95LatencyMs: 29491.4,
+        outputTokensPerSecond: 147.3,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3-flash-preview": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4717.1,
+        p95LatencyMs: 5037.1,
+        outputTokensPerSecond: 198.71,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.1-flash-lite": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 2855.8,
+        p95LatencyMs: 3172.7,
+        outputTokensPerSecond: 286.91,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.1-pro": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 24194.1,
+        p95LatencyMs: 27269.6,
+        outputTokensPerSecond: 109.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.5-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5320.6,
+        p95LatencyMs: 5429.8,
+        outputTokensPerSecond: 226.21,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.5-flash-lite": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3515.8,
+        p95LatencyMs: 4363.4,
+        outputTokensPerSecond: 248.9,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.6-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 13020,
+        p95LatencyMs: 15383.1,
+        outputTokensPerSecond: 187.87,
         errorRate: 0,
         samples: 3
       },
       "minimax/minimax-m2.7": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4596.7,
-        p95LatencyMs: 6884.6,
-        outputTokensPerSecond: 17.03,
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 8761.1,
+        p95LatencyMs: 10199.3,
+        outputTokensPerSecond: 59.18,
         errorRate: 0,
         samples: 3
       },
-      "zai/glm-5.2": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4406.3,
-        p95LatencyMs: 6139.7,
-        outputTokensPerSecond: 10.41,
+      "minimax/minimax-m3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 11101.9,
+        p95LatencyMs: 26087.1,
+        outputTokensPerSecond: 101.12,
         errorRate: 0,
         samples: 3
       },
-      "zai/glm-5.1": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 7775.4,
-        p95LatencyMs: 9182.1,
-        outputTokensPerSecond: 6.08,
+      "moonshot/kimi-k3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 24498.9,
+        p95LatencyMs: 40365.3,
+        outputTokensPerSecond: 25.11,
+        errorRate: 0,
+        samples: 3
+      },
+      "nvidia/mistral-nemotron": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7349.6,
+        p95LatencyMs: 9932.3,
+        outputTokensPerSecond: 79.48,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 9324.6,
+        p95LatencyMs: 12992,
+        outputTokensPerSecond: 64.96,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "nvidia/nemotron-nano-12b-v2-vl": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5846.9,
+        p95LatencyMs: 5846.9,
+        outputTokensPerSecond: 87.57,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "nvidia/nemotron-nano-9b-v2": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5282.5,
+        p95LatencyMs: 5282.5,
+        outputTokensPerSecond: 96.92,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "nvidia/step-3.7-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4617.4,
+        p95LatencyMs: 5237.4,
+        outputTokensPerSecond: 112.92,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "openai/chat-latest": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3690.9,
+        p95LatencyMs: 4344,
+        outputTokensPerSecond: 111.85,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4.1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3527.9,
+        p95LatencyMs: 3831.7,
+        outputTokensPerSecond: 141.27,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4.1-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4268.2,
+        p95LatencyMs: 5101.5,
+        outputTokensPerSecond: 103.42,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4.1-nano": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3088.3,
+        p95LatencyMs: 3369.2,
+        outputTokensPerSecond: 150.31,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4o": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 2995.2,
+        p95LatencyMs: 3174.2,
+        outputTokensPerSecond: 171.32,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4o-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4751.5,
+        p95LatencyMs: 4930.4,
+        outputTokensPerSecond: 107.84,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4558.1,
+        p95LatencyMs: 5081.9,
+        outputTokensPerSecond: 113.25,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.2": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5436.6,
+        p95LatencyMs: 5928.8,
+        outputTokensPerSecond: 95.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.3-codex": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 15290.4,
+        p95LatencyMs: 15290.4,
+        outputTokensPerSecond: 33.49,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "openai/gpt-5.4": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5596,
+        p95LatencyMs: 5919.4,
+        outputTokensPerSecond: 91.67,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.4-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3377.8,
+        p95LatencyMs: 3646.8,
+        outputTokensPerSecond: 138.08,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.4-nano": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4040.4,
+        p95LatencyMs: 4205.9,
+        outputTokensPerSecond: 118.52,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6367.8,
+        p95LatencyMs: 7330.7,
+        outputTokensPerSecond: 81.29,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-luna": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6064.5,
+        p95LatencyMs: 7347.3,
+        outputTokensPerSecond: 87.93,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-luna-pro": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 13914.9,
+        p95LatencyMs: 13914.9,
+        outputTokensPerSecond: 36.79,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "openai/gpt-5.6-sol": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7720.2,
+        p95LatencyMs: 9108.2,
+        outputTokensPerSecond: 67.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-sol-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 11442.7,
+        p95LatencyMs: 13363.1,
+        outputTokensPerSecond: 148.75,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-terra": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4941,
+        p95LatencyMs: 5095.3,
+        outputTokensPerSecond: 103.69,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-terra-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3574.1,
+        p95LatencyMs: 4126.3,
+        outputTokensPerSecond: 133.59,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4324.9,
+        p95LatencyMs: 5838.1,
+        outputTokensPerSecond: 125.86,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5463.4,
+        p95LatencyMs: 5613.1,
+        outputTokensPerSecond: 93.8,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o3-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 2912.7,
+        p95LatencyMs: 3092.1,
+        outputTokensPerSecond: 176.49,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o4-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4958.7,
+        p95LatencyMs: 5313,
+        outputTokensPerSecond: 103.81,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3385.5,
+        p95LatencyMs: 4042.7,
+        outputTokensPerSecond: 153.94,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-max": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9387.1,
+        p95LatencyMs: 10490.2,
+        outputTokensPerSecond: 54.92,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-plus": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9766.6,
+        p95LatencyMs: 9798.2,
+        outputTokensPerSecond: 52.42,
+        errorRate: 0,
+        samples: 3
+      },
+      "tencent/hy3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6062.3,
+        p95LatencyMs: 7070.2,
+        outputTokensPerSecond: 87.3,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-4.3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9467.7,
+        p95LatencyMs: 10087.9,
+        outputTokensPerSecond: 48.36,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 13564.8,
+        p95LatencyMs: 17351.9,
+        outputTokensPerSecond: 60.71,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-build-0.1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 16394.8,
+        p95LatencyMs: 18035.4,
+        outputTokensPerSecond: 96.86,
+        errorRate: 0,
+        samples: 3
+      },
+      "xiaomi/mimo-v2.5-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 12070.7,
+        p95LatencyMs: 12386.8,
+        outputTokensPerSecond: 42.44,
         errorRate: 0,
         samples: 3
       },
       "zai/glm-5": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 4159.4,
-        p95LatencyMs: 4992.7,
-        outputTokensPerSecond: 10.28,
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6839.7,
+        p95LatencyMs: 7261.4,
+        outputTokensPerSecond: 75.16,
         errorRate: 0,
         samples: 3
       },
-      "free/qwen3-coder-480b": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 2063.9,
-        p95LatencyMs: 3646.3,
-        outputTokensPerSecond: 39.8,
+      "zai/glm-5-turbo": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 55348.5,
+        p95LatencyMs: 114086.6,
+        outputTokensPerSecond: 14.64,
         errorRate: 0,
         samples: 3
       },
-      "free/mistral-large-3-675b": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 3147.5,
-        p95LatencyMs: 5555.3,
-        outputTokensPerSecond: 27.76,
+      "zai/glm-5.1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 15658.4,
+        p95LatencyMs: 17307.1,
+        outputTokensPerSecond: 32.9,
         errorRate: 0,
         samples: 3
       },
-      "free/nemotron-3-nano-omni-30b-a3b-reasoning": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 6508.4,
-        p95LatencyMs: 14252.7,
-        outputTokensPerSecond: 68.26,
+      "zai/glm-5.2": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 10308.5,
+        p95LatencyMs: 15127.6,
+        outputTokensPerSecond: 54.87,
         errorRate: 0,
         samples: 3
       },
-      "free/glm-4.7": {
-        measuredAt: "2026-07-21T10:21:31Z",
-        latencyMs: 2014.8,
-        p95LatencyMs: 3039.9,
-        outputTokensPerSecond: 39.92,
+      "zai/glm-5.3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7272.4,
+        p95LatencyMs: 7998.1,
+        outputTokensPerSecond: 71.09,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.3-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 10545.3,
+        p95LatencyMs: 11672.4,
+        outputTokensPerSecond: 49.01,
         errorRate: 0,
         samples: 3
       }
@@ -34890,11 +35334,6 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         measuredAt: "2026-03-16T13:50:48Z",
         latencyMs: 2305,
         outputTokensPerSecond: 140.6
-      },
-      "anthropic/claude-opus-4.6": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 2139,
-        outputTokensPerSecond: 119.7
       },
       "anthropic/claude-sonnet-4.6": {
         measuredAt: "2026-03-16T13:50:48Z",
@@ -34929,11 +35368,6 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         latencyMs: 1609,
         outputTokensPerSecond: 167.2
       },
-      "moonshot/kimi-k2.5": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1646,
-        outputTokensPerSecond: 155.7
-      },
       "openai/gpt-4o-mini": {
         measuredAt: "2026-03-16T13:50:48Z",
         latencyMs: 2764,
@@ -34943,18 +35377,6 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         measuredAt: "2026-03-16T13:50:48Z",
         latencyMs: 7935,
         outputTokensPerSecond: 32.3
-      },
-      "xai/grok-4-1-fast-non-reasoning": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1244,
-        outputTokensPerSecond: 205.8,
-        intelligenceIndex: 41
-      },
-      "xai/grok-4-1-fast-reasoning": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1454,
-        outputTokensPerSecond: 176.2,
-        intelligenceIndex: 41
       }
     });
     DEFAULT_PORTFOLIO_WEIGHTS = {
@@ -35111,7 +35533,7 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       }
     };
     DEFAULT_ROUTING_CONFIG = {
-      version: "3.4",
+      version: "3.5",
       strategy: "portfolio",
       portfolio: {
         auto: {
@@ -36165,95 +36587,129 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         // Below this confidence → ambiguous (null tier)
         confidenceThreshold: 0.7
       },
+      // ─── Tier chains ───
+      //
+      // Catalog refresh 2026-08-29 (V3.5). Every chain below names only models
+      // the public catalog lists (GET https://blockrun.ai/api/v1/models). Ids the
+      // gateway withholds (`hidden: true`) — kimi-k2.5/k2.6/k2.7, the grok-4-fast
+      // and grok-4-1-fast pairs, grok-4-0709, claude-opus-4.6, gemini-3-pro-preview,
+      // the whole `free/*` namespace — were removed everywhere, including fallback
+      // rungs, so a routed model is always one a user can find on blockrun.ai/models.
+      //
+      // Primaries moved only where portfolio.ts already carries calibration
+      // evidence for the successor (Sonnet 5 over Sonnet 4.6, GPT-5 Mini for
+      // agentic MEDIUM, Gemini 3.5 Flash where Kimi K2.7 was). Newcomers with no
+      // trajectory evidence yet (gemini-3.6-flash, glm-5.3, glm-5.3-flash,
+      // gpt-5.6-luna, grok-4.3, minimax-m3, qwen3.7-plus) enter as fallback rungs;
+      // promotion waits for a calibration run, because version recency is not a
+      // quality signal.
+      //
+      // Latency figures in comments are the 2026-08-29 gateway probe
+      // (model-profiles.generated.json); prices are the catalog list.
       // Auto (balanced) tier configs - current default smart routing
-      // Benchmark-tuned 2026-03-16: balancing quality (retention) + latency
       tiers: {
         SIMPLE: {
           primary: "google/gemini-2.5-flash",
-          // 1,238ms, IQ 20, 60% retention (best) — fast AND quality
+          // $0.30/$2.50 — 60% retention (best) in the 2026-03 run; still the fastest quality answer
           fallback: [
             "google/gemini-3-flash-preview",
-            // 1,398ms, IQ 46 — smarter fallback
+            // $0.50/$3 — GPQA 5/6 in the 2026-07 calibration
+            "google/gemini-3.5-flash-lite",
+            // $0.30/$2.50, 1M ctx, thinking mode — same price as 2.5 Flash, newer generation
             "deepseek/deepseek-chat",
-            // V4 Flash chat ($0.20/$0.40, 1M ctx) — repriced 2026-04-24
-            "moonshot/kimi-k2.5",
-            // 1,646ms, IQ 47, strong quality
+            // $0.14/$0.28, 1M ctx
             "google/gemini-3.1-flash-lite",
-            // $0.25/$1.50, 1M context — newest flash-lite
-            "google/gemini-2.5-flash-lite",
-            // 1,353ms, $0.10/$0.40
+            // $0.25/$1.50, 1M ctx
+            "openai/gpt-5.6-luna",
+            // $0.20/$1.20, 1M ctx — GPT-5.6 cost tier (cut 2026-07-30)
             "openai/gpt-5.4-nano",
-            // $0.20/$1.25, 1M context
-            "xai/grok-4-fast-non-reasoning",
-            // 1,143ms, $0.20/$0.50 — fast fallback
+            // $0.20/$1.25, 1M ctx
+            "google/gemini-2.5-flash-lite",
+            // $0.10/$0.40
             "nvidia/step-3.7-flash"
-            // FREE backstop — new NVIDIA free tier (gpt-oss-120b now 400s; probed 2026-08-21)
+            // FREE backstop — NVIDIA free tier (probed 2026-08-21)
           ]
         },
         MEDIUM: {
-          primary: "moonshot/kimi-k2.7",
-          // $0.95/$4.00, 256K ctx, multi-modal + reasoning — Moonshot flagship; promoted from K2.6 (2026-06-14) after BlockRun added K2.7 + hid K2.6. Same price as K2.6.
+          // Was moonshot/kimi-k2.7 (hidden 2026-08). Gemini 3.5 Flash is the
+          // calibrated successor: MGSM 5/5, GPQA 4/6, extraction band (portfolio.ts).
+          primary: "google/gemini-3.5-flash",
+          // $1.50/$9, 1M ctx, vision + tools
           fallback: [
-            "moonshot/kimi-k2.6",
-            // identical-cost in-family hot swap (K2.6 still routable)
-            "moonshot/kimi-k2.5",
-            // $0.60/$3.00 — graceful-degradation backstop
+            "google/gemini-3.6-flash",
+            // $1.50/$7.50 — newest Flash, output 17% cheaper than 3.5; awaiting calibration
+            "zai/glm-5.3-flash",
+            // $0.15/$0.50, 1M ctx, vision + tools verified live 2026-08-27
+            "openai/gpt-5.6-terra",
+            // $2/$12, 1M ctx — GPT-5.6 balanced tier
             "google/gemini-3-flash-preview",
-            // 1,398ms, IQ 46 — nearly same IQ, faster + cheaper
+            // $0.50/$3
             "deepseek/deepseek-chat",
-            // 1,431ms, IQ 32, 41% retention
+            // $0.14/$0.28
             "google/gemini-2.5-flash",
-            // 1,238ms, 60% retention
+            // $0.30/$2.50
+            "minimax/minimax-m3",
+            // $0.30/$1.20, 1M ctx
             "google/gemini-3.1-flash-lite",
-            // $0.25/$1.50, 1M context
-            "google/gemini-2.5-flash-lite",
-            // 1,353ms, $0.10/$0.40
-            "xai/grok-4-1-fast-non-reasoning",
-            // 1,244ms, fast fallback
-            "xai/grok-3-mini"
-            // 1,202ms, $0.30/$0.50
+            // $0.25/$1.50
+            "openai/gpt-5.6-luna",
+            // $0.20/$1.20
+            "google/gemini-2.5-flash-lite"
+            // $0.10/$0.40
           ]
         },
         COMPLEX: {
           primary: "google/gemini-3.1-pro",
-          // 1,609ms, IQ 57 — fast flagship quality
+          // $2/$12 — proven long-context flagship (portfolio.ts long_context lead)
           fallback: [
-            "google/gemini-3-flash-preview",
-            // 1,398ms, IQ 46 — fast + smart
-            "xai/grok-4-0709",
-            // 1,348ms, IQ 41
-            "google/gemini-2.5-pro",
-            // 1,294ms
+            "google/gemini-3.6-flash",
+            // $1.50/$7.50 — Pro-level quality at Flash price (Google's claim; uncalibrated here)
+            "google/gemini-3.5-flash",
+            // $1.50/$9 — calibrated
             "anthropic/claude-sonnet-5",
-            // near-Opus quality at Sonnet cost, 1M ctx
+            // $3/$15 — near-Opus quality, tau2 + Terminal-Bench calibrated
+            "xai/grok-4.5",
+            // $2.50/$9 — 503-resistant, independent infra (was grok-4-0709, now hidden)
+            "google/gemini-2.5-pro",
+            // $1.25/$10
             "anthropic/claude-sonnet-4.6",
-            // 2,110ms, IQ 52 — quality fallback
-            "deepseek/deepseek-chat",
-            // 1,431ms, IQ 32
-            "google/gemini-2.5-flash",
-            // 1,238ms, IQ 20 — cheap last resort
+            // $3/$15
             "openai/gpt-5.6-terra",
-            // GPT-5.6 balanced tier — newest generation, stable (Sol excluded: #202)
+            // $2/$12 — GPT-5.6 balanced tier (Sol excluded: #202)
             "openai/gpt-5.5",
-            // Prior OpenAI flagship — 1M+ ctx, native agent + computer use; benchmark TBD
-            "openai/gpt-5.4"
-            // 6,213ms, IQ 57 — previous flagship, benchmarked
+            // $5/$30 — prior OpenAI flagship
+            "openai/gpt-5.4",
+            // $2.50/$15 — previous flagship, benchmarked
+            "zai/glm-5.3",
+            // $1.40/$4.40, 1M ctx, always-on thinking — verified live 2026-08-19
+            "moonshot/kimi-k3",
+            // $3/$15, 1M ctx — Moonshot flagship (K2.7 successor)
+            "deepseek/deepseek-v4-pro",
+            // $0.435/$0.87 — strongest open-weight reasoner
+            "deepseek/deepseek-chat",
+            // $0.14/$0.28 — cheap last resort
+            "google/gemini-2.5-flash"
+            // $0.30/$2.50
           ]
         },
         REASONING: {
-          primary: "xai/grok-4-1-fast-reasoning",
-          // 1,454ms, $0.20/$0.50
+          // Was xai/grok-4-1-fast-reasoning ($0.20/$0.50, hidden 2026-08). DeepSeek
+          // Reasoner is the cheapest listed reasoner at the same 1M context.
+          primary: "deepseek/deepseek-reasoner",
+          // $0.14/$0.28, 1M ctx
           fallback: [
-            "xai/grok-4-fast-reasoning",
-            // 1,298ms, $0.20/$0.50
-            "deepseek/deepseek-reasoner",
-            // V4 Flash thinking ($0.20/$0.40, 1M ctx)
             "deepseek/deepseek-v4-pro",
-            // V4 Pro flagship ($0.50/$1.00 promo through 2026-05-31, list $2/$4) — strongest open-weight reasoner
+            // $0.435/$0.87 — calibrated reasoning band 0.95
+            "xai/grok-4.3",
+            // $1.50/$4, 1M ctx — xAI reasoning model, vision
+            "qwen/qwen3.7-plus",
+            // $0.32/$1.28, 1M ctx — reasoning; needs a generous max_tokens (thinking is billed)
+            "google/gemini-3.5-flash",
+            // $1.50/$9 — MGSM 5/5
             "openai/o4-mini",
-            // 2,328ms ($1.10/$4.40)
+            // $1.10/$4.40
             "openai/o3"
-            // 2,862ms
+            // $2/$8
           ]
         }
       },
@@ -36261,90 +36717,119 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       ecoTiers: {
         SIMPLE: {
           primary: "nvidia/step-3.7-flash",
-          // FREE! $0.00/$0.00 — new NVIDIA free tier flagship
+          // FREE — NVIDIA free tier flagship
           fallback: [
             "nvidia/nemotron-nano-9b-v2",
-            // FREE — compact + fast (~0.7s), high-volume light tasks
-            // This head keeps rotting with NVIDIA's free hosting: deepseek-v4-flash
-            // (410, 2026-08-12), seed-oss-36b (410, 2026-08-03), then gpt-oss-120b/20b
-            // (400 Unknown model, probed 2026-08-21). Each retirement retargets the
-            // two free rungs to the current free tier; the paid rungs below never move.
-            "google/gemini-3.1-flash-lite",
-            // $0.25/$1.50 — newest flash-lite
-            "openai/gpt-5.4-nano",
-            // $0.20/$1.25 — fast nano
+            // FREE — compact + fast, high-volume light tasks
+            // The free head keeps rotting with NVIDIA's hosting (deepseek-v4-flash
+            // 410 2026-08-12, seed-oss-36b 410 2026-08-03, gpt-oss-120b/20b 400
+            // 2026-08-21). Each retirement retargets the two free rungs to the
+            // current free tier; the paid rungs below never move.
             "google/gemini-2.5-flash-lite",
-            // $0.10/$0.40
-            "xai/grok-4-fast-non-reasoning"
-            // $0.20/$0.50
+            // $0.10/$0.40 — cheapest paid rung
+            "zai/glm-5.3-flash",
+            // $0.15/$0.50, 1M ctx, vision + tools
+            "openai/gpt-5.6-luna",
+            // $0.20/$1.20, 1M ctx
+            "openai/gpt-5.4-nano",
+            // $0.20/$1.25
+            "google/gemini-3.1-flash-lite"
+            // $0.25/$1.50
           ]
         },
         MEDIUM: {
-          primary: "google/gemini-3.1-flash-lite",
-          // $0.25/$1.50 — newest flash-lite
+          primary: "zai/glm-5.3-flash",
+          // $0.15/$0.50, 1M ctx, vision + tools verified live — cheapest full-capability model
           fallback: [
+            "deepseek/deepseek-chat",
+            // $0.14/$0.28
+            "google/gemini-3.1-flash-lite",
+            // $0.25/$1.50
+            "openai/gpt-5.6-luna",
+            // $0.20/$1.20
             "openai/gpt-5.4-nano",
             // $0.20/$1.25
             "google/gemini-2.5-flash-lite",
             // $0.10/$0.40
-            "xai/grok-4-fast-non-reasoning",
             "google/gemini-2.5-flash"
+            // $0.30/$2.50
           ]
         },
         COMPLEX: {
-          primary: "google/gemini-3.1-flash-lite",
-          // $0.25/$1.50
+          primary: "zai/glm-5.3-flash",
+          // $0.15/$0.50, 1M ctx
           fallback: [
-            "google/gemini-2.5-flash-lite",
-            "xai/grok-4-0709",
-            "google/gemini-2.5-flash",
-            "deepseek/deepseek-chat"
+            "deepseek/deepseek-chat",
+            // $0.14/$0.28, 1M ctx
+            "minimax/minimax-m3",
+            // $0.30/$1.20, 1M ctx
+            "deepseek/deepseek-v4-pro",
+            // $0.435/$0.87
+            "google/gemini-3.1-flash-lite",
+            // $0.25/$1.50
+            "google/gemini-2.5-flash"
+            // $0.30/$2.50
           ]
         },
         REASONING: {
-          primary: "xai/grok-4-1-fast-reasoning",
-          // $0.20/$0.50
+          primary: "deepseek/deepseek-reasoner",
+          // $0.14/$0.28, 1M ctx — cheapest listed reasoner
           fallback: [
-            "xai/grok-4-fast-reasoning",
-            "deepseek/deepseek-reasoner",
-            // V4 Flash thinking — $0.20/$0.40
-            "deepseek/deepseek-v4-pro"
-            // V4 Pro flagship — $0.50/$1.00 promo, post-promo $2/$4
+            "deepseek/deepseek-v4-pro",
+            // $0.435/$0.87
+            "qwen/qwen3.7-plus",
+            // $0.32/$1.28 — reasoning
+            "minimax/minimax-m3",
+            // $0.30/$1.20 — reasoning + coding
+            "zai/glm-5.3-flash"
+            // $0.15/$0.50 — reasoning tokens alongside content
           ]
         }
       },
       // Premium tier configs - best quality (blockrun/premium)
-      // codex=complex coding, kimi=simple coding, sonnet=reasoning/instructions, opus=architecture/PM/audits
+      // codex=complex coding, flash=simple coding, sonnet=reasoning/instructions, fable/opus=architecture/PM/audits
       premiumTiers: {
         SIMPLE: {
-          primary: "moonshot/kimi-k2.7",
-          // $0.95/$4.00 - Moonshot flagship (256K ctx, multi-modal + reasoning); promoted from K2.6 (2026-06-14), same price
+          // Was moonshot/kimi-k2.7 (hidden 2026-08).
+          primary: "google/gemini-3.5-flash",
+          // $1.50/$9, 1M ctx, vision + tools — calibrated
           fallback: [
-            "moonshot/kimi-k2.6",
-            // identical-cost in-family hot swap (K2.6 still routable)
-            "moonshot/kimi-k2.5",
-            // $0.60/$3.00 - proven reliable backstop when Moonshot direct API falters
-            "google/gemini-2.5-flash",
-            // 60% retention, fast growth
+            "google/gemini-3.6-flash",
+            // $1.50/$7.50 — newest Flash
             "anthropic/claude-haiku-4.5",
-            "google/gemini-2.5-flash-lite",
+            // $1/$5
+            "zai/glm-5.3",
+            // $1.40/$4.40, 1M ctx
+            "google/gemini-2.5-flash",
+            // $0.30/$2.50
+            "google/gemini-3.5-flash-lite",
+            // $0.30/$2.50
             "deepseek/deepseek-chat"
+            // $0.14/$0.28
           ]
         },
         MEDIUM: {
           primary: "openai/gpt-5.3-codex",
-          // $1.75/$14 - 400K context, 128K output, replaces 5.2
+          // $1.75/$14 - 400K context, 128K output — code_edit/debug lead (portfolio.ts)
           fallback: [
-            "moonshot/kimi-k2.7",
-            // Moonshot flagship
-            "moonshot/kimi-k2.6",
-            "moonshot/kimi-k2.5",
-            "google/gemini-2.5-flash",
-            // 60% retention, good coding capability
-            "google/gemini-2.5-pro",
-            "xai/grok-4-0709",
             "anthropic/claude-sonnet-5",
-            "anthropic/claude-sonnet-4.6"
+            // $3/$15 — code_agent band 0.98
+            "moonshot/kimi-k3",
+            // $3/$15, 1M ctx — Moonshot flagship
+            "zai/glm-5.3",
+            // $1.40/$4.40 — long-horizon coding
+            "google/gemini-3.6-flash",
+            // $1.50/$7.50
+            "google/gemini-3.5-flash",
+            // $1.50/$9
+            "google/gemini-2.5-pro",
+            // $1.25/$10
+            "xai/grok-4.5",
+            // $2.50/$9
+            "anthropic/claude-sonnet-4.6",
+            // $3/$15
+            "openai/gpt-5.6-terra"
+            // $2/$12
           ]
         },
         COMPLEX: {
@@ -36354,8 +36839,8 @@ ${value.slice(-(scanLimit - prefixLength))}`;
           // Best quality for complex tasks — Mythos-class flagship above Opus ($10/$50, 1M ctx, always-on thinking)
           // Fallback chain de-Gemini'd 2026-04-22: when Anthropic 503s, Gemini is
           // also prone to "high demand" 503s (correlated failure — everyone falls
-          // back to Google at the same time). Prefer xAI Grok → Moonshot → OpenAI
-          // flagship → DeepSeek → NVIDIA free instead.
+          // back to Google at the same time). Prefer in-family → xAI → Moonshot →
+          // OpenAI flagship → Z.AI → DeepSeek → NVIDIA free instead.
           fallback: [
             "anthropic/claude-opus-5",
             // in-family hot swap first (half the price, 1M ctx + adaptive thinking)
@@ -36363,52 +36848,54 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             // in-family hot swap (identical cost to 5)
             "anthropic/claude-opus-4.7",
             // in-family hot swap (identical cost to 4.8)
-            "anthropic/claude-opus-4.6",
-            // in-family hot swap
             "anthropic/claude-sonnet-5",
             // Sonnet-tier drop-down, near-Opus quality
             "anthropic/claude-sonnet-4.6",
             "xai/grok-4.5",
-            // xAI flagship — 503-resistant, direct-xAI SKU (added 2026-07-14)
-            "xai/grok-4-0709",
-            // 503-resistant flagship
-            "moonshot/kimi-k2.7",
+            // xAI flagship — 503-resistant, direct-xAI SKU
+            "moonshot/kimi-k3",
             // Moonshot flagship, independent infra
-            "moonshot/kimi-k2.6",
-            "moonshot/kimi-k2.5",
             "openai/gpt-5.6-terra",
-            // GPT-5.6 balanced tier — newest generation, stable (Sol excluded: #202)
+            // GPT-5.6 balanced tier — stable (Sol excluded: #202)
             "openai/gpt-5.5",
             // Prior OpenAI flagship — 1M+ ctx, native agent + computer use
             "openai/gpt-5.4",
             // Previous flagship (slow but stable, benchmarked at 6,213ms)
             "openai/gpt-5.3-codex",
+            "zai/glm-5.3",
+            // Z.AI flagship, 1M ctx
+            "deepseek/deepseek-v4-pro",
+            // strongest open-weight reasoner
             "deepseek/deepseek-chat",
             // Cheap, reliable
             "nvidia/step-3.7-flash"
-            // NVIDIA free ultimate backstop (was gpt-oss-120b; 400s since ~2026-08)
+            // NVIDIA free ultimate backstop
           ]
         },
         REASONING: {
-          primary: "anthropic/claude-sonnet-4.6",
-          // 2,110ms, $3/$15 - best for reasoning/instructions
+          // Sonnet 5 promoted over Sonnet 4.6 (same price; reasoning band 0.98 for both,
+          // plus Sonnet 5's tau2/BrowseComp trajectory evidence).
+          primary: "anthropic/claude-sonnet-5",
+          // $3/$15, 1M ctx, adaptive thinking
           fallback: [
-            "anthropic/claude-sonnet-5",
-            // in-family hot swap — same cost, adaptive thinking, 1M ctx
+            "anthropic/claude-sonnet-4.6",
+            // in-family hot swap — same cost
             "anthropic/claude-opus-5",
             // Newest flagship Opus w/ adaptive thinking
             "anthropic/claude-opus-4.8",
             // Prior flagship Opus — identical cost to 5
             "anthropic/claude-opus-4.7",
             // Flagship Opus w/ adaptive thinking
-            "anthropic/claude-opus-4.6",
-            // 2,139ms
-            "xai/grok-4-1-fast-reasoning",
-            // 1,454ms, cheap fast reasoning
+            "xai/grok-4.5",
+            // reasoning band 0.94
+            "deepseek/deepseek-v4-pro",
+            // reasoning band 0.95
+            "xai/grok-4.3",
+            // $1.50/$4 — xAI reasoning model
             "openai/o4-mini",
-            // 2,328ms ($1.10/$4.40)
+            // $1.10/$4.40
             "openai/o3"
-            // 2,862ms
+            // $2/$8
           ]
         }
       },
@@ -36418,101 +36905,102 @@ ${value.slice(-(scanLimit - prefixLength))}`;
           primary: "openai/gpt-4o-mini",
           // $0.15/$0.60 - best tool compliance at lowest cost
           fallback: [
-            "moonshot/kimi-k2.5",
-            // 1,646ms, strong tool use quality
+            "openai/gpt-5.6-luna",
+            // $0.20/$1.20 — lightweight agentic tier of GPT-5.6
+            "zai/glm-5.3-flash",
+            // $0.15/$0.50 — tool calls verified live 2026-08-27
             "anthropic/claude-haiku-4.5",
-            // 2,305ms
-            "xai/grok-4-1-fast-non-reasoning"
-            // 1,244ms, fast fallback
+            // $1/$5
+            "google/gemini-2.5-flash"
+            // $0.30/$2.50
           ]
         },
         MEDIUM: {
-          primary: "moonshot/kimi-k2.7",
-          // $0.95/$4.00 — Moonshot flagship, strong tool use; promoted from K2.6 (2026-06-14) after BlockRun added K2.7 + hid K2.6. Same price.
+          // Was moonshot/kimi-k2.7 (hidden 2026-08). GPT-5 Mini carries the
+          // Terminal-Bench and tau2 trajectory evidence in portfolio.ts.
+          primary: "openai/gpt-5-mini",
+          // $0.25/$2 — 4/7 Terminal-Bench, 5/6 tau2 airline
           fallback: [
-            "moonshot/kimi-k2.6",
-            // identical-cost in-family hot swap (K2.6 still routable)
-            "moonshot/kimi-k2.5",
-            // $0.60/$3.00 — graceful-degradation backstop
-            "xai/grok-4-1-fast-non-reasoning",
-            // 1,244ms, fast fallback
+            "google/gemini-3.5-flash",
+            // $1.50/$9 — tool_agent band 0.88
+            "zai/glm-5.3-flash",
+            // $0.15/$0.50 — tools verified
+            "openai/gpt-5.6-terra",
+            // $2/$12
             "openai/gpt-4o-mini",
-            // 2,764ms, reliable tool calling
+            // $0.15/$0.60 — reliable tool calling
             "anthropic/claude-haiku-4.5",
-            // 2,305ms
-            "deepseek/deepseek-chat"
-            // 1,431ms
+            // $1/$5
+            "deepseek/deepseek-chat",
+            // $0.14/$0.28
+            "moonshot/kimi-k3"
+            // $3/$15 — tool_agent band 0.85
           ]
         },
         COMPLEX: {
-          primary: "anthropic/claude-sonnet-4.6",
-          // 2,110ms — best agentic quality
+          // Sonnet 5 promoted over Sonnet 4.6: tau2 airline + retail reward 1.0,
+          // Terminal-Bench safety band lead (portfolio.ts).
+          primary: "anthropic/claude-sonnet-5",
+          // $3/$15 — best agentic quality per trajectory evidence
           // Fallback chain de-Gemini'd 2026-04-22: Gemini's "high demand" 503s
           // correlate with Anthropic outages (everyone falls back together).
           // Prefer 503-resistant providers first.
           fallback: [
-            "anthropic/claude-sonnet-5",
-            // in-family hot swap — same cost, near-Opus agentic quality
+            "anthropic/claude-sonnet-4.6",
+            // in-family hot swap — same cost
             "anthropic/claude-opus-5",
             // Newest flagship Opus — in-family hot swap
             "anthropic/claude-opus-4.8",
             // Prior flagship Opus — identical cost to 5
             "anthropic/claude-opus-4.7",
             // Flagship Opus — in-family hot swap
-            "anthropic/claude-opus-4.6",
-            // 2,139ms
-            "xai/grok-4-0709",
-            // 1,348ms — strong tool use, independent infra
-            "moonshot/kimi-k2.7",
-            // Moonshot flagship — strong tool use, independent infra
-            "moonshot/kimi-k2.5",
-            // cost-stability backstop
+            "xai/grok-4.5",
+            // xAI flagship — strong tool use, independent infra
+            "moonshot/kimi-k3",
+            // Moonshot flagship — independent infra
             "openai/gpt-5.6-terra",
-            // GPT-5.6 balanced tier — newest generation, stable (Sol excluded: #202)
+            // GPT-5.6 balanced tier — stable (Sol excluded: #202)
             "openai/gpt-5.5",
             // Prior flagship — native agent + computer use (exactly the agentic-tier use case)
             "openai/gpt-5.4",
-            // Previous flagship — 6,213ms, reliable
+            // Previous flagship — reliable
+            "openai/gpt-5.3-codex",
+            // code_agent lead
+            "zai/glm-5.3",
+            // long-horizon coding
+            "deepseek/deepseek-v4-pro",
+            // retail high-risk 3/3
             "deepseek/deepseek-chat",
-            // 1,431ms — cheap, reliable
+            // cheap, reliable
             "nvidia/step-3.7-flash"
-            // NVIDIA free ultimate backstop (was gpt-oss-120b; 400s since ~2026-08)
+            // NVIDIA free ultimate backstop
           ]
         },
         REASONING: {
-          primary: "anthropic/claude-sonnet-4.6",
-          // 2,110ms — strong tool use + reasoning
+          primary: "anthropic/claude-sonnet-5",
+          // $3/$15 — strong tool use + adaptive thinking
           fallback: [
-            "anthropic/claude-sonnet-5",
-            // in-family hot swap — same cost, adaptive thinking
+            "anthropic/claude-sonnet-4.6",
+            // in-family hot swap — same cost
             "anthropic/claude-opus-5",
             // Newest flagship Opus w/ adaptive thinking
             "anthropic/claude-opus-4.8",
             // Prior flagship Opus — identical cost to 5
             "anthropic/claude-opus-4.7",
             // Flagship Opus w/ adaptive thinking
-            "anthropic/claude-opus-4.6",
-            // 2,139ms
-            "xai/grok-4-1-fast-reasoning",
-            // 1,454ms
+            "xai/grok-4.5",
+            // reasoning band 0.94
+            "deepseek/deepseek-v4-pro",
+            // reasoning band 0.95
             "deepseek/deepseek-reasoner"
-            // 1,454ms
+            // $0.14/$0.28
           ]
         }
       },
-      // Time-windowed promotions — auto-applied when active, ignored when expired
-      promotions: [
-        {
-          name: "GLM-5.1 Launch Promo ($0.001 flat)",
-          startDate: "2026-04-01",
-          endDate: "2026-05-01",
-          tierOverrides: {
-            SIMPLE: { primary: "zai/glm-5.1" }
-          },
-          profiles: ["auto"]
-          // only auto profile — eco stays free, premium stays premium
-        }
-      ],
+      // Time-windowed promotions — auto-applied when active, ignored when expired.
+      // The GLM-5.1 launch promo (2026-04-01 → 2026-05-01) was the last entry and
+      // has expired; the list is kept empty so the mechanism stays wired.
+      promotions: [],
       overrides: {
         maxTokensForceComplex: 1e5,
         structuredOutputMinTier: "MEDIUM",
@@ -36894,12 +37382,16 @@ var init_models = __esm({
       "xai/grok-3-fast": "xai/grok-4-fast-reasoning",
       // delisted (too expensive)
       // NVIDIA — backward compat aliases (nvidia/xxx → free/xxx)
-      // Default free model is gpt-oss-120b (heavy user demand). New free models
-      // added 2026-04-29 — deepseek-v4-pro/flash, nemotron-omni — are additions,
-      // not replacements. Retired-with-redirect entries below mirror BlockRun
-      // server-side decommissioning of slow models (nemotron family, etc.).
-      nvidia: "free/gpt-oss-120b",
+      // Default free model is step-3.7-flash — the same model @blockrun/router-core
+      // opens the eco SIMPLE tier on. It replaced gpt-oss-120b on 2026-08-29:
+      // gpt-oss-120b went dead upstream on 2026-08-16 (NVIDIA still LISTS it, but a
+      // completion hangs until the client gives up — blockrun #391 retargeted its
+      // whole free cascade off it, and the gateway now answers 400 Unknown model
+      // for the `free/` id). Pins that NAME gpt-oss stay routable below — the
+      // gateway server-redirects them — but nothing generic may land on it.
+      nvidia: "free/step-3.7-flash",
       "gpt-120b": "free/gpt-oss-120b",
+      // names the model itself — gateway redirects
       "gpt-20b": "free/gpt-oss-20b",
       "nvidia/gpt-oss-120b": "free/gpt-oss-120b",
       "nvidia/gpt-oss-20b": "free/gpt-oss-20b",
@@ -36974,9 +37466,10 @@ var init_models = __esm({
       // no live free Llama left (maverick died 2026-07)
       // qwen3-coder-480b retired 2026-06-14 → seed-oss-36b, which then EOL'd 2026-08-03.
       // Follow the gateway's own retarget rather than chaining to a second dead model.
-      "qwen-coder": "free/gpt-oss-120b",
-      "qwen-coder-free": "free/gpt-oss-120b",
-      "qwen-thinking": "free/gpt-oss-120b",
+      "qwen-coder": "free/step-3.7-flash",
+      // no live free Qwen; follows the free default
+      "qwen-coder-free": "free/step-3.7-flash",
+      "qwen-thinking": "free/step-3.7-flash",
       // qwen3-next died 2026-07-17; no live free Qwen left
       "qwen3-next": "free/qwen3-next-80b-a3b-instruct",
       // explicit-ish pin — gateway redirects
@@ -36987,8 +37480,8 @@ var init_models = __esm({
       // seed-oss pins name the model itself — kept routable, the gateway redirects them.
       "seed-oss": "free/seed-oss-36b",
       "seed-oss-36b": "free/seed-oss-36b",
-      "coder-free": "free/gpt-oss-120b",
-      // generic "a free coder" → follows the gateway retarget
+      "coder-free": "free/step-3.7-flash",
+      // generic "a free coder" → follows the free default
       "mistral-nemotron": "free/mistral-nemotron",
       "step-flash": "free/step-3.7-flash",
       "step-3.7-flash": "free/step-3.7-flash",
@@ -37000,21 +37493,25 @@ var init_models = __esm({
       "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
-      // Retired shorthand aliases redirect to live successors (2026-07-17 map:
-      // llama-4-maverick died, so the old catch-all target moved to gpt-oss-120b)
+      // Retired shorthand aliases redirect to live successors. The catch-all target
+      // moved llama-4-maverick → gpt-oss-120b (2026-07-17) → step-3.7-flash
+      // (2026-08-29, gpt-oss-120b hung upstream; see the NVIDIA block above).
       nemotron: "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       // strongest live Nemotron
-      "nemotron-ultra": "free/gpt-oss-120b",
-      "nemotron-253b": "free/gpt-oss-120b",
-      "nemotron-super": "free/gpt-oss-120b",
-      "nemotron-49b": "free/gpt-oss-120b",
-      "nemotron-120b": "free/gpt-oss-120b",
-      devstral: "free/gpt-oss-120b",
-      // seed-oss-36b EOL'd 2026-08-03; matches blockrun's own retarget
-      "devstral-2": "free/gpt-oss-120b",
+      "nemotron-ultra": "free/step-3.7-flash",
+      "nemotron-253b": "free/step-3.7-flash",
+      "nemotron-super": "free/step-3.7-flash",
+      "nemotron-49b": "free/step-3.7-flash",
+      "nemotron-120b": "free/step-3.7-flash",
+      devstral: "free/step-3.7-flash",
+      // seed-oss-36b EOL'd 2026-08-03
+      "devstral-2": "free/step-3.7-flash",
       maverick: "free/llama-4-maverick",
       // explicit-ish pin — gateway redirects
-      free: "free/gpt-oss-120b",
+      // `free` = the free-tier default. Must equal router-core's ecoTiers.SIMPLE
+      // primary and the head of proxy.ts FREE_MODELS so `/model free`, the eco
+      // profile and the budget-cap free fallback all agree on one live model.
+      free: "free/step-3.7-flash",
       // MiniMax (minimax → current flagship: M3)
       minimax: "minimax/minimax-m3",
       "minimax-m3": "minimax/minimax-m3",
@@ -37084,7 +37581,7 @@ var init_models = __esm({
       },
       {
         id: "free",
-        name: "Free \u2192 GPT-OSS 120B",
+        name: "Free \u2192 Step 3.7 Flash",
         inputPrice: 0,
         outputPrice: 0,
         contextWindow: 131072,
@@ -38755,6 +39252,26 @@ var init_stats = __esm({
   }
 });
 
+// src/timestamp-strip.ts
+function stripLeadingTextBlockTimestamp(blocks) {
+  let stripped = false;
+  return blocks.map((block) => {
+    if (!stripped && block !== null && typeof block === "object" && block.type === "text" && typeof block.text === "string") {
+      stripped = true;
+      const b = block;
+      return { ...b, text: b.text.replace(TIMESTAMP_PATTERN, "") };
+    }
+    return block;
+  });
+}
+var TIMESTAMP_PATTERN;
+var init_timestamp_strip = __esm({
+  "src/timestamp-strip.ts"() {
+    "use strict";
+    TIMESTAMP_PATTERN = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
+  }
+});
+
 // src/dedup.ts
 import { createHash } from "crypto";
 function canonicalize(obj) {
@@ -38781,19 +39298,21 @@ function stripTimestamps(obj) {
   for (const [key2, value] of Object.entries(obj)) {
     if (key2 === "content" && typeof value === "string") {
       result[key2] = value.replace(TIMESTAMP_PATTERN, "");
+    } else if (key2 === "content" && Array.isArray(value)) {
+      result[key2] = stripLeadingTextBlockTimestamp(value.map(stripTimestamps));
     } else {
       result[key2] = stripTimestamps(value);
     }
   }
   return result;
 }
-var DEFAULT_TTL_MS2, MAX_BODY_SIZE, TIMESTAMP_PATTERN, RequestDeduplicator;
+var DEFAULT_TTL_MS2, MAX_BODY_SIZE, RequestDeduplicator;
 var init_dedup = __esm({
   "src/dedup.ts"() {
     "use strict";
+    init_timestamp_strip();
     DEFAULT_TTL_MS2 = 3e4;
     MAX_BODY_SIZE = 1048576;
-    TIMESTAMP_PATTERN = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
     RequestDeduplicator = class {
       inflight = /* @__PURE__ */ new Map();
       completed = /* @__PURE__ */ new Map();
@@ -38911,7 +39430,10 @@ function normalizeForCache(obj) {
         if (typeof msg === "object" && msg !== null) {
           const m = msg;
           if (typeof m.content === "string") {
-            return { ...m, content: m.content.replace(TIMESTAMP_PATTERN2, "") };
+            return { ...m, content: m.content.replace(TIMESTAMP_PATTERN, "") };
+          }
+          if (Array.isArray(m.content)) {
+            return { ...m, content: stripLeadingTextBlockTimestamp(m.content) };
           }
         }
         return msg;
@@ -38922,10 +39444,11 @@ function normalizeForCache(obj) {
   }
   return result;
 }
-var DEFAULT_CONFIG, TIMESTAMP_PATTERN2, ResponseCache;
+var DEFAULT_CONFIG, ResponseCache;
 var init_response_cache = __esm({
   "src/response-cache.ts"() {
     "use strict";
+    init_timestamp_strip();
     DEFAULT_CONFIG = {
       maxSize: 200,
       defaultTTL: 600,
@@ -38933,7 +39456,6 @@ var init_response_cache = __esm({
       // 1MB
       enabled: true
     };
-    TIMESTAMP_PATTERN2 = /^\[\w{3}\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+\w+\]\s*/;
     ResponseCache = class {
       cache = /* @__PURE__ */ new Map();
       expirationHeap = [];
@@ -89100,6 +89622,15 @@ function debrandSystemMessages(messages, resolvedModel) {
   });
   return hasChanges ? result : messages;
 }
+function isToolResultMessage(msg) {
+  if (msg.role === "tool") return true;
+  if (Array.isArray(msg.content)) {
+    return msg.content.some(
+      (b) => b && typeof b === "object" && b.type === "tool_result"
+    );
+  }
+  return false;
+}
 function truncateMessages(messages) {
   if (!messages || messages.length <= MAX_MESSAGES) {
     return {
@@ -89112,7 +89643,11 @@ function truncateMessages(messages) {
   const systemMsgs = messages.filter((m) => m.role === "system");
   const conversationMsgs = messages.filter((m) => m.role !== "system");
   const maxConversation = MAX_MESSAGES - systemMsgs.length;
-  const truncatedConversation = conversationMsgs.slice(-maxConversation);
+  let start = Math.max(0, conversationMsgs.length - maxConversation);
+  while (start < conversationMsgs.length && isToolResultMessage(conversationMsgs[start])) {
+    start++;
+  }
+  const truncatedConversation = conversationMsgs.slice(start);
   const result = [...systemMsgs, ...truncatedConversation];
   console.log(
     `[ClawRouter] Truncated messages: ${messages.length} \u2192 ${result.length} (kept ${systemMsgs.length} system + ${truncatedConversation.length} recent)`
@@ -89931,7 +90466,7 @@ async function startProxy(options) {
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
@@ -89975,6 +90510,10 @@ async function startProxy(options) {
       }
       if (req.url === "/v1/images/image2image" && req.method === "POST") {
         const img2imgStartTime = Date.now();
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -89990,7 +90529,7 @@ async function startProxy(options) {
             if (typeof val !== "string" || !val) continue;
             if (val.startsWith("data:")) {
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
-              const imgResp = await fetch(val);
+              const imgResp = await fetch(val, { signal: clientAbort.signal });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -90009,6 +90548,7 @@ async function startProxy(options) {
           img2imgCost = estimateImageCost(img2imgModel, parsed.size, parsed.n || 1);
           reqBody = JSON.stringify(parsed);
         } catch (parseErr) {
+          if (clientAbort.signal.aborted) return;
           const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Invalid request", details: msg }));
@@ -90018,7 +90558,8 @@ async function startProxy(options) {
           const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: reqBody
+            body: reqBody,
+            signal: clientAbort.signal
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -90048,7 +90589,7 @@ async function startProxy(options) {
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
                 try {
-                  const imgResp = await fetch(img.url);
+                  const imgResp = await fetch(img.url, { signal: clientAbort.signal });
                   if (imgResp.ok) {
                     const contentType = imgResp.headers.get("content-type") ?? "image/png";
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
@@ -90080,6 +90621,7 @@ async function startProxy(options) {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Image editing error: ${msg}`);
           if (!res.headersSent) {
@@ -90091,6 +90633,10 @@ async function startProxy(options) {
       }
       if (req.url === "/v1/audio/generations" && req.method === "POST") {
         const audioStartTime = Date.now();
+        const clientAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) clientAbort.abort();
+        });
         const chunks = [];
         for await (const chunk of req) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -90106,7 +90652,8 @@ async function startProxy(options) {
           const upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: reqBody
+            body: reqBody,
+            signal: clientAbort.signal
           });
           const text = await upstream.text();
           if (!upstream.ok) {
@@ -90128,7 +90675,7 @@ async function startProxy(options) {
             for (const track of result.data) {
               if (track.url?.startsWith("https://") || track.url?.startsWith("http://")) {
                 try {
-                  const audioResp = await fetch(track.url);
+                  const audioResp = await fetch(track.url, { signal: clientAbort.signal });
                   if (audioResp.ok) {
                     const contentType = audioResp.headers.get("content-type") ?? "audio/mpeg";
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
@@ -90160,6 +90707,7 @@ async function startProxy(options) {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(result));
         } catch (err) {
+          if (clientAbort.signal.aborted) return;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] Audio generation error: ${msg}`);
           if (!res.headersSent) {
@@ -90287,7 +90835,7 @@ async function startProxy(options) {
             for (const clip of finalResult.data) {
               if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
                 try {
-                  const videoResp = await fetch(clip.url);
+                  const videoResp = await fetch(clip.url, { signal: clientAbort.signal });
                   if (videoResp.ok) {
                     const contentType = videoResp.headers.get("content-type") ?? "video/mp4";
                     const ext = contentType.includes("webm") ? "webm" : contentType.includes("quicktime") ? "mov" : "mp4";
@@ -90906,6 +91454,10 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         console.log(
           `[ClawRouter] /imagegen command \u2192 ${imageModel} (${imageSize}): ${imagePrompt.slice(0, 80)}...`
         );
+        const imagegenAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) imagegenAbort.abort();
+        });
         try {
           const imageUpstreamUrl = `${apiBase}/v1/images/generations`;
           const imageBody = JSON.stringify({
@@ -90913,10 +91465,6 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             prompt: imagePrompt,
             size: imageSize,
             n: 1
-          });
-          const imagegenAbort = new AbortController();
-          res.on("close", () => {
-            if (!res.writableEnded) imagegenAbort.abort();
           });
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
@@ -91059,6 +91607,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             );
           }
         } catch (err) {
+          if (imagegenAbort.signal.aborted) return;
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /imagegen error: ${errMsg}`);
           if (!res.headersSent) {
@@ -91179,6 +91728,10 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         console.log(
           `[ClawRouter] /img2img \u2192 ${img2imgModel} (${img2imgSize}): ${img2imgPrompt.slice(0, 80)}`
         );
+        const img2imgAbort = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded) img2imgAbort.abort();
+        });
         try {
           const img2imgBody = JSON.stringify({
             model: img2imgModel,
@@ -91191,7 +91744,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           const img2imgResponse = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-            body: img2imgBody
+            body: img2imgBody,
+            signal: img2imgAbort.signal
           });
           const img2imgResult = await img2imgResponse.json();
           let responseText;
@@ -91241,6 +91795,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
           }
           sendImg2ImgText(responseText);
         } catch (err) {
+          if (img2imgAbort.signal.aborted) return;
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[ClawRouter] /img2img error: ${errMsg}`);
           if (!res.headersSent) {
@@ -91792,13 +92347,16 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const globalController = new AbortController();
   const timeoutId = setTimeout(() => globalController.abort(), timeoutMs);
+  const clientDisconnected = () => res.destroyed && !res.writableEnded;
+  const abortError = () => clientDisconnected() ? new ClientDisconnectedError() : new Error(`Request timed out after ${timeoutMs}ms`);
   const onClientClose = () => {
-    if (!globalController.signal.aborted) {
+    if (!res.writableEnded && !globalController.signal.aborted) {
       console.log(`[ClawRouter] Client disconnected \u2014 aborting upstream request`);
       globalController.abort();
     }
   };
-  req.on("close", onClientClose);
+  res.on("close", onClientClose);
+  if (res.destroyed) onClientClose();
   try {
     let modelsToTry;
     const excludeList = options.excludeModels ?? loadExcludeList();
@@ -91857,7 +92415,7 @@ data: [DONE]
         completed = true;
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
       const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
@@ -91956,7 +92514,7 @@ data: [DONE]
         }
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
-        req.removeListener("close", onClientClose);
+        res.removeListener("close", onClientClose);
         return;
       }
       if (excluded.length > 0) {
@@ -91987,7 +92545,7 @@ data: [DONE]
       const tryModel = modelsToTry[i];
       const isLastAttempt = i === modelsToTry.length - 1;
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
       const perAttemptTimeoutMs = timeoutForModel(tryModel);
@@ -92007,7 +92565,7 @@ data: [DONE]
       );
       clearTimeout(modelTimeoutId);
       if (globalController.signal.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs}ms`);
+        throw abortError();
       }
       if (!result.success && modelController.signal.aborted && !isLastAttempt) {
         console.log(
@@ -92219,7 +92777,7 @@ data: [DONE]
       break;
     }
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = void 0;
@@ -92722,12 +93280,16 @@ data: [DONE]
     completed = true;
   } catch (err) {
     clearTimeout(timeoutId);
-    req.removeListener("close", onClientClose);
+    res.removeListener("close", onClientClose);
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = void 0;
     }
     deduplicator.removeInflight(dedupKey);
+    if (err instanceof ClientDisconnectedError || err instanceof Error && err.name === "AbortError" && clientDisconnected()) {
+      console.log(`[ClawRouter] Request cancelled \u2014 client disconnected`);
+      return;
+    }
     balanceMonitor.invalidate();
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Request timed out after ${timeoutMs}ms`, { cause: err });
@@ -92783,7 +93345,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -92833,20 +93395,18 @@ var init_proxy = __esm({
       "premium"
     ]);
     FREE_MODELS = /* @__PURE__ */ new Set([
-      "free/gpt-oss-120b",
-      "free/gpt-oss-20b",
+      "free/step-3.7-flash",
+      // reasoning-focused — free-tier flagship
+      "free/nemotron-nano-9b-v2",
+      // fast lightweight generalist (~0.7s)
       "free/mistral-nemotron",
       // strong instruction following
-      "free/step-3.7-flash",
-      // reasoning-focused
-      "free/nemotron-nano-9b-v2",
-      // fast lightweight generalist
       "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       // vision (text/image/video/audio)
       "free/nemotron-nano-12b-v2-vl"
       // vision-language (text + image)
     ]);
-    FREE_MODEL = "free/gpt-oss-120b";
+    FREE_MODEL = "free/step-3.7-flash";
     MAX_MESSAGES = 200;
     CONTEXT_LIMIT_KB = 5120;
     HEARTBEAT_INTERVAL_MS = 2e3;
@@ -92865,6 +93425,12 @@ var init_proxy = __esm({
     PORT_RETRY_DELAY_MS = 1e3;
     MODEL_BODY_READ_TIMEOUT_MS = 3e5;
     ERROR_BODY_READ_TIMEOUT_MS = 3e4;
+    ClientDisconnectedError = class extends Error {
+      constructor() {
+        super("Client disconnected");
+        this.name = "ClientDisconnectedError";
+      }
+    };
     rateLimitedModels = /* @__PURE__ */ new Map();
     overloadedModels = /* @__PURE__ */ new Map();
     perProviderErrors = /* @__PURE__ */ new Map();

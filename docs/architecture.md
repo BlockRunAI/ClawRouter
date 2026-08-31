@@ -96,16 +96,28 @@ if (inflight) {
 // Extract user's last message
 const prompt = messages.findLast((m) => m.role === "user")?.content;
 
-// Run 15-dimension weighted scorer
+// Router Core V3.5 (@blockrun/router-core): 15-dimension scorer → hard
+// capability filters → portfolio ranking. Model capabilities come from the
+// live catalog, injected at proxy startup.
 const decision = route(prompt, systemPrompt, maxTokens, {
   config: DEFAULT_ROUTING_CONFIG,
   modelPricing,
+  modelCapabilities,
+  routingProfile: "auto",
+  hasTools,
+  toolCount,
+  toolNames,
+  hasVision,
 });
 
 // decision = {
 //   model: "google/gemini-2.5-flash",
 //   tier: "SIMPLE",
+//   taskType: "chat",
 //   confidence: 0.92,
+//   method: "portfolio",
+//   routerVersion: "v3-portfolio",
+//   candidates: ["google/gemini-2.5-flash", "google/gemini-3-flash-preview", ...],
 //   savings: 0.99,
 //   costEstimate: 0.0012,
 // }
@@ -235,17 +247,12 @@ data: [DONE]
 
 ## Routing Engine
 
-### Weighted Scorer
+The routing engine lives in [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.5), a product-neutral package shared by ClawRouter, Franklin, the `@blockrun/llm` SDKs and ClawRouter-Hermes. `src/router/index.ts` is a single `export * from "@blockrun/router-core"`; the package is a `devDependency` inlined by tsup at build time and pinned to an immutable commit SHA. Nothing in the decision path touches the network.
 
-The routing engine uses a 15-dimension weighted scorer that runs entirely locally:
+### 1. Classify — 15-dimension weighted scorer
 
 ```typescript
-function classifyByRules(
-  prompt: string,
-  systemPrompt: string | undefined,
-  tokenCount: number,
-  config: ScoringConfig,
-): ClassificationResult {
+function classifyByRules(prompt, systemPrompt, tokenCount, config): ClassificationResult {
   let score = 0;
   const signals: string[] = [];
 
@@ -262,50 +269,59 @@ function classifyByRules(
     signals.push("code");
   }
 
-  // ... 13 more dimensions
+  // ... 13 more dimensions (multiStepPatterns, technicalTerms, tokenCount,
+  //     creativeMarkers, questionComplexity, constraintCount, agenticTask, ...)
 
-  // Sigmoid calibration
-  const confidence = sigmoid(score, (k = 8), (midpoint = 0.5));
-
+  // Sigmoid calibration (steepness 12), ambiguous below 0.7
+  const confidence = sigmoid(score, config.confidenceSteepness);
   return { score, confidence, tier: selectTier(score, confidence), signals };
 }
 ```
 
-### Tier Selection
+Tier boundaries: `< 0.3` SIMPLE, `< 0.5` COMPLEX, else REASONING (2+ reasoning markers short-circuit to REASONING). Alongside the tier, a task classifier derives the _shape_ of the work from the prompt, the visible tool names/count, requested output size and language: `chat`, `extraction`, `code_edit`, `code_agent`, `tool_agent`, `tool_agent_parallel`, `debug`, `reasoning`, `reasoning_mcq`, `reasoning_math`, `long_context`, `vision`.
 
-```typescript
-function selectTier(score: number, confidence: number): Tier | null {
-  // Special case: 2+ reasoning markers → REASONING at high confidence
-  if (signals.includes("reasoning") && reasoningCount >= 2) {
-    return "REASONING";
-  }
+### 2. Filter — hard eligibility
 
-  if (confidence < 0.7) {
-    return null; // Ambiguous → default to MEDIUM
-  }
+The tier's curated chain (primary + fallbacks) is the candidate pool. Before anything is scored, candidates are removed that:
 
-  if (score < 0.3) return "SIMPLE";
-  if (score < 0.6) return "MEDIUM";
-  if (score < 0.8) return "COMPLEX";
-  return "REASONING";
-}
-```
+- lack tool calling on a turn that requires tools (`inferToolRequirement` — `tool_choice: "none"` is authoritative; host tool descriptions alone never create a requirement)
+- lack vision on image input
+- have too small a context window for the conversation, or too small a max-output for the requested length
+- take an incompatible structured-output path
+- are absent from the live catalog injected by the proxy (`modelCapabilities`)
+
+Capability errors never reach the preference stage — the router fails closed rather than optimistically cheap.
+
+### 3. Rank — portfolio scoring
+
+Survivors are scored on six bounded factors with per-profile weights (auto: quality 0.47 · capability 0.20 · cost 0.18 · speed 0.07 · reliability 0.03 · curated order 0.05; eco raises cost to 0.28, premium raises quality to 0.58). High-stakes turns boost quality and reliability, latency-sensitive turns boost speed; an `affinityFloorGap` stops a candidate far below the best task affinity from winning on price. Speed and reliability priors come from `model-profiles.generated.json` (BlockRun's gateway benchmark), decayed on a 30-day half-life.
+
+### 4. Recover — the fallback chain
+
+The full ranked list is returned as `decision.candidates`; the proxy walks it on timeouts and 5xx. The winner is chosen once per request — no mid-task drift, no auxiliary routing call.
 
 ### Overrides
 
-Certain conditions force tier assignment:
-
 ```typescript
 // Large context → COMPLEX
-if (tokenCount > 100000) {
+if (tokenCount > config.overrides.maxTokensForceComplex /* 100_000 */) {
   return { tier: "COMPLEX", method: "override:large_context" };
 }
 
-// Structured output (JSON/YAML) → min MEDIUM
-if (systemPrompt?.includes("json") || systemPrompt?.includes("yaml")) {
-  return { tier: Math.max(tier, "MEDIUM"), method: "override:structured" };
+// Structured output (JSON/YAML) → at least MEDIUM
+if (requiresStructuredOutput) {
+  return {
+    tier: max(tier, config.overrides.structuredOutputMinTier),
+    method: "override:structured",
+  };
 }
 ```
+
+### Escape hatches
+
+- `routing.strategy = "rules"` — one-line rollback to the V2 primary-first selector.
+- `routing.shadow = { strategy: "rules", sampleRate }` — recompute a comparison decision locally; reported on debug headers, never a second paid call.
+- `unavailableModels` — the host can hard-remove models it observed dead at the gateway from every chain before selection (router-core API; not yet wired in the proxy — free-model liveness is enforced at build time by `src/router/free-model-liveness.test.ts` instead).
 
 ---
 
@@ -538,22 +554,20 @@ src/
 ├── retry.ts              # Fetch retry with exponential backoff
 ├── version.ts            # Version from package.json
 └── router/
-    ├── index.ts          # route() entry point
-    ├── rules.ts          # 15-dimension weighted scorer (9-language)
-    ├── selector.ts       # Tier → model selection + fallback
-    ├── config.ts         # Default routing configuration (ECO/AUTO/PREMIUM/AGENTIC)
-    └── types.ts          # TypeScript type definitions
+    ├── index.ts                     # export * from "@blockrun/router-core" (Router Core V3.5)
+    ├── free-model-liveness.test.ts  # build-time guard: no chain names a dead free model
+    └── brand-numbers.test.ts        # README/SKILL brand markers stay in sync
 ```
 
 ### Key Files
 
-| File                 | Purpose                                                       |
-| -------------------- | ------------------------------------------------------------- |
-| `proxy.ts`           | Core request handling, SSE simulation, fallback chain         |
-| `wallet.ts`          | BIP-39 mnemonic generation, EVM + Solana (SLIP-10) derivation |
-| `router/rules.ts`    | 15-dimension weighted scorer, 9-language keyword sets         |
-| `x402.ts`            | EIP-712 typed data signing, payment header formatting         |
-| `balance.ts`         | USDC balance via Base RPC (EVM), caching, thresholds          |
-| `solana-balance.ts`  | USDC balance via Solana RPC (SPL Token), caching, retries     |
-| `payment-preauth.ts` | Pre-authorization cache (EVM; skipped for Solana)             |
-| `dedup.ts`           | SHA-256 hashing, 30s response cache                           |
+| File                 | Purpose                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `proxy.ts`           | Core request handling, SSE simulation, fallback chain                               |
+| `wallet.ts`          | BIP-39 mnemonic generation, EVM + Solana (SLIP-10) derivation                       |
+| `router/index.ts`    | Re-exports `@blockrun/router-core` (scorer, filters, portfolio ranker, tier config) |
+| `x402.ts`            | EIP-712 typed data signing, payment header formatting                               |
+| `balance.ts`         | USDC balance via Base RPC (EVM), caching, thresholds                                |
+| `solana-balance.ts`  | USDC balance via Solana RPC (SPL Token), caching, retries                           |
+| `payment-preauth.ts` | Pre-authorization cache (EVM; skipped for Solana)                                   |
+| `dedup.ts`           | SHA-256 hashing, 30s response cache                                                 |

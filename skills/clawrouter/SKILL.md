@@ -86,7 +86,7 @@ ClawRouter does **not** collect or forward third-party provider API keys. You do
 | `walletKey` | Yes       | EVM private key used to sign USDC micropayments via x402. **Auto-generated locally on first run** — no user input required. Never transmitted over the network; only detached payment signatures are sent. |
 | `solanaKey` | Yes       | Solana keypair (BIP-44 `m/44'/501'/0'/0'`). Auto-derived from the same local mnemonic via `@scure/bip32` + `@scure/bip39`.                                                                                 |
 | `gateway`   | No        | Gateway URL. Defaults: `https://sol.blockrun.ai/api` (Solana, default chain for new installs) · `https://blockrun.ai/api` (Base, default for pre-existing installs).                                       |
-| `routing`   | No        | Optional override of the default four-tier router.                                                                                                                                                         |
+| `routing`   | No        | Optional override of the router-core config (tier chains, `strategy: "rules"` rollback, `shadow` comparison, scorer keywords).                                                                             |
 
 **How and where keys are stored:**
 
@@ -124,20 +124,26 @@ openclaw models set openai/gpt-4o
 
 ## How Routing Works
 
-ClawRouter classifies each request into one of four tiers:
+Routing is done locally by [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.4, constraint-first), inlined into ClawRouter and pinned by commit. No network call, no second model — about a quarter of a millisecond per request.
+
+1. A 15-dimension weighted scorer classifies each request into one of four tiers, and a task classifier labels the shape of the work (chat, extraction, code_edit, code_agent, tool_agent, reasoning_math, long_context, vision, …).
+2. Models that cannot satisfy the request — no tool calling, no vision, too small a context window or max-output, incompatible structured output — are removed before anything is scored.
+3. Survivors are ranked on task quality, capability, estimated cost, speed and reliability; the full ranked list is kept as the fallback chain for timeouts and 5xx.
+
+Curated primaries on the default `auto` profile:
 
 - **SIMPLE** — factual lookups, greetings, translations → gemini-2.5-flash ($0.30/$2.50)
 - **MEDIUM** — summaries, explanations, data extraction → kimi-k2.7 ($0.95/$4.00)
 - **COMPLEX** — code generation, multi-step analysis → gemini-3.1-pro ($2/$12)
 - **REASONING** — proofs, formal logic, multi-step math → grok-4-1-fast-reasoning ($0.20/$0.50)
 
-Prices are per 1M input/output tokens, on the default `auto` profile. Per-tier
+Turns that actually need their attached tools switch to agent-tuned tiers (gpt-4o-mini → kimi-k2.7 → claude-sonnet-4.6). `eco` opens on the free tier (step-3.7-flash); `premium` climbs to gpt-5.3-codex / claude-fable-5 / claude-sonnet-4.6. Full chains: [docs/routing-profiles.md](../../docs/routing-profiles.md).
+
+Prices are per 1M input/output tokens. Per-tier
 savings percentages are deliberately not quoted here: the published figure is
 blended across a stated workload mix, and a per-tier number invites comparing
 it against a baseline nobody wrote down. See
 [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json).
-
-Rules handle ~~80% of requests in <1ms. Only ambiguous queries hit the LLM classifier (~~$0.00003 per classification).
 
 ## Available Models
 
