@@ -31,7 +31,7 @@ This is exactly the problem [ClawRouter](https://github.com/BlockRunAI/ClawRoute
 
 ## ClawRouter: Smart Routing for Agents
 
-ClawRouter is an open-source local proxy that sits between your agent and <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> LLM models across 9 providers. It analyzes every request across 15 dimensions and routes it to the cheapest model that can handle it — in under 1ms, entirely locally.
+ClawRouter is an open-source local proxy that sits between your agent and <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> LLM models across 9 providers. It analyzes every request across 15 dimensions and routes it to the cheapest model that can handle it — in under 1ms, entirely locally.
 
 ```
 Your Agent → ClawRouter (localhost:8402) → Best model for the job
@@ -56,7 +56,7 @@ From 20,000+ production requests:
 | Free models (trivial tasks)      | 12.8%        | $0.00             |
 | Others                           | 13.8%        | varies            |
 
-**Result: <!-- br:savings.autoVsBaselinePct -->88<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5 for every request** — the published figure, priced on a stated workload mix rather than estimated.
+**Result: <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% cheaper than pinning Claude Opus 5 for every request** — the published figure, priced on a stated workload mix rather than estimated.
 
 A typical user running 10K mixed requests/month:
 
@@ -74,7 +74,7 @@ Then point your agent at `http://localhost:8402/v1/` with any OpenAI-compatible 
 
 - **No API keys to manage** — wallet-based cryptographic auth
 - **No subscriptions** — pay per request in USDC (Base or Solana)
-- **No vendor lock-in** — <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> models, switch anytime
+- **No vendor lock-in** — <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, switch anytime
 - **You control your wallet** — non-custodial, funds never held by a third party
 - **Budget caps** — set a max spend per session, ClawRouter gracefully downgrades when budget runs low
 - **Token compression** — 7-layer pipeline reduces token costs by 7–40% before they hit any provider

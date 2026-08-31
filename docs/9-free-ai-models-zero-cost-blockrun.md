@@ -32,8 +32,8 @@ Through [ClawRouter](https://github.com/BlockRunAI/ClawRouter) — BlockRun's lo
 | **Nemotron 3.5 Lightning**   | 1M      | ✅        | The free default — thinking-mode reasoning |
 | **Nemotron 3 Nano 30B**      | 131K    | ✅        | Fastest free model (~121 tok/s)            |
 | **Nemotron 3 Ultra 550B**    | 1M      | ✅        | Largest free model — 550B / 55B active MoE |
-| **Nemotron 3 Nano Omni 30B** | 256K    | ✅        | Vision — text + image + video + audio      |
-| **Llama 3.2 11B Vision**     | 128K    | —         | Meta Llama with image input                |
+| **Nemotron 3 Nano Omni 30B** | 256K    | ✅        | Strong generalist (text only in practice)  |
+| **Llama 3.2 11B Vision**     | 128K    | —         | Meta Llama (text only in practice)         |
 | **Cohere North Mini Code**   | 256K    | ✅        | Coding, sub-second responses               |
 | **Poolside Laguna XS 2.1**   | 131K    | —         | Coding, ~161 tok/s                         |
 
@@ -111,17 +111,17 @@ The **fastest free model in the catalog** — around 121 tokens/second on realis
 
 **Best for:** Complex analysis and deep reasoning where you would otherwise pay.
 
-### Nemotron 3 Nano Omni 30B — The Only Free Vision Model
+### Nemotron 3 Nano Omni 30B — Strong, and Text-Only in Practice
 
-31B / 3.2B active MoE, 256K context, and the **only vision-capable model in the free tier**. It accepts images, video up to two minutes, and audio up to an hour. ChartQA 90.3, DocVQA 95.6, MMMU 70.8.
+31B / 3.2B active MoE, 256K context. Both gateways catalogue it as vision-capable and its benchmark card is real (ChartQA 90.3, DocVQA 95.6, MMMU 70.8) — but **the image path does not work through either gateway**, so ClawRouter treats it as text-only. See "There Is No Working Free Vision" below.
 
-**Best for:** Screenshots, charts, documents, and any multimodal input at zero cost.
+**Best for:** General reasoning at 256K context, for free.
 
 ### Llama 3.2 11B Vision — The Free Llama
 
-Meta's Llama 3.2 11B with image input and a 128K window. It is older than everything else here, and that is the point: a 12-model sweep of what NVIDIA still serves free found this was the only Llama that actually finishes a real completion.
+Meta's Llama 3.2 11B with a 128K window. It is older than everything else here, and that is the point: a 12-model sweep of what NVIDIA still serves free found this was the only Llama that actually finishes a real completion. The name promises image input; the gateway does not deliver it (see below).
 
-**Best for:** Anyone who needs a Llama specifically, plus lightweight image understanding.
+**Best for:** Anyone who needs a Llama specifically.
 
 ### Cohere North Mini Code — The Fast Coder
 
@@ -178,8 +178,8 @@ If you're using Claude Code, one command switches you to any free model:
 /model free              → Nemotron 3.5 Lightning (1M ctx, the default)
 /model nano-30b          → Nemotron 3 Nano 30B (fastest)
 /model ultra-550b        → Nemotron 3 Ultra 550B (largest)
-/model vision-free       → Nemotron 3 Nano Omni (images, video, audio)
-/model llama-vision      → Llama 3.2 11B Vision
+/model vision-free       → Nemotron 3 Nano Omni (text only, see below)
+/model llama-vision      → Llama 3.2 11B Vision (text only, see below)
 /model north-mini        → Cohere North Mini Code
 /model laguna            → Poolside Laguna XS 2.1
 ```
@@ -200,7 +200,13 @@ The gateway will return structured tool calls from these models, but ClawRouter 
 
 Five of the seven are reasoning-capable and handle most tasks well. On the hardest problems — competition-level math, formal proofs, deep multi-step planning — they don't match Claude Opus 5 or Sonnet 5. That's why ClawRouter's REASONING tier doesn't use free models.
 
-### 3. Free Hosting Is Volatile
+### 3. There Is No Working Free Vision
+
+Two of the seven are catalogued as vision-capable, and neither survives a real probe. On a 64×64 solid-red PNG, `nemotron-3-nano-omni` answered correctly 1 time in 4 on Base and returned "white" on Solana — where the response's own `model` field revealed a silent fallback to a text model. `llama-3.2-11b-vision` replied "I'm unable to see the image" on 3 of 3 attempts while answering plain text fine. Every one of those failures is an **HTTP 200**: the image is dropped and a confident wrong answer comes back with no error to branch on.
+
+ClawRouter therefore ships no `vision` flag on any free model, so requests carrying an image route to a paid vision model instead. The general lesson is worth more than the specific finding: **a catalog's capability list is a claim, not a measurement** — and one passing sample is not a measurement either. The first probe here returned the right colour; it took four to see that was luck.
+
+### 4. Free Hosting Is Volatile
 
 This is the real limitation, and it is worth more than the other two. On 2026-08-30 NVIDIA retired four of the five visible free models in one sweep, and none of the nine models this article originally listed is still in the tier. Free capacity comes from whatever a provider is willing to give away this quarter. Pin a free model if you like — but build so that losing it costs you a config line, not a rewrite. That is the entire argument for putting a router in front of them.
 
@@ -217,7 +223,7 @@ Quick chat, formatting    → Nemotron 3 Nano 30B (fastest)
 Code generation           → North Mini Code or Laguna XS 2.1
 Reasoning required        → Nemotron 3.5 Lightning (1M ctx)
 Hardest free reasoning    → Nemotron 3 Ultra 550B
-Images, video, audio      → Nemotron 3 Nano Omni
+Long-context reasoning    → Nemotron 3.5 Lightning (1M)
 A Llama specifically      → Llama 3.2 11B Vision
 ```
 

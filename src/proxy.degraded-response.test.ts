@@ -116,3 +116,27 @@ Yes.`,
     expect(result).toBeUndefined();
   });
 });
+
+describe("empty choices array", () => {
+  // A 200 with `choices: []` carries no answer at all, and used to pass through
+  // to the caller as a success. Distinct from the empty-turn case (a choice
+  // whose content is blank). This is the shape a relay produces when it reports
+  // upstream congestion in the envelope rather than the body — blockrun #448
+  // measured it at roughly 3 in 15 calls on nemotron-3-ultra-550b, which is
+  // cascade rung 6.
+  it("treats an empty choices array as degraded", () => {
+    expect(detectDegradedSuccessResponse(JSON.stringify({ id: "x", choices: [] }))).toContain(
+      "no choices",
+    );
+  });
+
+  it("leaves responses without a choices key alone", () => {
+    // Image, audio and embedding responses have no `choices` and must not be
+    // swept up by this check.
+    expect(
+      detectDegradedSuccessResponse(
+        JSON.stringify({ created: 1, data: [{ url: "http://x/y.png" }] }),
+      ),
+    ).toBeUndefined();
+  });
+});

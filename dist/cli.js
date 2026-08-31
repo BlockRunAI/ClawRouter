@@ -37684,10 +37684,13 @@ var init_top_models = __esm({
       "zai/glm-5.1",
       "zai/glm-5-turbo",
       "zai/glm-5",
+      "xiaomi/mimo-v2.5",
       "minimax/minimax-m3",
       "minimax/minimax-m2.7",
       "moonshot/kimi-k3",
       "qwen/qwen3.7-max",
+      "qwen/qwen3.8-flash",
+      "deepseek/deepseek-v4-flash-vision-exp",
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-chat",
       "deepseek/deepseek-reasoner",
@@ -37949,6 +37952,19 @@ var init_models = __esm({
       // `kimi` on K2.7. (`grok` WAS promoted to 4.5, but only after the cost
       // tradeoff was argued explicitly; there's no such case for qwen yet.)
       "qwen3.7-max": "qwen/qwen3.7-max",
+      // Qwen3.8 Flash — newer generation than the whole 3.7 line, and cheaper than
+      // the 3.7-plus tier it beats. Bare `qwen` stays UNBOUND (every other qwen*
+      // shorthand resolves to a free model, so binding the short name to a paid
+      // flagship would bill callers expecting free).
+      "qwen3.8-flash": "qwen/qwen3.8-flash",
+      "qwen3-8-flash": "qwen/qwen3.8-flash",
+      "qwen-vision": "qwen/qwen3.8-flash",
+      // DeepSeek's first image-capable SKU. Bare `deepseek` stays on deepseek-chat.
+      "deepseek-vision": "deepseek/deepseek-v4-flash-vision-exp",
+      "v4-flash-vision": "deepseek/deepseek-v4-flash-vision-exp",
+      // Xiaomi MiMo V2.5 — the natively multimodal SKU, distinct from mimo-v2.5-pro
+      // (text-only upstream). `mimo` stays on the Pro entry it has always named.
+      "mimo-vision": "xiaomi/mimo-v2.5",
       "qwen-3.7-max": "qwen/qwen3.7-max",
       "qwen3-7-max": "qwen/qwen3.7-max",
       // Plus/Flash tiers (2026-08-03) — explicit pins, same rule as Max.
@@ -37963,7 +37979,15 @@ var init_models = __esm({
       hunyuan: "tencent/hy3",
       mimo: "xiaomi/mimo-v2.5-pro",
       "mimo-v2.5-pro": "xiaomi/mimo-v2.5-pro",
-      "mimo-v2.5": "xiaomi/mimo-v2.5-pro",
+      // RETARGETED 2026-08-30, Pro -> the real thing. This key used to point at
+      // `xiaomi/mimo-v2.5-pro`, which was harmless while no model owned the name —
+      // but blockrun then listed an actual `xiaomi/mimo-v2.5`, a DIFFERENT and
+      // natively-multimodal SKU at $0.14/$0.28 against Pro's $0.435/$0.87. Leaving
+      // it would have billed 3x for the text-only model when the caller named the
+      // cheaper multimodal one. (The key itself is safe: it is not equal to the
+      // catalog id, so it shadows nothing — the rule that bans `opus-5`-style keys
+      // does not apply to a bare shorthand.)
+      "mimo-v2.5": "xiaomi/mimo-v2.5",
       xiaomi: "xiaomi/mimo-v2.5-pro",
       // Google
       // gemini-3-pro-preview delisted by Google 2026-06-06 — mirror the gateway
@@ -38138,6 +38162,10 @@ var init_models = __esm({
       // Vision-capable free models
       "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
+      // `vision-free` kept for backward compatibility ONLY — it still resolves to
+      // nano-omni, which is the strongest free model, but the free tier no longer
+      // claims working image input on either chain (see the catalog note). Do not
+      // advertise this alias as a way to get free vision.
       "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
       // Retired shorthand aliases redirect to live successors. The catch-all target
       // moved llama-4-maverick → gpt-oss-120b (2026-07-17) → step-3.7-flash
@@ -38403,8 +38431,8 @@ var init_models = __esm({
         id: "openai/gpt-5.6-terra-pro",
         name: "GPT-5.6 Terra Pro",
         version: "5.6",
-        inputPrice: 1,
-        outputPrice: 6,
+        inputPrice: 2,
+        outputPrice: 12,
         contextWindow: 105e4,
         maxOutput: 128e3,
         reasoning: true,
@@ -38416,8 +38444,8 @@ var init_models = __esm({
         id: "openai/gpt-5.6-luna-pro",
         name: "GPT-5.6 Luna Pro",
         version: "5.6",
-        inputPrice: 0.1,
-        outputPrice: 0.6,
+        inputPrice: 0.2,
+        outputPrice: 1.2,
         contextWindow: 105e4,
         maxOutput: 128e3,
         reasoning: true,
@@ -38950,8 +38978,8 @@ var init_models = __esm({
         id: "deepseek/deepseek-v4-pro",
         name: "DeepSeek V4 Pro",
         version: "4-pro",
-        inputPrice: 0.435,
-        outputPrice: 0.87,
+        inputPrice: 1.32,
+        outputPrice: 3.96,
         contextWindow: 1048576,
         maxOutput: 65536,
         reasoning: true,
@@ -39409,8 +39437,21 @@ var init_models = __esm({
         outputPrice: 0,
         contextWindow: 256e3,
         maxOutput: 16384,
-        reasoning: true,
-        vision: true
+        reasoning: true
+        // NO `vision: true` — 2026-08-31. Both catalogs advertise vision on this
+        // model and blockrun #448 cites an 8x8 PNG answering "Red", but a 64x64
+        // solid-red probe does not hold up: 1 of 4 correct on Base (the others
+        // "I'm not able to view the image" or leaked reasoning), and on sol it
+        // answered "white" twice, once with the response's own `model` field
+        // reading `nemotron-3-super-120b (fallback: ...nano-omni)` — the image is
+        // silently dropped and a text model answers.
+        //
+        // `vision: true` is what makes filterByVision() route real image turns
+        // here, so the flag does not merely describe the model, it aims traffic at
+        // it. HTTP 200 with a confident wrong colour is worse than no free vision:
+        // there is no error for a caller to branch on. Image turns go to paid
+        // vision models until a correctly-sized probe comes back right on both
+        // chains. Independently confirmed on Solana by the blockrun-sol owner.
       },
       // 2026-06-14: BlockRun re-featured these two as free flagships (catalog sweep).
       // Added to the auto-pick set behind gpt-oss to strengthen the mid/back of the
@@ -39532,8 +39573,11 @@ var init_models = __esm({
         outputPrice: 0,
         contextWindow: 131072,
         maxOutput: 16384,
-        reasoning: true,
-        vision: true
+        reasoning: true
+        // Vision flag dropped 2026-08-31 with the rest of the free tier: this id is
+        // 410 Gone and the gateway redirects it to nano-omni, whose image path does
+        // not work either (see above). A pinned caller sending an image would have
+        // been told, by the flag, that it would be seen.
       },
       // ── 2026-08-30 free-tier rebuild (blockrun #448) ─────────────────────────
       // NVIDIA retired FOUR of the five VISIBLE free models in one sweep. blockrun
@@ -39606,8 +39650,13 @@ var init_models = __esm({
         inputPrice: 0,
         outputPrice: 0,
         contextWindow: 128e3,
-        maxOutput: 16384,
-        vision: true
+        maxOutput: 16384
+        // NO `vision: true` despite the name and blockrun's `categories:
+        // ["chat","vision"]` — 2026-08-31, three consecutive 64x64 PNG probes came
+        // back "I'm unable to see the image" / "you haven't provided an image",
+        // while a plain-text control on the same id answered fine. The model is
+        // alive; the image path is not. Mirroring the catalog's claim here would
+        // have routed image turns to it. See the nano-omni note above.
       },
       {
         // Cohere North Mini Code, on OpenRouter's $0 pool — 607ms median, the
@@ -39636,6 +39685,57 @@ var init_models = __esm({
         outputPrice: 0,
         contextWindow: 131072,
         maxOutput: 16384
+      },
+      // ── 2026-08-30 paid catalog refresh (blockrun #449) ─────────────────────
+      // Three additions, each probe-verified upstream with a real completion AND a
+      // real image before listing. All three carry `vision: true` on that evidence
+      // — unlike the free tier, where the same claim did not survive a probe.
+      {
+        // Alibaba's 3.8 generation: 125B MoE, one tier above the whole 3.7 line and
+        // cheaper than the qwen3.7-plus ($0.32/$1.28) it outperforms.
+        // Vision took two probes to establish upstream: the first 400'd with
+        // `invalid_parameter_error` on an 8x8 PNG because the model requires >10px
+        // per side; 64x64 answered correctly. A single 400 is not a capability gap.
+        id: "qwen/qwen3.8-flash",
+        name: "Qwen3.8 Flash",
+        version: "3.8-flash",
+        inputPrice: 0.15,
+        outputPrice: 0.47,
+        contextWindow: 1e6,
+        maxOutput: 131072,
+        reasoning: true,
+        vision: true,
+        toolCalling: true
+      },
+      {
+        // The first DeepSeek SKU that takes images. Priced at DeepSeek's PEAK rate
+        // on purpose: they now split peak/off-peak and off-peak is half, so listing
+        // the lower number would sell under cost for seven hours every weekday.
+        id: "deepseek/deepseek-v4-flash-vision-exp",
+        name: "DeepSeek V4 Flash Vision",
+        version: "v4-flash-vision-exp",
+        inputPrice: 0.44,
+        outputPrice: 1.32,
+        contextWindow: 1048576,
+        maxOutput: 65536,
+        reasoning: true,
+        vision: true,
+        toolCalling: true
+      },
+      {
+        // NOT a cheaper mimo-v2.5-pro — a different, natively multimodal SKU. The
+        // Pro entry is text-only upstream while this one takes images, at a third
+        // of the price. Keep both.
+        id: "xiaomi/mimo-v2.5",
+        name: "Xiaomi MiMo V2.5",
+        version: "2.5",
+        inputPrice: 0.14,
+        outputPrice: 0.28,
+        contextWindow: 1048576,
+        maxOutput: 131072,
+        reasoning: true,
+        vision: true,
+        toolCalling: true
       },
       // Z.AI GLM-5 Models
       {
@@ -89923,7 +90023,36 @@ import { homedir as homedir7 } from "os";
 import { join as join10 } from "path";
 import { mkdir as mkdir4, writeFile as writeFile2, readFile as readFile2, stat as fsStat } from "fs/promises";
 import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
+async function loadGatewayCatalog(apiBase) {
+  try {
+    const controller = new AbortController();
+    const timer2 = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
+    const res = await fetch(`${apiBase}/v1/models`, { signal: controller.signal });
+    clearTimeout(timer2);
+    if (!res.ok) return;
+    const body = await res.json();
+    const ids = (body.data ?? []).map((m) => m.id).filter((id2) => !!id2);
+    if (ids.length === 0) return;
+    gatewayModelIds = new Set(ids);
+    const unserved = [...FREE_MODELS].filter((m) => !gatewayModelIds.has(toUpstreamModelId(m)));
+    if (unserved.length > 0) {
+      console.log(
+        `[ClawRouter] Free models not served by this gateway (skipped in the cascade): ${unserved.join(", ")}`
+      );
+    }
+  } catch {
+  }
+}
+function isServedByGateway(modelId) {
+  if (!gatewayModelIds) return true;
+  return gatewayModelIds.has(toUpstreamModelId(modelId));
+}
 function pickFreeModel(excludeList) {
+  for (const m of FREE_MODELS) {
+    if (excludeList?.has(m)) continue;
+    if (!isServedByGateway(m)) continue;
+    return m;
+  }
   for (const m of FREE_MODELS) {
     if (!excludeList?.has(m)) return m;
   }
@@ -90263,6 +90392,9 @@ function detectDegradedSuccessResponse(body) {
       return `degraded response: ${errorText.slice(0, 120)}`;
     }
     const choices = parsed.choices;
+    if (Array.isArray(choices) && choices.length === 0) {
+      return "degraded response: no choices returned";
+    }
     if (Array.isArray(choices) && choices.length > 0) {
       const choice = choices[0];
       const msg = choice.message ?? choice.delta;
@@ -90753,6 +90885,7 @@ async function startProxy(options) {
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
   }
+  void loadGatewayCatalog(apiBase);
   const listenPort = options.port ?? getProxyPort();
   const existingProxy = await checkExistingProxy(listenPort);
   if (existingProxy) {
@@ -93286,6 +93419,22 @@ data: [DONE]
     } else {
       modelsToTry = modelId ? [modelId] : [];
     }
+    if (modelsToTry.length > 0) {
+      const unservedFree = modelsToTry.filter((m) => FREE_MODELS.has(m) && !isServedByGateway(m));
+      if (unservedFree.length > 0) {
+        const servedFree = [...FREE_MODELS].filter(
+          (m) => isServedByGateway(m) && !excludeList?.has(m)
+        );
+        const replacement = servedFree[0];
+        if (replacement) {
+          modelsToTry = modelsToTry.map((m) => unservedFree.includes(m) ? replacement : m);
+          modelsToTry = modelsToTry.filter((m, i) => modelsToTry.indexOf(m) === i);
+          console.log(
+            `[ClawRouter] ${unservedFree.join(", ")} not served on this chain \u2014 using ${replacement}`
+          );
+        }
+      }
+    }
     if (!hasTools && routingDecision) {
       const freeFallback = pickFreeModel(excludeList);
       if (freeFallback && !modelsToTry.includes(freeFallback)) {
@@ -94166,7 +94315,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, FREE_MODEL, FREE_UPSTREAM_OVERRIDES, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, gatewayModelIds, FREE_MODEL, FREE_UPSTREAM_OVERRIDES, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, GATEWAY_CATALOG_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -94241,6 +94390,7 @@ var init_proxy = __esm({
     CONTEXT_LIMIT_KB = 5120;
     HEARTBEAT_INTERVAL_MS = 2e3;
     BALANCE_CHECK_TIMEOUT_MS = 2500;
+    GATEWAY_CATALOG_TIMEOUT_MS = 5e3;
     DEFAULT_REQUEST_TIMEOUT_MS = 3e5;
     PER_MODEL_TIMEOUT_MS = 6e4;
     REASONING_MODEL_TIMEOUT_MS = 18e4;

@@ -4,6 +4,61 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.259 — August 31, 2026
+
+Corrections to v0.12.258 plus the same-night paid-catalog refresh, both found by checking claims instead of trusting catalogs. Neither would have surfaced as an error — both fail with HTTP 200.
+
+### Fixed — the new free tier 400'd on Solana, which is the default chain for new installs
+
+v0.12.258 rebuilt the free tier from blockrun's Base catalog. `sol.blockrun.ai` does not carry it: six of the seven return **HTTP 400 "Unknown model"** there, and only `nemotron-3-nano-omni` exists. Since v0.12.246 new installs default to Solana, so on a fresh install `/model free` and router-core's eco SIMPLE primary both pointed at a model their own gateway had never heard of.
+
+The gateways' never-retire redirect rule does not help here — it protects ids a gateway once shipped, and these were never shipped on sol, so they hard-400 rather than falling back.
+
+`loadGatewayCatalog()` now reads the active gateway's `/v1/models` once at startup and `pickFreeModel()` skips rungs that chain does not serve, so a Solana user degrades to the models sol actually has instead of collecting 400s. It is deliberately **advisory only**: it filters, it never chooses. The cascade head stays a committed literal because `free`, `FREE_MODELS[0]`, `FREE_MODEL` and router-core's `ecoTiers.SIMPLE.primary` must agree and `free-model-liveness.test.ts` checks that at build time — a runtime-derived head would make the invariant unverifiable. A failed or empty catalog read leaves every rung eligible: a catalog we could not read must never be able to switch the free tier off.
+
+The blockrun-sol owner is adding the four load-bearing ids to sol's in-flight rebuild, served as themselves rather than redirected, so the two chains converge.
+
+### Fixed — no free model claims `vision` any more; two of them were lying
+
+v0.12.258 set `vision: true` on `nemotron-3-nano-omni` and `llama-3.2-11b-vision`, mirroring both gateways' `categories` lists. Neither holds up against a 64×64 solid-red PNG:
+
+| model                           | result                                                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nemotron-3-nano-omni` (Base)   | correct **1 of 4** — the others "I'm not able to view the image" or leaked reasoning                                                                           |
+| `nemotron-3-nano-omni` (Solana) | answered **"white"** for red, twice; one response's own `model` field read `nemotron-3-super-120b (fallback: …nano-omni)` — a silent fall back to a text model |
+| `llama-3.2-11b-vision` (Base)   | "I'm unable to see the image" **3 of 3**, while a plain-text control on the same id answered fine                                                              |
+
+Every one of those is an HTTP 200. The image is dropped and a confident wrong answer comes back with nothing for a caller to branch on. `vision` is not a description — it is what `filterByVision()` uses to _aim_ image turns at a model — so the flag was actively routing real traffic into that. It is now off on every free model (including the dead-but-pinnable `nemotron-nano-12b-v2-vl`), and image requests go to one of the 45 paid vision models. `src/models.test.ts` pins the absence.
+
+Worth recording how this was nearly missed: the **first** Base probe returned "Red" and I took it as verification. It took four samples to see that was luck. A catalog's capability list is a claim, not a measurement — and neither is a single sample. Independently confirmed on the Solana side by the blockrun-sol owner, who hit the same failure with the same fixture size.
+
+### Changed — paid catalog refresh + three real price moves (blockrun #449)
+
+Landed the same night, verified against `origin/main` rather than taken on report:
+
+- **`deepseek/deepseek-v4-pro` $0.435/$0.87 → $1.32/$3.96.** A 3x rise on a model sitting in four router chains (eco COMPLEX + REASONING, premium and agentic COMPLEX). Until now every one of those calls was accumulating a third of its real cost into `maxCostPerRun`.
+- `openai/gpt-5.6-terra-pro` $1/$6 → $2/$12 and `gpt-5.6-luna-pro` $0.10/$0.60 → $0.20/$1.20 — both were unroutable at the old numbers, not merely mispriced.
+- Three new models, each probe-verified upstream with a real completion **and** a real image: `qwen/qwen3.8-flash` ($0.15/$0.47, 1M), `deepseek/deepseek-v4-flash-vision-exp` ($0.44/$1.32 — DeepSeek's peak rate on purpose, since off-peak is half and listing that would sell under cost on weekday mornings), and `xiaomi/mimo-v2.5` ($0.14/$0.28).
+- Published counts: **76 chat models** (was 73) and the `auto` savings figure **88% → 84%** — that is a real move, not a re-estimate: `auto` is costed on DeepSeek V4 Pro, which just tripled. `eco` stays 98%.
+
+### Fixed — `mimo-v2.5` was billing 3x for the wrong model
+
+`"mimo-v2.5"` had long been an alias for `xiaomi/mimo-v2.5-pro`, which was harmless while nothing owned that name. blockrun then listed an actual `xiaomi/mimo-v2.5` — a **different**, natively-multimodal SKU at $0.14/$0.28 against Pro's $0.435/$0.87 and text-only. The alias would have sent anyone naming the cheaper multimodal model to the pricier text-only one. Retargeted. (`mimo`, `mimo-v2.5-pro` and `xiaomi` still resolve to Pro.)
+
+This is the near-miss worth remembering: adding a model can make an _existing_ alias wrong. Check the alias map against new ids, not just for collisions.
+
+### Fixed — a 200 with an empty `choices` array passed through as a success
+
+`detectDegradedSuccessResponse()` already caught a blank assistant turn, an upstream error delivered as HTTP 200, and placeholder/loop output. It did not catch `choices: []` — no answer at all — which went to the caller as a successful response. That is the shape a relay produces when it reports upstream congestion in the envelope rather than the body; blockrun measured it at roughly 3 in 15 calls on `nemotron-3-ultra-550b`, which is cascade rung 6. It now fails over like any other 5xx. Responses with no `choices` key at all (images, audio, embeddings) are untouched.
+
+### Verified, not changed
+
+`cohere/north-mini-code` was reported by two other sessions as returning empty content when the token budget is tight — the theory being it spends the whole allowance reasoning and emits nothing. It does not reproduce on Base: 12 of 12 samples across `max_tokens` 200/400/1200/2000 returned non-empty content with `finish_reason: "stop"`, plus 5 of 5 clean streaming runs. Their measurements were on the Solana gateway's provider pool. Left at cascade rung 4; the empty-`choices` fix above and the existing empty-turn detection both fail it over if it does starve in the field.
+
+`nemotron-3-ultra-550b` stays at rung 6 — low on purpose, and now covered by the empty-`choices` guard.
+
+---
+
 ## v0.12.258 — August 31, 2026
 
 ### Fixed — the free tier was dead and nothing said so

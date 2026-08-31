@@ -156,6 +156,19 @@ export const MODEL_ALIASES: Record<string, string> = {
   // `kimi` on K2.7. (`grok` WAS promoted to 4.5, but only after the cost
   // tradeoff was argued explicitly; there's no such case for qwen yet.)
   "qwen3.7-max": "qwen/qwen3.7-max",
+  // Qwen3.8 Flash — newer generation than the whole 3.7 line, and cheaper than
+  // the 3.7-plus tier it beats. Bare `qwen` stays UNBOUND (every other qwen*
+  // shorthand resolves to a free model, so binding the short name to a paid
+  // flagship would bill callers expecting free).
+  "qwen3.8-flash": "qwen/qwen3.8-flash",
+  "qwen3-8-flash": "qwen/qwen3.8-flash",
+  "qwen-vision": "qwen/qwen3.8-flash",
+  // DeepSeek's first image-capable SKU. Bare `deepseek` stays on deepseek-chat.
+  "deepseek-vision": "deepseek/deepseek-v4-flash-vision-exp",
+  "v4-flash-vision": "deepseek/deepseek-v4-flash-vision-exp",
+  // Xiaomi MiMo V2.5 — the natively multimodal SKU, distinct from mimo-v2.5-pro
+  // (text-only upstream). `mimo` stays on the Pro entry it has always named.
+  "mimo-vision": "xiaomi/mimo-v2.5",
   "qwen-3.7-max": "qwen/qwen3.7-max",
   "qwen3-7-max": "qwen/qwen3.7-max",
   // Plus/Flash tiers (2026-08-03) — explicit pins, same rule as Max.
@@ -171,7 +184,15 @@ export const MODEL_ALIASES: Record<string, string> = {
   hunyuan: "tencent/hy3",
   mimo: "xiaomi/mimo-v2.5-pro",
   "mimo-v2.5-pro": "xiaomi/mimo-v2.5-pro",
-  "mimo-v2.5": "xiaomi/mimo-v2.5-pro",
+  // RETARGETED 2026-08-30, Pro -> the real thing. This key used to point at
+  // `xiaomi/mimo-v2.5-pro`, which was harmless while no model owned the name —
+  // but blockrun then listed an actual `xiaomi/mimo-v2.5`, a DIFFERENT and
+  // natively-multimodal SKU at $0.14/$0.28 against Pro's $0.435/$0.87. Leaving
+  // it would have billed 3x for the text-only model when the caller named the
+  // cheaper multimodal one. (The key itself is safe: it is not equal to the
+  // catalog id, so it shadows nothing — the rule that bans `opus-5`-style keys
+  // does not apply to a bare shorthand.)
+  "mimo-v2.5": "xiaomi/mimo-v2.5",
   xiaomi: "xiaomi/mimo-v2.5-pro",
 
   // Google
@@ -338,6 +359,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // Vision-capable free models
   "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
+  // `vision-free` kept for backward compatibility ONLY — it still resolves to
+  // nano-omni, which is the strongest free model, but the free tier no longer
+  // claims working image input on either chain (see the catalog note). Do not
+  // advertise this alias as a way to get free vision.
   "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   // Retired shorthand aliases redirect to live successors. The catch-all target
   // moved llama-4-maverick → gpt-oss-120b (2026-07-17) → step-3.7-flash
@@ -700,8 +725,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "openai/gpt-5.6-terra-pro",
     name: "GPT-5.6 Terra Pro",
     version: "5.6",
-    inputPrice: 1.0,
-    outputPrice: 6.0,
+    inputPrice: 2.0,
+    outputPrice: 12.0,
     contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,
@@ -713,8 +738,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "openai/gpt-5.6-luna-pro",
     name: "GPT-5.6 Luna Pro",
     version: "5.6",
-    inputPrice: 0.1,
-    outputPrice: 0.6,
+    inputPrice: 0.2,
+    outputPrice: 1.2,
     contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,
@@ -1255,8 +1280,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "deepseek/deepseek-v4-pro",
     name: "DeepSeek V4 Pro",
     version: "4-pro",
-    inputPrice: 0.435,
-    outputPrice: 0.87,
+    inputPrice: 1.32,
+    outputPrice: 3.96,
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
@@ -1728,7 +1753,20 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 256000,
     maxOutput: 16384,
     reasoning: true,
-    vision: true,
+    // NO `vision: true` — 2026-08-31. Both catalogs advertise vision on this
+    // model and blockrun #448 cites an 8x8 PNG answering "Red", but a 64x64
+    // solid-red probe does not hold up: 1 of 4 correct on Base (the others
+    // "I'm not able to view the image" or leaked reasoning), and on sol it
+    // answered "white" twice, once with the response's own `model` field
+    // reading `nemotron-3-super-120b (fallback: ...nano-omni)` — the image is
+    // silently dropped and a text model answers.
+    //
+    // `vision: true` is what makes filterByVision() route real image turns
+    // here, so the flag does not merely describe the model, it aims traffic at
+    // it. HTTP 200 with a confident wrong colour is worse than no free vision:
+    // there is no error for a caller to branch on. Image turns go to paid
+    // vision models until a correctly-sized probe comes back right on both
+    // chains. Independently confirmed on Solana by the blockrun-sol owner.
   },
   // 2026-06-14: BlockRun re-featured these two as free flagships (catalog sweep).
   // Added to the auto-pick set behind gpt-oss to strengthen the mid/back of the
@@ -1851,7 +1889,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 131072,
     maxOutput: 16384,
     reasoning: true,
-    vision: true,
+    // Vision flag dropped 2026-08-31 with the rest of the free tier: this id is
+    // 410 Gone and the gateway redirects it to nano-omni, whose image path does
+    // not work either (see above). A pinned caller sending an image would have
+    // been told, by the flag, that it would be seen.
   },
 
   // ── 2026-08-30 free-tier rebuild (blockrun #448) ─────────────────────────
@@ -1926,7 +1967,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0,
     contextWindow: 128000,
     maxOutput: 16384,
-    vision: true,
+    // NO `vision: true` despite the name and blockrun's `categories:
+    // ["chat","vision"]` — 2026-08-31, three consecutive 64x64 PNG probes came
+    // back "I'm unable to see the image" / "you haven't provided an image",
+    // while a plain-text control on the same id answered fine. The model is
+    // alive; the image path is not. Mirroring the catalog's claim here would
+    // have routed image turns to it. See the nano-omni note above.
   },
   {
     // Cohere North Mini Code, on OpenRouter's $0 pool — 607ms median, the
@@ -1955,6 +2001,58 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0,
     contextWindow: 131072,
     maxOutput: 16384,
+  },
+
+  // ── 2026-08-30 paid catalog refresh (blockrun #449) ─────────────────────
+  // Three additions, each probe-verified upstream with a real completion AND a
+  // real image before listing. All three carry `vision: true` on that evidence
+  // — unlike the free tier, where the same claim did not survive a probe.
+  {
+    // Alibaba's 3.8 generation: 125B MoE, one tier above the whole 3.7 line and
+    // cheaper than the qwen3.7-plus ($0.32/$1.28) it outperforms.
+    // Vision took two probes to establish upstream: the first 400'd with
+    // `invalid_parameter_error` on an 8x8 PNG because the model requires >10px
+    // per side; 64x64 answered correctly. A single 400 is not a capability gap.
+    id: "qwen/qwen3.8-flash",
+    name: "Qwen3.8 Flash",
+    version: "3.8-flash",
+    inputPrice: 0.15,
+    outputPrice: 0.47,
+    contextWindow: 1000000,
+    maxOutput: 131072,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // The first DeepSeek SKU that takes images. Priced at DeepSeek's PEAK rate
+    // on purpose: they now split peak/off-peak and off-peak is half, so listing
+    // the lower number would sell under cost for seven hours every weekday.
+    id: "deepseek/deepseek-v4-flash-vision-exp",
+    name: "DeepSeek V4 Flash Vision",
+    version: "v4-flash-vision-exp",
+    inputPrice: 0.44,
+    outputPrice: 1.32,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // NOT a cheaper mimo-v2.5-pro — a different, natively multimodal SKU. The
+    // Pro entry is text-only upstream while this one takes images, at a third
+    // of the price. Keep both.
+    id: "xiaomi/mimo-v2.5",
+    name: "Xiaomi MiMo V2.5",
+    version: "2.5",
+    inputPrice: 0.14,
+    outputPrice: 0.28,
+    contextWindow: 1048576,
+    maxOutput: 131072,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
   },
 
   // Z.AI GLM-5 Models

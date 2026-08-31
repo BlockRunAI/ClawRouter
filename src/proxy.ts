@@ -186,8 +186,72 @@ const FREE_MODELS = new Set([
   "free/nemotron-3-ultra-550b", // largest free model, 1M ctx — but slow + flaky
   "free/llama-3.2-11b-vision", // only free Llama left; slowest, so last
 ]);
+/**
+ * Upstream ids the ACTIVE chain's gateway actually lists, or `undefined` while
+ * unknown. Populated once at startup by `loadGatewayCatalog()`.
+ *
+ * This exists because the two gateways do NOT carry the same free tier. BlockRun
+ * on Base rebuilt to seven free models on 2026-08-30; sol.blockrun.ai carries one
+ * of them, and answers HTTP 400 "Unknown model" for the other six. Solana has
+ * been the default chain for new installs since v0.12.246, so a fresh install
+ * would walk four hard 400s before reaching a rung its own gateway serves.
+ *
+ * Note these ids are NOT covered by the gateways' never-retire redirect rule —
+ * that only protects ids a gateway once shipped. A model that never existed on a
+ * chain hard-400s there, so this cannot be left to the fallback chain to absorb.
+ */
+let gatewayModelIds: Set<string> | undefined;
+
+/**
+ * Fetch the active gateway's catalog once, so the free cascade can skip rungs
+ * this chain does not serve.
+ *
+ * Deliberately advisory: it filters, it never *chooses*. The cascade head stays
+ * a committed literal because `free` in the alias map, `FREE_MODELS[0]`,
+ * `FREE_MODEL` and router-core's `ecoTiers.SIMPLE.primary` must agree, and
+ * `free-model-liveness.test.ts` checks that at build time — a runtime-derived
+ * head would make the invariant unverifiable. Any failure here leaves
+ * `gatewayModelIds` unset and every rung eligible, which is the pre-existing
+ * behaviour: a catalog we could not read must never disable the free tier.
+ */
+async function loadGatewayCatalog(apiBase: string): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
+    const res = await fetch(`${apiBase}/v1/models`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const body = (await res.json()) as { data?: Array<{ id?: string }> };
+    const ids = (body.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
+    if (ids.length === 0) return; // an empty catalog is a bad read, not a bare gateway
+    gatewayModelIds = new Set(ids);
+
+    const unserved = [...FREE_MODELS].filter((m) => !gatewayModelIds!.has(toUpstreamModelId(m)));
+    if (unserved.length > 0) {
+      console.log(
+        `[ClawRouter] Free models not served by this gateway (skipped in the cascade): ${unserved.join(", ")}`,
+      );
+    }
+  } catch {
+    // Offline, slow, or an unexpected shape — stay permissive.
+  }
+}
+
+/** Does the active gateway list this model? Permissive while the catalog is unknown. */
+function isServedByGateway(modelId: string): boolean {
+  if (!gatewayModelIds) return true;
+  return gatewayModelIds.has(toUpstreamModelId(modelId));
+}
+
 /** Pick the best available free model that isn't excluded. */
 function pickFreeModel(excludeList?: Set<string>): string | undefined {
+  for (const m of FREE_MODELS) {
+    if (excludeList?.has(m)) continue;
+    if (!isServedByGateway(m)) continue;
+    return m;
+  }
+  // Every rung was filtered out by the catalog. Fall back to the unfiltered walk:
+  // a stale or wrong catalog read must not be able to turn the free tier off.
   for (const m of FREE_MODELS) {
     if (!excludeList?.has(m)) return m;
   }
@@ -232,6 +296,8 @@ const HEARTBEAT_INTERVAL_MS = 2_000;
 // are flushed, so a slow RPC must not eat into OpenClaw's ~10-15s silence
 // timeout. On expiry the request proceeds optimistically.
 const BALANCE_CHECK_TIMEOUT_MS = 2_500;
+// Startup catalog read. Advisory only — see loadGatewayCatalog().
+const GATEWAY_CATALOG_TIMEOUT_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes (allows reasoning model first-attempt + non-reasoning fallback)
 const PER_MODEL_TIMEOUT_MS = 60_000; // 60s per non-reasoning model attempt (fallback to next on exceed)
 const REASONING_MODEL_TIMEOUT_MS = 180_000; // 3min per reasoning model attempt — first-token cold-start can take 60-120s on V4 Pro / Claude opus thinking / GPT-5 reasoning_effort=high
@@ -858,6 +924,16 @@ export function detectDegradedSuccessResponse(body: string): string | undefined 
     // Happens when models like gemini-3.1-flash-lite receive complex agentic requests
     // (e.g. Roo Code tool schemas) and produce zero output instead of refusing.
     const choices = parsed.choices;
+    // A 200 whose `choices` array is EMPTY carries no answer at all. Distinct
+    // from the empty-turn case below (which has a choice whose content is
+    // blank), and previously passed straight through to the caller as a
+    // success. Seen when a relay reports upstream congestion in the envelope
+    // rather than the body — the shape blockrun #448 hit on
+    // nemotron-3-ultra-550b at ~3 in 15 calls. Guarded on the key being present
+    // so a non-chat response (images, audio, embeddings) is untouched.
+    if (Array.isArray(choices) && choices.length === 0) {
+      return "degraded response: no choices returned";
+    }
     if (Array.isArray(choices) && choices.length > 0) {
       const choice = choices[0] as Record<string, unknown>;
       const msg = (choice.message ?? choice.delta) as Record<string, unknown> | undefined;
@@ -2166,6 +2242,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
   }
+
+  // Learn which models THIS chain's gateway serves, so the free cascade can skip
+  // rungs it does not carry (the two gateways do not share a free tier). Kicked
+  // off without awaiting: startup must not block on it, and until it resolves
+  // every rung stays eligible, which is the old behaviour.
+  void loadGatewayCatalog(apiBase);
 
   // Determine port: options.port > env var > default
   const listenPort = options.port ?? getProxyPort();
@@ -5563,6 +5645,32 @@ async function proxyRequest(
     } else {
       // For explicit model requests, use the requested model
       modelsToTry = modelId ? [modelId] : [];
+    }
+
+    // A free model this chain's gateway does not carry is a hard 400, not a
+    // fallback: the never-retire redirect rule only covers ids a gateway once
+    // shipped, and the free tiers diverged on 2026-08-30. `/model free` resolves
+    // through the alias map to a concrete id, so it lands in the explicit branch
+    // above and never touches pickFreeModel's filter — substitute here instead,
+    // where every path has converged on a chain.
+    //
+    // Only ever swaps one free model for another free model, so nothing becomes
+    // payable that was not, and a user who pinned a PAID model is untouched.
+    if (modelsToTry.length > 0) {
+      const unservedFree = modelsToTry.filter((m) => FREE_MODELS.has(m) && !isServedByGateway(m));
+      if (unservedFree.length > 0) {
+        const servedFree = [...FREE_MODELS].filter(
+          (m) => isServedByGateway(m) && !excludeList?.has(m),
+        );
+        const replacement = servedFree[0];
+        if (replacement) {
+          modelsToTry = modelsToTry.map((m) => (unservedFree.includes(m) ? replacement : m));
+          modelsToTry = modelsToTry.filter((m, i) => modelsToTry.indexOf(m) === i);
+          console.log(
+            `[ClawRouter] ${unservedFree.join(", ")} not served on this chain — using ${replacement}`,
+          );
+        }
+      }
     }
 
     // Ensure routed requests have a free-model last resort for non-tool chats.

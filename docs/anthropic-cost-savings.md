@@ -50,7 +50,7 @@ This is where you're paying for real value:
 
 ## The Solution: ClawRouter
 
-[ClawRouter](https://github.com/BlockRunAI/ClawRouter) is an open-source local proxy that sits between your app and <!-- br:models.chatVisible -->73<!-- /br:models.chatVisible --> AI models. It saves you money in three ways: **smart routing**, **token optimization**, and **response caching**.
+[ClawRouter](https://github.com/BlockRunAI/ClawRouter) is an open-source local proxy that sits between your app and <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> AI models. It saves you money in three ways: **smart routing**, **token optimization**, and **response caching**.
 
 ```
 ┌─────────────┐     ┌──────────────────────────────┐     ┌──────────────────┐

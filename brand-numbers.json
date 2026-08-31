@@ -2,8 +2,8 @@
   "$schema": "https://blockrun.ai/brand/numbers.schema.json",
   "version": 1,
   "models": {
-    "chatVisible": 73,
-    "totalVisible": 97,
+    "chatVisible": 76,
+    "totalVisible": 100,
     "free": 7,
     "freeWithheld": 26,
     "image": 9,
@@ -11,14 +11,14 @@
     "music": 1,
     "speech": 5,
     "soundfx": 1,
-    "withFallback": 46,
-    "withFallbackAllEntries": 87
+    "withFallback": 48,
+    "withFallbackAllEntries": 89
   },
   "clawrouter": {
     "dimensions": 15,
     "tiers": 4,
     "profiles": 4,
-    "aliases": 253
+    "aliases": 259
   },
   "mcp": {
     "tools": 20
@@ -29,6 +29,6 @@
   "savings": {
     "baselineModel": "anthropic/claude-opus-5",
     "ecoVsBaselinePct": 98,
-    "autoVsBaselinePct": 88
+    "autoVsBaselinePct": 84
   }
 }

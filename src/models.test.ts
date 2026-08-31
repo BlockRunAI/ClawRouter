@@ -282,6 +282,25 @@ describe("capability flags vs blockrun's catalog", () => {
     }
   });
 
+  it("claims no vision on any free model — the flag routes real image turns", () => {
+    // 2026-08-31. Both gateways' catalogs advertise vision on the free tier and
+    // blockrun #448 cites an 8x8 PNG answering "Red", but a properly-sized
+    // 64x64 solid-red probe does not hold up: nano-omni was 1 of 4 correct on
+    // Base and answered "white" twice on sol (once with the response's own
+    // `model` field showing a silent fallback to a text model), and
+    // llama-3.2-11b-vision said "I'm unable to see the image" on 3 of 3 while a
+    // plain-text control passed. Independently confirmed on Solana by the
+    // blockrun-sol owner.
+    //
+    // This is not cosmetic: `vision` is what filterByVision() uses to AIM image
+    // turns at a model. An HTTP 200 carrying a confident wrong colour is worse
+    // than having no free vision, because there is no error to branch on. If a
+    // future probe comes back correct on both chains, restore the flag with the
+    // probe recorded here — do not restore it from a catalog `categories` list.
+    const freeWithVision = BLOCKRUN_MODELS.filter((m) => m.inputPrice === 0 && m.vision);
+    expect(freeWithVision.map((m) => m.id)).toEqual([]);
+  });
+
   it("marks MiniMax M3 vision-capable so image_url requests reach it", () => {
     // blockrun's catalog lists M3 as chat+reasoning+coding with no `vision`
     // category, but that is an upstream under-claim (same class as the Claude

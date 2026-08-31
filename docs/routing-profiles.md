@@ -75,11 +75,13 @@ Set `routing.overrides.agenticMode: false` to disable the agentic tier set, or `
 
 ## FREE (`/model free`)
 
-`free` is an alias, not a routed profile: it pins the free-tier default, currently **`free/nemotron-3.5-lightning`** — the same model that opens ECO SIMPLE. If that model is excluded (`/exclude add lightning`) or the budget cap forces a free fallback, the proxy walks the free cascade in this order: nemotron-3.5-lightning → nemotron-3-nano-30b → laguna-xs-2.1 → north-mini-code → nemotron-3-nano-omni-30b-a3b-reasoning (vision) → nemotron-3-ultra-550b → llama-3.2-11b-vision (vision). All seven are $0.00 and need no USDC.
+`free` is an alias, not a routed profile: it pins the free-tier default, currently **`free/nemotron-3.5-lightning`** — the same model that opens ECO SIMPLE. If that model is excluded (`/exclude add lightning`) or the budget cap forces a free fallback, the proxy walks the free cascade in this order: nemotron-3.5-lightning → nemotron-3-nano-30b → laguna-xs-2.1 → north-mini-code → nemotron-3-nano-omni-30b-a3b-reasoning → nemotron-3-ultra-550b → llama-3.2-11b-vision. All seven are $0.00 and need no USDC, and all seven are treated as **text-only** — see the vision note below.
 
 The order is not arbitrary. The head is whatever the gateway itself redirects the previous head to, so the proxy and the gateway never name different models. After it comes the fastest rung, then the two sub-second coders — adjacent on purpose, because they sit on _different_ capacity pools (our own NVIDIA key vs OpenRouter's $0 pool), so one pool's outage cannot take both. The vision model sits mid-chain, and the two slowest rungs go last. The tier stopped being NVIDIA-only on 2026-08-30: two of the seven come from Cohere and Poolside.
 
-Pin any of them directly with `/model lightning`, `/model nano-30b`, `/model laguna`, `/model north-mini`, `/model nemotron-omni` (vision), `/model ultra-550b` or `/model llama-vision` (vision).
+Pin any of them directly with `/model lightning`, `/model nano-30b`, `/model laguna`, `/model north-mini`, `/model nemotron-omni`, `/model ultra-550b` or `/model llama-vision`.
+
+**No free model carries the `vision` flag,** even the two the upstream catalogs advertise as vision-capable. A 64×64 solid-colour probe on 2026-08-31 got the right answer 1 time in 4 from `nemotron-3-nano-omni` on Base, and "white" for red on Solana — where the response's own `model` field showed a silent fallback to a text model. `llama-3.2-11b-vision`, despite the name, said "I'm unable to see the image" on 3 of 3 while a plain-text control passed. Every one of those is an HTTP 200, so the caller gets a confident wrong answer with nothing to branch on. Since `vision` is what `filterByVision()` uses to _aim_ image turns at a model, flagging them would route real traffic into that. Requests carrying an `image_url` go to a paid vision model.
 
 ---
 
@@ -111,7 +113,7 @@ Combined input + output rate per 1M tokens, primaries only:
 | COMPLEX   | $1.75 | $14.00 | **88%**  |
 | REASONING | $0.70 | $0.70  | 0%       |
 
-The published savings claim (**88%** on `auto`, **98%** on `eco`, against pinning Claude Opus 5) is blended across a stated workload mix and priced on the live catalog — see [`savings-mix.json`](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json). Per-tier numbers above are illustrative; the blended figure is the one to quote.
+The published savings claim (**84%** on `auto`, **98%** on `eco`, against pinning Claude Opus 5) is blended across a stated workload mix and priced on the live catalog — see [`savings-mix.json`](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json). Per-tier numbers above are illustrative; the blended figure is the one to quote.
 
 ---
 
