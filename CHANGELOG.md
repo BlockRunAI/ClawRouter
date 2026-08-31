@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.262 — August 31, 2026
+
+### Added — four live catalog models that were never in the picker
+
+`google/gemini-3.6-flash`, `google/gemini-3.5-flash-lite`, `tencent/hy3` and `xiaomi/mimo-v2.5-pro` have had entries in `src/models.ts` and have been visible in the live BlockRun catalog, but none of them was ever added to `src/top-models.json`. Everything that curates against that file — the picker, and every downstream consumer of `TOP_MODELS` — has been blind to all four.
+
+Placement follows the existing grouping, with no reordering of current entries: the two Gemini flash tiers beside their siblings, `mimo-v2.5-pro` after `mimo-v2.5`, `hy3` after the Qwen pair. 51 → 55 entries.
+
+Surfaced from downstream. ClawRouter-Hermes curates its Telegram/gateway picker against this file and had to park all four in an exemption set to get its own mirror guard green ([Hermes #32](https://github.com/BlockRunAI/ClawRouter-Hermes/pull/32)); that exemption is now removed, and the two catalogs are identical entry for entry and in order.
+
+---
+
 ## v0.12.261 — August 31, 2026
 
 ### Fixed — image requests were skipping the cheapest model that can handle them
