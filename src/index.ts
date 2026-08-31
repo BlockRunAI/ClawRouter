@@ -72,6 +72,7 @@ import {
   mkdirSync,
   copyFileSync,
   renameSync,
+  unlinkSync,
 } from "node:fs";
 import { readFile as readFileAsync } from "node:fs/promises";
 import { readTextFileSync } from "./fs-read.js";
@@ -617,8 +618,21 @@ function syncAgentModelCache(
 
 /**
  * Inject dummy auth profile for BlockRun into agent auth stores.
- * OpenClaw's agent system looks for auth credentials even if provider has auth: [].
- * We inject a placeholder so the lookup succeeds (proxy handles real auth internally).
+ *
+ * The legacy ``auth-profiles.json`` write is now deliberately narrow:
+ *
+ * - Wherever ``openclaw-agent.sqlite`` exists, the SQLite auth store is
+ *   authoritative. Writing the legacy JSON beside it is at best ignored, at
+ *   worst a failed-closed migration trigger: since OpenClaw 2026.8.1 a
+ *   leftover legacy file beside a store that holds no profiles fails auth
+ *   migration for the whole agent fleet. So we never write there, and we
+ *   clean up the placeholder we previously injected.
+ * - The shared auth-owner directory (``main``) is managed by OpenClaw
+ *   itself; a placeholder written there can shadow that state. The
+ *   provider's real auth comes from the x402 proxy (and the apiKey
+ *   injectModelsConfig writes into openclaw.json), so nothing is lost.
+ * - Only on very old installs with no SQLite store at all do we keep the
+ *   original JSON bootstrap, which those releases import.
  */
 function injectAuthProfile(logger: { info: (msg: string) => void }): void {
   const agentsDir = join(homedir(), ".openclaw", "agents");
@@ -649,6 +663,22 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
     for (const agentId of agents) {
       const authDir = join(agentsDir, agentId, "agent");
       const authPath = join(authDir, "auth-profiles.json");
+      const sqlitePath = join(authDir, "openclaw-agent.sqlite");
+
+      // SQLite store exists: it is authoritative, and the legacy JSON is
+      // obsolete. Remove our own placeholder and never rewrite it.
+      if (existsSync(sqlitePath)) {
+        removeInjectedAuthPlaceholder(authPath, logger, agentId);
+        continue;
+      }
+
+      // Never write into the shared auth-owner directory. OpenClaw manages
+      // its credentials centrally, and a leftover legacy file there is what
+      // fails dispatch closed on 2026.8.1+ when that store is empty.
+      if (agentId === "main") {
+        removeInjectedAuthPlaceholder(authPath, logger, agentId);
+        continue;
+      }
 
       // Create agent dir if needed
       if (!existsSync(authDir)) {
@@ -703,6 +733,42 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
     }
   } catch (err) {
     logger.info(`Auth injection failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Remove a legacy ``auth-profiles.json`` — but only when it contains nothing
+ * but the exact placeholder this plugin injects. A real user credential file
+ * is never touched.
+ */
+function removeInjectedAuthPlaceholder(
+  authPath: string,
+  logger: { info: (msg: string) => void },
+  agentId: string,
+): void {
+  try {
+    if (!existsSync(authPath)) return;
+    const parsed = JSON.parse(readTextFileSync(authPath)) as {
+      profiles?: Record<string, unknown>;
+    };
+    const profiles = parsed?.profiles;
+    if (!profiles || typeof profiles !== "object" || Array.isArray(profiles)) return;
+    const keys = Object.keys(profiles);
+    if (keys.length !== 1 || keys[0] !== "blockrun:default") return;
+    const entry = profiles["blockrun:default"];
+    if (!entry || typeof entry !== "object") return;
+    const profile = entry as { type?: unknown; provider?: unknown; key?: unknown };
+    if (
+      profile.type !== "api_key" ||
+      profile.provider !== "blockrun" ||
+      profile.key !== "x402-proxy-handles-auth"
+    ) {
+      return;
+    }
+    unlinkSync(authPath);
+    logger.info(`Removed legacy BlockRun auth placeholder for agent: ${agentId}`);
+  } catch {
+    // Unreadable or not our file — leave it alone.
   }
 }
 
