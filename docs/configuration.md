@@ -12,6 +12,7 @@ Complete reference for ClawRouter configuration options.
 - [Routing Configuration](#routing-configuration)
 - [Tier Overrides](#tier-overrides)
 - [Scoring Weights](#scoring-weights)
+- [Spend Control & Counterparty Policy](#spend-control--counterparty-policy)
 - [Testing Configuration](#testing-configuration)
 
 ---
@@ -537,6 +538,86 @@ routing:
     # Require higher confidence for tier assignment
     confidenceThreshold: 0.8 # Default: 0.7
 ```
+
+---
+
+## Spend Control & Counterparty Policy
+
+Amount caps bound **how much** the agent may pay. Counterparty policy bounds
+**whom** it may pay, and on which network and asset. Both are evaluated before
+the wallet signs anything: a refusal aborts the payment at the x402 pre-sign
+hook, so no authorization is ever produced.
+
+Everything here is **off by default**. An unconfigured list is not consulted.
+
+State lives in `~/.openclaw/blockrun/spending.json` (mode 0600), read once at
+proxy startup — **edit it, then restart the proxy** for changes to take effect.
+
+```json
+{
+  "limits": {
+    "perRequest": 0.05,
+    "hourly": 2.0,
+    "daily": 20.0,
+    "session": 5.0,
+    "allowedPayees": ["0x1111111111111111111111111111111111111111"],
+    "blockedPayees": ["0x2222222222222222222222222222222222222222"],
+    "allowedNetworks": ["eip155:8453"],
+    "allowedAssets": ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"]
+  },
+  "history": []
+}
+```
+
+| Field                                         | Meaning                                                                            |
+| --------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `perRequest` / `hourly` / `daily` / `session` | USD caps. Rolling 1h and 24h windows; session resets on restart.                   |
+| `allowedPayees`                               | Only these `payTo` addresses may be paid.                                          |
+| `blockedPayees`                               | These may never be paid. **Wins over `allowedPayees`** when an address is on both. |
+| `allowedNetworks`                             | CAIP-2 ids only.                                                                   |
+| `allowedAssets`                               | Token contract addresses of the asset being paid in.                               |
+
+**Networks are CAIP-2, not nicknames.** `base` does not match `eip155:8453`
+and fails closed. Use `eip155:8453` for Base and
+`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d` for Solana mainnet; both
+are exported as `CAIP2_BASE` and `CAIP2_SOLANA_MAINNET`.
+
+EVM addresses in `allowedPayees`, `blockedPayees` and `allowedAssets` are
+compared case-insensitively, so checksummed and lowercase forms both match.
+Solana base58 addresses are case-sensitive and compared exactly.
+
+### Fail-closed behavior
+
+- A configured list with **no matching value on the payment** refuses, rather
+  than skipping the check.
+- A payment quote whose amount is not a canonical decimal integer refuses
+  whenever an amount cap is set. (`parseInt` and the signer's `BigInt` disagree
+  on `0x`-style values, so an unparseable quote is never treated as $0.)
+- A **malformed** policy list in `spending.json` refuses every paid request
+  until the file is repaired. The proxy still starts and free models keep
+  working; the error names the offending field. An empty array (`[]`) is not
+  malformed — it means "not configured", and is how you clear a list by hand.
+
+### Programmatic use
+
+```ts
+import { SpendControl, registerSpendPolicyHook, CAIP2_BASE } from "@blockrun/clawrouter";
+
+const control = new SpendControl();
+control.setLimit("daily", 20);
+control.setPolicy("allowedNetworks", [CAIP2_BASE]);
+
+// startProxy does this for you; only needed on your own x402 client.
+registerSpendPolicyHook(x402, control);
+```
+
+A refusal reaches the caller as HTTP 403 with
+`{"error": {"type": "spend_policy_denied", ...}}`. It is deliberately **not**
+retried against other models: a policy denial is a decision, not an outage.
+
+**Scope:** this governs payments made by the proxy. Local tools that sign with
+the same wallet outside the proxy's x402 client (Polymarket funding and order
+placement, `clawrouter doctor`'s probe) are not covered.
 
 ---
 

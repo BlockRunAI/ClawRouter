@@ -2448,10 +2448,17 @@ export {
   FileSpendControlStorage,
   InMemorySpendControlStorage,
   formatDuration,
+  registerSpendPolicyHook,
+  SpendPolicyError,
+  MalformedSpendPolicyError,
+  CAIP2_BASE,
+  CAIP2_SOLANA_MAINNET,
 } from "./spend-control.js";
 export type {
   SpendWindow,
+  PolicyList,
   SpendLimits,
+  CounterpartyInfo,
   SpendRecord,
   SpendingStatus,
   CheckResult,

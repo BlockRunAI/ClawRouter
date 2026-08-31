@@ -25,6 +25,7 @@ import type { x402Client } from "@x402/fetch";
 import { x402HTTPClient } from "@x402/fetch";
 
 import { resolveMaxTokens } from "./max-tokens.js";
+import { SpendPolicyError } from "./spend-control.js";
 
 type PaymentRequired = Parameters<InstanceType<typeof x402Client>["createPaymentPayload"]>[0];
 
@@ -127,9 +128,15 @@ export function createPayFetchWithPreAuth(
         // The rejection 402 is NOT a reusable challenge, so drop it and fall
         // through to a clean, un-paid request that yields a fresh challenge.
         cache.delete(cacheKey);
-      } catch {
-        // Pre-auth signing failed — invalidate and fall through.
+      } catch (err) {
         cache.delete(cacheKey);
+        // A spend-policy refusal is deterministic: falling through would sign
+        // the same blocked payment again on the fresh-challenge path, costing
+        // an extra unpaid upstream round trip to reach the identical denial.
+        if (err instanceof SpendPolicyError) {
+          throw err;
+        }
+        // Pre-auth signing failed — invalidate and fall through.
       }
     }
 
