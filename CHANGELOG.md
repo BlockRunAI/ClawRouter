@@ -4,6 +4,31 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.257 — August 31, 2026
+
+### Added — counterparty policy: control *who* the agent may pay, not just how much
+
+`SpendLimits` already bounded how much an agent could spend per request, hour, day and session. It said nothing about **whom** it paid, or on which network and asset. Four optional, default-off lists close that: `allowedPayees`, `blockedPayees`, `allowedNetworks` and `allowedAssets`, with a block always beating an allow when an address is on both.
+
+Enforcement runs on the live payment path, not just in the SDK: `startProxy` registers an x402 `onBeforePaymentCreation` hook, so a refusal aborts **before** the scheme signer runs and no authorization is ever produced. A configured list with no matching value on the payment refuses rather than skipping the check. Networks are CAIP-2 only — `base` does not match `eip155:8453` and fails closed. EVM addresses are compared case-insensitively so checksummed and lowercase forms both match. State lives in `~/.openclaw/blockrun/spending.json`, documented in `docs/configuration.md`.
+
+A policy denial reaches the caller as HTTP 403 `spend_policy_denied` and is deliberately never retried against other models: it is a decision, not an outage. Treated as a retryable provider error it would have walked the entire paid fallback chain and then answered 200 from a free model, hiding the refusal completely.
+
+Four things found in review and fixed before merge, all on the money path:
+
+- **Amount quotes are validated, not coerced.** `Number.parseInt(amount, 10)` truncates at the first non-decimal character while `@x402/evm` signs `BigInt(value)`, and `@x402/core` validates the field as a non-empty string with no digit check. `parseInt("0x1DCD6500", 10)` is `0`; `BigInt("0x1DCD6500")` is `500000000`. A gateway quoting hex (or `0b`/`0o`) would have read as $0.000000 against every cap and still had the full amount authorized. Quotes must now be canonical decimal integers, and anything else refuses whenever a cap is set. x402 v1's `maxAmountRequired` is read too — v2 renamed it to `amount`, so v1 quotes had been parsing as free.
+- **Reservations are released.** The pre-sign hold is now in-memory rather than a persisted spend record: settled when the payment is signed, released when the signer fails, and expired after two minutes. Previously a failed signer, a rejected pre-authorization and every fallback attempt each consumed budget permanently for money that never moved.
+- **Recording a payment no longer erases policy.** History-only saves preserve the limits already on disk, writes are atomic (temp + rename), and an empty array means "not configured" instead of tripping the corruption guard. A torn write previously parsed as a failure and silently dropped configured lists — fail-open on the one file that must not do that.
+- **A malformed policy file no longer takes the proxy down.** It refuses every paid request and says so loudly, while the proxy stays up so free models keep working.
+
+`proxy.spend-policy.test.ts` pins the `startProxy` wiring itself: deleting the hook registration previously left the whole suite green, shipping a policy that governed nothing.
+
+Not covered, and documented as such: Polymarket funding and order placement, and `clawrouter doctor`'s probe, sign with the same wallet outside the proxy's x402 client. There is also no CLI command for `setPolicy` yet — edit `spending.json` and restart.
+
+- Thanks to @twzrd-sol for the design, the implementation, and two rounds of fast iteration (#268, closes #230).
+
+---
+
 ## v0.12.256 — August 30, 2026
 
 ### Fixed — multimodal retries now dedupe and cache-hit like text-only ones

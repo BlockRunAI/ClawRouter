@@ -1,5 +1,6 @@
 import { RoutingConfig, RoutingDecision } from '@blockrun/router-core';
 export { DEFAULT_ROUTING_CONFIG, RouterOptions, RoutingConfig, RoutingDecision, TaskType, Tier, calculateModelCost, filterCandidatesByCapacity, getFallbackChain, getFallbackChainFiltered, inferToolRequirement, route } from '@blockrun/router-core';
+import { x402Client } from '@x402/fetch';
 
 /**
  * OpenClaw Plugin Types (locally defined)
@@ -589,6 +590,234 @@ declare class SolanaBalanceMonitor {
 }
 
 /**
+ * Spend Control - Time-windowed spending limits and counterparty policy
+ *
+ * Absorbed from @blockrun/clawwallet. Chain-agnostic (works for both EVM and Solana).
+ *
+ * Features:
+ * - Per-request limits (e.g., max $0.10 per call)
+ * - Hourly limits (e.g., max $3.00 per hour)
+ * - Daily limits (e.g., max $20.00 per day)
+ * - Session limits (e.g., max $5.00 per session)
+ * - Rolling windows (last 1h, last 24h)
+ * - Counterparty policy: payee allow/deny, network and asset allowlists
+ * - Fail-closed enforcement before the signer, via the x402 pre-sign hook
+ * - Persistent storage (~/.openclaw/blockrun/spending.json)
+ */
+
+type SpendWindow = "perRequest" | "hourly" | "daily" | "session";
+/**
+ * Counterparty/network/asset allow-or-deny lists. Default-off: a list only
+ * takes effect once configured via setPolicy(). `allowedPayees`/`blockedPayees`
+ * are both supported (block always wins if both are set); network and asset
+ * are allowlist-only, matching what a caller can realistically enumerate.
+ */
+type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" | "allowedAssets";
+/** Base mainnet, as carried on x402 `selectedRequirements.network`. */
+declare const CAIP2_BASE = "eip155:8453";
+/** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
+declare const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+/**
+ * A policy list on disk is present but unusable. Thrown rather than swallowed:
+ * silently dropping a corrupted allow/deny list would widen what the agent may
+ * pay, which is the one direction this file must never fail in. Callers
+ * classify on `instanceof`, not on the message text.
+ */
+declare class MalformedSpendPolicyError extends Error {
+    constructor(key: string);
+}
+interface SpendLimits {
+    perRequest?: number;
+    hourly?: number;
+    daily?: number;
+    session?: number;
+    allowedPayees?: string[];
+    blockedPayees?: string[];
+    /**
+     * CAIP-2 identifiers matching x402 `selectedRequirements.network`
+     * (e.g. `eip155:8453`, `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`).
+     * Nicknames such as `base` or `solana` do not match and fail closed.
+     */
+    allowedNetworks?: string[];
+    allowedAssets?: string[];
+}
+/**
+ * Counterparty details for a pending payment, passed to check() alongside
+ * the estimated cost. EVM `payTo` values matching `0x` + 40 hex are compared
+ * case-insensitively; anything else (including Solana base58) is exact-match.
+ */
+interface CounterpartyInfo {
+    payTo?: string;
+    network?: string;
+    asset?: string;
+}
+interface SpendRecord {
+    timestamp: number;
+    amount: number;
+    model?: string;
+    action?: string;
+}
+interface SpendingStatus {
+    limits: SpendLimits;
+    spending: {
+        hourly: number;
+        daily: number;
+        session: number;
+    };
+    remaining: {
+        hourly: number | null;
+        daily: number | null;
+        session: number | null;
+    };
+    calls: number;
+}
+interface CheckResult {
+    allowed: boolean;
+    blockedBy?: SpendWindow;
+    blockedByPolicy?: PolicyList;
+    remaining?: number;
+    reason?: string;
+    resetIn?: number;
+}
+interface SpendControlStorage {
+    load(): {
+        limits: SpendLimits;
+        history: SpendRecord[];
+    } | null;
+    save(data: {
+        limits: SpendLimits;
+        history: SpendRecord[];
+    }): void;
+    /**
+     * Optional: persist history without touching stored limits. Implement it to
+     * keep recorded spend from overwriting an operator's policy edits. Falls
+     * back to save() when absent.
+     */
+    saveHistory?(history: SpendRecord[]): void;
+}
+declare class FileSpendControlStorage implements SpendControlStorage {
+    private readonly spendingFile;
+    constructor();
+    load(): {
+        limits: SpendLimits;
+        history: SpendRecord[];
+    } | null;
+    save(data: {
+        limits: SpendLimits;
+        history: SpendRecord[];
+    }): void;
+    /**
+     * Persist history while leaving the stored limits exactly as they are on
+     * disk. Recording spend must not rewrite policy: the proxy reads limits once
+     * at startup, so writing its in-memory copy back on every payment would
+     * erase an operator's hand-edit to spending.json seconds after they made it.
+     */
+    saveHistory(history: SpendRecord[]): void;
+}
+declare class InMemorySpendControlStorage implements SpendControlStorage {
+    private data;
+    load(): {
+        limits: SpendLimits;
+        history: SpendRecord[];
+    } | null;
+    save(data: {
+        limits: SpendLimits;
+        history: SpendRecord[];
+    }): void;
+}
+interface SpendControlOptions {
+    storage?: SpendControlStorage;
+    now?: () => number;
+}
+declare class SpendControl {
+    private limits;
+    private history;
+    private sessionSpent;
+    private sessionCalls;
+    private pending;
+    private reservationSeq;
+    /** Limits we loaded and have not changed; history-only saves must not clobber operator edits. */
+    private limitsDirty;
+    /** Set when spending.json held an unusable policy list: refuse every payment. */
+    private policyFileBroken?;
+    private readonly storage;
+    private readonly now;
+    constructor(options?: SpendControlOptions);
+    setLimit(window: SpendWindow, amount: number): void;
+    clearLimit(window: SpendWindow): void;
+    setPolicy(list: PolicyList, values: string[]): void;
+    clearPolicy(list: PolicyList): void;
+    getLimits(): SpendLimits;
+    check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult;
+    record(amount: number, metadata?: {
+        model?: string;
+        action?: string;
+    }): void;
+    /** True when any window that this module can compare an amount against is set. */
+    hasAmountLimits(): boolean;
+    /** True when a window spans more than one request, so reservations matter. */
+    hasAggregateLimits(): boolean;
+    /**
+     * Hold `amount` against the aggregate windows before a payment is signed.
+     *
+     * Reservations live in memory only and are never persisted: an unsettled
+     * reservation is not spend, and writing it to disk is what made a failed
+     * signer permanently consume budget. They expire on their own so a caller
+     * that never settles or releases (process killed mid-payment, a transport
+     * that hangs past the payment timeout) cannot wedge the window shut.
+     */
+    reserve(amount: number): string;
+    /** Convert a reservation into recorded spend (the payment was signed). */
+    settleReservation(id: string, metadata?: {
+        model?: string;
+        action?: string;
+    }): void;
+    /** Drop a reservation without recording spend (the payment was never signed). */
+    releaseReservation(id: string): void;
+    /** Total currently held but not yet settled. */
+    private pendingTotal;
+    private expireReservations;
+    private getSpendingInWindow;
+    getSpending(window: "hourly" | "daily" | "session"): number;
+    getRemaining(window: "hourly" | "daily" | "session"): number | null;
+    getStatus(): SpendingStatus;
+    getHistory(limit?: number): SpendRecord[];
+    resetSession(): void;
+    private cleanup;
+    private save;
+    private load;
+}
+/**
+ * Thrown from the pre-sign hook when policy or an amount window refuses.
+ *
+ * A deliberate refusal must never be mistaken for a transient upstream fault:
+ * the proxy's fallback loop retries provider errors across every paid model
+ * and then silently lands on a free one, which would hide the denial from the
+ * caller entirely. Callers classify on `instanceof` (see `proxy.ts`), so the
+ * message text is free to change. It keeps the `Payment creation aborted:`
+ * prefix that `@x402/core` uses for its own aborts so existing log greps and
+ * error matchers still see a familiar string.
+ */
+declare class SpendPolicyError extends Error {
+    readonly blockedBy?: SpendWindow;
+    readonly blockedByPolicy?: PolicyList;
+    constructor(reason: string, blocked?: {
+        blockedBy?: SpendWindow;
+        blockedByPolicy?: PolicyList;
+    });
+}
+/**
+ * Register the fail-closed spend-policy hook on an x402 client.
+ *
+ * Reservations are keyed on the `selectedRequirements` object, which
+ * `@x402/core` passes by reference to the before / after / failure hooks of
+ * the same `createPaymentPayload` call, so concurrent payments never settle
+ * each other's reservation.
+ */
+declare function registerSpendPolicyHook(x402: x402Client, control: SpendControl): void;
+declare function formatDuration(seconds: number): string;
+
+/**
  * Session Persistence Store
  *
  * Tracks model selections per session to prevent model switching mid-task.
@@ -846,6 +1075,11 @@ type ProxyOptions = {
     /** Called when balance is insufficient for a request (request fails) */
     onInsufficientFunds?: (info: InsufficientFundsInfo) => void;
     /**
+     * Spend / counterparty policy. Default: FileSpendControlStorage at
+     * ~/.openclaw/blockrun/spending.json. Inject in tests.
+     */
+    spendControl?: SpendControl;
+    /**
      * Upstream proxy URL for all outgoing requests.
      * Supports http://, https://, and socks5:// schemes.
      * Also readable via BLOCKRUN_UPSTREAM_PROXY environment variable.
@@ -1089,118 +1323,6 @@ declare class RequestDeduplicator {
     /** Prune expired completed entries. */
     private prune;
 }
-
-/**
- * Spend Control - Time-windowed spending limits
- *
- * Absorbed from @blockrun/clawwallet. Chain-agnostic (works for both EVM and Solana).
- *
- * Features:
- * - Per-request limits (e.g., max $0.10 per call)
- * - Hourly limits (e.g., max $3.00 per hour)
- * - Daily limits (e.g., max $20.00 per day)
- * - Session limits (e.g., max $5.00 per session)
- * - Rolling windows (last 1h, last 24h)
- * - Persistent storage (~/.openclaw/blockrun/spending.json)
- */
-type SpendWindow = "perRequest" | "hourly" | "daily" | "session";
-interface SpendLimits {
-    perRequest?: number;
-    hourly?: number;
-    daily?: number;
-    session?: number;
-}
-interface SpendRecord {
-    timestamp: number;
-    amount: number;
-    model?: string;
-    action?: string;
-}
-interface SpendingStatus {
-    limits: SpendLimits;
-    spending: {
-        hourly: number;
-        daily: number;
-        session: number;
-    };
-    remaining: {
-        hourly: number | null;
-        daily: number | null;
-        session: number | null;
-    };
-    calls: number;
-}
-interface CheckResult {
-    allowed: boolean;
-    blockedBy?: SpendWindow;
-    remaining?: number;
-    reason?: string;
-    resetIn?: number;
-}
-interface SpendControlStorage {
-    load(): {
-        limits: SpendLimits;
-        history: SpendRecord[];
-    } | null;
-    save(data: {
-        limits: SpendLimits;
-        history: SpendRecord[];
-    }): void;
-}
-declare class FileSpendControlStorage implements SpendControlStorage {
-    private readonly spendingFile;
-    constructor();
-    load(): {
-        limits: SpendLimits;
-        history: SpendRecord[];
-    } | null;
-    save(data: {
-        limits: SpendLimits;
-        history: SpendRecord[];
-    }): void;
-}
-declare class InMemorySpendControlStorage implements SpendControlStorage {
-    private data;
-    load(): {
-        limits: SpendLimits;
-        history: SpendRecord[];
-    } | null;
-    save(data: {
-        limits: SpendLimits;
-        history: SpendRecord[];
-    }): void;
-}
-interface SpendControlOptions {
-    storage?: SpendControlStorage;
-    now?: () => number;
-}
-declare class SpendControl {
-    private limits;
-    private history;
-    private sessionSpent;
-    private sessionCalls;
-    private readonly storage;
-    private readonly now;
-    constructor(options?: SpendControlOptions);
-    setLimit(window: SpendWindow, amount: number): void;
-    clearLimit(window: SpendWindow): void;
-    getLimits(): SpendLimits;
-    check(estimatedCost: number): CheckResult;
-    record(amount: number, metadata?: {
-        model?: string;
-        action?: string;
-    }): void;
-    private getSpendingInWindow;
-    getSpending(window: "hourly" | "daily" | "session"): number;
-    getRemaining(window: "hourly" | "daily" | "session"): number | null;
-    getStatus(): SpendingStatus;
-    getHistory(limit?: number): SpendRecord[];
-    resetSession(): void;
-    private cleanup;
-    private save;
-    private load;
-}
-declare function formatDuration(seconds: number): string;
 
 /**
  * Wallet Key Derivation
@@ -1602,4 +1724,4 @@ declare function parseCallArgs(raw: string): {
 declare function buildImageGenerationProvider(): ImageGenerationProviderPlugin;
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, type CachedLLMResponse, type CachedResponse, type CheckResult, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };

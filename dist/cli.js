@@ -27426,8 +27426,8 @@ var init_parseUtil = __esm({
     init_errors4();
     init_en();
     makeIssue = (params) => {
-      const { data, path: path6, errorMaps, issueData } = params;
-      const fullPath = [...path6, ...issueData.path || []];
+      const { data, path: path5, errorMaps, issueData } = params;
+      const fullPath = [...path5, ...issueData.path || []];
       const fullIssue = {
         ...issueData,
         path: fullPath
@@ -27738,11 +27738,11 @@ var init_types = __esm({
     init_parseUtil();
     init_util();
     ParseInputLazyPath = class {
-      constructor(parent, value, path6, key2) {
+      constructor(parent, value, path5, key2) {
         this._cachedPath = [];
         this.parent = parent;
         this.data = value;
-        this._path = path6;
+        this._path = path5;
         this._key = key2;
       }
       get path() {
@@ -32235,6 +32235,613 @@ var init_max_tokens = __esm({
   }
 });
 
+// src/fs-read.ts
+import { open } from "fs/promises";
+import { openSync, readSync, closeSync, fstatSync } from "fs";
+async function readTextFile(filePath) {
+  const fh = await open(filePath, "r");
+  try {
+    const size5 = (await fh.stat()).size;
+    const buf = Buffer.alloc(size5);
+    let offset = 0;
+    while (offset < size5) {
+      const { bytesRead } = await fh.read(buf, offset, size5 - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return buf.subarray(0, offset).toString("utf-8");
+  } finally {
+    await fh.close();
+  }
+}
+function readTextFileSync(filePath) {
+  const fd = openSync(filePath, "r");
+  try {
+    const size5 = fstatSync(fd).size;
+    const buf = Buffer.alloc(size5);
+    let offset = 0;
+    while (offset < size5) {
+      const bytesRead = readSync(fd, buf, offset, size5 - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return buf.subarray(0, offset).toString("utf-8");
+  } finally {
+    closeSync(fd);
+  }
+}
+var init_fs_read = __esm({
+  "src/fs-read.ts"() {
+    "use strict";
+  }
+});
+
+// src/spend-control.ts
+import * as fs from "fs";
+import * as path from "path";
+import { homedir } from "os";
+function normalizePayee(value) {
+  return EVM_ADDRESS.test(value) ? value.toLowerCase() : value;
+}
+function isAddressList(list) {
+  return ADDRESS_LISTS.includes(list);
+}
+function normalizePolicyValues(list, values) {
+  return isAddressList(list) ? values.map(normalizePayee) : [...values];
+}
+function isValidPolicyValues(values) {
+  return Array.isArray(values) && values.every((v) => typeof v === "string" && v.length > 0);
+}
+function isPolicyList(value) {
+  return POLICY_LISTS.includes(value);
+}
+function cloneLimits(limits) {
+  const clone = { ...limits };
+  for (const key2 of POLICY_LISTS) {
+    const val = limits[key2];
+    if (val !== void 0) {
+      clone[key2] = [...val];
+    }
+  }
+  return clone;
+}
+function parseQuotedAmountUsd(selected) {
+  const raw = selected.amount ?? selected.maxAmountRequired;
+  if (typeof raw !== "string" || !CANONICAL_AMOUNT.test(raw)) {
+    return void 0;
+  }
+  const micros = Number(raw);
+  if (!Number.isSafeInteger(micros)) {
+    return void 0;
+  }
+  return micros / 1e6;
+}
+function assertSpendPolicyAllows(control, selected) {
+  const quoted = parseQuotedAmountUsd(selected);
+  if (quoted === void 0 && control.hasAmountLimits()) {
+    throw new SpendPolicyError(
+      `Payment quote carries no usable amount (${JSON.stringify(
+        selected.amount ?? selected.maxAmountRequired
+      )}); refusing to sign against a configured spend limit`
+    );
+  }
+  const estimatedCost2 = quoted ?? 0;
+  const result = control.check(estimatedCost2, {
+    payTo: selected.payTo,
+    network: selected.network,
+    asset: selected.asset
+  });
+  if (!result.allowed) {
+    throw new SpendPolicyError(result.reason ?? "blocked by spend policy", {
+      blockedBy: result.blockedBy,
+      blockedByPolicy: result.blockedByPolicy
+    });
+  }
+  if (!control.hasAggregateLimits()) {
+    return void 0;
+  }
+  return control.reserve(estimatedCost2);
+}
+function registerSpendPolicyHook(x402, control) {
+  const reservations = /* @__PURE__ */ new WeakMap();
+  x402.onBeforePaymentCreation(async (ctx) => {
+    const selected = ctx.selectedRequirements;
+    const reservationId = assertSpendPolicyAllows(control, selected);
+    if (reservationId !== void 0) {
+      reservations.set(ctx.selectedRequirements, reservationId);
+    }
+  });
+  x402.onAfterPaymentCreation(async (ctx) => {
+    const key2 = ctx.selectedRequirements;
+    const id2 = reservations.get(key2);
+    if (id2 !== void 0) {
+      reservations.delete(key2);
+      control.settleReservation(id2, { action: "x402 payment" });
+    }
+  });
+  x402.onPaymentCreationFailure(async (ctx) => {
+    const key2 = ctx.selectedRequirements;
+    const id2 = reservations.get(key2);
+    if (id2 !== void 0) {
+      reservations.delete(key2);
+      control.releaseReservation(id2);
+    }
+  });
+}
+function formatDuration(seconds) {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  } else if (seconds < 3600) {
+    const mins = Math.ceil(seconds / 60);
+    return `${mins} min`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.ceil(seconds % 3600 / 60);
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+}
+var WALLET_DIR, HOUR_MS, DAY_MS, CAIP2_BASE, CAIP2_SOLANA_MAINNET, POLICY_LISTS, ADDRESS_LISTS, EVM_ADDRESS, MalformedSpendPolicyError, FileSpendControlStorage, InMemorySpendControlStorage, RESERVATION_TTL_MS, SpendControl, SpendPolicyError, CANONICAL_AMOUNT;
+var init_spend_control = __esm({
+  "src/spend-control.ts"() {
+    "use strict";
+    init_fs_read();
+    WALLET_DIR = path.join(homedir(), ".openclaw", "blockrun");
+    HOUR_MS = 60 * 60 * 1e3;
+    DAY_MS = 24 * HOUR_MS;
+    CAIP2_BASE = "eip155:8453";
+    CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+    POLICY_LISTS = [
+      "allowedPayees",
+      "blockedPayees",
+      "allowedNetworks",
+      "allowedAssets"
+    ];
+    ADDRESS_LISTS = ["allowedPayees", "blockedPayees", "allowedAssets"];
+    EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+    MalformedSpendPolicyError = class extends Error {
+      constructor(key2) {
+        super(
+          `[ClawRouter] refusing to load spending.json: ${key2} is malformed; a corrupted policy file must not widen what the agent may pay`
+        );
+        this.name = "MalformedSpendPolicyError";
+      }
+    };
+    FileSpendControlStorage = class {
+      spendingFile;
+      constructor() {
+        this.spendingFile = path.join(WALLET_DIR, "spending.json");
+      }
+      load() {
+        try {
+          if (fs.existsSync(this.spendingFile)) {
+            const data = JSON.parse(readTextFileSync(this.spendingFile));
+            const rawLimits = data.limits ?? {};
+            const rawHistory = data.history ?? [];
+            const limits = {};
+            for (const key2 of ["perRequest", "hourly", "daily", "session"]) {
+              const val = rawLimits[key2];
+              if (typeof val === "number" && val > 0 && Number.isFinite(val)) {
+                limits[key2] = val;
+              }
+            }
+            for (const key2 of POLICY_LISTS) {
+              if (!Object.prototype.hasOwnProperty.call(rawLimits, key2)) continue;
+              const val = rawLimits[key2];
+              if (!isValidPolicyValues(val)) {
+                throw new MalformedSpendPolicyError(key2);
+              }
+              if (val.length === 0) continue;
+              limits[key2] = normalizePolicyValues(key2, val);
+            }
+            const history = [];
+            if (Array.isArray(rawHistory)) {
+              for (const r2 of rawHistory) {
+                if (typeof r2?.timestamp === "number" && typeof r2?.amount === "number" && Number.isFinite(r2.timestamp) && Number.isFinite(r2.amount) && r2.amount >= 0) {
+                  history.push({
+                    timestamp: r2.timestamp,
+                    amount: r2.amount,
+                    model: typeof r2.model === "string" ? r2.model : void 0,
+                    action: typeof r2.action === "string" ? r2.action : void 0
+                  });
+                }
+              }
+            }
+            return { limits, history };
+          }
+        } catch (err) {
+          if (err instanceof MalformedSpendPolicyError) {
+            throw err;
+          }
+          console.error(
+            `[ClawRouter] Failed to load spending data, starting fresh (any configured spend policy is NOT in effect until this file is repaired): ${err}`
+          );
+        }
+        return null;
+      }
+      save(data) {
+        try {
+          if (!fs.existsSync(WALLET_DIR)) {
+            fs.mkdirSync(WALLET_DIR, { recursive: true, mode: 448 });
+          }
+          const tmp = `${this.spendingFile}.${process.pid}.tmp`;
+          fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 384 });
+          fs.renameSync(tmp, this.spendingFile);
+        } catch (err) {
+          console.error(`[ClawRouter] Failed to save spending data: ${err}`);
+        }
+      }
+      /**
+       * Persist history while leaving the stored limits exactly as they are on
+       * disk. Recording spend must not rewrite policy: the proxy reads limits once
+       * at startup, so writing its in-memory copy back on every payment would
+       * erase an operator's hand-edit to spending.json seconds after they made it.
+       */
+      saveHistory(history) {
+        let storedLimits = {};
+        try {
+          const current = this.load();
+          if (current) storedLimits = current.limits;
+        } catch {
+          return;
+        }
+        this.save({ limits: storedLimits, history });
+      }
+    };
+    InMemorySpendControlStorage = class {
+      data = null;
+      load() {
+        return this.data ? {
+          limits: cloneLimits(this.data.limits),
+          history: this.data.history.map((r2) => ({ ...r2 }))
+        } : null;
+      }
+      save(data) {
+        this.data = {
+          limits: cloneLimits(data.limits),
+          history: data.history.map((r2) => ({ ...r2 }))
+        };
+      }
+    };
+    RESERVATION_TTL_MS = 2 * 60 * 1e3;
+    SpendControl = class {
+      limits = {};
+      history = [];
+      sessionSpent = 0;
+      sessionCalls = 0;
+      pending = /* @__PURE__ */ new Map();
+      reservationSeq = 0;
+      /** Limits we loaded and have not changed; history-only saves must not clobber operator edits. */
+      limitsDirty = false;
+      /** Set when spending.json held an unusable policy list: refuse every payment. */
+      policyFileBroken;
+      storage;
+      now;
+      constructor(options) {
+        this.storage = options?.storage ?? new FileSpendControlStorage();
+        this.now = options?.now ?? (() => Date.now());
+        this.load();
+      }
+      setLimit(window2, amount) {
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error("Limit must be a finite positive number");
+        }
+        this.limits[window2] = amount;
+        this.limitsDirty = true;
+        this.save();
+      }
+      clearLimit(window2) {
+        delete this.limits[window2];
+        this.limitsDirty = true;
+        this.save();
+      }
+      setPolicy(list, values) {
+        if (!isPolicyList(list)) {
+          throw new Error(`Unknown policy list: ${String(list)}`);
+        }
+        if (!isValidPolicyValues(values) || values.length === 0) {
+          throw new Error("Policy list must be a non-empty array of non-empty strings");
+        }
+        this.limits[list] = normalizePolicyValues(list, values);
+        this.limitsDirty = true;
+        this.save();
+      }
+      clearPolicy(list) {
+        if (!isPolicyList(list)) {
+          throw new Error(`Unknown policy list: ${String(list)}`);
+        }
+        delete this.limits[list];
+        this.limitsDirty = true;
+        this.save();
+      }
+      getLimits() {
+        return cloneLimits(this.limits);
+      }
+      check(estimatedCost2, counterparty) {
+        if (this.policyFileBroken !== void 0) {
+          return {
+            allowed: false,
+            reason: `Spend policy is unreadable, refusing all payments: ${this.policyFileBroken}`
+          };
+        }
+        const payeePolicySet = this.limits.blockedPayees && this.limits.blockedPayees.length > 0 || this.limits.allowedPayees && this.limits.allowedPayees.length > 0;
+        if (payeePolicySet) {
+          if (counterparty?.payTo === void 0) {
+            return {
+              allowed: false,
+              blockedByPolicy: this.limits.blockedPayees?.length ? "blockedPayees" : "allowedPayees",
+              reason: "Payee policy is configured but no payTo was provided to check()"
+            };
+          }
+          const payTo = normalizePayee(counterparty.payTo);
+          if (this.limits.blockedPayees?.includes(payTo)) {
+            return {
+              allowed: false,
+              blockedByPolicy: "blockedPayees",
+              reason: `Payee is blocked by policy: ${counterparty.payTo}`
+            };
+          }
+          if (this.limits.allowedPayees && this.limits.allowedPayees.length > 0 && !this.limits.allowedPayees.includes(payTo)) {
+            return {
+              allowed: false,
+              blockedByPolicy: "allowedPayees",
+              reason: `Payee is not in the configured allowlist: ${counterparty.payTo}`
+            };
+          }
+        }
+        if (this.limits.allowedNetworks && this.limits.allowedNetworks.length > 0) {
+          if (counterparty?.network === void 0) {
+            return {
+              allowed: false,
+              blockedByPolicy: "allowedNetworks",
+              reason: "Network policy is configured but no network was provided to check()"
+            };
+          }
+          if (!this.limits.allowedNetworks.includes(counterparty.network)) {
+            return {
+              allowed: false,
+              blockedByPolicy: "allowedNetworks",
+              reason: `Network is not in the configured allowlist: ${counterparty.network}`
+            };
+          }
+        }
+        if (this.limits.allowedAssets && this.limits.allowedAssets.length > 0) {
+          if (counterparty?.asset === void 0) {
+            return {
+              allowed: false,
+              blockedByPolicy: "allowedAssets",
+              reason: "Asset policy is configured but no asset was provided to check()"
+            };
+          }
+          if (!this.limits.allowedAssets.includes(normalizePayee(counterparty.asset))) {
+            return {
+              allowed: false,
+              blockedByPolicy: "allowedAssets",
+              reason: `Asset is not in the configured allowlist: ${counterparty.asset}`
+            };
+          }
+        }
+        const now2 = this.now();
+        if (this.limits.perRequest !== void 0) {
+          if (estimatedCost2 > this.limits.perRequest) {
+            return {
+              allowed: false,
+              blockedBy: "perRequest",
+              remaining: this.limits.perRequest,
+              reason: `Per-request limit exceeded: $${estimatedCost2.toFixed(4)} > $${this.limits.perRequest.toFixed(2)} max`
+            };
+          }
+        }
+        if (this.limits.hourly !== void 0) {
+          const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
+          const remaining = this.limits.hourly - hourlySpent;
+          if (estimatedCost2 > remaining) {
+            const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - HOUR_MS);
+            const resetIn = oldestInWindow ? Math.ceil((oldestInWindow.timestamp + HOUR_MS - now2) / 1e3) : 0;
+            return {
+              allowed: false,
+              blockedBy: "hourly",
+              remaining,
+              reason: `Hourly limit exceeded: $${(hourlySpent + estimatedCost2).toFixed(2)} > $${this.limits.hourly.toFixed(2)} max`,
+              resetIn
+            };
+          }
+        }
+        if (this.limits.daily !== void 0) {
+          const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
+          const remaining = this.limits.daily - dailySpent;
+          if (estimatedCost2 > remaining) {
+            const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - DAY_MS);
+            const resetIn = oldestInWindow ? Math.ceil((oldestInWindow.timestamp + DAY_MS - now2) / 1e3) : 0;
+            return {
+              allowed: false,
+              blockedBy: "daily",
+              remaining,
+              reason: `Daily limit exceeded: $${(dailySpent + estimatedCost2).toFixed(2)} > $${this.limits.daily.toFixed(2)} max`,
+              resetIn
+            };
+          }
+        }
+        if (this.limits.session !== void 0) {
+          const sessionSpent = this.sessionSpent + this.pendingTotal();
+          const remaining = this.limits.session - sessionSpent;
+          if (estimatedCost2 > remaining) {
+            return {
+              allowed: false,
+              blockedBy: "session",
+              remaining,
+              reason: `Session limit exceeded: $${(sessionSpent + estimatedCost2).toFixed(2)} > $${this.limits.session.toFixed(2)} max`
+            };
+          }
+        }
+        return { allowed: true };
+      }
+      record(amount, metadata) {
+        if (!Number.isFinite(amount) || amount < 0) {
+          throw new Error("Record amount must be a non-negative finite number");
+        }
+        const record = {
+          timestamp: this.now(),
+          amount,
+          model: metadata?.model,
+          action: metadata?.action
+        };
+        this.history.push(record);
+        this.sessionSpent += amount;
+        this.sessionCalls += 1;
+        this.cleanup();
+        this.save();
+      }
+      /** True when any window that this module can compare an amount against is set. */
+      hasAmountLimits() {
+        return this.limits.perRequest !== void 0 || this.limits.hourly !== void 0 || this.limits.daily !== void 0 || this.limits.session !== void 0;
+      }
+      /** True when a window spans more than one request, so reservations matter. */
+      hasAggregateLimits() {
+        return this.limits.hourly !== void 0 || this.limits.daily !== void 0 || this.limits.session !== void 0;
+      }
+      /**
+       * Hold `amount` against the aggregate windows before a payment is signed.
+       *
+       * Reservations live in memory only and are never persisted: an unsettled
+       * reservation is not spend, and writing it to disk is what made a failed
+       * signer permanently consume budget. They expire on their own so a caller
+       * that never settles or releases (process killed mid-payment, a transport
+       * that hangs past the payment timeout) cannot wedge the window shut.
+       */
+      reserve(amount) {
+        if (!Number.isFinite(amount) || amount < 0) {
+          throw new Error("Reservation amount must be a non-negative finite number");
+        }
+        const id2 = `${this.now()}-${this.reservationSeq += 1}`;
+        this.pending.set(id2, { amount, expiresAt: this.now() + RESERVATION_TTL_MS });
+        return id2;
+      }
+      /** Convert a reservation into recorded spend (the payment was signed). */
+      settleReservation(id2, metadata) {
+        const held = this.pending.get(id2);
+        if (!held) return;
+        this.pending.delete(id2);
+        this.record(held.amount, metadata);
+      }
+      /** Drop a reservation without recording spend (the payment was never signed). */
+      releaseReservation(id2) {
+        this.pending.delete(id2);
+      }
+      /** Total currently held but not yet settled. */
+      pendingTotal() {
+        this.expireReservations();
+        let total = 0;
+        for (const held of this.pending.values()) {
+          total += held.amount;
+        }
+        return total;
+      }
+      expireReservations() {
+        const now2 = this.now();
+        for (const [id2, held] of this.pending) {
+          if (held.expiresAt <= now2) {
+            this.pending.delete(id2);
+          }
+        }
+      }
+      getSpendingInWindow(from15, to) {
+        const recorded = this.history.filter((r2) => r2.timestamp >= from15 && r2.timestamp <= to).reduce((sum, r2) => sum + r2.amount, 0);
+        return recorded + (to >= this.now() ? this.pendingTotal() : 0);
+      }
+      getSpending(window2) {
+        const now2 = this.now();
+        switch (window2) {
+          case "hourly":
+            return this.getSpendingInWindow(now2 - HOUR_MS, now2);
+          case "daily":
+            return this.getSpendingInWindow(now2 - DAY_MS, now2);
+          case "session":
+            return this.sessionSpent + this.pendingTotal();
+        }
+      }
+      getRemaining(window2) {
+        const limit = this.limits[window2];
+        if (limit === void 0) return null;
+        return Math.max(0, limit - this.getSpending(window2));
+      }
+      getStatus() {
+        const now2 = this.now();
+        const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
+        const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
+        return {
+          limits: cloneLimits(this.limits),
+          spending: {
+            hourly: hourlySpent,
+            daily: dailySpent,
+            session: this.sessionSpent
+          },
+          remaining: {
+            hourly: this.limits.hourly !== void 0 ? this.limits.hourly - hourlySpent : null,
+            daily: this.limits.daily !== void 0 ? this.limits.daily - dailySpent : null,
+            session: this.limits.session !== void 0 ? this.limits.session - (this.sessionSpent + this.pendingTotal()) : null
+          },
+          calls: this.sessionCalls
+        };
+      }
+      getHistory(limit) {
+        const records = [...this.history].reverse();
+        return limit ? records.slice(0, limit) : records;
+      }
+      resetSession() {
+        this.sessionSpent = 0;
+        this.sessionCalls = 0;
+      }
+      cleanup() {
+        const cutoff = this.now() - DAY_MS;
+        this.history = this.history.filter((r2) => r2.timestamp >= cutoff);
+      }
+      save() {
+        if (this.policyFileBroken !== void 0) {
+          return;
+        }
+        if (!this.limitsDirty && this.storage.saveHistory) {
+          this.storage.saveHistory([...this.history]);
+          return;
+        }
+        this.storage.save({
+          limits: cloneLimits(this.limits),
+          history: [...this.history]
+        });
+      }
+      load() {
+        let data;
+        try {
+          data = this.storage.load();
+        } catch (err) {
+          if (!(err instanceof MalformedSpendPolicyError)) throw err;
+          this.policyFileBroken = err.message;
+          console.error(`[ClawRouter] ${err.message}`);
+          console.error(
+            "[ClawRouter] All paid requests will be refused until spending.json is repaired. Free models are unaffected."
+          );
+          return;
+        }
+        if (data) {
+          this.limits = cloneLimits(data.limits);
+          this.history = data.history;
+          this.cleanup();
+        }
+      }
+    };
+    SpendPolicyError = class extends Error {
+      blockedBy;
+      blockedByPolicy;
+      constructor(reason, blocked) {
+        super(`Payment creation aborted: ${reason}`);
+        this.name = "SpendPolicyError";
+        this.blockedBy = blocked?.blockedBy;
+        this.blockedByPolicy = blocked?.blockedByPolicy;
+      }
+    };
+    CANONICAL_AMOUNT = /^\d+$/;
+  }
+});
+
 // src/payment-preauth.ts
 function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, options) {
   const httpClient = new x402HTTPClient(client);
@@ -32279,8 +32886,11 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
           return response2;
         }
         cache2.delete(cacheKey2);
-      } catch {
+      } catch (err) {
         cache2.delete(cacheKey2);
+        if (err instanceof SpendPolicyError) {
+          throw err;
+        }
       }
     }
     const clonedRequest = request2.clone();
@@ -32324,6 +32934,7 @@ var init_payment_preauth = __esm({
     "use strict";
     init_esm4();
     init_max_tokens();
+    init_spend_control();
     DEFAULT_TTL_MS = 36e5;
   }
 });
@@ -38908,8 +39519,8 @@ var init_models = __esm({
 
 // src/logger.ts
 import { appendFile, mkdir } from "fs/promises";
-import { join as join2 } from "path";
-import { homedir } from "os";
+import { join as join3 } from "path";
+import { homedir as homedir2 } from "os";
 async function ensureDir() {
   if (dirReady) return;
   await mkdir(LOG_DIR, { recursive: true });
@@ -38919,7 +39530,7 @@ async function logUsage(entry) {
   try {
     await ensureDir();
     const date = entry.timestamp.slice(0, 10);
-    const file = join2(LOG_DIR, `usage-${date}.jsonl`);
+    const file = join3(LOG_DIR, `usage-${date}.jsonl`);
     await appendFile(file, JSON.stringify(entry) + "\n");
   } catch {
   }
@@ -38928,56 +39539,15 @@ var LOG_DIR, dirReady;
 var init_logger = __esm({
   "src/logger.ts"() {
     "use strict";
-    LOG_DIR = join2(homedir(), ".openclaw", "blockrun", "logs");
+    LOG_DIR = join3(homedir2(), ".openclaw", "blockrun", "logs");
     dirReady = false;
-  }
-});
-
-// src/fs-read.ts
-import { open } from "fs/promises";
-import { openSync, readSync, closeSync, fstatSync } from "fs";
-async function readTextFile(filePath) {
-  const fh = await open(filePath, "r");
-  try {
-    const size5 = (await fh.stat()).size;
-    const buf = Buffer.alloc(size5);
-    let offset = 0;
-    while (offset < size5) {
-      const { bytesRead } = await fh.read(buf, offset, size5 - offset, offset);
-      if (bytesRead === 0) break;
-      offset += bytesRead;
-    }
-    return buf.subarray(0, offset).toString("utf-8");
-  } finally {
-    await fh.close();
-  }
-}
-function readTextFileSync(filePath) {
-  const fd = openSync(filePath, "r");
-  try {
-    const size5 = fstatSync(fd).size;
-    const buf = Buffer.alloc(size5);
-    let offset = 0;
-    while (offset < size5) {
-      const bytesRead = readSync(fd, buf, offset, size5 - offset, offset);
-      if (bytesRead === 0) break;
-      offset += bytesRead;
-    }
-    return buf.subarray(0, offset).toString("utf-8");
-  } finally {
-    closeSync(fd);
-  }
-}
-var init_fs_read = __esm({
-  "src/fs-read.ts"() {
-    "use strict";
   }
 });
 
 // src/version.ts
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
-import { dirname, join as join3 } from "path";
+import { dirname, join as join4 } from "path";
 function clientTag() {
   const raw = (process.env.CLAWROUTER_CLIENT ?? "").trim();
   if (!raw) return "";
@@ -38991,7 +39561,7 @@ var init_version4 = __esm({
     __filename2 = fileURLToPath(import.meta.url);
     __dirname = dirname(__filename2);
     require2 = createRequire(import.meta.url);
-    pkg = require2(join3(__dirname, "..", "package.json"));
+    pkg = require2(join4(__dirname, "..", "package.json"));
     VERSION = pkg.version;
     USER_AGENT = `clawrouter/${VERSION}${clientTag()}`;
   }
@@ -38999,8 +39569,8 @@ var init_version4 = __esm({
 
 // src/stats.ts
 import { readdir, unlink } from "fs/promises";
-import { join as join4 } from "path";
-import { homedir as homedir2 } from "os";
+import { join as join5 } from "path";
+import { homedir as homedir3 } from "os";
 async function parseLogFile(filePath) {
   try {
     const content = await readTextFile(filePath);
@@ -39072,7 +39642,7 @@ async function getStats(days = 7) {
   let totalLatency = 0;
   for (const file of filesToRead) {
     const date = file.replace("usage-", "").replace(".jsonl", "");
-    const filePath = join4(LOG_DIR2, file);
+    const filePath = join5(LOG_DIR2, file);
     const entries = await parseLogFile(filePath);
     if (entries.length === 0) continue;
     const dayStats = aggregateDay(date, entries);
@@ -39191,7 +39761,7 @@ async function formatRecentLogs(days = 1) {
   const filesToRead = logFiles.slice(0, days);
   const allEntries = [];
   for (const file of filesToRead) {
-    const entries = await parseLogFile(join4(LOG_DIR2, file));
+    const entries = await parseLogFile(join5(LOG_DIR2, file));
     allEntries.push(...entries);
   }
   allEntries.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -39236,7 +39806,7 @@ async function clearStats() {
   try {
     const files = await readdir(LOG_DIR2);
     const logFiles = files.filter((f) => f.startsWith("usage-") && f.endsWith(".jsonl"));
-    await Promise.all(logFiles.map((f) => unlink(join4(LOG_DIR2, f))));
+    await Promise.all(logFiles.map((f) => unlink(join5(LOG_DIR2, f))));
     return { deletedFiles: logFiles.length };
   } catch {
     return { deletedFiles: 0 };
@@ -39248,7 +39818,7 @@ var init_stats = __esm({
     "use strict";
     init_fs_read();
     init_version4();
-    LOG_DIR2 = join4(homedir2(), ".openclaw", "blockrun", "logs");
+    LOG_DIR2 = join5(homedir3(), ".openclaw", "blockrun", "logs");
   }
 });
 
@@ -43067,7 +43637,7 @@ function alphabet2(letters) {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function join5(separator = "") {
+function join6(separator = "") {
   astr2("join", separator);
   return {
     encode: (from15) => {
@@ -43177,7 +43747,7 @@ var genBase58, base58, createBase58check;
 var init_base3 = __esm({
   "node_modules/@scure/base/index.js"() {
     "use strict";
-    genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix3(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join5(""));
+    genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix3(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join6(""));
     base58 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"));
     createBase58check = (sha25610) => {
       afn2(sha25610);
@@ -43326,14 +43896,14 @@ var init_bip32 = __esm({
         }
         this.pubHash = hash160(this._publicKey);
       }
-      derive(path6) {
-        if (!/^[mM]'?/.test(path6)) {
+      derive(path5) {
+        if (!/^[mM]'?/.test(path5)) {
           throw new Error('Path must start with "m" or "M"');
         }
-        if (/^[mM]'?$/.test(path6)) {
+        if (/^[mM]'?$/.test(path5)) {
           return this;
         }
-        const parts = path6.replace(/^[mM]'?\//, "").split("/");
+        const parts = path5.replace(/^[mM]'?\//, "").split("/");
         let child = this;
         for (const c of parts) {
           const m = /^(\d+)('?)$/.exec(c);
@@ -51623,14 +52193,14 @@ function createSolanaJsonRpcIntegerOverflowError(methodName, keyPath, value) {
   } else {
     argumentLabel = `\`${keyPath[0].toString()}\``;
   }
-  const path6 = keyPath.length > 1 ? keyPath.slice(1).map((pathPart) => typeof pathPart === "number" ? `[${pathPart}]` : pathPart).join(".") : void 0;
+  const path5 = keyPath.length > 1 ? keyPath.slice(1).map((pathPart) => typeof pathPart === "number" ? `[${pathPart}]` : pathPart).join(".") : void 0;
   const error = new SolanaError(SOLANA_ERROR__RPC__INTEGER_OVERFLOW, {
     argumentLabel,
     keyPath,
     methodName,
-    optionalPathLabel: path6 ? ` at path \`${path6}\`` : "",
+    optionalPathLabel: path5 ? ` at path \`${path5}\`` : "",
     value,
-    ...path6 !== void 0 ? { path: path6 } : void 0
+    ...path5 !== void 0 ? { path: path5 } : void 0
   });
   safeCaptureStackTrace(error, createSolanaJsonRpcIntegerOverflowError);
   return error;
@@ -56294,14 +56864,14 @@ function createSolanaJsonRpcIntegerOverflowError2(methodName, keyPath, value) {
   } else {
     argumentLabel = `\`${keyPath[0].toString()}\``;
   }
-  const path6 = keyPath.length > 1 ? keyPath.slice(1).map((pathPart) => typeof pathPart === "number" ? `[${pathPart}]` : pathPart).join(".") : void 0;
+  const path5 = keyPath.length > 1 ? keyPath.slice(1).map((pathPart) => typeof pathPart === "number" ? `[${pathPart}]` : pathPart).join(".") : void 0;
   const error = new SolanaError(SOLANA_ERROR__RPC__INTEGER_OVERFLOW, {
     argumentLabel,
     keyPath,
     methodName,
-    optionalPathLabel: path6 ? ` at path \`${path6}\`` : "",
+    optionalPathLabel: path5 ? ` at path \`${path5}\`` : "",
     value,
-    ...path6 !== void 0 ? { path: path6 } : void 0
+    ...path5 !== void 0 ? { path: path5 } : void 0
   });
   safeCaptureStackTrace(error, createSolanaJsonRpcIntegerOverflowError2);
   return error;
@@ -58381,8 +58951,8 @@ __export(auth_exports, {
   setupSolana: () => setupSolana
 });
 import { writeFile, mkdir as mkdir2 } from "fs/promises";
-import { join as join6 } from "path";
-import { homedir as homedir3 } from "os";
+import { join as join7 } from "path";
+import { homedir as homedir4 } from "os";
 async function loadSavedWallet() {
   try {
     const key2 = (await readTextFile(WALLET_FILE)).trim();
@@ -58431,7 +59001,7 @@ async function loadMnemonic() {
   return void 0;
 }
 async function saveMnemonic(mnemonic) {
-  await mkdir2(WALLET_DIR, { recursive: true });
+  await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 384 });
 }
 async function generateAndSaveWallet() {
@@ -58450,7 +59020,7 @@ Then run: npx @blockrun/clawrouter`
   }
   const mnemonic = generateWalletMnemonic();
   const derived = deriveAllKeys(mnemonic);
-  await mkdir2(WALLET_DIR, { recursive: true });
+  await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(WALLET_FILE, derived.evmPrivateKey + "\n", { mode: 384 });
   await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 384 });
   try {
@@ -58583,7 +59153,7 @@ async function recoverWalletFromMnemonic() {
   console.log(`[ClawRouter]   wallet, recovery is safe to proceed.`);
   console.log(`[ClawRouter] \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
   console.log(`[ClawRouter]`);
-  await mkdir2(WALLET_DIR, { recursive: true });
+  await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(WALLET_FILE, derived.evmPrivateKey + "\n", { mode: 384 });
   console.log(`[ClawRouter] \u2713 wallet.key restored at ${WALLET_FILE}`);
   console.log(`[ClawRouter]   Run: npx @blockrun/clawrouter`);
@@ -58609,7 +59179,7 @@ async function setupSolana() {
   return { mnemonic, solanaPrivateKeyBytes: solanaKeyBytes };
 }
 async function savePaymentChain(chain3) {
-  await mkdir2(WALLET_DIR, { recursive: true });
+  await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(CHAIN_FILE, chain3 + "\n", { mode: 384 });
 }
 async function loadPaymentChain() {
@@ -58626,17 +59196,17 @@ async function resolvePaymentChain() {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "base") return "base";
   return loadPaymentChain();
 }
-var WALLET_DIR, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
+var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
 var init_auth = __esm({
   "src/auth.ts"() {
     "use strict";
     init_fs_read();
     init_accounts();
     init_wallet2();
-    WALLET_DIR = join6(homedir3(), ".openclaw", "blockrun");
-    WALLET_FILE = join6(WALLET_DIR, "wallet.key");
-    MNEMONIC_FILE = join6(WALLET_DIR, "mnemonic");
-    CHAIN_FILE = join6(WALLET_DIR, "payment-chain");
+    WALLET_DIR2 = join7(homedir4(), ".openclaw", "blockrun");
+    WALLET_FILE = join7(WALLET_DIR2, "wallet.key");
+    MNEMONIC_FILE = join7(WALLET_DIR2, "mnemonic");
+    CHAIN_FILE = join7(WALLET_DIR2, "payment-chain");
   }
 });
 
@@ -58795,7 +59365,7 @@ function generateCodebookHeader(usedCodes, pathMap = {}) {
     parts.push(`[Dict: ${codeEntries}]`);
   }
   if (Object.keys(pathMap).length > 0) {
-    const pathEntries = Object.entries(pathMap).map(([code, path6]) => `${code}=${path6}`).join(", ");
+    const pathEntries = Object.entries(pathMap).map(([code, path5]) => `${code}=${path5}`).join(", ");
     parts.push(`[Paths: ${pathEntries}]`);
   }
   return parts.join("\n");
@@ -58943,8 +59513,8 @@ function extractPaths(messages) {
 }
 function findFrequentPrefixes(paths) {
   const prefixCounts = /* @__PURE__ */ new Map();
-  for (const path6 of paths) {
-    const parts = path6.split("/").filter(Boolean);
+  for (const path5 of paths) {
+    const parts = path5.split("/").filter(Boolean);
     for (let i = 2; i < parts.length; i++) {
       const prefix = "/" + parts.slice(0, i).join("/") + "/";
       prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
@@ -59728,9 +60298,9 @@ var init_updater = __esm({
 });
 
 // src/exclude-models.ts
-import { readFileSync, writeFileSync, mkdirSync, statSync } from "fs";
-import { join as join7, dirname as dirname2 } from "path";
-import { homedir as homedir4 } from "os";
+import { readFileSync, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, statSync } from "fs";
+import { join as join8, dirname as dirname2 } from "path";
+import { homedir as homedir5 } from "os";
 function loadExcludeList(filePath = DEFAULT_FILE_PATH) {
   try {
     const mtimeMs = statSync(filePath).mtimeMs;
@@ -59751,8 +60321,8 @@ function loadExcludeList(filePath = DEFAULT_FILE_PATH) {
 function saveExcludeList(set, filePath) {
   const sorted = [...set].sort();
   const dir = dirname2(filePath);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(filePath, JSON.stringify(sorted, null, 2) + "\n", "utf-8");
+  mkdirSync2(dir, { recursive: true });
+  writeFileSync2(filePath, JSON.stringify(sorted, null, 2) + "\n", "utf-8");
   loadCache.delete(filePath);
 }
 function addExclusion(model, filePath = DEFAULT_FILE_PATH) {
@@ -59779,7 +60349,7 @@ var init_exclude_models = __esm({
   "src/exclude-models.ts"() {
     "use strict";
     init_models();
-    DEFAULT_FILE_PATH = join7(homedir4(), ".openclaw", "blockrun", "exclude-models.json");
+    DEFAULT_FILE_PATH = join8(homedir5(), ".openclaw", "blockrun", "exclude-models.json");
     loadCache = /* @__PURE__ */ new Map();
   }
 });
@@ -61084,14 +61654,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin2 = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path6 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path5 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin2[origin2.length - 1] === "/") {
           origin2 = origin2.slice(0, origin2.length - 1);
         }
-        if (path6 && path6[0] !== "/") {
-          path6 = `/${path6}`;
+        if (path5 && path5[0] !== "/") {
+          path5 = `/${path5}`;
         }
-        return new URL(`${origin2}${path6}`);
+        return new URL(`${origin2}${path5}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -61962,9 +62532,9 @@ var require_diagnostics = __commonJS({
         "undici:client:sendHeaders",
         (evt) => {
           const {
-            request: { method, path: path6, origin: origin2 }
+            request: { method, path: path5, origin: origin2 }
           } = evt;
-          debugLog("sending request to %s %s%s", method, origin2, path6);
+          debugLog("sending request to %s %s%s", method, origin2, path5);
         }
       );
     }
@@ -61982,14 +62552,14 @@ var require_diagnostics = __commonJS({
         "undici:request:headers",
         (evt) => {
           const {
-            request: { method, path: path6, origin: origin2 },
+            request: { method, path: path5, origin: origin2 },
             response: { statusCode }
           } = evt;
           debugLog(
             "received response to %s %s%s - HTTP %d",
             method,
             origin2,
-            path6,
+            path5,
             statusCode
           );
         }
@@ -61998,23 +62568,23 @@ var require_diagnostics = __commonJS({
         "undici:request:trailers",
         (evt) => {
           const {
-            request: { method, path: path6, origin: origin2 }
+            request: { method, path: path5, origin: origin2 }
           } = evt;
-          debugLog("trailers received from %s %s%s", method, origin2, path6);
+          debugLog("trailers received from %s %s%s", method, origin2, path5);
         }
       );
       diagnosticsChannel.subscribe(
         "undici:request:error",
         (evt) => {
           const {
-            request: { method, path: path6, origin: origin2 },
+            request: { method, path: path5, origin: origin2 },
             error
           } = evt;
           debugLog(
             "request to %s %s%s errored - %s",
             method,
             origin2,
-            path6,
+            path5,
             error.message
           );
         }
@@ -62169,7 +62739,7 @@ var require_request = __commonJS({
     };
     var Request2 = class {
       constructor(origin2, {
-        path: path6,
+        path: path5,
         method,
         body,
         headers,
@@ -62186,11 +62756,11 @@ var require_request = __commonJS({
         maxRedirections,
         typeOfService
       }, handler) {
-        if (typeof path6 !== "string") {
+        if (typeof path5 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path6[0] !== "/" && !(path6.startsWith("http://") || path6.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path5[0] !== "/" && !(path5.startsWith("http://") || path5.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path6)) {
+        } else if (invalidPathRegex.test(path5)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -62265,7 +62835,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? serializePathWithQuery(path6, query) : path6;
+        this.path = query ? serializePathWithQuery(path5, query) : path5;
         this.origin = origin2;
         this.protocol = getProtocolFromUrlString(origin2);
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" || method === "QUERY" : idempotent;
@@ -67351,7 +67921,7 @@ var require_client_h1 = __commonJS({
       }
     }
     function writeH1(client, request2) {
-      const { method, path: path6, host, upgrade, blocking, reset } = request2;
+      const { method, path: path5, host, upgrade, blocking, reset } = request2;
       let { body, headers, contentLength } = request2;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util5.isFormDataLike(body)) {
@@ -67427,7 +67997,7 @@ var require_client_h1 = __commonJS({
         socket[kBlocking] = true;
       }
       setTypeOfService(socket, request2);
-      let header = `${method} ${path6} HTTP/1.1\r
+      let header = `${method} ${path5} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -68508,7 +69078,7 @@ var require_client_h2 = __commonJS({
       const headersTimeout = request2.headersTimeout ?? client[kHeadersTimeout];
       const bodyTimeout = request2.bodyTimeout ?? client[kBodyTimeout];
       const session = client[kHTTP2Session];
-      const { method, path: path6, host, upgrade, expectContinue, signal, protocol, headers: reqHeaders } = request2;
+      const { method, path: path5, host, upgrade, expectContinue, signal, protocol, headers: reqHeaders } = request2;
       if (upgrade != null && upgrade !== "websocket") {
         util5.errorRequest(client, request2, new InvalidArgumentError(`Custom upgrade "${upgrade}" not supported over HTTP/2`));
         return false;
@@ -68571,7 +69141,7 @@ var require_client_h2 = __commonJS({
           }
           headers[HTTP2_HEADER_METHOD] = "CONNECT";
           headers[HTTP2_HEADER_PROTOCOL] = "websocket";
-          headers[HTTP2_HEADER_PATH] = path6;
+          headers[HTTP2_HEADER_PATH] = path5;
           if (protocol === "ws:" || protocol === "wss:") {
             headers[HTTP2_HEADER_SCHEME] = protocol === "ws:" ? "http" : "https";
           } else {
@@ -68593,7 +69163,7 @@ var require_client_h2 = __commonJS({
         setupUpgradeStream(stream4, state);
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path6;
+      headers[HTTP2_HEADER_PATH] = path5;
       headers[HTTP2_HEADER_SCHEME] = protocol === "http:" ? "http" : "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       let body = state.body;
@@ -71263,10 +71833,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin: origin2,
-          path: path6 = "/",
+          path: path5 = "/",
           headers = {}
         } = opts;
-        opts.path = origin2 + path6;
+        opts.path = origin2 + path5;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL(origin2);
           headers.host = host;
@@ -73531,20 +74101,20 @@ var require_mock_utils = __commonJS({
       }
       return normalizedQp;
     }
-    function safeUrl(path6) {
-      if (typeof path6 !== "string") {
-        return path6;
+    function safeUrl(path5) {
+      if (typeof path5 !== "string") {
+        return path5;
       }
-      const pathSegments = path6.split("?", 3);
+      const pathSegments = path5.split("?", 3);
       if (pathSegments.length !== 2) {
-        return path6;
+        return path5;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path6, method, body, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path6);
+    function matchKey(mockDispatch2, { path: path5, method, body, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path5);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -73571,8 +74141,8 @@ var require_mock_utils = __commonJS({
       const basePath = key2.query ? serializePathWithQuery(key2.path, key2.query) : key2.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
       const resolvedPathWithoutTrailingSlash = removeTrailingSlash(resolvedPath);
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path6, ignoreTrailingSlash }) => {
-        return ignoreTrailingSlash ? matchValue(removeTrailingSlash(safeUrl(path6)), resolvedPathWithoutTrailingSlash) : matchValue(safeUrl(path6), resolvedPath);
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path5, ignoreTrailingSlash }) => {
+        return ignoreTrailingSlash ? matchValue(removeTrailingSlash(safeUrl(path5)), resolvedPathWithoutTrailingSlash) : matchValue(safeUrl(path5), resolvedPath);
       });
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
@@ -73611,22 +74181,22 @@ var require_mock_utils = __commonJS({
         mockDispatches.splice(index2, 1);
       }
     }
-    function removeTrailingSlash(path6) {
-      if (typeof path6 !== "string") {
-        return path6;
+    function removeTrailingSlash(path5) {
+      if (typeof path5 !== "string") {
+        return path5;
       }
-      while (path6.endsWith("/")) {
-        path6 = path6.slice(0, -1);
+      while (path5.endsWith("/")) {
+        path5 = path5.slice(0, -1);
       }
-      if (path6.length === 0) {
-        path6 = "/";
+      if (path5.length === 0) {
+        path5 = "/";
       }
-      return path6;
+      return path5;
     }
     function buildKey(opts) {
-      const { path: path6, method, body, headers, query } = opts;
+      const { path: path5, method, body, headers, query } = opts;
       return {
-        path: path6,
+        path: path5,
         method,
         body,
         headers,
@@ -74497,10 +75067,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path6, data: { statusCode }, persist, times, timesInvoked, origin: origin2 }) => ({
+          ({ method, path: path5, data: { statusCode }, persist, times, timesInvoked, origin: origin2 }) => ({
             Method: method,
             Origin: origin2,
-            Path: path6,
+            Path: path5,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -74582,9 +75152,9 @@ var require_mock_agent = __commonJS({
         const acceptNonStandardSearchParameters = this[kMockAgentAcceptsNonStandardSearchParameters];
         const dispatchOpts = { ...opts };
         if (acceptNonStandardSearchParameters && dispatchOpts.path) {
-          const [path6, searchParams] = dispatchOpts.path.split("?");
+          const [path5, searchParams] = dispatchOpts.path.split("?");
           const normalizedSearchParams = normalizeSearchParams(searchParams, acceptNonStandardSearchParameters);
-          dispatchOpts.path = `${path6}?${normalizedSearchParams}`;
+          dispatchOpts.path = `${path5}?${normalizedSearchParams}`;
         }
         return this[kAgent].dispatch(dispatchOpts, handler);
       }
@@ -75000,12 +75570,12 @@ var require_snapshot_recorder = __commonJS({
        * @return {Promise<void>} - Resolves when snapshots are loaded
        */
       async loadSnapshots(filePath) {
-        const path6 = filePath || this.#snapshotPath;
-        if (!path6) {
+        const path5 = filePath || this.#snapshotPath;
+        if (!path5) {
           throw new InvalidArgumentError("Snapshot path is required");
         }
         try {
-          const data = await readFile3(resolve(path6), "utf8");
+          const data = await readFile3(resolve(path5), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -75019,7 +75589,7 @@ var require_snapshot_recorder = __commonJS({
           if (error.code === "ENOENT") {
             this.#snapshots.clear();
           } else {
-            throw new UndiciError(`Failed to load snapshots from ${path6}`, { cause: error });
+            throw new UndiciError(`Failed to load snapshots from ${path5}`, { cause: error });
           }
         }
       }
@@ -75030,11 +75600,11 @@ var require_snapshot_recorder = __commonJS({
        * @returns {Promise<void>} - Resolves when snapshots are saved
        */
       async saveSnapshots(filePath) {
-        const path6 = filePath || this.#snapshotPath;
-        if (!path6) {
+        const path5 = filePath || this.#snapshotPath;
+        if (!path5) {
           throw new InvalidArgumentError("Snapshot path is required");
         }
-        const resolvedPath = resolve(path6);
+        const resolvedPath = resolve(path5);
         await mkdir5(dirname5(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash5, snapshot]) => ({
           hash: hash5,
@@ -75671,15 +76241,15 @@ var require_redirect_handler = __commonJS({
           return;
         }
         const { origin: origin2, pathname, search } = util5.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path6 = search ? `${pathname}${search}` : pathname;
-        const redirectUrlString = `${origin2}${path6}`;
+        const path5 = search ? `${pathname}${search}` : pathname;
+        const redirectUrlString = `${origin2}${path5}`;
         for (const historyUrl of this.history) {
           if (historyUrl.toString() === redirectUrlString) {
             throw new InvalidArgumentError(`Redirect loop detected. Cannot redirect to ${origin2}. This typically happens when using a Client or Pool with cross-origin redirects. Use an Agent for cross-origin redirects.`);
           }
         }
         this.opts.headers = cleanRequestHeaders(this.opts.headers, removeContentHeaders, this.opts.origin !== origin2, this.stripHeadersOnRedirect, this.stripHeadersOnCrossOriginRedirect);
-        this.opts.path = path6;
+        this.opts.path = path5;
         this.opts.origin = origin2;
         this.opts.query = null;
       }
@@ -77507,10 +78077,10 @@ var require_cache_handler = __commonJS({
       }
       return locationUrl.pathname + locationUrl.search;
     }
-    function deleteCachedUri(store, cacheKey2, path6) {
+    function deleteCachedUri(store, cacheKey2, path5) {
       deleteCachedValue(store, {
         ...cacheKey2,
-        path: path6
+        path: path5
       });
       for (let i = 0; i < util5.safeHTTPMethods.length; i++) {
         const method = util5.safeHTTPMethods[i];
@@ -77518,7 +78088,7 @@ var require_cache_handler = __commonJS({
           deleteCachedValue(store, {
             ...cacheKey2,
             method,
-            path: path6
+            path: path5
           });
         }
       }
@@ -77529,9 +78099,9 @@ var require_cache_handler = __commonJS({
       }
       const values = Array.isArray(headerValue) ? headerValue : [headerValue];
       for (let i = 0; i < values.length; i++) {
-        const path6 = getSameOriginPath(cacheKey2, values[i]);
-        if (path6 !== void 0) {
-          deleteCachedUri(store, cacheKey2, path6);
+        const path5 = getSameOriginPath(cacheKey2, values[i]);
+        if (path5 !== void 0) {
+          deleteCachedUri(store, cacheKey2, path5);
         }
       }
     }
@@ -82528,13 +83098,13 @@ var require_fetch = __commonJS({
       function dispatch({ body }) {
         const url2 = requestCurrentURL(request2);
         const agent = fetchParams.controller.dispatcher;
-        const path6 = url2.pathname + url2.search;
+        const path5 = url2.pathname + url2.search;
         const hasTrailingQuestionMark = url2.search.length === 0 && url2.href[url2.href.length - url2.hash.length - 1] === "?";
         return dispatchWithProtocolPreference(body);
         function dispatchWithProtocolPreference(body2, allowH2) {
           return new Promise((resolve, reject) => agent.dispatch(
             {
-              path: hasTrailingQuestionMark ? `${path6}?` : path6,
+              path: hasTrailingQuestionMark ? `${path5}?` : path5,
               origin: url2.origin,
               method: request2.method,
               body: agent.isMockActive ? request2.body && (request2.body.source || request2.body.stream) : body2,
@@ -83446,9 +84016,9 @@ var require_util4 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path6) {
-      for (let i = 0; i < path6.length; ++i) {
-        const code = path6.charCodeAt(i);
+    function validateCookiePath(path5) {
+      for (let i = 0; i < path5.length; ++i) {
+        const code = path5.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code > 126 || // exclude non-ascii and DEL
         code === 59) {
@@ -86820,11 +87390,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path6 = opts.path;
+          let path5 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path6 = `/${path6}`;
+            path5 = `/${path5}`;
           }
-          url2 = new URL(util5.parseOrigin(url2).origin + path6);
+          url2 = new URL(util5.parseOrigin(url2).origin + path5);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -87370,8 +87940,8 @@ var init_textual_tool_calls = __esm({
 
 // src/response-store.ts
 import { appendFile as appendFile2, mkdir as mkdir3, readFile, readdir as readdir2 } from "fs/promises";
-import { homedir as homedir5 } from "os";
-import { join as join8 } from "path";
+import { homedir as homedir6 } from "os";
+import { join as join9 } from "path";
 import { randomBytes as randomBytes7 } from "crypto";
 function isEnabled() {
   const v = process.env.BLOCKRUN_RESPONSE_STORE;
@@ -87384,7 +87954,7 @@ async function ensureDir2() {
 }
 function dailyFile(date = /* @__PURE__ */ new Date()) {
   const iso = date.toISOString().slice(0, 10);
-  return join8(STORE_DIR, `responses-${iso}.jsonl`);
+  return join9(STORE_DIR, `responses-${iso}.jsonl`);
 }
 function genId() {
   return `resp_${Date.now()}_${randomBytes7(3).toString("hex")}`;
@@ -87434,7 +88004,7 @@ async function listRecent(limit = 20, daysBack = 7) {
       d.setUTCDate(d.getUTCDate() - i);
       const iso = d.toISOString().slice(0, 10);
       const name = `responses-${iso}.jsonl`;
-      if (files.includes(name)) candidateFiles.push(join8(STORE_DIR, name));
+      if (files.includes(name)) candidateFiles.push(join9(STORE_DIR, name));
     }
     const all3 = [];
     for (const f of candidateFiles) {
@@ -87463,7 +88033,7 @@ var STORE_DIR, dirReady2;
 var init_response_store = __esm({
   "src/response-store.ts"() {
     "use strict";
-    STORE_DIR = join8(homedir5(), ".openclaw", "blockrun", "responses");
+    STORE_DIR = join9(homedir6(), ".openclaw", "blockrun", "responses");
     dirReady2 = false;
   }
 });
@@ -89113,10 +89683,10 @@ var init_client3 = __esm({
 import { AsyncLocalStorage } from "async_hooks";
 import { createServer } from "http";
 import { finished } from "stream";
-import { homedir as homedir6 } from "os";
-import { join as join9 } from "path";
+import { homedir as homedir7 } from "os";
+import { join as join10 } from "path";
 import { mkdir as mkdir4, writeFile as writeFile2, readFile as readFile2, stat as fsStat } from "fs/promises";
-import { readFileSync as readFileSync2, existsSync } from "fs";
+import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
 function pickFreeModel(excludeList) {
   for (const m of FREE_MODELS) {
     if (!excludeList?.has(m)) return m;
@@ -89882,8 +90452,8 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   });
 }
 function readImageFileAsDataUri(filePath) {
-  const resolved = filePath.startsWith("~/") ? join9(homedir6(), filePath.slice(2)) : filePath;
-  if (!existsSync(resolved)) {
+  const resolved = filePath.startsWith("~/") ? join10(homedir7(), filePath.slice(2)) : filePath;
+  if (!existsSync2(resolved)) {
     throw new Error(`Image file not found: ${resolved}`);
   }
   const ext = resolved.split(".").pop()?.toLowerCase() ?? "png";
@@ -89997,6 +90567,8 @@ async function startProxy(options) {
   const evmPublicClient = createPublicClient({ chain: base, transport: http() });
   const evmSigner = toClientEvmSigner(account, evmPublicClient);
   const x402 = new x402Client();
+  const spendControl = options.spendControl ?? new SpendControl();
+  registerSpendPolicyHook(x402, spendControl);
   registerExactEvmScheme(x402, { signer: evmSigner });
   let solanaAddress;
   if (solanaPrivateKeyBytes) {
@@ -90165,8 +90737,8 @@ async function startProxy(options) {
       if (req.url?.startsWith("/share") && req.method === "GET") {
         try {
           const url2 = new URL(req.url, "http://localhost");
-          const path6 = url2.pathname;
-          if (path6 === "/share/list") {
+          const path5 = url2.pathname;
+          if (path5 === "/share/list") {
             const limit = Math.min(parseInt(url2.searchParams.get("limit") || "20", 10), 100);
             const entries = await listRecent(limit);
             res.writeHead(200, { "Content-Type": "application/json" });
@@ -90184,7 +90756,7 @@ async function startProxy(options) {
             );
             return;
           }
-          if (path6 === "/share/last") {
+          if (path5 === "/share/last") {
             const sessionId = url2.searchParams.get("sessionId") || void 0;
             const entry = await getLast(sessionId);
             if (!entry) {
@@ -90213,7 +90785,7 @@ async function startProxy(options) {
             res.end(JSON.stringify(entry));
             return;
           }
-          const idMatch = path6.match(/^\/share\/(resp_[A-Za-z0-9_]+)(?:\/render)?$/);
+          const idMatch = path5.match(/^\/share\/(resp_[A-Za-z0-9_]+)(?:\/render)?$/);
           if (idMatch) {
             const id2 = idMatch[1];
             const entry = await getById(id2);
@@ -90259,7 +90831,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join9(IMAGE_DIR, filename);
+        const filePath = join10(IMAGE_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -90290,7 +90862,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join9(AUDIO_DIR, filename);
+        const filePath = join10(AUDIO_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -90320,7 +90892,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join9(VIDEO_DIR, filename);
+        const filePath = join10(VIDEO_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -90461,7 +91033,7 @@ async function startProxy(options) {
                 const [, mimeType, b64] = dataUriMatch;
                 const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
                 const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                await writeFile2(join9(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                await writeFile2(join10(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
                 img.url = `http://localhost:${port2}/images/${filename}`;
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
@@ -90472,7 +91044,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await imgResp.arrayBuffer());
-                    await writeFile2(join9(IMAGE_DIR, filename), buf);
+                    await writeFile2(join10(IMAGE_DIR, filename), buf);
                     img.url = `http://localhost:${port2}/images/${filename}`;
                     console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
                   }
@@ -90584,7 +91156,7 @@ async function startProxy(options) {
                 const [, mimeType, b64] = dataUriMatch;
                 const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
                 const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                await writeFile2(join9(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                await writeFile2(join10(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
                 img.url = `http://localhost:${port2}/images/${filename}`;
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
@@ -90595,7 +91167,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await imgResp.arrayBuffer());
-                    await writeFile2(join9(IMAGE_DIR, filename), buf);
+                    await writeFile2(join10(IMAGE_DIR, filename), buf);
                     img.url = `http://localhost:${port2}/images/${filename}`;
                     console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
                   }
@@ -90681,7 +91253,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await audioResp.arrayBuffer());
-                    await writeFile2(join9(AUDIO_DIR, filename), buf);
+                    await writeFile2(join10(AUDIO_DIR, filename), buf);
                     track.url = `http://localhost:${port2}/audio/${filename}`;
                     console.log(`[ClawRouter] Audio saved \u2192 ${track.url}`);
                   }
@@ -90841,7 +91413,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("webm") ? "webm" : contentType.includes("quicktime") ? "mov" : "mp4";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await videoResp.arrayBuffer());
-                    await writeFile2(join9(VIDEO_DIR, filename), buf);
+                    await writeFile2(join10(VIDEO_DIR, filename), buf);
                     clip.url = `http://localhost:${port2}/videos/${filename}`;
                     console.log(`[ClawRouter] Video saved \u2192 ${clip.url}`);
                   }
@@ -91181,6 +91753,17 @@ async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxT
     return { success: true, response };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    if (err instanceof SpendPolicyError) {
+      return {
+        success: false,
+        errorBody: JSON.stringify({
+          error: { message: errorMsg, type: "spend_policy_denied", status: 403 }
+        }),
+        errorStatus: 403,
+        isProviderError: false,
+        errorCategory: "payment_error"
+      };
+    }
     return {
       success: false,
       errorBody: errorMsg,
@@ -93367,6 +93950,7 @@ var init_proxy = __esm({
     init_response_cache();
     init_balance();
     init_auth();
+    init_spend_control();
     init_compression();
     init_version4();
     init_session();
@@ -93382,9 +93966,9 @@ var init_proxy = __esm({
     paymentStore = new AsyncLocalStorage();
     BLOCKRUN_API = "https://blockrun.ai/api";
     BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
-    IMAGE_DIR = join9(homedir6(), ".openclaw", "blockrun", "images");
-    AUDIO_DIR = join9(homedir6(), ".openclaw", "blockrun", "audio");
-    VIDEO_DIR = join9(homedir6(), ".openclaw", "blockrun", "videos");
+    IMAGE_DIR = join10(homedir7(), ".openclaw", "blockrun", "images");
+    AUDIO_DIR = join10(homedir7(), ".openclaw", "blockrun", "audio");
+    VIDEO_DIR = join10(homedir7(), ".openclaw", "blockrun", "videos");
     AUTO_MODEL = "blockrun/auto";
     ROUTING_PROFILES = /* @__PURE__ */ new Set([
       "blockrun/eco",
@@ -94449,7 +95033,7 @@ function buildTool(service, proxyBaseUrl) {
       required
     },
     execute: async (_toolCallId, params) => {
-      let path6;
+      let path5;
       const leftoverParams = {};
       let dynamicMethod = "GET";
       let dynamicBody = void 0;
@@ -94461,7 +95045,7 @@ function buildTool(service, proxyBaseUrl) {
             `predexon_endpoint_call: invalid path '${rawPath}' \u2014 must begin with '/pm/' and contain no '..'`
           );
         }
-        path6 = `/v1${normalized}`;
+        path5 = `/v1${normalized}`;
         if (typeof params.method === "string") {
           const upper = params.method.toUpperCase();
           if (upper !== "GET" && upper !== "POST") {
@@ -94510,19 +95094,19 @@ function buildTool(service, proxyBaseUrl) {
           }
         }
       } else {
-        path6 = `/v1${service.proxyPath}`;
+        path5 = `/v1${service.proxyPath}`;
         for (const [key2, value] of Object.entries(params)) {
           if (value === void 0 || value === null) continue;
           const placeholder = `:${key2}`;
-          if (path6.includes(placeholder)) {
-            path6 = path6.replace(placeholder, encodeURIComponent(String(value)));
+          if (path5.includes(placeholder)) {
+            path5 = path5.replace(placeholder, encodeURIComponent(String(value)));
           } else {
             leftoverParams[key2] = value;
           }
         }
       }
       const effectiveMethod = service.proxyPath === "/pm/__dynamic__" ? dynamicMethod : service.method;
-      let url2 = `${proxyBaseUrl}${path6}`;
+      let url2 = `${proxyBaseUrl}${path5}`;
       if (effectiveMethod === "GET" && Object.keys(leftoverParams).length > 0) {
         const qs = new URLSearchParams();
         for (const [key2, value] of Object.entries(leftoverParams)) {
@@ -106201,11 +106785,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup(path6) {
-      if (!path6 || typeof path6 !== "string") {
+    function lookup(path5) {
+      if (!path5 || typeof path5 !== "string") {
         return false;
       }
-      var extension3 = extname("x." + path6).toLowerCase().substr(1);
+      var extension3 = extname("x." + path5).toLowerCase().substr(1);
       if (!extension3) {
         return false;
       }
@@ -107320,7 +107904,7 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util5 = __require("util");
-    var path6 = __require("path");
+    var path5 = __require("path");
     var http5 = __require("http");
     var https2 = __require("https");
     var parseUrl3 = __require("url").parse;
@@ -107451,11 +108035,11 @@ var require_form_data = __commonJS({
     FormData3.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path6.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path5.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path6.basename(options.filename || value && (value.name || value.path));
+        filename = path5.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path6.basename(value.client._httpMessage.path || "");
+        filename = path5.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + escapeHeaderParam(filename) + '"';
@@ -107669,9 +108253,9 @@ function isVisitable(thing) {
 function removeBrackets(key2) {
   return utils_default.endsWith(key2, "[]") ? key2.slice(0, -2) : key2;
 }
-function renderKey(path6, key2, dots) {
-  if (!path6) return key2;
-  return path6.concat(key2).map(function each(token, i) {
+function renderKey(path5, key2, dots) {
+  if (!path5) return key2;
+  return path5.concat(key2).map(function each(token, i) {
     token = removeBrackets(token);
     return !dots && i ? "[" + token + "]" : token;
   }).join(dots ? "." : "");
@@ -107754,13 +108338,13 @@ function toFormData(obj, formData, options) {
       return currentValue;
     });
   }
-  function defaultVisitor(value, key2, path6) {
+  function defaultVisitor(value, key2, path5) {
     let arr = value;
     if (utils_default.isReactNative(formData) && utils_default.isReactNativeBlob(value)) {
-      formData.append(renderKey(path6, key2, dots), convertValue(value));
+      formData.append(renderKey(path5, key2, dots), convertValue(value));
       return false;
     }
-    if (value && !path6 && typeof value === "object") {
+    if (value && !path5 && typeof value === "object") {
       if (utils_default.endsWith(key2, "{}")) {
         key2 = metaTokens ? key2 : key2.slice(0, -2);
         value = stringifyWithDepthLimit(value, 1);
@@ -107779,7 +108363,7 @@ function toFormData(obj, formData, options) {
     if (isVisitable(value)) {
       return true;
     }
-    formData.append(renderKey(path6, key2, dots), convertValue(value));
+    formData.append(renderKey(path5, key2, dots), convertValue(value));
     return false;
   }
   const exposedHelpers = Object.assign(predicates, {
@@ -107787,17 +108371,17 @@ function toFormData(obj, formData, options) {
     convertValue,
     isVisitable
   });
-  function build(value, path6, depth = 0) {
+  function build(value, path5, depth = 0) {
     if (utils_default.isUndefined(value)) return;
     throwIfMaxDepthExceeded(depth);
     if (stack.indexOf(value) !== -1) {
-      throw new Error("Circular reference detected in " + path6.join("."));
+      throw new Error("Circular reference detected in " + path5.join("."));
     }
     stack.push(value);
     utils_default.forEach(value, function each(el, key2) {
-      const result = !(utils_default.isUndefined(el) || el === null) && visitor.call(formData, el, utils_default.isString(key2) ? key2.trim() : key2, path6, exposedHelpers);
+      const result = !(utils_default.isUndefined(el) || el === null) && visitor.call(formData, el, utils_default.isString(key2) ? key2.trim() : key2, path5, exposedHelpers);
       if (result === true) {
-        build(el, path6 ? path6.concat(key2) : [key2], depth + 1);
+        build(el, path5 ? path5.concat(key2) : [key2], depth + 1);
       }
     });
     stack.pop();
@@ -108076,7 +108660,7 @@ var init_platform = __esm({
 // node_modules/axios/lib/helpers/toURLEncodedForm.js
 function toURLEncodedForm(data, options) {
   return toFormData_default(data, new platform_default.classes.URLSearchParams(), {
-    visitor: function(value, key2, path6, helpers) {
+    visitor: function(value, key2, path5, helpers) {
       if (platform_default.isNode && utils_default.isBuffer(value)) {
         this.append(key2, value.toString("base64"));
         return false;
@@ -108105,14 +108689,14 @@ function throwIfDepthExceeded(index2) {
   }
 }
 function parsePropPath(name) {
-  const path6 = [];
+  const path5 = [];
   const pattern = /[^.[\]]+|\[([^.[\]]*)]/g;
   let match;
   while ((match = pattern.exec(name)) !== null) {
-    throwIfDepthExceeded(path6.length);
-    path6.push(match[0] === "[]" ? "" : match[1] || match[0]);
+    throwIfDepthExceeded(path5.length);
+    path5.push(match[0] === "[]" ? "" : match[1] || match[0]);
   }
-  return path6;
+  return path5;
 }
 function arrayToObject(arr) {
   const obj = {};
@@ -108127,12 +108711,12 @@ function arrayToObject(arr) {
   return obj;
 }
 function formDataToJSON(formData) {
-  function buildPath(path6, value, target, index2) {
+  function buildPath(path5, value, target, index2) {
     throwIfDepthExceeded(index2);
-    let name = path6[index2++];
+    let name = path5[index2++];
     if (name === "__proto__") return true;
     const isNumericKey = Number.isFinite(+name);
-    const isLast = index2 >= path6.length;
+    const isLast = index2 >= path5.length;
     name = !name && utils_default.isArray(target) ? target.length : name;
     if (isLast) {
       if (utils_default.hasOwnProp(target, name)) {
@@ -108145,7 +108729,7 @@ function formDataToJSON(formData) {
     if (!utils_default.hasOwnProp(target, name) || !utils_default.isObject(target[name])) {
       target[name] = [];
     }
-    const result = buildPath(path6, value, target[name], index2);
+    const result = buildPath(path5, value, target[name], index2);
     if (result && utils_default.isArray(target[name])) {
       target[name] = arrayToObject(target[name]);
     }
@@ -111692,9 +112276,9 @@ var init_http4 = __esm({
           auth = urlUsername + ":" + urlPassword;
         }
         auth && headers.delete("authorization");
-        let path6;
+        let path5;
         try {
-          path6 = buildURL(
+          path5 = buildURL(
             parsed.pathname + parsed.search,
             own2("params"),
             own2("paramsSerializer")
@@ -111713,7 +112297,7 @@ var init_http4 = __esm({
           false
         );
         const options = Object.assign(/* @__PURE__ */ Object.create(null), {
-          path: path6,
+          path: path5,
           method,
           headers: toByteStringHeaderObject(headers),
           agents: { http: httpAgent, https: httpsAgent },
@@ -112130,14 +112714,14 @@ var init_cookies = __esm({
     cookies_default = platform_default.hasStandardBrowserEnv ? (
       // Standard browser envs support document.cookie
       {
-        write(name, value, expires, path6, domain, secure, sameSite) {
+        write(name, value, expires, path5, domain, secure, sameSite) {
           if (typeof document === "undefined") return;
           const cookie = [`${name}=${encodeURIComponent(value)}`];
           if (utils_default.isNumber(expires)) {
             cookie.push(`expires=${new Date(expires).toUTCString()}`);
           }
-          if (utils_default.isString(path6)) {
-            cookie.push(`path=${path6}`);
+          if (utils_default.isString(path5)) {
+            cookie.push(`path=${path5}`);
           }
           if (utils_default.isString(domain)) {
             cookie.push(`domain=${domain}`);
@@ -115566,15 +116150,15 @@ var init_constants3 = __esm({
 });
 
 // src/polymarket/wallet-adapter.ts
-import fs from "fs";
-import { homedir as homedir7 } from "os";
-import { join as join10 } from "path";
+import fs2 from "fs";
+import { homedir as homedir8 } from "os";
+import { join as join11 } from "path";
 function getOrCreateWalletKey() {
   const envKey = process.env.BLOCKRUN_WALLET_KEY?.trim();
   if (envKey && /^0x[0-9a-fA-F]{64}$/.test(envKey)) return envKey;
   let key2;
   try {
-    key2 = fs.readFileSync(WALLET_FILE2, "utf-8").trim();
+    key2 = fs2.readFileSync(WALLET_FILE2, "utf-8").trim();
   } catch (err) {
     if (err.code === "ENOENT") {
       throw new Error(
@@ -115616,7 +116200,7 @@ var init_wallet_adapter = __esm({
     init_esm();
     init_chains();
     init_constants3();
-    WALLET_FILE2 = join10(homedir7(), ".openclaw", "blockrun", "wallet.key");
+    WALLET_FILE2 = join11(homedir8(), ".openclaw", "blockrun", "wallet.key");
     BASE_RPC_URLS = [
       "https://mainnet.base.org",
       "https://base.llamarpc.com",
@@ -115627,21 +116211,21 @@ var init_wallet_adapter = __esm({
 });
 
 // src/polymarket/creds.ts
-import fs2 from "fs";
-import path from "path";
+import fs3 from "fs";
+import path2 from "path";
 import os from "os";
 function readJsonFile(file) {
   try {
-    if (!fs2.existsSync(file)) return null;
-    const raw = fs2.readFileSync(file, "utf-8").trim();
+    if (!fs3.existsSync(file)) return null;
+    const raw = fs3.readFileSync(file, "utf-8").trim();
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 function writeJsonFile(file, value) {
-  fs2.mkdirSync(BLOCKRUN_DIR, { recursive: true });
-  fs2.writeFileSync(file, JSON.stringify(value, null, 2), { mode: 384 });
+  fs3.mkdirSync(BLOCKRUN_DIR, { recursive: true });
+  fs3.writeFileSync(file, JSON.stringify(value, null, 2), { mode: 384 });
 }
 function credsKey(address2, sigType) {
   return `${address2.toLowerCase()}:${sigType}`;
@@ -115693,10 +116277,10 @@ var BLOCKRUN_DIR, CREDS_FILE, BUILDER_CREDS_FILE, STATE_FILE;
 var init_creds = __esm({
   "src/polymarket/creds.ts"() {
     "use strict";
-    BLOCKRUN_DIR = path.join(os.homedir(), ".openclaw", "blockrun");
-    CREDS_FILE = path.join(BLOCKRUN_DIR, ".polymarket-creds");
-    BUILDER_CREDS_FILE = path.join(BLOCKRUN_DIR, ".polymarket-builder-creds");
-    STATE_FILE = path.join(BLOCKRUN_DIR, ".polymarket.json");
+    BLOCKRUN_DIR = path2.join(os.homedir(), ".openclaw", "blockrun");
+    CREDS_FILE = path2.join(BLOCKRUN_DIR, ".polymarket-creds");
+    BUILDER_CREDS_FILE = path2.join(BLOCKRUN_DIR, ".polymarket-builder-creds");
+    STATE_FILE = path2.join(BLOCKRUN_DIR, ".polymarket.json");
   }
 });
 
@@ -116878,13 +117462,13 @@ function __disposeResources(env) {
   }
   return next();
 }
-function __rewriteRelativeImportExtension(path6, preserveJsx) {
-  if (typeof path6 === "string" && /^\.\.?\//.test(path6)) {
-    return path6.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
+function __rewriteRelativeImportExtension(path5, preserveJsx) {
+  if (typeof path5 === "string" && /^\.\.?\//.test(path5)) {
+    return path5.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
       return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : d + ext + "." + cm.toLowerCase() + "js";
     });
   }
-  return path6;
+  return path5;
 }
 var extendStatics, __assign, __createBinding, __setModuleDefault, ownKeys, _SuppressedError, tslib_es6_default;
 var init_tslib_es6 = __esm({
@@ -149181,9 +149765,9 @@ var require_setupKzg = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.setupKzg = setupKzg;
     var defineKzg_js_1 = require_defineKzg();
-    function setupKzg(parameters, path6) {
+    function setupKzg(parameters, path5) {
       try {
-        parameters.loadTrustedSetup(path6);
+        parameters.loadTrustedSetup(path5);
       } catch (e7) {
         const error = e7;
         if (!error.message.includes("trusted setup is already loaded"))
@@ -197268,12 +197852,12 @@ var init_fragments = __esm({
 // node_modules/@ethersproject/abi/lib.esm/coders/abstract-coder.js
 function checkResultErrors(result) {
   const errors = [];
-  const checkErrors = function(path6, object) {
+  const checkErrors = function(path5, object) {
     if (!Array.isArray(object)) {
       return;
     }
     for (let key2 in object) {
-      const childPath = path6.slice();
+      const childPath = path5.slice();
       childPath.push(key2);
       try {
         checkErrors(childPath, object[key2]);
@@ -203091,8 +203675,8 @@ function createCommonjsModule(fn, basedir, module) {
   return module = {
     path: basedir,
     exports: {},
-    require: function(path6, base3) {
-      return commonjsRequire(path6, base3 === void 0 || base3 === null ? module.path : base3);
+    require: function(path5, base3) {
+      return commonjsRequire(path5, base3 === void 0 || base3 === null ? module.path : base3);
     }
   }, fn(module, module.exports), module.exports;
 }
@@ -206942,9 +207526,9 @@ var init_lib23 = __esm({
         if (index2 > 4294967295) {
           throw new Error("invalid index - " + String(index2));
         }
-        let path6 = this.path;
-        if (path6) {
-          path6 += "/" + (index2 & ~HardenedBit);
+        let path5 = this.path;
+        if (path5) {
+          path5 += "/" + (index2 & ~HardenedBit);
         }
         const data = new Uint8Array(37);
         if (index2 & HardenedBit) {
@@ -206952,8 +207536,8 @@ var init_lib23 = __esm({
             throw new Error("cannot derive child of neutered node");
           }
           data.set(arrayify(this.privateKey), 1);
-          if (path6) {
-            path6 += "'";
+          if (path5) {
+            path5 += "'";
           }
         } else {
           data.set(arrayify(this.publicKey));
@@ -206972,21 +207556,21 @@ var init_lib23 = __esm({
           const ek = new SigningKey(hexlify(IL));
           Ki = ek._addPoint(this.publicKey);
         }
-        let mnemonicOrPath = path6;
+        let mnemonicOrPath = path5;
         const srcMnemonic = this.mnemonic;
         if (srcMnemonic) {
           mnemonicOrPath = Object.freeze({
             phrase: srcMnemonic.phrase,
-            path: path6,
+            path: path5,
             locale: srcMnemonic.locale || "en"
           });
         }
         return new _HDNode(_constructorGuard4, ki, Ki, this.fingerprint, bytes32(IR), index2, this.depth + 1, mnemonicOrPath);
       }
-      derivePath(path6) {
-        const components = path6.split("/");
+      derivePath(path5) {
+        const components = path5.split("/");
         if (components.length === 0 || components[0] === "m" && this.depth !== 0) {
-          throw new Error("invalid path - " + path6);
+          throw new Error("invalid path - " + path5);
         }
         if (components[0] === "m") {
           components.shift();
@@ -207721,9 +208305,9 @@ function getPassword(password) {
   }
   return arrayify(password);
 }
-function searchPath(object, path6) {
+function searchPath(object, path5) {
   let currentChild = object;
-  const comps = path6.toLowerCase().split("/");
+  const comps = path5.toLowerCase().split("/");
   for (let i = 0; i < comps.length; i++) {
     let matchingChild = null;
     for (const key2 in currentChild) {
@@ -208372,12 +208956,12 @@ function _getAccount(data, key2) {
     const mnemonicIv = looseArrayify(searchPath(data, "x-ethers/mnemonicCounter"));
     const mnemonicCounter = new import_aes_js2.default.Counter(mnemonicIv);
     const mnemonicAesCtr = new import_aes_js2.default.ModeOfOperation.ctr(mnemonicKey, mnemonicCounter);
-    const path6 = searchPath(data, "x-ethers/path") || defaultPath;
+    const path5 = searchPath(data, "x-ethers/path") || defaultPath;
     const locale = searchPath(data, "x-ethers/locale") || "en";
     const entropy = arrayify(mnemonicAesCtr.decrypt(mnemonicCiphertext));
     try {
       const mnemonic = entropyToMnemonic2(entropy, locale);
-      const node = HDNode.fromMnemonic(mnemonic, null, locale).derivePath(path6);
+      const node = HDNode.fromMnemonic(mnemonic, null, locale).derivePath(path5);
       if (node.privateKey != account.privateKey) {
         throw new Error("mnemonic mismatch");
       }
@@ -208477,12 +209061,12 @@ function encrypt(account, password, options, progressCallback) {
   const privateKey = arrayify(account.privateKey);
   const passwordBytes = getPassword(password);
   let entropy = null;
-  let path6 = null;
+  let path5 = null;
   let locale = null;
   if (hasMnemonic(account)) {
     const srcMnemonic = account.mnemonic;
     entropy = arrayify(mnemonicToEntropy2(srcMnemonic.phrase, srcMnemonic.locale || "en"));
-    path6 = srcMnemonic.path || defaultPath;
+    path5 = srcMnemonic.path || defaultPath;
     locale = srcMnemonic.locale || "en";
   }
   let client = options.client;
@@ -208568,7 +209152,7 @@ function encrypt(account, password, options, progressCallback) {
         gethFilename: "UTC--" + timestamp + "--" + data.address,
         mnemonicCounter: hexlify(mnemonicIv).substring(2),
         mnemonicCiphertext: hexlify(mnemonicCiphertext).substring(2),
-        path: path6,
+        path: path5,
         locale,
         version: "0.1"
       };
@@ -208862,11 +209446,11 @@ var init_lib26 = __esm({
       static fromEncryptedJsonSync(json, password) {
         return new _Wallet(decryptJsonWalletSync(json, password));
       }
-      static fromMnemonic(mnemonic, path6, wordlist3) {
-        if (!path6) {
-          path6 = defaultPath;
+      static fromMnemonic(mnemonic, path5, wordlist3) {
+        if (!path5) {
+          path5 = defaultPath;
         }
-        return new _Wallet(HDNode.fromMnemonic(mnemonic, null, wordlist3).derivePath(path6));
+        return new _Wallet(HDNode.fromMnemonic(mnemonic, null, wordlist3).derivePath(path5));
       }
     };
   }
@@ -214862,21 +215446,21 @@ var init_web3_provider = __esm({
         if (provider == null) {
           logger43.throwArgumentError("missing provider", "provider", provider);
         }
-        let path6 = null;
+        let path5 = null;
         let jsonRpcFetchFunc = null;
         let subprovider = null;
         if (typeof provider === "function") {
-          path6 = "unknown:";
+          path5 = "unknown:";
           jsonRpcFetchFunc = provider;
         } else {
-          path6 = provider.host || provider.path || "";
-          if (!path6 && provider.isMetaMask) {
-            path6 = "metamask";
+          path5 = provider.host || provider.path || "";
+          if (!path5 && provider.isMetaMask) {
+            path5 = "metamask";
           }
           subprovider = provider;
           if (provider.request) {
-            if (path6 === "") {
-              path6 = "eip-1193:";
+            if (path5 === "") {
+              path5 = "eip-1193:";
             }
             jsonRpcFetchFunc = buildEip1193Fetcher(provider);
           } else if (provider.sendAsync) {
@@ -214886,11 +215470,11 @@ var init_web3_provider = __esm({
           } else {
             logger43.throwArgumentError("unsupported provider", "provider", provider);
           }
-          if (!path6) {
-            path6 = "unknown:";
+          if (!path5) {
+            path5 = "unknown:";
           }
         }
-        super(path6, network);
+        super(path5, network);
         defineReadOnly(this, "jsonRpcFetchFunc", jsonRpcFetchFunc);
         defineReadOnly(this, "provider", subprovider);
       }
@@ -215728,7 +216312,7 @@ var require_axios = __commonJS({
     var https2 = __require("https");
     var http23 = __require("http2");
     var util5 = __require("util");
-    var path6 = __require("path");
+    var path5 = __require("path");
     var followRedirects2 = require_follow_redirects();
     var zlib2 = __require("zlib");
     var stream4 = __require("stream");
@@ -216796,9 +217380,9 @@ var require_axios = __commonJS({
     function removeBrackets2(key2) {
       return utils$1.endsWith(key2, "[]") ? key2.slice(0, -2) : key2;
     }
-    function renderKey2(path7, key2, dots) {
-      if (!path7) return key2;
-      return path7.concat(key2).map(function each(token, i) {
+    function renderKey2(path6, key2, dots) {
+      if (!path6) return key2;
+      return path6.concat(key2).map(function each(token, i) {
         token = removeBrackets2(token);
         return !dots && i ? "[" + token + "]" : token;
       }).join(dots ? "." : "");
@@ -216876,13 +217460,13 @@ var require_axios = __commonJS({
           return currentValue;
         });
       }
-      function defaultVisitor(value, key2, path7) {
+      function defaultVisitor(value, key2, path6) {
         let arr = value;
         if (utils$1.isReactNative(formData) && utils$1.isReactNativeBlob(value)) {
-          formData.append(renderKey2(path7, key2, dots), convertValue(value));
+          formData.append(renderKey2(path6, key2, dots), convertValue(value));
           return false;
         }
-        if (value && !path7 && typeof value === "object") {
+        if (value && !path6 && typeof value === "object") {
           if (utils$1.endsWith(key2, "{}")) {
             key2 = metaTokens ? key2 : key2.slice(0, -2);
             value = stringifyWithDepthLimit(value, 1);
@@ -216901,7 +217485,7 @@ var require_axios = __commonJS({
         if (isVisitable2(value)) {
           return true;
         }
-        formData.append(renderKey2(path7, key2, dots), convertValue(value));
+        formData.append(renderKey2(path6, key2, dots), convertValue(value));
         return false;
       }
       const exposedHelpers = Object.assign(predicates2, {
@@ -216909,17 +217493,17 @@ var require_axios = __commonJS({
         convertValue,
         isVisitable: isVisitable2
       });
-      function build(value, path7, depth = 0) {
+      function build(value, path6, depth = 0) {
         if (utils$1.isUndefined(value)) return;
         throwIfMaxDepthExceeded(depth);
         if (stack.indexOf(value) !== -1) {
-          throw new Error("Circular reference detected in " + path7.join("."));
+          throw new Error("Circular reference detected in " + path6.join("."));
         }
         stack.push(value);
         utils$1.forEach(value, function each(el, key2) {
-          const result = !(utils$1.isUndefined(el) || el === null) && visitor.call(formData, el, utils$1.isString(key2) ? key2.trim() : key2, path7, exposedHelpers);
+          const result = !(utils$1.isUndefined(el) || el === null) && visitor.call(formData, el, utils$1.isString(key2) ? key2.trim() : key2, path6, exposedHelpers);
           if (result === true) {
-            build(el, path7 ? path7.concat(key2) : [key2], depth + 1);
+            build(el, path6 ? path6.concat(key2) : [key2], depth + 1);
           }
         });
         stack.pop();
@@ -217108,7 +217692,7 @@ var require_axios = __commonJS({
     };
     function toURLEncodedForm2(data, options) {
       return toFormData3(data, new platform2.classes.URLSearchParams(), {
-        visitor: function(value, key2, path7, helpers) {
+        visitor: function(value, key2, path6, helpers) {
           if (platform2.isNode && utils$1.isBuffer(value)) {
             this.append(key2, value.toString("base64"));
             return false;
@@ -217125,14 +217709,14 @@ var require_axios = __commonJS({
       }
     }
     function parsePropPath2(name) {
-      const path7 = [];
+      const path6 = [];
       const pattern = /[^.[\]]+|\[([^.[\]]*)]/g;
       let match;
       while ((match = pattern.exec(name)) !== null) {
-        throwIfDepthExceeded2(path7.length);
-        path7.push(match[0] === "[]" ? "" : match[1] || match[0]);
+        throwIfDepthExceeded2(path6.length);
+        path6.push(match[0] === "[]" ? "" : match[1] || match[0]);
       }
-      return path7;
+      return path6;
     }
     function arrayToObject2(arr) {
       const obj = {};
@@ -217147,12 +217731,12 @@ var require_axios = __commonJS({
       return obj;
     }
     function formDataToJSON2(formData) {
-      function buildPath(path7, value, target, index2) {
+      function buildPath(path6, value, target, index2) {
         throwIfDepthExceeded2(index2);
-        let name = path7[index2++];
+        let name = path6[index2++];
         if (name === "__proto__") return true;
         const isNumericKey = Number.isFinite(+name);
-        const isLast = index2 >= path7.length;
+        const isLast = index2 >= path6.length;
         name = !name && utils$1.isArray(target) ? target.length : name;
         if (isLast) {
           if (utils$1.hasOwnProp(target, name)) {
@@ -217165,7 +217749,7 @@ var require_axios = __commonJS({
         if (!utils$1.hasOwnProp(target, name) || !utils$1.isObject(target[name])) {
           target[name] = [];
         }
-        const result = buildPath(path7, value, target[name], index2);
+        const result = buildPath(path6, value, target[name], index2);
         if (result && utils$1.isArray(target[name])) {
           target[name] = arrayToObject2(target[name]);
         }
@@ -218776,8 +219360,8 @@ var require_axios = __commonJS({
           const allowedSocketPaths = own3("allowedSocketPaths");
           if (allowedSocketPaths != null) {
             const allowed = Array.isArray(allowedSocketPaths) ? allowedSocketPaths : [allowedSocketPaths];
-            const resolvedSocket = path6.resolve(socketPath);
-            const isAllowed = allowed.some((entry) => typeof entry === "string" && path6.resolve(entry) === resolvedSocket);
+            const resolvedSocket = path5.resolve(socketPath);
+            const isAllowed = allowed.some((entry) => typeof entry === "string" && path5.resolve(entry) === resolvedSocket);
             if (!isAllowed) {
               return reject(new AxiosError3(`socketPath "${socketPath}" is not permitted by allowedSocketPaths`, AxiosError3.ERR_BAD_OPTION_VALUE, config));
             }
@@ -219076,14 +219660,14 @@ var require_axios = __commonJS({
     var cookies = platform2.hasStandardBrowserEnv ? (
       // Standard browser envs support document.cookie
       {
-        write(name, value, expires, path7, domain, secure, sameSite) {
+        write(name, value, expires, path6, domain, secure, sameSite) {
           if (typeof document === "undefined") return;
           const cookie = [`${name}=${encodeURIComponent(value)}`];
           if (utils$1.isNumber(expires)) {
             cookie.push(`expires=${new Date(expires).toUTCString()}`);
           }
-          if (utils$1.isString(path7)) {
-            cookie.push(`path=${path7}`);
+          if (utils$1.isString(path6)) {
+            cookie.push(`path=${path6}`);
           }
           if (utils$1.isString(domain)) {
             cookie.push(`domain=${domain}`);
@@ -223572,18 +224156,18 @@ var require_client2 = __commonJS({
         }
         console.log(`Transaction not found or not in given states, timing out!`);
       }
-      async sendAuthedRequest(method, path6, body) {
+      async sendAuthedRequest(method, path5, body) {
         if (this.canBuilderAuth()) {
-          const builderHeaders = await this._generateBuilderHeaders(method, path6, body);
+          const builderHeaders = await this._generateBuilderHeaders(method, path5, body);
           if (builderHeaders !== void 0) {
-            return this.send(path6, method, { headers: builderHeaders, data: body });
+            return this.send(path5, method, { headers: builderHeaders, data: body });
           }
         }
-        return this.send(path6, method, { data: body });
+        return this.send(path5, method, { data: body });
       }
-      async _generateBuilderHeaders(method, path6, body) {
+      async _generateBuilderHeaders(method, path5, body) {
         if (this.builderConfig !== void 0) {
-          const builderHeaders = await this.builderConfig.generateBuilderHeaders(method, path6, body);
+          const builderHeaders = await this.builderConfig.generateBuilderHeaders(method, path5, body);
           if (builderHeaders == void 0) {
             return void 0;
           }
@@ -223674,12 +224258,12 @@ var require_signer = __commonJS({
       constructor(creds) {
         this.creds = creds;
       }
-      createBuilderHeaderPayload(method, path6, body, timestamp) {
+      createBuilderHeaderPayload(method, path5, body, timestamp) {
         let ts = Math.floor(Date.now() / 1e3);
         if (timestamp !== void 0) {
           ts = timestamp;
         }
-        const builderSig = (0, signing_1.buildHmacSignature)(this.creds.secret, ts, method, path6, body);
+        const builderSig = (0, signing_1.buildHmacSignature)(this.creds.secret, ts, method, path5, body);
         return {
           POLY_BUILDER_API_KEY: this.creds.key,
           POLY_BUILDER_PASSPHRASE: this.creds.passphrase,
@@ -223768,17 +224352,17 @@ var require_config2 = __commonJS({
        * @param path
        * @param body
        */
-      async generateBuilderHeaders(method, path6, body, timestamp) {
+      async generateBuilderHeaders(method, path5, body, timestamp) {
         this.ensureValid();
         const builderType = this.getBuilderType();
         if (builderType == types_1.BuilderType.LOCAL) {
-          return Promise.resolve(this.signer?.createBuilderHeaderPayload(method, path6, body, timestamp));
+          return Promise.resolve(this.signer?.createBuilderHeaderPayload(method, path5, body, timestamp));
         }
         if (builderType == types_1.BuilderType.REMOTE) {
           const url2 = this.remoteBuilderConfig.url;
           const payload = {
             method,
-            path: path6,
+            path: path5,
             body,
             timestamp
           };
@@ -224560,11 +225144,11 @@ var init_withdraw = __esm({
 });
 
 // node_modules/@blockrun/llm/dist/index.js
-import * as path2 from "path";
+import * as path3 from "path";
 import * as os2 from "os";
 import * as path22 from "path";
 import * as os22 from "os";
-import * as path3 from "path";
+import * as path32 from "path";
 import * as os3 from "os";
 import * as path4 from "path";
 import * as os4 from "os";
@@ -224738,7 +225322,7 @@ function resolveDefaultTimeout() {
 function sleep2(ms) {
   return new Promise((r2) => setTimeout(r2, ms));
 }
-var BlockrunError, PaymentError, APIError, BASE_CHAIN_ID2, USDC_BASE2, USDC_DOMAIN, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, LOCALHOST_DOMAINS, BLOCKRUN_DIR2, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_TIMEOUT, PHONE_PRICES, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, WALLET_DIR2, WALLET_FILE3, WALLET_DIR22, SOLANA_WALLET_FILE, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL;
+var BlockrunError, PaymentError, APIError, BASE_CHAIN_ID2, USDC_BASE2, USDC_DOMAIN, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, LOCALHOST_DOMAINS, BLOCKRUN_DIR2, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_TIMEOUT, PHONE_PRICES, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, WALLET_DIR3, WALLET_FILE3, WALLET_DIR22, SOLANA_WALLET_FILE, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL;
 var init_dist7 = __esm({
   "node_modules/@blockrun/llm/dist/index.js"() {
     "use strict";
@@ -224786,8 +225370,8 @@ var init_dist7 = __esm({
     };
     BLOCKRUN_SERVICE_CODE2 = "blockrun";
     LOCALHOST_DOMAINS = ["localhost", "127.0.0.1"];
-    BLOCKRUN_DIR2 = path2.join(os2.homedir(), ".blockrun");
-    COST_LOG_FILE = path2.join(BLOCKRUN_DIR2, "cost_log.jsonl");
+    BLOCKRUN_DIR2 = path3.join(os2.homedir(), ".blockrun");
+    COST_LOG_FILE = path3.join(BLOCKRUN_DIR2, "cost_log.jsonl");
     SDK_VERSION = "3.10.0";
     USER_AGENT2 = `blockrun-ts/${SDK_VERSION}`;
     DEFAULT_TIMEOUT = resolveDefaultTimeout();
@@ -224832,15 +225416,15 @@ var init_dist7 = __esm({
        * `/api` is tolerated and stripped). Query params are URL-encoded; arrays
        * become repeated keys (`?a=1&a=2`); undefined/null are dropped.
        */
-      async get(path52, params) {
-        const url2 = this.buildUrl(path52, params);
+      async get(path5, params) {
+        const url2 = this.buildUrl(path5, params);
         return this.requestWithPayment(url2, "GET");
       }
       /**
        * POST a BlockRun endpoint with a JSON body.
        */
-      async post(path52, body) {
-        const url2 = this.buildUrl(path52);
+      async post(path5, body) {
+        const url2 = this.buildUrl(path5);
         return this.requestWithPayment(url2, "POST", body);
       }
       /**
@@ -224855,8 +225439,8 @@ var init_dist7 = __esm({
        * short-circuits and returns the body. Most long-running endpoints (image,
        * video, music, voice) return 202 with a poll_url.
        */
-      async poll(path52, body, options) {
-        const submitUrl = this.buildUrl(path52);
+      async poll(path5, body, options) {
+        const submitUrl = this.buildUrl(path5);
         const budgetMs = options?.budgetMs ?? DEFAULT_POLL_BUDGET_MS;
         const intervalMs = options?.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
         const resp402 = await this.fetchWithTimeout(submitUrl, {
@@ -224955,8 +225539,8 @@ var init_dist7 = __esm({
        *     process.stdout.write(chunk.choices?.[0]?.delta?.content ?? "");
        *   }
        */
-      async *stream(path52, body) {
-        const url2 = this.buildUrl(path52);
+      async *stream(path5, body) {
+        const url2 = this.buildUrl(path5);
         const requestBody = JSON.stringify(body ?? {});
         const resp402 = await this.fetchWithTimeout(url2, {
           method: "POST",
@@ -225022,8 +225606,8 @@ var init_dist7 = __esm({
       // --------------------------------------------------------------------
       // Internal: shared infrastructure
       // --------------------------------------------------------------------
-      buildUrl(path52, params) {
-        let normalized = path52.startsWith("/") ? path52 : `/${path52}`;
+      buildUrl(path5, params) {
+        let normalized = path5.startsWith("/") ? path5 : `/${path5}`;
         if (normalized.startsWith("/api/")) {
           normalized = normalized.slice(4);
         }
@@ -225171,10 +225755,10 @@ var init_dist7 = __esm({
         return { totalUsd: this.sessionTotalUsd, calls: this.sessionCalls };
       }
     };
-    WALLET_DIR2 = path22.join(os22.homedir(), ".blockrun");
-    WALLET_FILE3 = path22.join(WALLET_DIR2, ".session");
-    WALLET_DIR22 = path3.join(os3.homedir(), ".blockrun");
-    SOLANA_WALLET_FILE = path3.join(WALLET_DIR22, ".solana-session");
+    WALLET_DIR3 = path22.join(os22.homedir(), ".blockrun");
+    WALLET_FILE3 = path22.join(WALLET_DIR3, ".session");
+    WALLET_DIR22 = path32.join(os3.homedir(), ".blockrun");
+    SOLANA_WALLET_FILE = path32.join(WALLET_DIR22, ".solana-session");
     CACHE_DIR = path4.join(os4.homedir(), ".blockrun", "cache");
     DATA_DIR = path4.join(os4.homedir(), ".blockrun", "data");
     COST_LOG_FILE2 = path4.join(os4.homedir(), ".blockrun", "cost_log.jsonl");
@@ -225670,261 +226254,6 @@ var init_mcp_config = __esm({
   }
 });
 
-// src/spend-control.ts
-import * as fs3 from "fs";
-import * as path5 from "path";
-import { homedir as homedir12 } from "os";
-function formatDuration(seconds) {
-  if (seconds < 60) {
-    return `${seconds}s`;
-  } else if (seconds < 3600) {
-    const mins = Math.ceil(seconds / 60);
-    return `${mins} min`;
-  } else {
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.ceil(seconds % 3600 / 60);
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  }
-}
-var WALLET_DIR3, HOUR_MS, DAY_MS, FileSpendControlStorage, InMemorySpendControlStorage, SpendControl;
-var init_spend_control = __esm({
-  "src/spend-control.ts"() {
-    "use strict";
-    init_fs_read();
-    WALLET_DIR3 = path5.join(homedir12(), ".openclaw", "blockrun");
-    HOUR_MS = 60 * 60 * 1e3;
-    DAY_MS = 24 * HOUR_MS;
-    FileSpendControlStorage = class {
-      spendingFile;
-      constructor() {
-        this.spendingFile = path5.join(WALLET_DIR3, "spending.json");
-      }
-      load() {
-        try {
-          if (fs3.existsSync(this.spendingFile)) {
-            const data = JSON.parse(readTextFileSync(this.spendingFile));
-            const rawLimits = data.limits ?? {};
-            const rawHistory = data.history ?? [];
-            const limits = {};
-            for (const key2 of ["perRequest", "hourly", "daily", "session"]) {
-              const val = rawLimits[key2];
-              if (typeof val === "number" && val > 0 && Number.isFinite(val)) {
-                limits[key2] = val;
-              }
-            }
-            const history = [];
-            if (Array.isArray(rawHistory)) {
-              for (const r2 of rawHistory) {
-                if (typeof r2?.timestamp === "number" && typeof r2?.amount === "number" && Number.isFinite(r2.timestamp) && Number.isFinite(r2.amount) && r2.amount >= 0) {
-                  history.push({
-                    timestamp: r2.timestamp,
-                    amount: r2.amount,
-                    model: typeof r2.model === "string" ? r2.model : void 0,
-                    action: typeof r2.action === "string" ? r2.action : void 0
-                  });
-                }
-              }
-            }
-            return { limits, history };
-          }
-        } catch (err) {
-          console.error(`[ClawRouter] Failed to load spending data, starting fresh: ${err}`);
-        }
-        return null;
-      }
-      save(data) {
-        try {
-          if (!fs3.existsSync(WALLET_DIR3)) {
-            fs3.mkdirSync(WALLET_DIR3, { recursive: true, mode: 448 });
-          }
-          fs3.writeFileSync(this.spendingFile, JSON.stringify(data, null, 2), {
-            mode: 384
-          });
-        } catch (err) {
-          console.error(`[ClawRouter] Failed to save spending data: ${err}`);
-        }
-      }
-    };
-    InMemorySpendControlStorage = class {
-      data = null;
-      load() {
-        return this.data ? {
-          limits: { ...this.data.limits },
-          history: this.data.history.map((r2) => ({ ...r2 }))
-        } : null;
-      }
-      save(data) {
-        this.data = {
-          limits: { ...data.limits },
-          history: data.history.map((r2) => ({ ...r2 }))
-        };
-      }
-    };
-    SpendControl = class {
-      limits = {};
-      history = [];
-      sessionSpent = 0;
-      sessionCalls = 0;
-      storage;
-      now;
-      constructor(options) {
-        this.storage = options?.storage ?? new FileSpendControlStorage();
-        this.now = options?.now ?? (() => Date.now());
-        this.load();
-      }
-      setLimit(window2, amount) {
-        if (!Number.isFinite(amount) || amount <= 0) {
-          throw new Error("Limit must be a finite positive number");
-        }
-        this.limits[window2] = amount;
-        this.save();
-      }
-      clearLimit(window2) {
-        delete this.limits[window2];
-        this.save();
-      }
-      getLimits() {
-        return { ...this.limits };
-      }
-      check(estimatedCost2) {
-        const now2 = this.now();
-        if (this.limits.perRequest !== void 0) {
-          if (estimatedCost2 > this.limits.perRequest) {
-            return {
-              allowed: false,
-              blockedBy: "perRequest",
-              remaining: this.limits.perRequest,
-              reason: `Per-request limit exceeded: $${estimatedCost2.toFixed(4)} > $${this.limits.perRequest.toFixed(2)} max`
-            };
-          }
-        }
-        if (this.limits.hourly !== void 0) {
-          const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
-          const remaining = this.limits.hourly - hourlySpent;
-          if (estimatedCost2 > remaining) {
-            const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - HOUR_MS);
-            const resetIn = oldestInWindow ? Math.ceil((oldestInWindow.timestamp + HOUR_MS - now2) / 1e3) : 0;
-            return {
-              allowed: false,
-              blockedBy: "hourly",
-              remaining,
-              reason: `Hourly limit exceeded: $${(hourlySpent + estimatedCost2).toFixed(2)} > $${this.limits.hourly.toFixed(2)} max`,
-              resetIn
-            };
-          }
-        }
-        if (this.limits.daily !== void 0) {
-          const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
-          const remaining = this.limits.daily - dailySpent;
-          if (estimatedCost2 > remaining) {
-            const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - DAY_MS);
-            const resetIn = oldestInWindow ? Math.ceil((oldestInWindow.timestamp + DAY_MS - now2) / 1e3) : 0;
-            return {
-              allowed: false,
-              blockedBy: "daily",
-              remaining,
-              reason: `Daily limit exceeded: $${(dailySpent + estimatedCost2).toFixed(2)} > $${this.limits.daily.toFixed(2)} max`,
-              resetIn
-            };
-          }
-        }
-        if (this.limits.session !== void 0) {
-          const remaining = this.limits.session - this.sessionSpent;
-          if (estimatedCost2 > remaining) {
-            return {
-              allowed: false,
-              blockedBy: "session",
-              remaining,
-              reason: `Session limit exceeded: $${(this.sessionSpent + estimatedCost2).toFixed(2)} > $${this.limits.session.toFixed(2)} max`
-            };
-          }
-        }
-        return { allowed: true };
-      }
-      record(amount, metadata) {
-        if (!Number.isFinite(amount) || amount < 0) {
-          throw new Error("Record amount must be a non-negative finite number");
-        }
-        const record = {
-          timestamp: this.now(),
-          amount,
-          model: metadata?.model,
-          action: metadata?.action
-        };
-        this.history.push(record);
-        this.sessionSpent += amount;
-        this.sessionCalls += 1;
-        this.cleanup();
-        this.save();
-      }
-      getSpendingInWindow(from15, to) {
-        return this.history.filter((r2) => r2.timestamp >= from15 && r2.timestamp <= to).reduce((sum, r2) => sum + r2.amount, 0);
-      }
-      getSpending(window2) {
-        const now2 = this.now();
-        switch (window2) {
-          case "hourly":
-            return this.getSpendingInWindow(now2 - HOUR_MS, now2);
-          case "daily":
-            return this.getSpendingInWindow(now2 - DAY_MS, now2);
-          case "session":
-            return this.sessionSpent;
-        }
-      }
-      getRemaining(window2) {
-        const limit = this.limits[window2];
-        if (limit === void 0) return null;
-        return Math.max(0, limit - this.getSpending(window2));
-      }
-      getStatus() {
-        const now2 = this.now();
-        const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
-        const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
-        return {
-          limits: { ...this.limits },
-          spending: {
-            hourly: hourlySpent,
-            daily: dailySpent,
-            session: this.sessionSpent
-          },
-          remaining: {
-            hourly: this.limits.hourly !== void 0 ? this.limits.hourly - hourlySpent : null,
-            daily: this.limits.daily !== void 0 ? this.limits.daily - dailySpent : null,
-            session: this.limits.session !== void 0 ? this.limits.session - this.sessionSpent : null
-          },
-          calls: this.sessionCalls
-        };
-      }
-      getHistory(limit) {
-        const records = [...this.history].reverse();
-        return limit ? records.slice(0, limit) : records;
-      }
-      resetSession() {
-        this.sessionSpent = 0;
-        this.sessionCalls = 0;
-      }
-      cleanup() {
-        const cutoff = this.now() - DAY_MS;
-        this.history = this.history.filter((r2) => r2.timestamp >= cutoff);
-      }
-      save() {
-        this.storage.save({
-          limits: { ...this.limits },
-          history: [...this.history]
-        });
-      }
-      load() {
-        const data = this.storage.load();
-        if (data) {
-          this.limits = data.limits;
-          this.history = data.history;
-          this.cleanup();
-        }
-      }
-    };
-  }
-});
-
 // src/retry.ts
 function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -225993,6 +226322,8 @@ __export(index_exports, {
   BALANCE_THRESHOLDS: () => BALANCE_THRESHOLDS,
   BLOCKRUN_MODELS: () => BLOCKRUN_MODELS,
   BalanceMonitor: () => BalanceMonitor,
+  CAIP2_BASE: () => CAIP2_BASE,
+  CAIP2_SOLANA_MAINNET: () => CAIP2_SOLANA_MAINNET,
   DEFAULT_RETRY_CONFIG: () => DEFAULT_RETRY_CONFIG,
   DEFAULT_ROUTING_CONFIG: () => DEFAULT_ROUTING_CONFIG,
   DEFAULT_SESSION_CONFIG: () => DEFAULT_SESSION_CONFIG,
@@ -226001,6 +226332,7 @@ __export(index_exports, {
   InMemorySpendControlStorage: () => InMemorySpendControlStorage,
   InsufficientFundsError: () => InsufficientFundsError2,
   MODEL_ALIASES: () => MODEL_ALIASES,
+  MalformedSpendPolicyError: () => MalformedSpendPolicyError,
   OPENCLAW_MODELS: () => OPENCLAW_MODELS,
   PARTNER_SERVICES: () => PARTNER_SERVICES,
   RequestDeduplicator: () => RequestDeduplicator,
@@ -226009,6 +226341,7 @@ __export(index_exports, {
   SessionStore: () => SessionStore,
   SolanaBalanceMonitor: () => SolanaBalanceMonitor,
   SpendControl: () => SpendControl,
+  SpendPolicyError: () => SpendPolicyError,
   VISIBLE_OPENCLAW_MODELS: () => VISIBLE_OPENCLAW_MODELS,
   blockrunProvider: () => blockrunProvider,
   buildImageGenerationProvider: () => buildImageGenerationProvider,
@@ -226048,6 +226381,7 @@ __export(index_exports, {
   loadPaymentChain: () => loadPaymentChain,
   logUsage: () => logUsage,
   parseCallArgs: () => parseCallArgs,
+  registerSpendPolicyHook: () => registerSpendPolicyHook,
   resolveModelAlias: () => resolveModelAlias,
   resolvePaymentChain: () => resolvePaymentChain,
   route: () => route,
@@ -226062,7 +226396,7 @@ import {
   readdirSync,
   mkdirSync as mkdirSync3,
   copyFileSync,
-  renameSync
+  renameSync as renameSync2
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
 import { homedir as homedir13 } from "os";
@@ -226340,7 +226674,7 @@ function injectModelsConfig(logger48, options = {}) {
     try {
       const tmpPath = `${configPath}.tmp.${process.pid}`;
       writeFileSync3(tmpPath, JSON.stringify(config, null, 2));
-      renameSync(tmpPath, configPath);
+      renameSync2(tmpPath, configPath);
       logger48.info("Smart routing enabled (blockrun/auto)");
     } catch (err) {
       logger48.info(`Failed to write config: ${err instanceof Error ? err.message : String(err)}`);
@@ -226376,7 +226710,7 @@ function syncAgentModelCache(logger48, options = {}) {
       entry.models = VISIBLE_OPENCLAW_MODELS;
       const tmpPath = `${cachePath}.tmp.${process.pid}`;
       writeFileSync3(tmpPath, JSON.stringify(cache2, null, 2));
-      renameSync(tmpPath, cachePath);
+      renameSync2(tmpPath, cachePath);
       logger48.info(
         `Repaired ${agent} model cache: ${staleCount} \u2192 ${expectedIds.length} BlockRun models`
       );
@@ -227740,7 +228074,7 @@ ${errText}`
             }
             const tmpPath = `${configPath}.tmp.${process.pid}`;
             writeFileSync3(tmpPath, JSON.stringify(config, null, 2));
-            renameSync(tmpPath, configPath);
+            renameSync2(tmpPath, configPath);
             api.logger.info("ClawRouter config cleaned up");
           }
         } catch (err) {
@@ -227835,7 +228169,7 @@ init_stats();
 init_proxy();
 init_version4();
 import { platform, arch, freemem, totalmem } from "os";
-import { existsSync as existsSync2, readFileSync as readFileSync3 } from "fs";
+import { existsSync as existsSync3, readFileSync as readFileSync3 } from "fs";
 function formatBytes(bytes) {
   const gb = bytes / (1024 * 1024 * 1024);
   return `${gb.toFixed(1)}GB`;
@@ -228124,7 +228458,7 @@ async function analyzeWithAI(diagnostics, userQuestion, model = "sonnet") {
     const paymentChain = diagnostics.wallet.paymentChain;
     if (paymentChain === "solana") {
       try {
-        if (!existsSync2(MNEMONIC_FILE)) {
+        if (!existsSync3(MNEMONIC_FILE)) {
           throw new Error(`mnemonic file missing at ${MNEMONIC_FILE}`);
         }
         const mnemonic = readFileSync3(MNEMONIC_FILE, "utf8").trim();
@@ -228287,8 +228621,8 @@ Environment Variables:
 For more info: https://blockrun.ai/clawrouter.md
 `);
 }
-async function queryProxy(path6, port) {
-  const res = await fetch(`http://127.0.0.1:${port}${path6}`);
+async function queryProxy(path5, port) {
+  const res = await fetch(`http://127.0.0.1:${port}${path5}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   return res.json();
 }
@@ -228368,8 +228702,8 @@ Use: clawrouter share <id> --as=<feishu|slack|discord|telegram|whatsapp|plain>
       const { join: pjoin } = await import("path");
       const paths = [];
       for (const p of VALID_PRESETS) {
-        const path6 = idOrLast === "last" ? `/share/last?as=${p}` : `/share/${idOrLast}/render?as=${p}`;
-        const result = await queryProxy(path6, port);
+        const path5 = idOrLast === "last" ? `/share/last?as=${p}` : `/share/${idOrLast}/render?as=${p}`;
+        const result = await queryProxy(path5, port);
         const file = pjoin(tmpdir(), `claw-share-${result.id}-${p}.txt`);
         await writeFile3(file, result.rendered, "utf8");
         paths.push(file);
@@ -228390,8 +228724,8 @@ Use: clawrouter share <id> --as=<feishu|slack|discord|telegram|whatsapp|plain>
     process.exit(1);
   }
   try {
-    const path6 = idOrLast === "last" ? `/share/last?as=${chosenPreset}` : `/share/${idOrLast}/render?as=${chosenPreset}`;
-    const result = await queryProxy(path6, port);
+    const path5 = idOrLast === "last" ? `/share/last?as=${chosenPreset}` : `/share/${idOrLast}/render?as=${chosenPreset}`;
+    const result = await queryProxy(path5, port);
     process.stdout.write(result.rendered);
     if (!result.rendered.endsWith("\n")) process.stdout.write("\n");
     const clipErr = await copyToClipboard(result.rendered);
@@ -228511,8 +228845,8 @@ Usage Stats (last ${days} days)
 }
 async function cmdPhone(port, subcommand, numbersAction, arg, areaCode) {
   const base3 = `http://127.0.0.1:${port}`;
-  async function postJson(path6, body) {
-    const resp = await fetch(`${base3}${path6}`, {
+  async function postJson(path5, body) {
+    const resp = await fetch(`${base3}${path5}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body)
@@ -228614,12 +228948,12 @@ Releasing ${arg}...
         console.error(`\u2717 Usage: clawrouter phone ${subcommand} <+E.164-number>`);
         process.exit(1);
       }
-      const path6 = subcommand === "fraud" ? "/v1/phone/lookup/fraud" : "/v1/phone/lookup";
+      const path5 = subcommand === "fraud" ? "/v1/phone/lookup/fraud" : "/v1/phone/lookup";
       const price = subcommand === "fraud" ? "$0.05" : "$0.01";
       console.log(`
 Looking up ${arg}... (${price})
 `);
-      const result = await postJson(path6, { phoneNumber: arg });
+      const result = await postJson(path5, { phoneNumber: arg });
       console.log(JSON.stringify(result, null, 2));
       console.log();
     }
