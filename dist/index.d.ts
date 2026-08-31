@@ -1105,17 +1105,23 @@ type ProxyHandle = {
  */
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
 
+type SolanaWalletResolution = {
+    privateKeyBytes: Uint8Array;
+    source: "env" | "core" | "mnemonic";
+    mnemonic?: string;
+};
 /**
- * Resolve wallet key: load saved → env var → auto-generate.
- * Also loads mnemonic if available for Solana key derivation.
+ * Resolve wallet key: explicit env → BlockRun Core → legacy OpenClaw → generate.
+ * Uses the shared BlockRun Core Solana session before legacy mnemonic derivation.
  * Called by index.ts before the auth wizard runs.
  */
 type WalletResolution = {
     key: string;
     address: string;
-    source: "saved" | "env" | "config" | "generated";
+    source: "saved" | "core" | "env" | "config" | "generated";
     mnemonic?: string;
     solanaPrivateKeyBytes?: Uint8Array;
+    solanaSource?: SolanaWalletResolution["source"] | "generated";
 };
 /**
  * Set up Solana wallet for existing EVM-only users.

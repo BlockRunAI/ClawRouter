@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveModelAlias } from "./models.js";
-import { buildProxyModelList } from "./proxy.js";
+import { buildDetailedModelList, buildProxyModelList } from "./proxy.js";
 
 describe("buildProxyModelList", () => {
   it("includes alias models used by /model commands", () => {
@@ -42,5 +42,26 @@ describe("buildProxyModelList", () => {
     const list = buildProxyModelList(1234567890);
     const ids = list.map((model) => model.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("builds complete control-plane metadata without duplicate rows", () => {
+    const list = buildDetailedModelList(1234567890);
+    const ids = list.map((model) => model.id);
+    const sonnet = list.find((model) => model.id === "anthropic/claude-sonnet-5");
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(sonnet).toMatchObject({
+      name: "Claude Sonnet 5",
+      created: 1234567890,
+      owned_by: "anthropic",
+      context_window: expect.any(Number),
+      max_output: expect.any(Number),
+      input_price: expect.any(Number),
+      output_price: expect.any(Number),
+      reasoning: true,
+      vision: true,
+      agentic: true,
+      tool_calling: true,
+    });
   });
 });

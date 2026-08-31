@@ -59085,6 +59085,7 @@ var init_index_node37 = __esm({
 // src/wallet.ts
 var wallet_exports = {};
 __export(wallet_exports, {
+  decodeSolanaSessionKey: () => decodeSolanaSessionKey,
   deriveAllKeys: () => deriveAllKeys,
   deriveEvmKey: () => deriveEvmKey,
   deriveSolanaKeyBytes: () => deriveSolanaKeyBytes,
@@ -59126,6 +59127,44 @@ function deriveSolanaKeyBytes(mnemonic) {
   }
   return new Uint8Array(key2);
 }
+function decodeSolanaSessionKey(value) {
+  const key2 = value.trim();
+  let decoded;
+  if (key2.startsWith("[")) {
+    const parsed = JSON.parse(key2);
+    if (!Array.isArray(parsed) || !parsed.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)) {
+      throw new Error("Solana JSON key must contain byte values from 0 to 255.");
+    }
+    decoded = Uint8Array.from(parsed);
+  } else {
+    const hex = key2.startsWith("0x") ? key2.slice(2) : key2;
+    if (/^[0-9a-f]{64}(?:[0-9a-f]{64})?$/i.test(hex)) {
+      decoded = Uint8Array.from(Buffer.from(hex, "hex"));
+    } else {
+      const bytes = [0];
+      for (const char of key2) {
+        const digit = BASE58_ALPHABET.indexOf(char);
+        if (digit < 0) throw new Error("Solana key contains a non-base58 character.");
+        let carry2 = digit;
+        for (let index2 = 0; index2 < bytes.length; index2++) {
+          carry2 += bytes[index2] * 58;
+          bytes[index2] = carry2 & 255;
+          carry2 >>= 8;
+        }
+        while (carry2 > 0) {
+          bytes.push(carry2 & 255);
+          carry2 >>= 8;
+        }
+      }
+      for (let index2 = 0; index2 < key2.length - 1 && key2[index2] === "1"; index2++) bytes.push(0);
+      decoded = Uint8Array.from(bytes.reverse());
+    }
+  }
+  if (decoded.length !== 32 && decoded.length !== 64) {
+    throw new Error(`Solana key must decode to 32 or 64 bytes; got ${decoded.length}.`);
+  }
+  return decoded.slice(0, 32);
+}
 function deriveAllKeys(mnemonic) {
   const { privateKey: evmPrivateKey, address: evmAddress } = deriveEvmKey(mnemonic);
   const solanaPrivateKeyBytes = deriveSolanaKeyBytes(mnemonic);
@@ -59136,7 +59175,7 @@ async function getSolanaAddress(privateKeyBytes) {
   const signer = await createKeyPairSignerFromPrivateKeyBytes2(privateKeyBytes);
   return signer.address;
 }
-var ETH_DERIVATION_PATH, SOLANA_HARDENED_INDICES;
+var ETH_DERIVATION_PATH, SOLANA_HARDENED_INDICES, BASE58_ALPHABET;
 var init_wallet2 = __esm({
   "src/wallet.ts"() {
     "use strict";
@@ -59148,6 +59187,7 @@ var init_wallet2 = __esm({
     init_accounts();
     ETH_DERIVATION_PATH = "m/44'/60'/0'/0/0";
     SOLANA_HARDENED_INDICES = [44 + 2147483648, 501 + 2147483648, 0 + 2147483648, 0 + 2147483648];
+    BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   }
 });
 
@@ -59155,21 +59195,21 @@ var init_wallet2 = __esm({
 import { writeFile, mkdir as mkdir2 } from "fs/promises";
 import { join as join7 } from "path";
 import { homedir as homedir4 } from "os";
-async function loadSavedWallet() {
+async function loadWalletFile(file, label) {
   try {
-    const key2 = (await readTextFile(WALLET_FILE)).trim();
+    const key2 = (await readTextFile(file)).trim();
     if (key2.startsWith("0x") && key2.length === 66) {
-      console.log(`[ClawRouter] \u2713 Loaded existing wallet from ${WALLET_FILE}`);
+      console.log(`[ClawRouter] \u2713 Loaded ${label} wallet`);
       return key2;
     }
     console.error(`[ClawRouter] \u2717 CRITICAL: Wallet file exists but has invalid format!`);
-    console.error(`[ClawRouter]   File: ${WALLET_FILE}`);
+    console.error(`[ClawRouter]   File: ${file}`);
     console.error(`[ClawRouter]   Expected: 0x followed by 64 hex characters (66 chars total)`);
     console.error(
       `[ClawRouter]   To fix: restore your backup key or set BLOCKRUN_WALLET_KEY env var`
     );
     throw new Error(
-      `Wallet file at ${WALLET_FILE} is corrupted or has wrong format. Refusing to auto-generate new wallet to protect existing funds. Restore your backup key or set BLOCKRUN_WALLET_KEY environment variable.`
+      `Wallet file at ${file} is corrupted or has wrong format. Refusing to auto-generate new wallet to protect existing funds. Restore your backup key or set BLOCKRUN_WALLET_KEY environment variable.`
     );
   } catch (err) {
     if (err.code !== "ENOENT") {
@@ -59177,15 +59217,43 @@ async function loadSavedWallet() {
         throw err;
       }
       console.error(
-        `[ClawRouter] \u2717 Failed to read wallet file: ${err instanceof Error ? err.message : String(err)}`
+        `[ClawRouter] \u2717 Failed to read ${label} wallet file: ${err instanceof Error ? err.message : String(err)}`
       );
       throw new Error(
-        `Cannot read wallet file at ${WALLET_FILE}: ${err instanceof Error ? err.message : String(err)}. Refusing to auto-generate new wallet to protect existing funds. Fix file permissions or set BLOCKRUN_WALLET_KEY environment variable.`,
+        `Cannot read wallet file at ${file}: ${err instanceof Error ? err.message : String(err)}. Refusing to auto-generate new wallet to protect existing funds. Fix file permissions or set BLOCKRUN_WALLET_KEY environment variable.`,
         { cause: err }
       );
     }
   }
   return void 0;
+}
+async function loadSavedWallet() {
+  return loadWalletFile(WALLET_FILE, "legacy OpenClaw");
+}
+async function loadCoreWallet() {
+  return loadWalletFile(CORE_WALLET_FILE, "BlockRun Core");
+}
+async function resolveSolanaWallet() {
+  const envKey = process["env"].SOLANA_WALLET_KEY;
+  if (typeof envKey === "string" && envKey.trim()) {
+    return { privateKeyBytes: decodeSolanaSessionKey(envKey), source: "env" };
+  }
+  try {
+    const coreKey = (await readTextFile(CORE_SOLANA_WALLET_FILE)).trim();
+    if (coreKey) {
+      return { privateKeyBytes: decodeSolanaSessionKey(coreKey), source: "core" };
+    }
+    throw new Error("file is empty");
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw new Error(
+        `Cannot load the BlockRun Core Solana wallet at ${CORE_SOLANA_WALLET_FILE}: ${error instanceof Error ? error.message : String(error)}. Refusing to fall back to a different wallet.`,
+        { cause: error }
+      );
+    }
+  }
+  const mnemonic = await loadMnemonic();
+  return mnemonic ? { privateKeyBytes: deriveSolanaKeyBytes(mnemonic), source: "mnemonic", mnemonic } : void 0;
 }
 async function loadMnemonic() {
   try {
@@ -59283,37 +59351,42 @@ Then run: npx @blockrun/clawrouter`
   };
 }
 async function resolveOrGenerateWalletKey() {
-  const saved = await loadSavedWallet();
-  if (saved) {
-    const account = privateKeyToAccount(saved);
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: saved,
-        address: account.address,
-        source: "saved",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes
-      };
-    }
-    return { key: saved, address: account.address, source: "saved" };
-  }
+  const solana = await resolveSolanaWallet();
   const envKey = process["env"].BLOCKRUN_WALLET_KEY;
   if (typeof envKey === "string" && envKey.startsWith("0x") && envKey.length === 66) {
     const account = privateKeyToAccount(envKey);
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: envKey,
-        address: account.address,
-        source: "env",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes
-      };
-    }
-    return { key: envKey, address: account.address, source: "env" };
+    return {
+      key: envKey,
+      address: account.address,
+      source: "env",
+      mnemonic: solana?.mnemonic,
+      solanaPrivateKeyBytes: solana?.privateKeyBytes,
+      solanaSource: solana?.source
+    };
+  }
+  const core = await loadCoreWallet();
+  if (core) {
+    const account = privateKeyToAccount(core);
+    return {
+      key: core,
+      address: account.address,
+      source: "core",
+      mnemonic: solana?.mnemonic,
+      solanaPrivateKeyBytes: solana?.privateKeyBytes,
+      solanaSource: solana?.source
+    };
+  }
+  const saved = await loadSavedWallet();
+  if (saved) {
+    const account = privateKeyToAccount(saved);
+    return {
+      key: saved,
+      address: account.address,
+      source: "saved",
+      mnemonic: solana?.mnemonic,
+      solanaPrivateKeyBytes: solana?.privateKeyBytes,
+      solanaSource: solana?.source
+    };
   }
   const result = await generateAndSaveWallet();
   return {
@@ -59321,7 +59394,8 @@ async function resolveOrGenerateWalletKey() {
     address: result.address,
     source: "generated",
     mnemonic: result.mnemonic,
-    solanaPrivateKeyBytes: result.solanaPrivateKeyBytes
+    solanaPrivateKeyBytes: solana?.privateKeyBytes ?? result.solanaPrivateKeyBytes,
+    solanaSource: solana?.source ?? "generated"
   };
 }
 async function setupSolana() {
@@ -59329,7 +59403,7 @@ async function setupSolana() {
   if (existing) {
     throw new Error("Solana wallet already set up. Mnemonic file exists at " + MNEMONIC_FILE);
   }
-  const savedKey = await loadSavedWallet();
+  const savedKey = await loadCoreWallet() ?? await loadSavedWallet();
   if (!savedKey) {
     throw new Error(
       "No EVM wallet found. Run ClawRouter first to generate a wallet before setting up Solana."
@@ -59361,7 +59435,7 @@ async function resolvePaymentChain() {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "base") return "base";
   return loadPaymentChain();
 }
-var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
+var WALLET_DIR2, WALLET_FILE, CORE_WALLET_FILE, CORE_SOLANA_WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
 var init_auth = __esm({
   "src/auth.ts"() {
     "use strict";
@@ -59370,6 +59444,8 @@ var init_auth = __esm({
     init_wallet2();
     WALLET_DIR2 = join7(homedir4(), ".openclaw", "blockrun");
     WALLET_FILE = join7(WALLET_DIR2, "wallet.key");
+    CORE_WALLET_FILE = join7(homedir4(), ".blockrun", ".session");
+    CORE_SOLANA_WALLET_FILE = join7(homedir4(), ".blockrun", ".solana-session");
     MNEMONIC_FILE = join7(WALLET_DIR2, "mnemonic");
     CHAIN_FILE = join7(WALLET_DIR2, "payment-chain");
   }
@@ -90478,6 +90554,26 @@ function buildProxyModelList(createdAt = Math.floor(Date.now() / 1e3)) {
     owned_by: model.id.includes("/") ? model.id.split("/")[0] ?? "blockrun" : "blockrun"
   }));
 }
+function buildDetailedModelList(createdAt = Math.floor(Date.now() / 1e3)) {
+  const catalog = new Map(BLOCKRUN_MODELS.map((model) => [model.id, model]));
+  return buildProxyModelList(createdAt).map((entry) => {
+    const openClawModel = OPENCLAW_MODELS.find((model2) => model2.id === entry.id);
+    const canonicalId = resolveModelAlias(entry.id).replace(/^blockrun\//, "");
+    const model = catalog.get(canonicalId);
+    return {
+      ...entry,
+      name: openClawModel?.name ?? model?.name ?? entry.id,
+      context_window: openClawModel?.contextWindow ?? model?.contextWindow ?? 0,
+      max_output: openClawModel?.maxTokens ?? model?.maxOutput ?? 0,
+      input_price: openClawModel?.cost.input ?? model?.inputPrice ?? 0,
+      output_price: openClawModel?.cost.output ?? model?.outputPrice ?? 0,
+      reasoning: openClawModel?.reasoning ?? model?.reasoning ?? false,
+      vision: openClawModel?.input.includes("image") ?? model?.vision ?? false,
+      agentic: model?.agentic ?? false,
+      tool_calling: model?.toolCalling ?? false
+    };
+  });
+}
 function mergeRoutingConfig(overrides) {
   if (!overrides) return DEFAULT_ROUTING_CONFIG;
   const mergeTiers = (defaults2, user) => {
@@ -90932,6 +91028,11 @@ async function startProxy(options) {
         const models = buildProxyModelList();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ object: "list", data: models }));
+        return;
+      }
+      if (req.url === "/admin/models" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+        res.end(JSON.stringify({ object: "list", data: buildDetailedModelList() }));
         return;
       }
       if (req.url?.startsWith("/share") && req.method === "GET") {
@@ -227063,6 +227164,8 @@ async function startProxyInBackground(api, startupGeneration) {
     api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
+  } else if (wallet.source === "core") {
+    api.logger.info(`Using shared BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
     api.logger.info(`Using wallet from plugin config: ${wallet.address}`);
   } else {
@@ -228161,6 +228264,8 @@ ${errText}`
                 api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
               } else if (source === "saved") {
                 api.logger.info(`Using saved wallet: ${address2}`);
+              } else if (source === "core") {
+                api.logger.info(`Using shared BlockRun Core wallet: ${address2}`);
               } else if (source === "config") {
                 api.logger.info(`Using wallet from plugin config: ${address2}`);
               } else {

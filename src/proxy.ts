@@ -1559,6 +1559,18 @@ type ModelListEntry = {
   owned_by: string;
 };
 
+type DetailedModelListEntry = ModelListEntry & {
+  name: string;
+  context_window: number;
+  max_output: number;
+  input_price: number;
+  output_price: number;
+  reasoning: boolean;
+  vision: boolean;
+  agentic: boolean;
+  tool_calling: boolean;
+};
+
 /**
  * Build `/v1/models` response entries from the full OpenClaw model registry.
  * This includes alias IDs (e.g., `flash`, `kimi`) so `/model <alias>` works reliably.
@@ -1579,6 +1591,30 @@ export function buildProxyModelList(
     created: createdAt,
     owned_by: model.id.includes("/") ? (model.id.split("/")[0] ?? "blockrun") : "blockrun",
   }));
+}
+
+/** Model rows enriched for local control-plane UIs. */
+export function buildDetailedModelList(
+  createdAt: number = Math.floor(Date.now() / 1000),
+): DetailedModelListEntry[] {
+  const catalog = new Map(BLOCKRUN_MODELS.map((model) => [model.id, model]));
+  return buildProxyModelList(createdAt).map((entry) => {
+    const openClawModel = OPENCLAW_MODELS.find((model) => model.id === entry.id);
+    const canonicalId = resolveModelAlias(entry.id).replace(/^blockrun\//, "");
+    const model = catalog.get(canonicalId);
+    return {
+      ...entry,
+      name: openClawModel?.name ?? model?.name ?? entry.id,
+      context_window: openClawModel?.contextWindow ?? model?.contextWindow ?? 0,
+      max_output: openClawModel?.maxTokens ?? model?.maxOutput ?? 0,
+      input_price: openClawModel?.cost.input ?? model?.inputPrice ?? 0,
+      output_price: openClawModel?.cost.output ?? model?.outputPrice ?? 0,
+      reasoning: openClawModel?.reasoning ?? model?.reasoning ?? false,
+      vision: openClawModel?.input.includes("image") ?? model?.vision ?? false,
+      agentic: model?.agentic ?? false,
+      tool_calling: model?.toolCalling ?? false,
+    };
+  });
 }
 
 /**
@@ -2555,6 +2591,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         const models = buildProxyModelList();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ object: "list", data: models }));
+        return;
+      }
+
+      // Detailed local catalog for ClawRouter Desktop and other control planes.
+      if (req.url === "/admin/models" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+        res.end(JSON.stringify({ object: "list", data: buildDetailedModelList() }));
         return;
       }
 

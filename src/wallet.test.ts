@@ -9,6 +9,7 @@ import {
   isValidMnemonic,
   deriveEvmKey,
   deriveSolanaKeyBytes,
+  decodeSolanaSessionKey,
   deriveAllKeys,
 } from "./wallet.js";
 
@@ -97,6 +98,27 @@ describe("wallet key derivation", () => {
       const bytes = deriveSolanaKeyBytes(TEST_MNEMONIC);
       const signer = await createKeyPairSignerFromPrivateKeyBytes(bytes);
       expect(signer.address).toBe(EXPECTED_SLIP10_ADDRESS);
+    });
+  });
+
+  describe("decodeSolanaSessionKey", () => {
+    it("loads the 64-byte base58 format used by BlockRun Core", () => {
+      const encoded =
+        "1GMkH3brNXiNNs1tiFZHu4yZSRrzJwxi5wB9bHFtMinfCXNnR1adh8Vo8NTheK4evneedH4qmvjeqcBBNAefgS";
+      expect([...decodeSolanaSessionKey(encoded)]).toEqual([...Array(32).keys()]);
+    });
+
+    it("accepts Solana CLI JSON and 32-byte seed hex", () => {
+      const bytes = [...Array(64).keys()];
+      expect([...decodeSolanaSessionKey(JSON.stringify(bytes))]).toEqual(bytes.slice(0, 32));
+      expect(Buffer.from(decodeSolanaSessionKey("11".repeat(32))).toString("hex")).toBe(
+        "11".repeat(32),
+      );
+    });
+
+    it("rejects malformed or incorrectly-sized keys", () => {
+      expect(() => decodeSolanaSessionKey("not/a/solana/key")).toThrow(/base58/i);
+      expect(() => decodeSolanaSessionKey("1111")).toThrow(/32 or 64 bytes/i);
     });
   });
 

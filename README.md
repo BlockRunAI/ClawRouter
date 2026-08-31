@@ -80,7 +80,30 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 > **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
-### Option A — OpenClaw Agent
+### Option A — ClawRouter Desktop (macOS developer preview)
+
+ClawRouter Desktop provides one place to connect OpenClaw, Codex, Hermes,
+DeepSeek Harness, and Pi. It also shows the shared Base and Solana wallets,
+balances, model prices, context windows, and local proxy status.
+
+Until signed release downloads are published, build the developer preview from
+source:
+
+```bash
+git clone https://github.com/BlockRunAI/ClawRouter.git
+cd ClawRouter/apps/desktop
+npm install
+npm test
+npm run dist
+open release/mac-arm64/ClawRouter.app
+```
+
+Building requires Node 22.19 or newer. Packaged releases embed Node, so end
+users will not need to install it separately. See the
+[Desktop architecture and one-click contract](apps/desktop/README.md) for
+details.
+
+### Option B — OpenClaw Agent
 
 [OpenClaw](https://openclaw.ai) is an AI coding agent. If you're using it, ClawRouter installs as a plugin. **Two paths:**
 
@@ -103,7 +126,7 @@ openclaw gateway restart
 
 > ⚠️ **Skipping `clawrouter setup` will leave you broken.** Bare `npm install -g` only puts the package on disk; it does NOT register the plugin with OpenClaw, sync the models allowlist, or write the auth profile. Symptom: `/models` in your bot shows only ~7 entries (OpenClaw's hardcoded defaults) instead of the full ~44 BlockRun models. Run `clawrouter setup` to repair, or use path A1 to begin with.
 
-### Option B — Standalone (continue.dev, Cursor, VS Code, any OpenAI-compatible client)
+### Option C — Standalone (continue.dev, Cursor, VS Code, any OpenAI-compatible client)
 
 > **Using Claude Code?** Check out [BRCC](https://github.com/BlockRunAI/brcc) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >

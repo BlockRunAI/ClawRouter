@@ -90,6 +90,57 @@ export function deriveSolanaKeyBytes(mnemonic: string): Uint8Array {
   return new Uint8Array(key);
 }
 
+const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/**
+ * Decode the Solana secret-key formats used by the shared BlockRun wallet.
+ * The canonical `.solana-session` contains a base58-encoded 64-byte keypair;
+ * Solana Kit signs from its first 32-byte Ed25519 seed.
+ */
+export function decodeSolanaSessionKey(value: string): Uint8Array {
+  const key = value.trim();
+  let decoded: Uint8Array;
+
+  if (key.startsWith("[")) {
+    const parsed = JSON.parse(key) as unknown;
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)
+    ) {
+      throw new Error("Solana JSON key must contain byte values from 0 to 255.");
+    }
+    decoded = Uint8Array.from(parsed as number[]);
+  } else {
+    const hex = key.startsWith("0x") ? key.slice(2) : key;
+    if (/^[0-9a-f]{64}(?:[0-9a-f]{64})?$/i.test(hex)) {
+      decoded = Uint8Array.from(Buffer.from(hex, "hex"));
+    } else {
+      const bytes = [0];
+      for (const char of key) {
+        const digit = BASE58_ALPHABET.indexOf(char);
+        if (digit < 0) throw new Error("Solana key contains a non-base58 character.");
+        let carry = digit;
+        for (let index = 0; index < bytes.length; index++) {
+          carry += bytes[index] * 58;
+          bytes[index] = carry & 0xff;
+          carry >>= 8;
+        }
+        while (carry > 0) {
+          bytes.push(carry & 0xff);
+          carry >>= 8;
+        }
+      }
+      for (let index = 0; index < key.length - 1 && key[index] === "1"; index++) bytes.push(0);
+      decoded = Uint8Array.from(bytes.reverse());
+    }
+  }
+
+  if (decoded.length !== 32 && decoded.length !== 64) {
+    throw new Error(`Solana key must decode to 32 or 64 bytes; got ${decoded.length}.`);
+  }
+  return decoded.slice(0, 32);
+}
+
 /**
  * Derive both EVM and Solana keys from a single mnemonic.
  */

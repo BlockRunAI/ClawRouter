@@ -1,0 +1,12 @@
+{
+  "name": "@blockrun/clawrouter-desktop-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.3.0",
+  "dependencies": {
+    "@blockrun/clawrouter": "0.12.261",
+    "@blockrun/clawrouter-codex": "0.4.0",
+    "@deepseek-ai/dsh": "0.1.1-rc.2",
+    "@earendil-works/pi-coding-agent": "0.84.4"
+  }
+}

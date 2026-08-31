@@ -63,3 +63,29 @@ jobs:
 
       - name: Integration tests (lifecycle)
         run: npx vitest run --config vitest.integration.config.ts test/integration/lifecycle.test.ts
+
+  desktop:
+    name: Desktop
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

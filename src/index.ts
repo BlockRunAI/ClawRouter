@@ -925,6 +925,8 @@ async function startProxyInBackground(
     api.logger.warn(`════════════════════════════════════════════════`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
+  } else if (wallet.source === "core") {
+    api.logger.info(`Using shared BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
     api.logger.info(`Using wallet from plugin config: ${wallet.address}`);
   } else {
@@ -2274,6 +2276,8 @@ const plugin: OpenClawPluginDefinition = {
               api.logger.warn(`════════════════════════════════════════════════`);
             } else if (source === "saved") {
               api.logger.info(`Using saved wallet: ${address}`);
+            } else if (source === "core") {
+              api.logger.info(`Using shared BlockRun Core wallet: ${address}`);
             } else if (source === "config") {
               api.logger.info(`Using wallet from plugin config: ${address}`);
             } else {

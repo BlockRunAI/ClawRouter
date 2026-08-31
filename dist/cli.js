@@ -59216,6 +59216,7 @@ var init_index_node37 = __esm({
 // src/wallet.ts
 var wallet_exports = {};
 __export(wallet_exports, {
+  decodeSolanaSessionKey: () => decodeSolanaSessionKey,
   deriveAllKeys: () => deriveAllKeys,
   deriveEvmKey: () => deriveEvmKey,
   deriveSolanaKeyBytes: () => deriveSolanaKeyBytes,
@@ -59257,6 +59258,44 @@ function deriveSolanaKeyBytes(mnemonic) {
   }
   return new Uint8Array(key2);
 }
+function decodeSolanaSessionKey(value) {
+  const key2 = value.trim();
+  let decoded;
+  if (key2.startsWith("[")) {
+    const parsed = JSON.parse(key2);
+    if (!Array.isArray(parsed) || !parsed.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)) {
+      throw new Error("Solana JSON key must contain byte values from 0 to 255.");
+    }
+    decoded = Uint8Array.from(parsed);
+  } else {
+    const hex = key2.startsWith("0x") ? key2.slice(2) : key2;
+    if (/^[0-9a-f]{64}(?:[0-9a-f]{64})?$/i.test(hex)) {
+      decoded = Uint8Array.from(Buffer.from(hex, "hex"));
+    } else {
+      const bytes = [0];
+      for (const char of key2) {
+        const digit = BASE58_ALPHABET.indexOf(char);
+        if (digit < 0) throw new Error("Solana key contains a non-base58 character.");
+        let carry2 = digit;
+        for (let index2 = 0; index2 < bytes.length; index2++) {
+          carry2 += bytes[index2] * 58;
+          bytes[index2] = carry2 & 255;
+          carry2 >>= 8;
+        }
+        while (carry2 > 0) {
+          bytes.push(carry2 & 255);
+          carry2 >>= 8;
+        }
+      }
+      for (let index2 = 0; index2 < key2.length - 1 && key2[index2] === "1"; index2++) bytes.push(0);
+      decoded = Uint8Array.from(bytes.reverse());
+    }
+  }
+  if (decoded.length !== 32 && decoded.length !== 64) {
+    throw new Error(`Solana key must decode to 32 or 64 bytes; got ${decoded.length}.`);
+  }
+  return decoded.slice(0, 32);
+}
 function deriveAllKeys(mnemonic) {
   const { privateKey: evmPrivateKey, address: evmAddress } = deriveEvmKey(mnemonic);
   const solanaPrivateKeyBytes = deriveSolanaKeyBytes(mnemonic);
@@ -59267,7 +59306,7 @@ async function getSolanaAddress(privateKeyBytes) {
   const signer = await createKeyPairSignerFromPrivateKeyBytes2(privateKeyBytes);
   return signer.address;
 }
-var ETH_DERIVATION_PATH, SOLANA_HARDENED_INDICES;
+var ETH_DERIVATION_PATH, SOLANA_HARDENED_INDICES, BASE58_ALPHABET;
 var init_wallet2 = __esm({
   "src/wallet.ts"() {
     "use strict";
@@ -59279,6 +59318,7 @@ var init_wallet2 = __esm({
     init_accounts();
     ETH_DERIVATION_PATH = "m/44'/60'/0'/0/0";
     SOLANA_HARDENED_INDICES = [44 + 2147483648, 501 + 2147483648, 0 + 2147483648, 0 + 2147483648];
+    BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   }
 });
 
@@ -59286,33 +59326,36 @@ var init_wallet2 = __esm({
 var auth_exports = {};
 __export(auth_exports, {
   CHAIN_FILE: () => CHAIN_FILE,
+  CORE_SOLANA_WALLET_FILE: () => CORE_SOLANA_WALLET_FILE,
+  CORE_WALLET_FILE: () => CORE_WALLET_FILE,
   MNEMONIC_FILE: () => MNEMONIC_FILE,
   WALLET_FILE: () => WALLET_FILE,
   loadPaymentChain: () => loadPaymentChain,
   recoverWalletFromMnemonic: () => recoverWalletFromMnemonic,
   resolveOrGenerateWalletKey: () => resolveOrGenerateWalletKey,
   resolvePaymentChain: () => resolvePaymentChain,
+  resolveSolanaWallet: () => resolveSolanaWallet,
   savePaymentChain: () => savePaymentChain,
   setupSolana: () => setupSolana
 });
 import { writeFile, mkdir as mkdir2 } from "fs/promises";
 import { join as join7 } from "path";
 import { homedir as homedir4 } from "os";
-async function loadSavedWallet() {
+async function loadWalletFile(file, label) {
   try {
-    const key2 = (await readTextFile(WALLET_FILE)).trim();
+    const key2 = (await readTextFile(file)).trim();
     if (key2.startsWith("0x") && key2.length === 66) {
-      console.log(`[ClawRouter] \u2713 Loaded existing wallet from ${WALLET_FILE}`);
+      console.log(`[ClawRouter] \u2713 Loaded ${label} wallet`);
       return key2;
     }
     console.error(`[ClawRouter] \u2717 CRITICAL: Wallet file exists but has invalid format!`);
-    console.error(`[ClawRouter]   File: ${WALLET_FILE}`);
+    console.error(`[ClawRouter]   File: ${file}`);
     console.error(`[ClawRouter]   Expected: 0x followed by 64 hex characters (66 chars total)`);
     console.error(
       `[ClawRouter]   To fix: restore your backup key or set BLOCKRUN_WALLET_KEY env var`
     );
     throw new Error(
-      `Wallet file at ${WALLET_FILE} is corrupted or has wrong format. Refusing to auto-generate new wallet to protect existing funds. Restore your backup key or set BLOCKRUN_WALLET_KEY environment variable.`
+      `Wallet file at ${file} is corrupted or has wrong format. Refusing to auto-generate new wallet to protect existing funds. Restore your backup key or set BLOCKRUN_WALLET_KEY environment variable.`
     );
   } catch (err) {
     if (err.code !== "ENOENT") {
@@ -59320,15 +59363,43 @@ async function loadSavedWallet() {
         throw err;
       }
       console.error(
-        `[ClawRouter] \u2717 Failed to read wallet file: ${err instanceof Error ? err.message : String(err)}`
+        `[ClawRouter] \u2717 Failed to read ${label} wallet file: ${err instanceof Error ? err.message : String(err)}`
       );
       throw new Error(
-        `Cannot read wallet file at ${WALLET_FILE}: ${err instanceof Error ? err.message : String(err)}. Refusing to auto-generate new wallet to protect existing funds. Fix file permissions or set BLOCKRUN_WALLET_KEY environment variable.`,
+        `Cannot read wallet file at ${file}: ${err instanceof Error ? err.message : String(err)}. Refusing to auto-generate new wallet to protect existing funds. Fix file permissions or set BLOCKRUN_WALLET_KEY environment variable.`,
         { cause: err }
       );
     }
   }
   return void 0;
+}
+async function loadSavedWallet() {
+  return loadWalletFile(WALLET_FILE, "legacy OpenClaw");
+}
+async function loadCoreWallet() {
+  return loadWalletFile(CORE_WALLET_FILE, "BlockRun Core");
+}
+async function resolveSolanaWallet() {
+  const envKey = process["env"].SOLANA_WALLET_KEY;
+  if (typeof envKey === "string" && envKey.trim()) {
+    return { privateKeyBytes: decodeSolanaSessionKey(envKey), source: "env" };
+  }
+  try {
+    const coreKey = (await readTextFile(CORE_SOLANA_WALLET_FILE)).trim();
+    if (coreKey) {
+      return { privateKeyBytes: decodeSolanaSessionKey(coreKey), source: "core" };
+    }
+    throw new Error("file is empty");
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw new Error(
+        `Cannot load the BlockRun Core Solana wallet at ${CORE_SOLANA_WALLET_FILE}: ${error instanceof Error ? error.message : String(error)}. Refusing to fall back to a different wallet.`,
+        { cause: error }
+      );
+    }
+  }
+  const mnemonic = await loadMnemonic();
+  return mnemonic ? { privateKeyBytes: deriveSolanaKeyBytes(mnemonic), source: "mnemonic", mnemonic } : void 0;
 }
 async function loadMnemonic() {
   try {
@@ -59426,37 +59497,42 @@ Then run: npx @blockrun/clawrouter`
   };
 }
 async function resolveOrGenerateWalletKey() {
-  const saved = await loadSavedWallet();
-  if (saved) {
-    const account = privateKeyToAccount(saved);
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: saved,
-        address: account.address,
-        source: "saved",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes
-      };
-    }
-    return { key: saved, address: account.address, source: "saved" };
-  }
+  const solana = await resolveSolanaWallet();
   const envKey = process["env"].BLOCKRUN_WALLET_KEY;
   if (typeof envKey === "string" && envKey.startsWith("0x") && envKey.length === 66) {
     const account = privateKeyToAccount(envKey);
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: envKey,
-        address: account.address,
-        source: "env",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes
-      };
-    }
-    return { key: envKey, address: account.address, source: "env" };
+    return {
+      key: envKey,
+      address: account.address,
+      source: "env",
+      mnemonic: solana?.mnemonic,
+      solanaPrivateKeyBytes: solana?.privateKeyBytes,
+      solanaSource: solana?.source
+    };
+  }
+  const core = await loadCoreWallet();
+  if (core) {
+    const account = privateKeyToAccount(core);
+    return {
+      key: core,
+      address: account.address,
+      source: "core",
+      mnemonic: solana?.mnemonic,
+      solanaPrivateKeyBytes: solana?.privateKeyBytes,
+      solanaSource: solana?.source
+    };
+  }
+  const saved = await loadSavedWallet();
+  if (saved) {
+    const account = privateKeyToAccount(saved);
+    return {
+      key: saved,
+      address: account.address,
+      source: "saved",
+      mnemonic: solana?.mnemonic,
+      solanaPrivateKeyBytes: solana?.privateKeyBytes,
+      solanaSource: solana?.source
+    };
   }
   const result = await generateAndSaveWallet();
   return {
@@ -59464,7 +59540,8 @@ async function resolveOrGenerateWalletKey() {
     address: result.address,
     source: "generated",
     mnemonic: result.mnemonic,
-    solanaPrivateKeyBytes: result.solanaPrivateKeyBytes
+    solanaPrivateKeyBytes: solana?.privateKeyBytes ?? result.solanaPrivateKeyBytes,
+    solanaSource: solana?.source ?? "generated"
   };
 }
 async function recoverWalletFromMnemonic() {
@@ -59509,7 +59586,7 @@ async function setupSolana() {
   if (existing) {
     throw new Error("Solana wallet already set up. Mnemonic file exists at " + MNEMONIC_FILE);
   }
-  const savedKey = await loadSavedWallet();
+  const savedKey = await loadCoreWallet() ?? await loadSavedWallet();
   if (!savedKey) {
     throw new Error(
       "No EVM wallet found. Run ClawRouter first to generate a wallet before setting up Solana."
@@ -59541,7 +59618,7 @@ async function resolvePaymentChain() {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "base") return "base";
   return loadPaymentChain();
 }
-var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
+var WALLET_DIR2, WALLET_FILE, CORE_WALLET_FILE, CORE_SOLANA_WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
 var init_auth = __esm({
   "src/auth.ts"() {
     "use strict";
@@ -59550,6 +59627,8 @@ var init_auth = __esm({
     init_wallet2();
     WALLET_DIR2 = join7(homedir4(), ".openclaw", "blockrun");
     WALLET_FILE = join7(WALLET_DIR2, "wallet.key");
+    CORE_WALLET_FILE = join7(homedir4(), ".blockrun", ".session");
+    CORE_SOLANA_WALLET_FILE = join7(homedir4(), ".blockrun", ".solana-session");
     MNEMONIC_FILE = join7(WALLET_DIR2, "mnemonic");
     CHAIN_FILE = join7(WALLET_DIR2, "payment-chain");
   }
@@ -90658,6 +90737,26 @@ function buildProxyModelList(createdAt = Math.floor(Date.now() / 1e3)) {
     owned_by: model.id.includes("/") ? model.id.split("/")[0] ?? "blockrun" : "blockrun"
   }));
 }
+function buildDetailedModelList(createdAt = Math.floor(Date.now() / 1e3)) {
+  const catalog = new Map(BLOCKRUN_MODELS.map((model) => [model.id, model]));
+  return buildProxyModelList(createdAt).map((entry) => {
+    const openClawModel = OPENCLAW_MODELS.find((model2) => model2.id === entry.id);
+    const canonicalId = resolveModelAlias(entry.id).replace(/^blockrun\//, "");
+    const model = catalog.get(canonicalId);
+    return {
+      ...entry,
+      name: openClawModel?.name ?? model?.name ?? entry.id,
+      context_window: openClawModel?.contextWindow ?? model?.contextWindow ?? 0,
+      max_output: openClawModel?.maxTokens ?? model?.maxOutput ?? 0,
+      input_price: openClawModel?.cost.input ?? model?.inputPrice ?? 0,
+      output_price: openClawModel?.cost.output ?? model?.outputPrice ?? 0,
+      reasoning: openClawModel?.reasoning ?? model?.reasoning ?? false,
+      vision: openClawModel?.input.includes("image") ?? model?.vision ?? false,
+      agentic: model?.agentic ?? false,
+      tool_calling: model?.toolCalling ?? false
+    };
+  });
+}
 function mergeRoutingConfig(overrides) {
   if (!overrides) return DEFAULT_ROUTING_CONFIG;
   const mergeTiers = (defaults2, user) => {
@@ -91112,6 +91211,11 @@ async function startProxy(options) {
         const models = buildProxyModelList();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ object: "list", data: models }));
+        return;
+      }
+      if (req.url === "/admin/models" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+        res.end(JSON.stringify({ object: "list", data: buildDetailedModelList() }));
         return;
       }
       if (req.url?.startsWith("/share") && req.method === "GET") {
@@ -227316,6 +227420,8 @@ async function startProxyInBackground(api, startupGeneration) {
     api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
+  } else if (wallet.source === "core") {
+    api.logger.info(`Using shared BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
     api.logger.info(`Using wallet from plugin config: ${wallet.address}`);
   } else {
@@ -228415,6 +228521,8 @@ ${errText}`
                 api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
               } else if (source === "saved") {
                 api.logger.info(`Using saved wallet: ${address2}`);
+              } else if (source === "core") {
+                api.logger.info(`Using shared BlockRun Core wallet: ${address2}`);
               } else if (source === "config") {
                 api.logger.info(`Using wallet from plugin config: ${address2}`);
               } else {
@@ -228994,6 +229102,51 @@ async function runDoctor(userQuestion, model = "sonnet") {
 
 // src/cli.ts
 init_partners();
+
+// src/onramp.ts
+init_esm4();
+init_esm5();
+init_client2();
+init_esm();
+init_accounts();
+init_chains();
+init_auth();
+var ONRAMP_ENDPOINT = "https://blockrun.ai/api/v1/onramp/token";
+async function createCoinbaseOnrampUrl(amount = 50) {
+  if (!Number.isFinite(amount) || amount < 1 || amount > 2500) {
+    throw new Error("Onramp amount must be between $1 and $2,500.");
+  }
+  const { key: key2, address: address2 } = await resolveOrGenerateWalletKey();
+  const account = privateKeyToAccount(key2);
+  const publicClient = createPublicClient({ chain: base, transport: http() });
+  const signer = toClientEvmSigner(account, publicClient);
+  const client = new x402Client();
+  registerExactEvmScheme(client, { signer });
+  const response = await wrapFetchWithPayment(fetch, client)(ONRAMP_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address: address2, network: "base", asset: "USDC" }),
+    signal: AbortSignal.timeout(3e4)
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      typeof body.error === "string" ? body.error : `Onramp gateway returned HTTP ${response.status}.`
+    );
+  }
+  if (typeof body.url !== "string") throw new Error("Onramp gateway returned no Coinbase link.");
+  const url2 = new URL(body.url);
+  if (url2.protocol !== "https:" || url2.hostname !== "pay.coinbase.com") {
+    throw new Error("Onramp gateway returned an invalid Coinbase link.");
+  }
+  url2.searchParams.set("defaultAsset", "USDC");
+  url2.searchParams.set("defaultNetwork", "base");
+  url2.searchParams.set("presetFiatAmount", amount.toFixed(2));
+  url2.searchParams.set("fiatCurrency", "USD");
+  return url2.toString();
+}
+
+// src/cli.ts
 function printHelp() {
   console.log(`
 ClawRouter v${VERSION} - Smart LLM Router
@@ -229002,6 +229155,7 @@ Usage:
   clawrouter [options]
   clawrouter status                    # Live proxy status (wallet, balance, chain)
   clawrouter wallet                    # Wallet details + balance
+  clawrouter onramp [amount] [--json]  # Buy Base USDC with fiat via Coinbase
   clawrouter models                    # List available models
   clawrouter stats [--days <n>]        # Usage stats (default: 7 days)
   clawrouter doctor [opus] [question]
@@ -229045,6 +229199,7 @@ Management Commands:
   partners          List available partner APIs with pricing
   partners test     Test partner API endpoints (expect 402 = alive)
   wallet recover    Restore wallet.key from mnemonic (if generated by ClawRouter)
+  onramp 50         Create a one-time Coinbase link for $50 of Base USDC
   chain solana      Switch to Solana (persists)
   chain base        Switch to Base EVM (persists)
 
@@ -229507,6 +229662,9 @@ function parseArgs(args) {
     reportPeriod: "daily",
     reportJson: false,
     walletRecover: false,
+    onramp: false,
+    onrampAmount: 50,
+    onrampJson: false,
     chain: void 0,
     port: void 0,
     queryStatus: false,
@@ -229582,6 +229740,28 @@ function parseArgs(args) {
         i++;
       } else {
         result.queryWallet = true;
+      }
+    } else if (arg === "onramp") {
+      result.onramp = true;
+      const positional = args[i + 1];
+      if (positional && !positional.startsWith("--")) {
+        result.onrampAmount = Number(positional);
+        i++;
+      }
+      while (i + 1 < args.length) {
+        const flag = args[i + 1];
+        if (flag === "--json") {
+          result.onrampJson = true;
+          i++;
+        } else if (flag === "--amount" && args[i + 2]) {
+          result.onrampAmount = Number(args[i + 2]);
+          i += 2;
+        } else if (flag.startsWith("--amount=")) {
+          result.onrampAmount = Number(flag.slice("--amount=".length));
+          i++;
+        } else {
+          break;
+        }
       }
     } else if ((arg === "chain" || arg === "/wallet") && (args[i + 1] === "solana" || args[i + 1] === "base")) {
       result.chain = args[i + 1];
@@ -229674,6 +229854,16 @@ async function main() {
   }
   if (args.setup) {
     await cmdSetup();
+    process.exit(0);
+  }
+  if (args.onramp) {
+    const url2 = await createCoinbaseOnrampUrl(args.onrampAmount);
+    if (args.onrampJson) {
+      console.log(JSON.stringify({ url: url2 }));
+    } else {
+      console.log("Coinbase Onramp is ready. This one-time link expires shortly:");
+      console.log(url2);
+    }
     process.exit(0);
   }
   const queryPort = args.port ?? getProxyPort();
@@ -229793,23 +229983,14 @@ ClawRouter Partner APIs (v${VERSION})
   if (args.chain) {
     const targetChain = args.chain;
     if (targetChain === "solana") {
-      const { existsSync: existsSync5 } = await import("fs");
-      const { MNEMONIC_FILE: MNEMONIC_FILE2, setupSolana: setupSolana2 } = await Promise.resolve().then(() => (init_auth(), auth_exports));
-      const { deriveSolanaKeyBytes: deriveSolanaKeyBytes2, getSolanaAddress: getSolanaAddress2 } = await Promise.resolve().then(() => (init_wallet2(), wallet_exports));
-      let solanaAddr;
-      if (existsSync5(MNEMONIC_FILE2)) {
-        const { readFileSync: readFileSync4 } = await import("fs");
-        const mnemonic = readFileSync4(MNEMONIC_FILE2, "utf8").trim();
-        const keyBytes = deriveSolanaKeyBytes2(mnemonic);
-        solanaAddr = await getSolanaAddress2(keyBytes);
-        console.log(`[ClawRouter] Solana wallet already set up.`);
-      } else {
-        console.log(`[ClawRouter] Setting up Solana wallet...`);
-        const { solanaPrivateKeyBytes } = await setupSolana2();
-        solanaAddr = await getSolanaAddress2(solanaPrivateKeyBytes);
-        console.log(`[ClawRouter] Solana wallet created.`);
-        console.log(`[ClawRouter] \u26A0  Back up your mnemonic: ${MNEMONIC_FILE2}`);
-      }
+      const { setupSolana: setupSolana2 } = await Promise.resolve().then(() => (init_auth(), auth_exports));
+      const { getSolanaAddress: getSolanaAddress2 } = await Promise.resolve().then(() => (init_wallet2(), wallet_exports));
+      const resolved = await resolveOrGenerateWalletKey();
+      const solanaPrivateKeyBytes = resolved.solanaPrivateKeyBytes ?? (await setupSolana2()).solanaPrivateKeyBytes;
+      const solanaAddr = await getSolanaAddress2(solanaPrivateKeyBytes);
+      console.log(
+        `[ClawRouter] Solana wallet loaded from ${resolved.solanaSource ?? "local setup"}.`
+      );
       await savePaymentChain("solana");
       console.log(`[ClawRouter] Payment chain \u2192 Solana`);
       console.log(`[ClawRouter] Solana address : ${solanaAddr}`);
@@ -229834,6 +230015,8 @@ ClawRouter Partner APIs (v${VERSION})
     console.log(`[ClawRouter] Generated new wallet: ${wallet.address}`);
   } else if (wallet.source === "saved") {
     console.log(`[ClawRouter] Using saved wallet: ${wallet.address}`);
+  } else if (wallet.source === "core") {
+    console.log(`[ClawRouter] Using shared BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
     console.log(`[ClawRouter] Using wallet from plugin config: ${wallet.address}`);
   } else {
