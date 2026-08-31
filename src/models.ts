@@ -1227,6 +1227,14 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
   {
+    // vision LIVE-VERIFIED 2026-08-31: 3 of 3 proxy probes with a 64x64 solid-red
+    // PNG answered "Red", each served as itself. blockrun's catalog does not tag
+    // it (same under-claim class as the Claude models below), and without the
+    // flag filterByVision() excluded the CHEAPEST paid model in the catalog from
+    // every image request — so image turns escalated past a $0.10/$0.40 rung that
+    // handles them. It is also router-core's eco SIMPLE cheapest-paid fallback.
+    // Unrelated to its presence in TOOL_NONCOMPLIANT_MODELS (proxy.ts), which is
+    // about tool schemas, not image input.
     id: "google/gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash Lite",
     version: "2.5",
@@ -1234,6 +1242,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0.4,
     contextWindow: 1048576,
     maxOutput: 65536,
+    vision: true,
     toolCalling: true,
   },
   {

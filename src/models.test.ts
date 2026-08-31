@@ -270,6 +270,14 @@ describe("capability flags vs blockrun's catalog", () => {
     }
   });
 
+  it("keeps vision on gemini-2.5-flash-lite, which blockrun does not tag", () => {
+    // 3 of 3 proxy probes on 2026-08-31 with a 64x64 solid-red PNG answered
+    // "Red", served as itself. This is the cheapest paid model in the catalog
+    // and router-core's eco SIMPLE cheapest-paid rung, so without the flag
+    // filterByVision() pushed every image request past it to something dearer.
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "google/gemini-2.5-flash-lite")?.vision).toBe(true);
+  });
+
   it("keeps vision on Claude models that blockrun's catalog under-claims", () => {
     // blockrun lists haiku-4.5 as chat+coding and sonnet-4.6 as
     // chat+coding+reasoning — neither carries `vision`. That is an upstream

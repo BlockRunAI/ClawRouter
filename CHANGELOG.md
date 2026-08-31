@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.261 — August 31, 2026
+
+### Fixed — image requests were skipping the cheapest model that can handle them
+
+`google/gemini-2.5-flash-lite` reads images. blockrun's catalog does not tag it, so ClawRouter did not either, and `filterByVision()` excluded the **cheapest paid model in the catalog** ($0.10/$0.40) from every request carrying an `image_url`. Image turns escalated past it to something dearer. It is also router-core's eco SIMPLE cheapest-paid rung, so the eco profile felt this most.
+
+Verified before flagging, not taken on report: 3 of 3 proxy probes with a 64×64 solid-red PNG answered "Red", each served as itself.
+
+The four other models flagged as under-tagged upstream — `claude-sonnet-4.6`, `claude-opus-4.5`, `claude-haiku-4.5`, `gemini-2.5-flash` — already carried `vision: true` here; ClawRouter has been ahead of blockrun's catalog on those since v0.12.233.
+
+### Confirmed — the free tier still has no working vision
+
+Re-probed both free models on Base with the same fixture: `llama-3.2-11b-vision` 0 of 3 ("I'm unable to see the image"), `nemotron-3-nano-omni` 0 of 3 ("white" for red twice). Base still strips image parts on the NVIDIA paths. The flags stay off, as shipped in v0.12.259.
+
+Two independent corrections arrived from the Solana gateway's owner that sharpen the record: `nemotron-3-nano-omni` **is not a vision model and never was** — the published sheets tagging it were wrong — and the free-tier image failures trace to a gateway-side unconditional `image_url` strip, not a model limitation. Neither changes what ClawRouter ships; both mean the v0.12.259 decision was right for a better reason than the one recorded.
+
+---
+
 ## v0.12.260 — August 31, 2026
 
 ### Fixed — the legacy auth placeholder bricked dispatch on OpenClaw 2026.8.1
