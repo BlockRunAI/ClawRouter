@@ -461,7 +461,7 @@ export class SpendControl {
     }
 
     if (this.limits.hourly !== undefined) {
-      const hourlySpent = this.getSpendingInWindow(now - HOUR_MS, now);
+      const hourlySpent = this.getSpendingInWindow(now - HOUR_MS, now, now);
       const remaining = this.limits.hourly - hourlySpent;
       if (estimatedCost > remaining) {
         const oldestInWindow = this.history.find((r) => r.timestamp >= now - HOUR_MS);
@@ -479,7 +479,7 @@ export class SpendControl {
     }
 
     if (this.limits.daily !== undefined) {
-      const dailySpent = this.getSpendingInWindow(now - DAY_MS, now);
+      const dailySpent = this.getSpendingInWindow(now - DAY_MS, now, now);
       const remaining = this.limits.daily - dailySpent;
       if (estimatedCost > remaining) {
         const oldestInWindow = this.history.find((r) => r.timestamp >= now - DAY_MS);
@@ -600,23 +600,33 @@ export class SpendControl {
     }
   }
 
-  private getSpendingInWindow(from: number, to: number): number {
+  // `now` is the single clock reading the caller already took to build the
+  // window; it must be passed in, not re-read here. In-flight reservations are
+  // "now" holds, so they count only against a window that reaches the present
+  // (`to >= now`). The bug this guards against: reading the clock a SECOND time
+  // inside this method (the old `to >= this.now()`) could land a millisecond
+  // after the caller's `now`, flip the guard false, and silently drop the
+  // pending total from the hourly/daily check — letting two concurrent payments
+  // both clear the same remaining budget. Threading the caller's `now` keeps the
+  // guard meaningful (a genuinely historical window with `to < now` still
+  // excludes live holds) without a second, racing read. Every existing test
+  // injects a frozen clock (`now: () => clock`), so the two reads always matched
+  // and the sub-ms window went uncaught; see the live-clock test in
+  // spend-control.test.ts.
+  private getSpendingInWindow(from: number, to: number, now: number): number {
     const recorded = this.history
       .filter((r) => r.timestamp >= from && r.timestamp <= to)
       .reduce((sum, r) => sum + r.amount, 0);
-    // In-flight reservations count against every window they could land in.
-    // Both the hourly and daily windows end at `now`, so a live hold belongs
-    // to each of them.
-    return recorded + (to >= this.now() ? this.pendingTotal() : 0);
+    return recorded + (to >= now ? this.pendingTotal() : 0);
   }
 
   getSpending(window: "hourly" | "daily" | "session"): number {
     const now = this.now();
     switch (window) {
       case "hourly":
-        return this.getSpendingInWindow(now - HOUR_MS, now);
+        return this.getSpendingInWindow(now - HOUR_MS, now, now);
       case "daily":
-        return this.getSpendingInWindow(now - DAY_MS, now);
+        return this.getSpendingInWindow(now - DAY_MS, now, now);
       case "session":
         return this.sessionSpent + this.pendingTotal();
     }
@@ -630,8 +640,8 @@ export class SpendControl {
 
   getStatus(): SpendingStatus {
     const now = this.now();
-    const hourlySpent = this.getSpendingInWindow(now - HOUR_MS, now);
-    const dailySpent = this.getSpendingInWindow(now - DAY_MS, now);
+    const hourlySpent = this.getSpendingInWindow(now - HOUR_MS, now, now);
+    const dailySpent = this.getSpendingInWindow(now - DAY_MS, now, now);
 
     return {
       limits: cloneLimits(this.limits),
