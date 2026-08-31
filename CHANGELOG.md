@@ -51,6 +51,10 @@ This is the near-miss worth remembering: adding a model can make an _existing_ a
 
 `detectDegradedSuccessResponse()` already caught a blank assistant turn, an upstream error delivered as HTTP 200, and placeholder/loop output. It did not catch `choices: []` — no answer at all — which went to the caller as a successful response. That is the shape a relay produces when it reports upstream congestion in the envelope rather than the body; blockrun measured it at roughly 3 in 15 calls on `nemotron-3-ultra-550b`, which is cascade rung 6. It now fails over like any other 5xx. Responses with no `choices` key at all (images, audio, embeddings) are untouched.
 
+### Fixed — the startup catalog read broke four test mocks
+
+`loadGatewayCatalog()` issues a bodyless GET to `${apiBase}/v1/models`, and four mock upstreams in the test suite called `JSON.parse` on every request body unconditionally. That throws "Unexpected end of JSON input" inside whichever test happened to be running when the read landed — it passed locally and failed CI, because the race resolves differently under load. The mocks now answer the catalog read and return instead of recording a phantom entry in the assertions. Kept the fetch unconditional: reconciling the free tier against whatever gateway the proxy points at is meaningful for any BlockRun-compatible endpoint, not just the two hosted ones.
+
 ### Verified, not changed
 
 `cohere/north-mini-code` was reported by two other sessions as returning empty content when the token budget is tight — the theory being it spends the whole allowance reasoning and emits nothing. It does not reproduce on Base: 12 of 12 samples across `max_tokens` 200/400/1200/2000 returned non-empty content with `finish_reason: "stop"`, plus 5 of 5 clean streaming runs. Their measurements were on the Solana gateway's provider pool. Left at cascade rung 4; the empty-`choices` fix above and the existing empty-turn detection both fail it over if it does starve in the field.

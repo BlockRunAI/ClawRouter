@@ -19,7 +19,16 @@ describe("modal sandbox proxying", () => {
       for await (const chunk of req) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       }
-      receivedBody = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+      // Skip the proxy's bodyless GET of `${apiBase}/v1/models` (startup
+      // catalog read, see loadGatewayCatalog) — parsing it throws and would
+      // also clobber the request this test is actually asserting on.
+      const rawBody = Buffer.concat(chunks).toString();
+      if (!rawBody) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: [] }));
+        return;
+      }
+      receivedBody = JSON.parse(rawBody) as Record<string, unknown>;
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(

@@ -44,7 +44,17 @@ async function createUpstream(
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
 
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+    // The proxy reads `${apiBase}/v1/models` once at startup (see
+    // loadGatewayCatalog) — a GET with no body. Answer it here and return:
+    // parsing it throws "Unexpected end of JSON input", and letting it reach the
+    // handler would record a phantom "" entry in whatever this test asserts on.
+    const rawBody = Buffer.concat(chunks).toString();
+    if (!rawBody) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
+    const body = JSON.parse(rawBody) as Record<string, unknown>;
     await handler(body, req, res);
   });
 
