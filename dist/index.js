@@ -226539,7 +226539,8 @@ import {
   readdirSync,
   mkdirSync as mkdirSync3,
   copyFileSync,
-  renameSync as renameSync2
+  renameSync as renameSync2,
+  unlinkSync
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
 import { homedir as homedir13 } from "os";
@@ -226884,6 +226885,15 @@ function injectAuthProfile(logger48) {
     for (const agentId of agents) {
       const authDir = join16(agentsDir, agentId, "agent");
       const authPath = join16(authDir, "auth-profiles.json");
+      const sqlitePath = join16(authDir, "openclaw-agent.sqlite");
+      if (existsSync3(sqlitePath)) {
+        removeInjectedAuthPlaceholder(authPath, logger48, agentId);
+        continue;
+      }
+      if (agentId === "main") {
+        removeInjectedAuthPlaceholder(authPath, logger48, agentId);
+        continue;
+      }
       if (!existsSync3(authDir)) {
         try {
           mkdirSync3(authDir, { recursive: true });
@@ -226924,6 +226934,25 @@ function injectAuthProfile(logger48) {
     }
   } catch (err) {
     logger48.info(`Auth injection failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+function removeInjectedAuthPlaceholder(authPath, logger48, agentId) {
+  try {
+    if (!existsSync3(authPath)) return;
+    const parsed = JSON.parse(readTextFileSync(authPath));
+    const profiles = parsed?.profiles;
+    if (!profiles || typeof profiles !== "object" || Array.isArray(profiles)) return;
+    const keys = Object.keys(profiles);
+    if (keys.length !== 1 || keys[0] !== "blockrun:default") return;
+    const entry = profiles["blockrun:default"];
+    if (!entry || typeof entry !== "object") return;
+    const profile = entry;
+    if (profile.type !== "api_key" || profile.provider !== "blockrun" || profile.key !== "x402-proxy-handles-auth") {
+      return;
+    }
+    unlinkSync(authPath);
+    logger48.info(`Removed legacy BlockRun auth placeholder for agent: ${agentId}`);
+  } catch {
   }
 }
 function clearDeferredProxyStartTimer(proc = process) {

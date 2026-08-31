@@ -1692,8 +1692,21 @@ declare function syncAgentModelCache(logger: {
 }): void;
 /**
  * Inject dummy auth profile for BlockRun into agent auth stores.
- * OpenClaw's agent system looks for auth credentials even if provider has auth: [].
- * We inject a placeholder so the lookup succeeds (proxy handles real auth internally).
+ *
+ * The legacy ``auth-profiles.json`` write is now deliberately narrow:
+ *
+ * - Wherever ``openclaw-agent.sqlite`` exists, the SQLite auth store is
+ *   authoritative. Writing the legacy JSON beside it is at best ignored, at
+ *   worst a failed-closed migration trigger: since OpenClaw 2026.8.1 a
+ *   leftover legacy file beside a store that holds no profiles fails auth
+ *   migration for the whole agent fleet. So we never write there, and we
+ *   clean up the placeholder we previously injected.
+ * - The shared auth-owner directory (``main``) is managed by OpenClaw
+ *   itself; a placeholder written there can shadow that state. The
+ *   provider's real auth comes from the x402 proxy (and the apiKey
+ *   injectModelsConfig writes into openclaw.json), so nothing is lost.
+ * - Only on very old installs with no SQLite store at all do we keep the
+ *   original JSON bootstrap, which those releases import.
  */
 declare function injectAuthProfile(logger: {
     info: (msg: string) => void;

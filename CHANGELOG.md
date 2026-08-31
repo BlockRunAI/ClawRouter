@@ -4,6 +4,29 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.260 — August 31, 2026
+
+### Fixed — the legacy auth placeholder bricked dispatch on OpenClaw 2026.8.1
+
+`injectAuthProfile()` wrote a placeholder `agent/auth-profiles.json` into every agent directory, including the shared auth-owner (`main`). On OpenClaw 2026.8.1 the SQLite auth store is authoritative, and a leftover legacy JSON beside an **empty** store fails auth migration closed — which takes message dispatch down for the whole agent fleet:
+
+```
+AuthProfileMigrationRequiredError: Auth profile store
+~/.openclaw/agents/main/agent/openclaw-agent.sqlite requires legacy credential migration
+```
+
+The write is now SQLite-aware. Where `openclaw-agent.sqlite` exists the legacy JSON is never written and our own previously-injected placeholder is removed; the shared `main` directory is never written into at all; only installs with no store keep the original bootstrap. Removal is deliberately narrow — a file is deleted only when it contains **nothing but** the exact `blockrun:default` placeholder, so a real credential file is never touched.
+
+**The rationale this replaces is now retired.** `injectAuthProfile` carried the comment "OpenClaw's agent system looks for auth credentials even if provider has `auth: []`" since it was written. Measured on 2026.5.2 before merging, via `openclaw agent --agent main --json` in three states — placeholder present, `blockrun:default` removed, and `auth-profiles.json` deleted outright — all three dispatched successfully with real token usage and zero errors. The placeholder was not load-bearing. What carries it is the `apiKey` `injectModelsConfig` writes into `openclaw.json` plus the provider's `auth: []` declaration.
+
+One trap worth recording for anyone auditing this path: the run reports `"authMode": "auth-profile"` in all three states, **including with the file deleted**. That field describes the configured mode, not that a profile was found — it is not evidence a profile is in use.
+
+New `src/auth.injection.test.ts` (5 tests) pins the matrix: legacy bootstrap kept with no store, `main` never written, no write beside an existing store, placeholder removed beside a store, and real credential files never removed. 797 tests pass.
+
+- Thanks to @0xCheetah1 for the fix, the 2026.8.1 reproduction, and the before/after `openclaw doctor --lint --all` verification (#288).
+
+---
+
 ## v0.12.259 — August 31, 2026
 
 Corrections to v0.12.258 plus the same-night paid-catalog refresh, both found by checking claims instead of trusting catalogs. Neither would have surfaced as an error — both fail with HTTP 200.
