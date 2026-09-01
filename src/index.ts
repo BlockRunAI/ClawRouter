@@ -87,6 +87,7 @@ import { buildPartnerTools, PARTNER_SERVICES } from "./partners/index.js";
 import { buildPolymarketTool } from "./polymarket/tool.js";
 import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
+import { createPolicyCommand } from "./commands/policy.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
 
 function getPackageRoot(): string {
@@ -2226,9 +2227,10 @@ const plugin: OpenClawPluginDefinition = {
     }
     api.registerCommand(createStatsCommand());
     api.registerCommand(createExcludeCommand());
+    api.registerCommand(createPolicyCommand());
     if (shouldLogRegistration) {
       api.logger.info(
-        "Commands registered: /wallet, /blockrun, /stats, /exclude, /partners, /cr-imagegen, /videogen, /cr-call",
+        "Commands registered: /wallet, /blockrun, /stats, /exclude, /policy, /partners, /cr-imagegen, /videogen, /cr-call",
       );
     }
 

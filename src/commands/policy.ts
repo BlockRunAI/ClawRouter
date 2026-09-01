@@ -1,0 +1,228 @@
+/**
+ * /policy command — operator surface for SpendControl limits and counterparty lists.
+ *
+ * One implementation behind two entry points: the `clawrouter policy` CLI and
+ * the OpenClaw `/policy` plugin command both call runPolicyCommand(), so the
+ * validation lives in exactly one place. Fail-closed on input: every argument
+ * is checked before the store is opened, and a rejected argument writes nothing.
+ *
+ * This edits spending.json. The proxy reads limits once, in the SpendControl
+ * constructor, so a change takes effect on its next start.
+ */
+import type {
+  OpenClawPluginCommandDefinition,
+  PluginCommandContext,
+  PluginCommandResult,
+} from "../types.js";
+import {
+  CAIP2_BASE,
+  CAIP2_SOLANA_MAINNET,
+  POLICY_LISTS,
+  SpendControl,
+  normalizePayee,
+  type PolicyList,
+  type SpendLimits,
+  type SpendWindow,
+} from "../spend-control.js";
+
+const SPEND_WINDOWS: readonly SpendWindow[] = ["perRequest", "hourly", "daily", "session"];
+/** The only network ids the proxy ever pays on; any other allowlist entry can never match a quote. */
+const KNOWN_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
+/** Strict decimal: "5abc" and "1e3" are rejected, not truncated the way parseFloat would. */
+const USD = /^\d+(\.\d+)?$/;
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const LIST_ACTIONS = ["set", "add", "remove", "clear"] as const;
+type ListAction = (typeof LIST_ACTIONS)[number];
+
+const USAGE = [
+  "Usage:",
+  "  policy                                 show limits and lists on disk",
+  `  policy set|add|remove <list> <v>...    <list>: ${POLICY_LISTS.join(" | ")}`,
+  "  policy clear <list>",
+  `  policy limit <window> <usd>|clear      <window>: ${SPEND_WINDOWS.join(" | ")}`,
+  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet).`,
+].join("\n");
+const RESTART_NOTE =
+  "Saved to spending.json. The proxy reads limits once at startup — restart it (or the OpenClaw gateway) to apply.";
+
+type Plan =
+  | { kind: "show" }
+  | { kind: "limit"; window: SpendWindow; usd: number | undefined }
+  | { kind: "list"; action: ListAction; list: PolicyList; values: string[] };
+
+export interface PolicyCommandOptions {
+  /** Opens the store; called again after a write to prove it landed. Defaults to the on-disk store. */
+  openControl?: () => SpendControl;
+}
+
+function fail(text: string): PluginCommandResult {
+  return { text, isError: true };
+}
+
+function isPolicyList(v: string): v is PolicyList {
+  return (POLICY_LISTS as readonly string[]).includes(v);
+}
+
+function isSpendWindow(v: string): v is SpendWindow {
+  return (SPEND_WINDOWS as readonly string[]).includes(v);
+}
+
+function isListAction(v: string): v is ListAction {
+  return (LIST_ACTIONS as readonly string[]).includes(v);
+}
+
+/** Why `value` must not enter `list`, or undefined when it may. */
+function rejectValue(list: PolicyList, value: string): string | undefined {
+  if (list === "allowedNetworks") {
+    return KNOWN_NETWORKS.includes(value)
+      ? undefined
+      : `"${value}" is not a supported CAIP-2 network id — use ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname`;
+  }
+  if (/^0x/i.test(value) && !EVM_ADDRESS.test(value)) {
+    return `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
+  }
+  return undefined;
+}
+
+/** Turn argv into a plan or a rejection. Pure: nothing is read or written here. */
+function parsePolicyArgs(argv: readonly string[]): Plan | PluginCommandResult {
+  const [sub = "", target = "", ...values] = argv;
+  const action = sub.toLowerCase();
+  if (action === "") return { kind: "show" };
+
+  if (action === "limit") {
+    if (!isSpendWindow(target)) {
+      return fail(
+        `Unknown window "${target}"; expected one of: ${SPEND_WINDOWS.join(", ")}\n${USAGE}`,
+      );
+    }
+    const raw = values[0];
+    if (raw === undefined || values.length !== 1) {
+      return fail(`policy limit takes exactly one amount (or "clear")\n${USAGE}`);
+    }
+    if (raw === "clear") return { kind: "limit", window: target, usd: undefined };
+    const usd = Number(raw);
+    if (!USD.test(raw) || !Number.isFinite(usd) || usd <= 0) {
+      return fail(
+        `Rejected amount "${raw}": must be a positive decimal USD value such as 0.10 or 5`,
+      );
+    }
+    return { kind: "limit", window: target, usd };
+  }
+
+  if (!isListAction(action)) return fail(`Unknown subcommand "${sub}"\n${USAGE}`);
+  if (!isPolicyList(target)) {
+    return fail(`Unknown list "${target}"; expected one of: ${POLICY_LISTS.join(", ")}\n${USAGE}`);
+  }
+  if (action === "clear" ? values.length !== 0 : values.length === 0) {
+    return fail(
+      `policy ${action} <list> ${action === "clear" ? "takes no values" : "needs at least one value"}\n${USAGE}`,
+    );
+  }
+  for (const v of values) {
+    const why = rejectValue(target, v);
+    if (why !== undefined) return fail(`Rejected ${target} entry: ${why}`);
+  }
+  return { kind: "list", action, list: target, values };
+}
+
+/** The value `plan.list` must hold afterwards (undefined = not configured), or a rejection. */
+function nextListValue(
+  current: string[] | undefined,
+  plan: Extract<Plan, { kind: "list" }>,
+): { next: string[] | undefined } | { reject: string } {
+  const have = current ?? [];
+  // normalizePayee lowercases EVM addresses so "0xAbC…" and "0xabc…" dedupe; it is a no-op on CAIP-2 ids.
+  const wanted = [...new Set(plan.values.map(normalizePayee))];
+  switch (plan.action) {
+    case "set":
+      return { next: wanted };
+    case "clear":
+      return { next: undefined };
+    case "add":
+      return { next: [...new Set([...have, ...wanted])] };
+    case "remove": {
+      if (have.length === 0) return { reject: `${plan.list} is not configured; nothing to remove` };
+      const missing = wanted.filter((v) => !have.includes(v));
+      if (missing.length > 0) return { reject: `not in ${plan.list}: ${missing.join(", ")}` };
+      const next = have.filter((v) => !wanted.includes(v));
+      // An emptied list routes to clearPolicy(): setPolicy([]) throws by design.
+      return { next: next.length > 0 ? next : undefined };
+    }
+  }
+}
+
+function formatPolicy(limits: SpendLimits): string {
+  const lines = ["Spend limits (USD):"];
+  for (const w of SPEND_WINDOWS) {
+    const v = limits[w];
+    lines.push(`  ${w}: ${v === undefined ? "(none)" : `$${v}`}`);
+  }
+  lines.push("Policy lists:");
+  for (const l of POLICY_LISTS) {
+    const v = limits[l];
+    lines.push(`  ${l}: ${v && v.length > 0 ? v.join(", ") : "(none)"}`);
+  }
+  return lines.join("\n");
+}
+
+export function runPolicyCommand(
+  argv: readonly string[],
+  options?: PolicyCommandOptions,
+): PluginCommandResult {
+  const plan = parsePolicyArgs(argv);
+  if (!("kind" in plan)) return plan;
+
+  const openControl = options?.openControl ?? (() => new SpendControl());
+  const control = openControl();
+  const broken = control.getPolicyFileError();
+  if (broken !== undefined) {
+    return fail(`${broken}\nNothing was written; repair or delete spending.json, then retry.`);
+  }
+  if (plan.kind === "show") return { text: formatPolicy(control.getLimits()) };
+
+  const key: PolicyList | SpendWindow = plan.kind === "limit" ? plan.window : plan.list;
+  let expected: number | string[] | undefined;
+  try {
+    if (plan.kind === "limit") {
+      expected = plan.usd;
+      if (plan.usd === undefined) control.clearLimit(plan.window);
+      else control.setLimit(plan.window, plan.usd);
+    } else {
+      const outcome = nextListValue(control.getLimits()[plan.list], plan);
+      if ("reject" in outcome) return fail(`${outcome.reject}; nothing written`);
+      expected = outcome.next;
+      if (outcome.next === undefined) control.clearPolicy(plan.list);
+      else control.setPolicy(plan.list, outcome.next);
+    }
+  } catch (err) {
+    return fail(`Nothing was written: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // FileSpendControlStorage.save() logs and swallows write failures, so a setter
+  // returning is not proof of persistence. Re-open the store and compare the one
+  // key this command changed; report anything else as not applied.
+  const landed = openControl().getLimits()[key];
+  if (JSON.stringify(landed) !== JSON.stringify(expected)) {
+    return fail(
+      `Write did not land: ${key} on disk is ${JSON.stringify(landed) ?? "(none)"}, expected ${JSON.stringify(expected) ?? "(none)"}`,
+    );
+  }
+  return {
+    text: `${key}: ${expected === undefined ? "(none)" : JSON.stringify(expected)}\n${RESTART_NOTE}`,
+  };
+}
+
+export function createPolicyCommand(
+  options?: PolicyCommandOptions,
+): OpenClawPluginCommandDefinition {
+  return {
+    name: "policy",
+    description:
+      "Spend limits and counterparty policy — /policy [set|add|remove|clear <list> ...] [limit <window> <usd>|clear]",
+    acceptsArgs: true,
+    requireAuth: true,
+    handler: async (ctx: PluginCommandContext) =>
+      runPolicyCommand((ctx.args ?? "").trim().split(/\s+/).filter(Boolean), options),
+  };
+}

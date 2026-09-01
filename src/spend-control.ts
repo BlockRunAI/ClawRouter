@@ -40,7 +40,7 @@ export const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 
-const POLICY_LISTS: readonly PolicyList[] = [
+export const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",
   "blockedPayees",
   "allowedNetworks",
@@ -372,6 +372,16 @@ export class SpendControl {
 
   getLimits(): SpendLimits {
     return cloneLimits(this.limits);
+  }
+
+  /**
+   * Why spending.json could not be loaded, or undefined when it is usable.
+   * While set, every setter mutates memory only: save() refuses to rewrite a
+   * file it could not fully parse, so callers must check this before
+   * reporting a change as applied.
+   */
+  getPolicyFileError(): string | undefined {
+    return this.policyFileBroken;
   }
 
   check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult {

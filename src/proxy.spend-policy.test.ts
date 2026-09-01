@@ -5,6 +5,7 @@ import { generatePrivateKey } from "viem/accounts";
 
 import { startProxy, type ProxyHandle } from "./proxy.js";
 import { SpendControl, InMemorySpendControlStorage, CAIP2_BASE } from "./spend-control.js";
+import { runPolicyCommand } from "./commands/policy.js";
 
 /**
  * Pins the enforcement wiring itself, not just the helper.
@@ -68,8 +69,14 @@ describe("startProxy enforces spend policy on the live payment path", () => {
     await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
     const addr = upstream.address() as AddressInfo;
 
-    control = new SpendControl({ storage: new InMemorySpendControlStorage() });
-    control.setPolicy("blockedPayees", [blockedPayee]);
+    // Configure through the operator command rather than setPolicy() directly, so
+    // this pins the whole path: CLI/plugin surface -> spending store -> pre-sign hook.
+    const storage = new InMemorySpendControlStorage();
+    const applied = runPolicyCommand(["set", "blockedPayees", blockedPayee], {
+      openControl: () => new SpendControl({ storage }),
+    });
+    expect(applied.isError).toBeFalsy();
+    control = new SpendControl({ storage });
 
     proxy = await startProxy({
       wallet: generatePrivateKey(),
