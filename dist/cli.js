@@ -40105,7 +40105,8 @@ function formatStatsAscii(stats) {
   lines.push("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D");
   return lines.join("\n");
 }
-async function formatRecentLogs(days = 1) {
+async function formatRecentLogs(requestedDays = 1) {
+  const days = Number.isFinite(requestedDays) && requestedDays > 0 ? Math.floor(requestedDays) : 1;
   const logFiles = await getLogFiles();
   const filesToRead = logFiles.slice(0, days);
   const allEntries = [];

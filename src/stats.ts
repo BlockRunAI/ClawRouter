@@ -299,7 +299,15 @@ export function formatStatsAscii(stats: AggregatedStats): string {
  * Format per-request log entries as an ASCII table for terminal display.
  * Reads the last N days of log files and shows each request individually.
  */
-export async function formatRecentLogs(days: number = 1): Promise<string> {
+export async function formatRecentLogs(requestedDays: number = 1): Promise<string> {
+  // `days` reaches here straight from `clawrouter logs --days <n>`, where
+  // `parseInt(raw, 10) || 1` lets a negative through (it is truthy). A negative
+  // then turns `slice(0, days)` into a tail-trim — `slice(0, -1)` silently drops
+  // the NEWEST day, the exact opposite of asking for more history — and the
+  // header renders "last -1 days". Guard at the sink so every caller is covered,
+  // not just the CLI one.
+  const days = Number.isFinite(requestedDays) && requestedDays > 0 ? Math.floor(requestedDays) : 1;
+
   const logFiles = await getLogFiles();
   const filesToRead = logFiles.slice(0, days);
 
