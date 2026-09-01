@@ -69,7 +69,7 @@ import {
 } from "./models.js";
 import { DEFAULT_MAX_TOKENS, resolveMaxTokens } from "./max-tokens.js";
 import { logUsage, type UsageEntry } from "./logger.js";
-import { getStats, clearStats } from "./stats.js";
+import { getStats, clearStats, resolveStatsDays } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
 import { ResponseCache, type ResponseCacheConfig } from "./response-cache.js";
 import { BalanceMonitor } from "./balance.js";
@@ -2522,8 +2522,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
         try {
           const url = new URL(req.url, "http://localhost");
-          const days = parseInt(url.searchParams.get("days") || "7", 10);
-          const stats = await getStats(Math.min(days, 30));
+          const days = resolveStatsDays(url.searchParams.get("days"));
+          const stats = await getStats(days);
 
           res.writeHead(200, {
             "Content-Type": "application/json",
