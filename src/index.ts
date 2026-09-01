@@ -453,6 +453,41 @@ function injectModelsConfig(
     }
   }
 
+  // OpenClaw 2026.8+ gates the /model picker on agents.defaults.modelPolicy.allow
+  // (a plain string array), NOT agents.defaults.models. Keep the blockrun/* slice
+  // of that array in lockstep with TOP_MODELS too, otherwise newly-shipped models
+  // appear in the catalog but are rejected with "not available for this agent".
+  // Non-blockrun entries (e.g. other providers) are preserved.
+  let modelPolicyAllow = (defaults.modelPolicy as Record<string, unknown> | undefined)?.allow;
+  if (!Array.isArray(modelPolicyAllow)) {
+    modelPolicyAllow = [];
+    (defaults.modelPolicy as Record<string, unknown>) = { allow: modelPolicyAllow };
+    needsWrite = true;
+  }
+  const policyEntries = modelPolicyAllow as string[];
+  let policyAddedCount = 0;
+  let policyPrunedCount = 0;
+  for (const key of policyEntries.slice()) {
+    if (key.startsWith("blockrun/") && !expectedBlockrunKeys.has(key)) {
+      const idx = policyEntries.indexOf(key);
+      if (idx !== -1) policyEntries.splice(idx, 1);
+      policyPrunedCount++;
+    }
+  }
+  for (const id of TOP_MODELS) {
+    const key = `blockrun/${id}`;
+    if (!policyEntries.includes(key)) {
+      policyEntries.push(key);
+      policyAddedCount++;
+    }
+  }
+  if (policyAddedCount > 0 || policyPrunedCount > 0) {
+    needsWrite = true;
+    logger.info(
+      `Synced modelPolicy.allow (added ${policyAddedCount}, pruned ${policyPrunedCount} blockrun entries)`,
+    );
+  }
+
   // web_search: set `enabled = true` (safe — boolean, no provider validator),
   // but DELETE any persisted `provider` value. OpenClaw 2026.5.2+ runs a
   // strict known-providers validator on `tools.web.search.provider` at
