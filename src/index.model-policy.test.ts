@@ -71,7 +71,7 @@ describe("injectModelsConfig — modelPolicy.allow sync", () => {
   });
 
   it("creates modelPolicy.allow when the key is absent", async () => {
-    const { mod, configPath, TOP_MODELS } = await withConfig({ agents: { defaults: {} } });
+    const { mod, configPath } = await withConfig({ agents: { defaults: {} } });
 
     mod.injectModelsConfig({ info: vi.fn() }, { forceWrite: true });
 
@@ -81,7 +81,7 @@ describe("injectModelsConfig — modelPolicy.allow sync", () => {
   });
 
   it("treats a non-array modelPolicy.allow as empty instead of crashing", async () => {
-    const { mod, configPath, TOP_MODELS } = await withConfig({
+    const { mod, configPath } = await withConfig({
       agents: { defaults: { modelPolicy: { allow: "not-an-array" } } },
     });
 
