@@ -1467,12 +1467,6 @@ declare function fetchWithRetry(fetchFn: (url: string, init?: RequestInit) => Pr
  */
 declare function isRetryable(errorOrResponse: Error | Response, config?: Partial<RetryConfig>): boolean;
 
-/**
- * Usage Statistics Aggregator
- *
- * Reads usage log files and aggregates statistics for terminal display.
- * Supports filtering by date range and provides multiple aggregation views.
- */
 type DailyStats = {
     date: string;
     totalRequests: number;

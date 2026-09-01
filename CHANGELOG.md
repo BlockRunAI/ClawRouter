@@ -4,6 +4,39 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.263 — September 1, 2026
+
+### Fixed — a live-clock race let in-flight reservations vanish from the spend caps
+
+`SpendControl.getSpendingInWindow()` decided whether in-flight reservations counted toward the hourly/daily spend by reading the clock a **second** time and comparing it against a window bound the caller had already built from a **first** read:
+
+```ts
+const now = this.now();                                        // read #1
+const hourlySpent = this.getSpendingInWindow(now - HOUR_MS, now);
+// ...inside:
+return recorded + (to >= this.now() ? this.pendingTotal() : 0); // read #2
+```
+
+On the production clock (`() => Date.now()`), a millisecond ticking between the two reads makes `this.now() > to`, the guard goes false, and the whole pending total is silently dropped from the figure the cap is checked against. Reservations are the concurrency-safety mechanism — the x402 pre-sign hook does check-then-`reserve()` synchronously precisely so two concurrent payments cannot both clear the same remaining budget. With the pending total missing, they can: a $5 hold disappears and a second $5 payment sees the full $5 of an already-exhausted $5 cap.
+
+The caller's single `now` is threaded through instead. Every existing test injected a frozen clock, so the two reads always matched and the sub-millisecond window went uncaught; there is now a live-clock test.
+
+### Fixed — `?days=` on /stats silently zeroed or mislabeled the report
+
+`GET /stats?days=` ran user input through `parseInt(...)` then `Math.min(days, 30)`, and both steps pass bad input straight through JS's numeric coercion. `?days=abc` became `NaN`, survived `Math.min`, and turned `getStats`' `slice(0, NaN)` into `slice(0, 0)` — the endpoint reported **zero usage** instead of falling back to the default window. `?days=-1` survived `Math.min(-1, 30)`, and `slice(0, -1)` **dropped the newest day** while the response labelled itself "last -1 days".
+
+A single `resolveStatsDays()` guard (mirroring the existing `resolveMaxTokens` precedent) covers non-numeric, `NaN`, zero and negative alike. Local, read-only diagnostic endpoint — wrong numbers, not a security boundary.
+
+### Fixed — `logs --days -1` dropped the newest day instead of showing more history
+
+The sibling of the above on the path that does **not** go over HTTP. `clawrouter logs --days <n>` parses with `parseInt(raw, 10) || 1`; `NaN` is falsy so a typo fell back to 1, but a **negative is truthy** and reached `logFiles.slice(0, days)`. Log files are newest-first and a negative second argument to `slice` trims from the end, so `--days -1` cut the **newest** day — the opposite of asking for more history — and the header rendered "last -1 days".
+
+Guarded at the sink in `formatRecentLogs` rather than at the CLI parse site, so every caller is covered rather than the one that happens to exist today. Worth recording: `clawrouter stats --days` sends `/stats?days=` over HTTP and was therefore already covered by the `resolveStatsDays` guard above; `logs` reads the files locally and was the one path left uncovered.
+
+- Thanks to @erhnysr for the spend-control clock race (#286) and the `/stats` window validation (#285).
+
+---
+
 ## v0.12.262 — August 31, 2026
 
 ### Added — four live catalog models that were never in the picker

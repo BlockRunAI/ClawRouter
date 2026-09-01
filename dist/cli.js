@@ -32632,7 +32632,7 @@ var init_spend_control = __esm({
           }
         }
         if (this.limits.hourly !== void 0) {
-          const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
+          const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2, now2);
           const remaining = this.limits.hourly - hourlySpent;
           if (estimatedCost2 > remaining) {
             const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - HOUR_MS);
@@ -32647,7 +32647,7 @@ var init_spend_control = __esm({
           }
         }
         if (this.limits.daily !== void 0) {
-          const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
+          const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2, now2);
           const remaining = this.limits.daily - dailySpent;
           if (estimatedCost2 > remaining) {
             const oldestInWindow = this.history.find((r2) => r2.timestamp >= now2 - DAY_MS);
@@ -32744,17 +32744,30 @@ var init_spend_control = __esm({
           }
         }
       }
-      getSpendingInWindow(from15, to) {
+      // `now` is the single clock reading the caller already took to build the
+      // window; it must be passed in, not re-read here. In-flight reservations are
+      // "now" holds, so they count only against a window that reaches the present
+      // (`to >= now`). The bug this guards against: reading the clock a SECOND time
+      // inside this method (the old `to >= this.now()`) could land a millisecond
+      // after the caller's `now`, flip the guard false, and silently drop the
+      // pending total from the hourly/daily check — letting two concurrent payments
+      // both clear the same remaining budget. Threading the caller's `now` keeps the
+      // guard meaningful (a genuinely historical window with `to < now` still
+      // excludes live holds) without a second, racing read. Every existing test
+      // injects a frozen clock (`now: () => clock`), so the two reads always matched
+      // and the sub-ms window went uncaught; see the live-clock test in
+      // spend-control.test.ts.
+      getSpendingInWindow(from15, to, now2) {
         const recorded = this.history.filter((r2) => r2.timestamp >= from15 && r2.timestamp <= to).reduce((sum, r2) => sum + r2.amount, 0);
-        return recorded + (to >= this.now() ? this.pendingTotal() : 0);
+        return recorded + (to >= now2 ? this.pendingTotal() : 0);
       }
       getSpending(window2) {
         const now2 = this.now();
         switch (window2) {
           case "hourly":
-            return this.getSpendingInWindow(now2 - HOUR_MS, now2);
+            return this.getSpendingInWindow(now2 - HOUR_MS, now2, now2);
           case "daily":
-            return this.getSpendingInWindow(now2 - DAY_MS, now2);
+            return this.getSpendingInWindow(now2 - DAY_MS, now2, now2);
           case "session":
             return this.sessionSpent + this.pendingTotal();
         }
@@ -32766,8 +32779,8 @@ var init_spend_control = __esm({
       }
       getStatus() {
         const now2 = this.now();
-        const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2);
-        const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2);
+        const hourlySpent = this.getSpendingInWindow(now2 - HOUR_MS, now2, now2);
+        const dailySpent = this.getSpendingInWindow(now2 - DAY_MS, now2, now2);
         return {
           limits: cloneLimits(this.limits),
           spending: {
@@ -39920,6 +39933,13 @@ var init_version4 = __esm({
 import { readdir, unlink } from "fs/promises";
 import { join as join5 } from "path";
 import { homedir as homedir3 } from "os";
+function resolveStatsDays(raw) {
+  const parsed = parseInt(raw ?? "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_STATS_DAYS;
+  }
+  return Math.min(parsed, MAX_STATS_DAYS);
+}
 async function parseLogFile(filePath) {
   try {
     const content = await readTextFile(filePath);
@@ -40162,13 +40182,15 @@ async function clearStats() {
     return { deletedFiles: 0 };
   }
 }
-var LOG_DIR2;
+var LOG_DIR2, DEFAULT_STATS_DAYS, MAX_STATS_DAYS;
 var init_stats = __esm({
   "src/stats.ts"() {
     "use strict";
     init_fs_read();
     init_version4();
     LOG_DIR2 = join5(homedir3(), ".openclaw", "blockrun", "logs");
+    DEFAULT_STATS_DAYS = 7;
+    MAX_STATS_DAYS = 30;
   }
 });
 
@@ -91087,8 +91109,8 @@ async function startProxy(options) {
       if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
         try {
           const url2 = new URL(req.url, "http://localhost");
-          const days = parseInt(url2.searchParams.get("days") || "7", 10);
-          const stats = await getStats(Math.min(days, 30));
+          const days = resolveStatsDays(url2.searchParams.get("days"));
+          const stats = await getStats(days);
           res.writeHead(200, {
             "Content-Type": "application/json",
             "Cache-Control": "no-cache"
