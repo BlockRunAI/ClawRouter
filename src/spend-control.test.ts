@@ -780,6 +780,52 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
   });
 });
 
+describe("in-flight reservations under a live (non-frozen) clock", () => {
+  // Every other test in this file injects a FROZEN clock (`now: () => clock`, see
+  // createControl above): both clock reads inside a single check() return the same
+  // value, so a reservation is always counted and the race below cannot surface.
+  // Production uses Date.now(), which advances — when a millisecond ticks between
+  // the `now` check() captures at its top and the second `this.now()` the window
+  // helper used to read, the hourly/daily window silently dropped the pending
+  // total. This live clock (each read 1ms later) models that sub-ms advance so the
+  // concurrent-overspend path is actually exercised.
+  const liveClock = (startMs = 1_000_000_000_000) => {
+    let t = startMs;
+    return () => (t += 1);
+  };
+
+  it("counts an in-flight reservation against the hourly window while the clock advances mid-check", () => {
+    const control = new SpendControl({
+      storage: new InMemorySpendControlStorage(),
+      now: liveClock(),
+    });
+    control.setLimit("hourly", 1.0);
+
+    // Payment A is signed-in-flight: it cleared check() and reserved its cost but
+    // has not settled yet.
+    control.reserve(0.8);
+
+    // Payment B arrives concurrently. A's live $0.80 hold plus B's $0.80 is $1.60,
+    // over the $1.00/hr cap — B must be refused, or the two together overspend.
+    const result = control.check(0.8, {});
+    expect(result.allowed).toBe(false);
+    expect(result.blockedBy).toBe("hourly");
+  });
+
+  it("counts an in-flight reservation against the daily window while the clock advances mid-check", () => {
+    const control = new SpendControl({
+      storage: new InMemorySpendControlStorage(),
+      now: liveClock(),
+    });
+    control.setLimit("daily", 1.0);
+    control.reserve(0.8);
+
+    const result = control.check(0.8, {});
+    expect(result.allowed).toBe(false);
+    expect(result.blockedBy).toBe("daily");
+  });
+});
+
 describe("formatDuration", () => {
   it("formats seconds", () => {
     expect(formatDuration(30)).toBe("30s");
