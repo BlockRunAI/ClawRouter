@@ -37708,6 +37708,7 @@ var init_top_models = __esm({
       "qwen/qwen3.8-flash",
       "tencent/hy3",
       "deepseek/deepseek-v4-flash-vision-exp",
+      "deepseek/deepseek-v4-flash",
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-chat",
       "deepseek/deepseek-reasoner",
@@ -38994,6 +38995,21 @@ var init_models = __esm({
         contextWindow: 1048576,
         maxOutput: 65536,
         reasoning: true,
+        toolCalling: true
+      },
+      {
+        // V4 Flash (paid) — the free deepseek-v4-flash tier was EOL'd upstream
+        // (NVIDIA hosting rot, 410s since 2026-08-12). The paid route survives;
+        // it is just not advertised in GET /v1/models, so it fell out of the
+        // picker. Repriced to DeepSeek's published rate 0.14/0.28 like the
+        // deepseek-chat alias.
+        id: "deepseek/deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        version: "4-flash",
+        inputPrice: 0.14,
+        outputPrice: 0.28,
+        contextWindow: 1048576,
+        maxOutput: 65536,
         toolCalling: true
       },
       {
@@ -227066,6 +227082,35 @@ function injectModelsConfig(logger48, options = {}) {
     if (addedCount > 0) {
       logger48.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
     }
+  }
+  let modelPolicyAllow = defaults2.modelPolicy?.allow;
+  if (!Array.isArray(modelPolicyAllow)) {
+    modelPolicyAllow = [];
+    defaults2.modelPolicy = { allow: modelPolicyAllow };
+    needsWrite = true;
+  }
+  const policyEntries = modelPolicyAllow;
+  let policyAddedCount = 0;
+  let policyPrunedCount = 0;
+  for (const key2 of policyEntries.slice()) {
+    if (key2.startsWith("blockrun/") && !expectedBlockrunKeys.has(key2)) {
+      const idx = policyEntries.indexOf(key2);
+      if (idx !== -1) policyEntries.splice(idx, 1);
+      policyPrunedCount++;
+    }
+  }
+  for (const id2 of TOP_MODELS) {
+    const key2 = `blockrun/${id2}`;
+    if (!policyEntries.includes(key2)) {
+      policyEntries.push(key2);
+      policyAddedCount++;
+    }
+  }
+  if (policyAddedCount > 0 || policyPrunedCount > 0) {
+    needsWrite = true;
+    logger48.info(
+      `Synced modelPolicy.allow (added ${policyAddedCount}, pruned ${policyPrunedCount} blockrun entries)`
+    );
   }
   if (!config.tools || typeof config.tools !== "object" || Array.isArray(config.tools)) {
     config.tools = {};

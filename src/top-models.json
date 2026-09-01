@@ -44,6 +44,7 @@
   "qwen/qwen3.8-flash",
   "tencent/hy3",
   "deepseek/deepseek-v4-flash-vision-exp",
+  "deepseek/deepseek-v4-flash",
   "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",

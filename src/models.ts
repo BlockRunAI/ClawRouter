@@ -1282,6 +1282,21 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
   {
+    // V4 Flash (paid) — the free deepseek-v4-flash tier was EOL'd upstream
+    // (NVIDIA hosting rot, 410s since 2026-08-12). The paid route survives;
+    // it is just not advertised in GET /v1/models, so it fell out of the
+    // picker. Repriced to DeepSeek's published rate 0.14/0.28 like the
+    // deepseek-chat alias.
+    id: "deepseek/deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
+    version: "4-flash",
+    inputPrice: 0.14,
+    outputPrice: 0.28,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    toolCalling: true,
+  },
+  {
     // V4 flagship — strongest open-weight reasoner. The 75% launch promo
     // became DeepSeek's permanent list price after 2026-05-31. Resold via
     // BlockRun's OpenRouter credit pool. Was listed in top-models.json
