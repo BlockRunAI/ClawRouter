@@ -112,4 +112,21 @@ describe("trade gating (cross-field validation, no network)", () => {
     expect(r.isError).toBe(true);
     expect(r.text).toMatch(/GTD orders need expires_at/i);
   });
+
+  // A negative or zero amount_usd must be rejected here, before any network
+  // call: it becomes the order's notional, and being additive it lets
+  // `ledger.totalUsd + notional > sessionCap` be satisfied by *reducing*
+  // totalUsd instead of raising it — silently defeating
+  // POLYMARKET_MAX_SESSION_USD for every order placed afterward.
+  it("rejects a market buy with a negative amount_usd before touching the CLOB", async () => {
+    const r = await executeTrade({ action: "buy", token_id: "1", amount_usd: -5 });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/amount_usd must be a positive dollar amount/i);
+  });
+
+  it("rejects a market buy with amount_usd of zero before touching the CLOB", async () => {
+    const r = await executeTrade({ action: "buy", token_id: "1", amount_usd: 0 });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/amount_usd must be a positive dollar amount/i);
+  });
 });

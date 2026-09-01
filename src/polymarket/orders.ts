@@ -289,6 +289,23 @@ export async function executeTrade(input: TradeInput): Promise<ToolResult> {
       isError: true,
     };
   }
+  // A non-positive amount_usd would otherwise become the order's notional
+  // (see below) and, being additive, a negative value lets the ledger check
+  // (`ledger.totalUsd + notional > sessionCap`) be satisfied by *reducing*
+  // totalUsd instead of raising it — silently defeating POLYMARKET_MAX_SESSION_USD
+  // for every order placed afterward. Reject before any network call, same as
+  // fund.ts's amount_usd guard.
+  if (
+    !isLimit &&
+    input.action === "buy" &&
+    input.amount_usd !== undefined &&
+    input.amount_usd <= 0
+  ) {
+    return {
+      text: `amount_usd must be a positive dollar amount to spend, got ${input.amount_usd}.`,
+      isError: true,
+    };
+  }
   if (!isLimit && input.action === "sell" && input.size === undefined) {
     return { text: `Market sells need size (shares to sell).`, isError: true };
   }

@@ -48,6 +48,16 @@ interface WithdrawInput {
 }
 
 export async function withdrawFunds(input: WithdrawInput): Promise<ToolResult> {
+  // A non-positive amount_usd would otherwise pass the balance check below
+  // (amountRaw > balanceRaw is false for zero or negative amounts) and reach
+  // the bridge/transfer call. Reject before any network call, same as
+  // fund.ts's amount_usd guard.
+  if (input.amount_usd !== undefined && input.amount_usd <= 0) {
+    return {
+      text: `amount_usd must be a positive dollar amount, got ${input.amount_usd}. Omit it to withdraw the full balance.`,
+      isError: true,
+    };
+  }
   let owner: Hex;
   try {
     owner = getFundsAddress();
