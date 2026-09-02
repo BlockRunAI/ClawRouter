@@ -42,7 +42,7 @@ export class EmptyWalletError extends Error {
       `Options:`,
       `  1. Fund wallet: ${walletAddress}`,
       `  2. Use free model: /model free`,
-      `  3. Uninstall: bash ~/.openclaw/extensions/clawrouter/scripts/uninstall.sh`,
+      `  3. Uninstall: bash ~/.openclaw/extensions/blockrun-clawrouter/scripts/uninstall.sh`,
     ].join("\n");
     super(msg);
     this.name = "EmptyWalletError";

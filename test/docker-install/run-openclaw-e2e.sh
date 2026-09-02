@@ -8,23 +8,28 @@ echo "=== Step 1: Environment ==="
 echo "OpenClaw: $(openclaw --version)"
 echo ""
 
+OPENCLAW_CAPABILITY_ARGS=()
+if openclaw plugins install --help 2>&1 | grep -q -- '--accept-capabilities'; then
+  OPENCLAW_CAPABILITY_ARGS=(--accept-capabilities)
+fi
+
 mkdir -p $HOME/.openclaw
 echo '{}' > $HOME/.openclaw/openclaw.json
 
 echo "=== Step 2: Fresh install on clean OpenClaw 2026.5.4 ==="
 INSTALL_A=$(mktemp)
-openclaw plugins install --force /tmp/clawrouter.tgz 2>&1 | tee $INSTALL_A | tail -8
+openclaw plugins install --force "${OPENCLAW_CAPABILITY_ARGS[@]}" /tmp/clawrouter.tgz 2>&1 | tee $INSTALL_A | tail -8
 echo ""
 
 echo "=== Step 3: Install-time assertions ==="
 grep -q "unknown web_search provider" $INSTALL_A && fail "validator collision" || pass "No 'unknown web_search provider'"
 grep -q "Config write rejected" $INSTALL_A && fail "size-drop rejection" || pass "No 'Config write rejected'"
-grep -q "Installed plugin: clawrouter" $INSTALL_A && pass "Plugin install committed" || fail "Plugin install did NOT commit"
+grep -q "Installed plugin: blockrun-clawrouter" $INSTALL_A && pass "Plugin install committed" || fail "Plugin install did NOT commit"
 grep -q "blockrun_predexon_endpoint_call" $INSTALL_A && pass "NEW TOOL blockrun_predexon_endpoint_call registered" || fail "NEW TOOL missing"
 echo ""
 
 echo "=== Step 4: clawrouter setup (writes models config + web_search enabled) ==="
-node /root/.openclaw/extensions/clawrouter/dist/cli.js setup 2>&1 | tail -12
+BLOCKRUN_CLAWROUTER_INSTALL_SPEC=/tmp/clawrouter.tgz node /root/.openclaw/extensions/blockrun-clawrouter/dist/cli.js setup 2>&1 | tail -12
 echo ""
 BLOCKRUN_MODELS=$(jq -r '.models.providers.blockrun.models | length' $HOME/.openclaw/openclaw.json 2>/dev/null || echo 0)
 ALLOWLIST=$(jq -r '.agents.defaults.models | to_entries | map(select(.key | startswith("blockrun/"))) | length' $HOME/.openclaw/openclaw.json 2>/dev/null || echo 0)
@@ -46,7 +51,7 @@ echo "Injected legacy. provider=$(jq -r '.tools.web.search.provider' $HOME/.open
 echo ""
 echo "=== Step 5b: Install WITHOUT migration → expected to fail with validator collision ==="
 INSTALL_NOMIG=$(mktemp)
-openclaw plugins install --force /tmp/clawrouter.tgz 2>&1 | tee $INSTALL_NOMIG | tail -8
+openclaw plugins install --force "${OPENCLAW_CAPABILITY_ARGS[@]}" /tmp/clawrouter.tgz 2>&1 | tee $INSTALL_NOMIG | tail -8
 grep -q "unknown web_search provider" $INSTALL_NOMIG && pass "Validator failure reproduced (root cause)" || fail "Did NOT reproduce validator failure"
 echo ""
 
@@ -66,14 +71,14 @@ echo "Post-migration provider: $(jq -r '.tools.web.search.provider // "absent"' 
 echo ""
 echo "=== Step 7: Re-install AFTER migration → should succeed ==="
 INSTALL_B=$(mktemp)
-openclaw plugins install --force /tmp/clawrouter.tgz 2>&1 | tee $INSTALL_B | tail -25
+openclaw plugins install --force "${OPENCLAW_CAPABILITY_ARGS[@]}" /tmp/clawrouter.tgz 2>&1 | tee $INSTALL_B | tail -25
 echo ""
 
 if grep -q "unknown web_search provider" $INSTALL_B; then
   fail "Re-install hit validator collision (migration ineffective)"
 elif grep -q "Config write rejected" $INSTALL_B; then
   fail "Re-install hit size-drop"
-elif grep -q "Installed plugin: clawrouter" $INSTALL_B; then
+elif grep -q "Installed plugin: blockrun-clawrouter" $INSTALL_B; then
   pass "Re-install after migration succeeded"
 else
   fail "Re-install: unknown failure"

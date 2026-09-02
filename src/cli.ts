@@ -63,6 +63,7 @@ Options:
   --version, -v     Show version number
   --help, -h        Show this help message
   --port <number>   Port to listen on (default: ${getProxyPort()})
+  --no-reuse        Refuse an existing listener (used by managed Desktop startup)
 
 Query Commands (talk to running proxy on localhost:${getProxyPort()}):
   status            Proxy status: wallet, balance, payment chain
@@ -545,11 +546,24 @@ async function cmdCache(port: number): Promise<void> {
  */
 async function cmdSetup(): Promise<void> {
   const { execFileSync, execSync } = await import("node:child_process");
-  const { existsSync } = await import("node:fs");
+  const {
+    copyFileSync,
+    cpSync,
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    renameSync,
+    rmSync,
+    unlinkSync,
+    writeFileSync,
+  } = await import("node:fs");
   const { dirname, join } = await import("node:path");
   const { homedir } = await import("node:os");
   const { injectModelsConfig, injectAuthProfile, syncAgentModelCache, VISIBLE_OPENCLAW_MODELS } =
     await import("./index.js");
+  const { BLOCKRUN_PLUGIN_ID, prepareBlockRunPluginConfig } =
+    await import("./openclaw-plugin-config.js");
 
   console.log("🦞 ClawRouter setup\n");
 
@@ -602,28 +616,249 @@ async function cmdSetup(): Promise<void> {
   }
   console.log(`  ✓ Found openclaw at ${openclawPath}`);
 
-  // Step 2: register as an OpenClaw plugin (writes plugins.entries.clawrouter).
-  // OpenClaw 2026.5.2 added strict validation that may reject our config writes
-  // during install (e.g. unknown web_search provider blockrun-exa before the
-  // gateway is running). If that happens, OpenClaw rolls back its own install
-  // record but our injectModelsConfig step below will still populate the user's
-  // openclaw.json correctly — they'll just need to re-run `openclaw plugins
-  // install --force @blockrun/clawrouter` after the gateway has started.
-  console.log("\n→ Registering ClawRouter with OpenClaw...");
-  let installOk = false;
-  try {
-    execFileSync(openclawPath, ["plugins", "install", "--force", "@blockrun/clawrouter"], {
-      stdio: "inherit",
+  // Step 2: preflight config compatibility before installation. Do not add the
+  // renamed id yet: OpenClaw warns about allow/entry ids that are not installed.
+  // Never remove `clawrouter`: OpenClaw owns that id.
+  const configPath = join(homedir(), ".openclaw", "openclaw.json");
+  const configInitiallyExisted = existsSync(configPath);
+  const configRollbackBackup = configInitiallyExisted
+    ? `${configPath}.before-${BLOCKRUN_PLUGIN_ID}.${Date.now()}`
+    : undefined;
+  if (configRollbackBackup) copyFileSync(configPath, configRollbackBackup);
+  const ensureConfigRollbackBackup = (): string | undefined => {
+    return configRollbackBackup;
+  };
+  let installAttempted = false;
+  const openclawRoot = join(homedir(), ".openclaw");
+  const findManagedBlockRunInstalls = (): string[] => {
+    const candidates = [
+      join(openclawRoot, "extensions", BLOCKRUN_PLUGIN_ID),
+      join(openclawRoot, "extensions", "clawrouter"),
+      join(openclawRoot, "npm", "node_modules", "@blockrun", "clawrouter"),
+    ];
+    const projectsDir = join(openclawRoot, "npm", "projects");
+    try {
+      for (const project of readdirSync(projectsDir)) {
+        candidates.push(join(projectsDir, project, "node_modules", "@blockrun", "clawrouter"));
+      }
+    } catch {
+      // OpenClaw has not created an npm-project store yet.
+    }
+    return [...new Set(candidates)].filter((candidate) => {
+      try {
+        const metadata = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8")) as {
+          name?: unknown;
+        };
+        return metadata.name === "@blockrun/clawrouter";
+      } catch {
+        return false;
+      }
     });
-    installOk = true;
+  };
+  const initialPluginDirs = findManagedBlockRunInstalls();
+  const setupRollbackRoot = join(
+    openclawRoot,
+    "blockrun",
+    "setup-rollbacks",
+    `${Date.now()}-${process.pid}`,
+  );
+  const pluginRollbackBackups = new Map<string, string>();
+  if (initialPluginDirs.length > 0) {
+    mkdirSync(setupRollbackRoot, { recursive: true, mode: 0o700 });
+    for (const [index, pluginDir] of initialPluginDirs.entries()) {
+      const backup = join(setupRollbackRoot, String(index));
+      cpSync(pluginDir, backup, { recursive: true });
+      pluginRollbackBackups.set(pluginDir, backup);
+    }
+  }
+  const restoreSetupConfig = (): void => {
+    if (configRollbackBackup && existsSync(configRollbackBackup)) {
+      copyFileSync(configRollbackBackup, configPath);
+      console.error(`  ✓ Restored original OpenClaw config from ${configRollbackBackup}`);
+    } else if (!configInitiallyExisted && existsSync(configPath)) {
+      rmSync(configPath);
+      console.error("  ✓ Removed the partially created OpenClaw config");
+    }
+  };
+  const rollbackSetup = (): void => {
+    if (installAttempted) {
+      if (initialPluginDirs.length === 0) {
+        try {
+          execFileSync(openclawPath, ["plugins", "uninstall", "--force", BLOCKRUN_PLUGIN_ID], {
+            stdio: "ignore",
+            timeout: 30_000,
+          });
+        } catch {
+          // Restoring the original config below still leaves a failed install inactive.
+        }
+      }
+      for (const currentDir of findManagedBlockRunInstalls()) {
+        if (!pluginRollbackBackups.has(currentDir)) {
+          rmSync(currentDir, { recursive: true, force: true });
+        }
+      }
+      for (const [pluginDir, backup] of pluginRollbackBackups) {
+        if (!existsSync(backup)) continue;
+        rmSync(pluginDir, { recursive: true, force: true });
+        mkdirSync(dirname(pluginDir), { recursive: true });
+        cpSync(backup, pluginDir, { recursive: true });
+      }
+    }
+    restoreSetupConfig();
+    rmSync(setupRollbackRoot, { recursive: true, force: true });
+  };
+  let legacyBlockRunInstall = false;
+  let stagedLegacyEntry: Record<string, unknown> | undefined;
+  if (existsSync(configPath)) {
+    try {
+      const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+      const legacyPackagePath = join(
+        homedir(),
+        ".openclaw",
+        "extensions",
+        "clawrouter",
+        "package.json",
+      );
+      if (existsSync(legacyPackagePath)) {
+        try {
+          const legacyPackage = JSON.parse(readFileSync(legacyPackagePath, "utf8")) as {
+            name?: unknown;
+          };
+          legacyBlockRunInstall = legacyPackage.name === "@blockrun/clawrouter";
+        } catch {
+          // An unreadable directory is not proof that the official id was ours.
+        }
+      }
+
+      let stripUnsupportedInstalls = false;
+      try {
+        execFileSync(openclawPath, ["config", "validate"], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 30_000,
+        });
+      } catch (error) {
+        const output = `${error instanceof Error ? error.message : String(error)} ${
+          typeof error === "object" && error && "stdout" in error ? String(error.stdout) : ""
+        } ${typeof error === "object" && error && "stderr" in error ? String(error.stderr) : ""}`;
+        stripUnsupportedInstalls =
+          output.includes("Unrecognized key") && output.includes("installs");
+      }
+
+      let configChanged = false;
+      if (legacyBlockRunInstall) {
+        const stagedConfig = structuredClone(config);
+        prepareBlockRunPluginConfig(stagedConfig, { legacyBlockRunInstall: true });
+        const stagedPlugins = stagedConfig.plugins as
+          { entries?: Record<string, Record<string, unknown>> } | undefined;
+        const stagedEntries = stagedPlugins?.entries;
+        stagedLegacyEntry = stagedEntries?.[BLOCKRUN_PLUGIN_ID];
+        const livePlugins = config.plugins as
+          { entries?: Record<string, Record<string, unknown>> } | undefined;
+        if (stagedEntries?.clawrouter && livePlugins?.entries?.clawrouter) {
+          if (
+            JSON.stringify(livePlugins.entries.clawrouter) !==
+            JSON.stringify(stagedEntries.clawrouter)
+          ) {
+            livePlugins.entries.clawrouter = stagedEntries.clawrouter;
+            configChanged = true;
+          }
+        }
+      }
+      configChanged =
+        prepareBlockRunPluginConfig(config, { stripUnsupportedInstalls }) || configChanged;
+
+      if (configChanged) {
+        const backupPath = ensureConfigRollbackBackup();
+        const tmpPath = `${configPath}.tmp.${process.pid}`;
+        writeFileSync(tmpPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+        renameSync(tmpPath, configPath);
+        console.log(`  ✓ Prepared OpenClaw 2.0 config (backup: ${backupPath})`);
+      }
+    } catch (err) {
+      rollbackSetup();
+      console.error(
+        `  ✗ Cannot safely prepare OpenClaw config: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
+  }
+
+  // Register with the managed OpenClaw plugin lifecycle. OpenClaw 2.0 requires
+  // explicit capability consent for this plugin's declared tools.
+  console.log("\n→ Registering ClawRouter with OpenClaw...");
+  try {
+    let acceptsCapabilities = false;
+    try {
+      const help = execFileSync(openclawPath, ["plugins", "install", "--help"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000,
+      });
+      acceptsCapabilities = help.includes("--accept-capabilities");
+    } catch {
+      // Older OpenClaw versions do not need the flag.
+    }
+    const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC ?? "@blockrun/clawrouter";
+    const installArgs = ["plugins", "install", "--force"];
+    if (acceptsCapabilities) installArgs.push("--accept-capabilities");
+    installArgs.push(installSpec);
+    installAttempted = true;
+    execFileSync(openclawPath, installArgs, {
+      stdio: "inherit",
+      timeout: 180_000,
+    });
   } catch (err) {
-    console.warn(
-      `  ⚠ openclaw plugins install reported a problem: ${err instanceof Error ? err.message : String(err)}`,
+    rollbackSetup();
+    console.error(
+      `  ✗ OpenClaw plugin install failed: ${err instanceof Error ? err.message : String(err)}`,
     );
-    console.warn("    Continuing with manual config sync — if validation rejected the install,");
-    console.warn(
-      "    re-run `openclaw plugins install --force @blockrun/clawrouter` after gateway start.",
+    console.error(
+      "    Configuration was rolled back. Fix the error and run `clawrouter setup` again.",
     );
+    process.exit(1);
+  }
+
+  // The plugin now exists, so enabling its new id no longer produces stale-id
+  // warnings. A configured plugins.allow list is exclusive, which is why this
+  // explicit post-install step cannot rely on the plugin activating itself.
+  if (existsSync(configPath)) {
+    try {
+      const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+      if (stagedLegacyEntry) {
+        const plugins = (config.plugins ??= {}) as Record<string, unknown>;
+        const entries = (plugins.entries ??= {}) as Record<string, unknown>;
+        const current = (entries[BLOCKRUN_PLUGIN_ID] ?? {}) as Record<string, unknown>;
+        const stagedConfig = stagedLegacyEntry.config as Record<string, unknown> | undefined;
+        const currentConfig = current.config as Record<string, unknown> | undefined;
+        entries[BLOCKRUN_PLUGIN_ID] = {
+          ...stagedLegacyEntry,
+          ...current,
+          ...(stagedConfig || currentConfig
+            ? { config: { ...stagedConfig, ...currentConfig } }
+            : {}),
+        };
+      }
+      const configChanged = prepareBlockRunPluginConfig(config, {
+        explicitSetup: true,
+        legacyBlockRunInstall,
+      });
+      if (stagedLegacyEntry || configChanged) {
+        const backupPath = ensureConfigRollbackBackup();
+        const tmpPath = `${configPath}.tmp.${process.pid}`;
+        writeFileSync(tmpPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+        renameSync(tmpPath, configPath);
+        console.log(
+          `  ✓ Enabled ${BLOCKRUN_PLUGIN_ID}${backupPath ? ` (backup: ${backupPath})` : ""}`,
+        );
+      }
+    } catch (err) {
+      rollbackSetup();
+      console.error(
+        `  ✗ Plugin installed, but its config could not be enabled safely: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
   }
 
   // Step 3: sync the models allowlist + provider config + auth profile directly.
@@ -635,18 +870,20 @@ async function cmdSetup(): Promise<void> {
     info: (msg: string) => console.log(`  ${msg}`),
   };
   try {
+    if (existsSync(configPath)) ensureConfigRollbackBackup();
     injectModelsConfig(setupLogger, { forceWrite: true });
     syncAgentModelCache(setupLogger, { forceWrite: true });
     injectAuthProfile(setupLogger);
   } catch (err) {
+    rollbackSetup();
     console.error(`  ✗ Config sync failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 
-  if (installOk) {
-    console.log("\n✓ Setup complete.");
-  } else {
-    console.log("\n✓ Models config synced (plugin registration may need a manual retry).");
+  console.log("\n✓ Setup complete.");
+  rmSync(setupRollbackRoot, { recursive: true, force: true });
+  if (configRollbackBackup && existsSync(configRollbackBackup)) {
+    unlinkSync(configRollbackBackup);
   }
   console.log("\nNext: restart the gateway to load ClawRouter:");
   console.log("  openclaw gateway restart");
@@ -669,6 +906,7 @@ function parseArgs(args: string[]): {
   walletRecover: boolean;
   chain?: "solana" | "base";
   port?: number;
+  noReuse: boolean;
   // Query commands
   queryStatus: boolean;
   queryWallet: boolean;
@@ -706,6 +944,7 @@ function parseArgs(args: string[]): {
     walletRecover: false,
     chain: undefined as "solana" | "base" | undefined,
     port: undefined as number | undefined,
+    noReuse: false,
     queryStatus: false,
     queryWallet: false,
     queryModels: false,
@@ -797,6 +1036,8 @@ function parseArgs(args: string[]): {
     } else if (arg === "--port" && args[i + 1]) {
       result.port = parseInt(args[i + 1], 10);
       i++;
+    } else if (arg === "--no-reuse") {
+      result.noReuse = true;
     } else if (arg === "setup") {
       result.setup = true;
     } else if (arg === "phone") {
@@ -1042,21 +1283,18 @@ async function main(): Promise<void> {
     const targetChain = args.chain;
 
     if (targetChain === "solana") {
-      // Ensure Solana wallet is set up (mnemonic → keypair)
-      const { existsSync } = await import("fs");
+      // Reuse the BlockRun Core Solana wallet, migrating a legacy mnemonic on
+      // first use. Only generate a new Solana key if neither source exists.
       const { MNEMONIC_FILE, setupSolana } = await import("./auth.js");
-      const { deriveSolanaKeyBytes, getSolanaAddress } = await import("./wallet.js");
+      const { getSolanaAddress } = await import("./wallet.js");
+      const wallet = await resolveOrGenerateWalletKey();
 
       let solanaAddr: string;
-      if (existsSync(MNEMONIC_FILE)) {
-        // Already set up — derive address from existing mnemonic
-        const { readFileSync } = await import("fs");
-        const mnemonic = readFileSync(MNEMONIC_FILE, "utf8").trim();
-        const keyBytes = deriveSolanaKeyBytes(mnemonic);
-        solanaAddr = await getSolanaAddress(keyBytes);
-        console.log(`[ClawRouter] Solana wallet already set up.`);
+      if (wallet.solanaPrivateKeyBytes) {
+        solanaAddr = await getSolanaAddress(wallet.solanaPrivateKeyBytes);
+        console.log(`[ClawRouter] Using BlockRun Core Solana wallet.`);
       } else {
-        // First time — generate mnemonic + keypair
+        // First time — generate a Core Solana key and keep a recovery mnemonic.
         console.log(`[ClawRouter] Setting up Solana wallet...`);
         const { solanaPrivateKeyBytes } = await setupSolana();
         solanaAddr = await getSolanaAddress(solanaPrivateKeyBytes);
@@ -1091,6 +1329,8 @@ async function main(): Promise<void> {
 
   if (wallet.source === "generated") {
     console.log(`[ClawRouter] Generated new wallet: ${wallet.address}`);
+  } else if (wallet.source === "core") {
+    console.log(`[ClawRouter] Using BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "saved") {
     console.log(`[ClawRouter] Using saved wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
@@ -1113,6 +1353,7 @@ async function main(): Promise<void> {
   const proxy = await startProxy({
     wallet,
     port: args.port,
+    allowExistingProxy: !args.noReuse,
     onReady: (port) => {
       console.log(`[ClawRouter] v${VERSION} | Proxy listening on http://127.0.0.1:${port}`);
       console.log(`[ClawRouter] Health check: http://127.0.0.1:${port}/health`);

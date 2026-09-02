@@ -16,13 +16,15 @@ const HEALTH_TIMEOUT_MS = 5_000;
 let proxyHandle: ProxyHandle | undefined;
 
 function getTestPort(): number {
-  // Keep worker 1 on the historical default (8402), then offset others.
+  const explicit = Number.parseInt(process.env.CLAWROUTER_TEST_PORT ?? "", 10);
+  if (Number.isInteger(explicit) && explicit >= 1024 && explicit <= 65535) return explicit;
+
+  // Never use the production default (8402): a developer may have the real
+  // desktop proxy running while tests execute. PID + worker keeps Vitest fork
+  // pools isolated without a shared fixed-port collision.
   const workerRaw = process.env.VITEST_POOL_ID ?? process.env.VITEST_WORKER_ID ?? "1";
   const workerId = Number.parseInt(workerRaw, 10);
-  if (Number.isInteger(workerId) && workerId >= 1) {
-    return 8401 + workerId;
-  }
-  return 8402;
+  return 20_000 + ((process.pid * 37 + (Number.isInteger(workerId) ? workerId : 1)) % 30_000);
 }
 
 /**
@@ -67,7 +69,7 @@ export async function stopTestProxy(): Promise<void> {
 }
 
 /**
- * Get the base URL of the running test proxy (e.g. http://127.0.0.1:8402).
+ * Get the base URL of the running test proxy.
  * Throws if the proxy has not been started.
  */
 export function getTestProxyUrl(): string {

@@ -136,6 +136,15 @@ console.log("\n═══ Part 2: Proxy Reuse ═══\n");
       `Original proxy still running after reused handle closed: ${health3Data.status}`,
     );
 
+    // Managed callers must never fall back to the shape-only reuse path.
+    let strictRejected = false;
+    try {
+      await startProxy({ wallet: walletKey, port: testPort, allowExistingProxy: false });
+    } catch (error) {
+      strictRejected = (error as NodeJS.ErrnoException).code === "EADDRINUSE";
+    }
+    assert(strictRejected, "Strict startup rejects an occupied port instead of reusing it");
+
     // Close first proxy
     await proxy1.close();
     console.log("  First proxy closed.");

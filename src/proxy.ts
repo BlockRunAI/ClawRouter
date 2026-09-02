@@ -20,6 +20,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHmac } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 // Per-request payment tracking via AsyncLocalStorage (safe for concurrent requests).
@@ -60,6 +61,7 @@ import {
 import { classifyByRules } from "./router/index.js";
 import {
   BLOCKRUN_MODELS,
+  MODEL_ALIASES,
   OPENCLAW_MODELS,
   resolveModelAlias,
   isReasoningModel,
@@ -108,6 +110,9 @@ import { isSharePreset, transform } from "./share-formatters.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
+const DESKTOP_SERVICE_TOKEN_FILE =
+  process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ??
+  join(homedir(), ".clawrouter-desktop", "service-token");
 const IMAGE_DIR = join(homedir(), ".openclaw", "blockrun", "images");
 const AUDIO_DIR = join(homedir(), ".openclaw", "blockrun", "audio");
 const VIDEO_DIR = join(homedir(), ".openclaw", "blockrun", "videos");
@@ -1432,6 +1437,12 @@ export type ProxyOptions = {
   paymentChain?: PaymentChain;
   /** Port to listen on (default: 8402) */
   port?: number;
+  /**
+   * Reuse a compatible process already listening on the requested port.
+   * Desktop disables this because it must only configure agents against a
+   * process whose lifecycle it owns.
+   */
+  allowExistingProxy?: boolean;
   routingConfig?: Partial<RoutingConfig>;
   /** Request timeout in ms (default: 180000 = 3 minutes). Covers on-chain tx + LLM response. */
   requestTimeoutMs?: number;
@@ -1557,6 +1568,15 @@ type ModelListEntry = {
   object: "model";
   created: number;
   owned_by: string;
+  name: string;
+  context_window: number;
+  max_output: number;
+  input_price: number;
+  output_price: number;
+  reasoning: boolean;
+  vision: boolean;
+  agentic: boolean;
+  tool_calling: boolean;
 };
 
 /**
@@ -1573,12 +1593,25 @@ export function buildProxyModelList(
     if (seen.has(model.id)) return false;
     seen.add(model.id);
     return true;
-  }).map((model) => ({
-    id: model.id,
-    object: "model",
-    created: createdAt,
-    owned_by: model.id.includes("/") ? (model.id.split("/")[0] ?? "blockrun") : "blockrun",
-  }));
+  }).map((model) => {
+    const targetId = MODEL_ALIASES[model.id] ?? model.id;
+    const canonical = BLOCKRUN_MODELS.find((entry) => entry.id === targetId);
+    return {
+      id: model.id,
+      object: "model",
+      created: createdAt,
+      owned_by: targetId.includes("/") ? (targetId.split("/")[0] ?? "blockrun") : "blockrun",
+      name: model.name,
+      context_window: model.contextWindow,
+      max_output: model.maxTokens,
+      input_price: model.cost.input,
+      output_price: model.cost.output,
+      reasoning: model.reasoning,
+      vision: model.input.includes("image"),
+      agentic: canonical?.agentic ?? false,
+      tool_calling: canonical?.toolCalling ?? false,
+    };
+  });
 }
 
 /**
@@ -2253,7 +2286,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const listenPort = options.port ?? getProxyPort();
 
   // Check if a proxy is already running on this port
-  const existingProxy = await checkExistingProxy(listenPort);
+  const existingProxy =
+    options.allowExistingProxy === false ? undefined : await checkExistingProxy(listenPort);
   if (existingProxy) {
     // Proxy already running — reuse it instead of failing with EADDRINUSE
     const account = privateKeyToAccount(walletKey as `0x${string}`);
@@ -2485,7 +2519,25 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           }
         }
 
-        res.writeHead(200, { "Content-Type": "application/json" });
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        };
+        const challengeValue = req.headers["x-clawrouter-challenge"];
+        const challenge = Array.isArray(challengeValue) ? challengeValue[0] : challengeValue;
+        if (challenge && /^[a-f0-9]{64}$/i.test(challenge)) {
+          try {
+            const token = readFileSync(DESKTOP_SERVICE_TOKEN_FILE, "utf8").trim();
+            if (/^[a-f0-9]{64}$/i.test(token)) {
+              headers["X-ClawRouter-Proof"] = createHmac("sha256", token)
+                .update(challenge)
+                .digest("hex");
+            }
+          } catch {
+            // Desktop identity proof is optional for ordinary health clients.
+          }
+        }
+        res.writeHead(200, headers);
         res.end(JSON.stringify(response));
         return;
       }
@@ -3523,6 +3575,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         server.removeListener("error", onError);
 
         if (err.code === "EADDRINUSE") {
+          if (options.allowExistingProxy === false) {
+            rejectAttempt(err);
+            return;
+          }
           // Port is in use - check if a proxy is actually running
           const existingProxy2 = await checkExistingProxy(listenPort);
           if (existingProxy2) {

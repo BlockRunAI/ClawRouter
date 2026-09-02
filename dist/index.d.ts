@@ -359,6 +359,9 @@ type OpenClawPluginDefinition = {
     };
 };
 
+/** OpenClaw's bundled router owns `clawrouter`; BlockRun must never claim it. */
+declare const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+
 /**
  * Response Cache for LLM Completions
  *
@@ -1004,6 +1007,12 @@ type ProxyOptions = {
     paymentChain?: PaymentChain;
     /** Port to listen on (default: 8402) */
     port?: number;
+    /**
+     * Reuse a compatible process already listening on the requested port.
+     * Desktop disables this because it must only configure agents against a
+     * process whose lifecycle it owns.
+     */
+    allowExistingProxy?: boolean;
     routingConfig?: Partial<RoutingConfig>;
     /** Request timeout in ms (default: 180000 = 3 minutes). Covers on-chain tx + LLM response. */
     requestTimeoutMs?: number;
@@ -1106,21 +1115,21 @@ type ProxyHandle = {
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
 
 /**
- * Resolve wallet key: load saved → env var → auto-generate.
- * Also loads mnemonic if available for Solana key derivation.
+ * Resolve wallet key: migrate legacy files → explicit env → Core → legacy → generate.
+ * Also loads Core Solana material or a legacy mnemonic-derived key when available.
  * Called by index.ts before the auth wizard runs.
  */
 type WalletResolution = {
     key: string;
     address: string;
-    source: "saved" | "env" | "config" | "generated";
+    source: "core" | "saved" | "env" | "config" | "generated";
     mnemonic?: string;
     solanaPrivateKeyBytes?: Uint8Array;
 };
 /**
  * Set up Solana wallet for existing EVM-only users.
  * Generates a new mnemonic for Solana key derivation.
- * NEVER touches the existing wallet.key file.
+ * NEVER changes the existing Base wallet.
  */
 declare function setupSolana(): Promise<{
     mnemonic: string;
@@ -1324,6 +1333,9 @@ declare class RequestDeduplicator {
     private prune;
 }
 
+/** Derive the Solana seed at m/44'/501'/0'/0' using SLIP-0010 Ed25519. */
+declare function deriveSolanaKeyBytes(mnemonic: string): Uint8Array;
+
 /**
  * Wallet Key Derivation
  *
@@ -1355,17 +1367,7 @@ declare function deriveEvmKey(mnemonic: string): {
     privateKey: `0x${string}`;
     address: string;
 };
-/**
- * Derive 32-byte Solana private key using SLIP-10 Ed25519 derivation.
- * Path: m/44'/501'/0'/0' (Phantom / Solflare / Backpack compatible)
- *
- * Algorithm (SLIP-0010 for Ed25519):
- *   1. Master: HMAC-SHA512(key="ed25519 seed", data=bip39_seed) → IL=key, IR=chainCode
- *   2. For each hardened child index:
- *      HMAC-SHA512(key=chainCode, data=0x00 || key || ser32(index)) → split again
- *   3. Final IL (32 bytes) = Ed25519 private key seed
- */
-declare function deriveSolanaKeyBytes(mnemonic: string): Uint8Array;
+
 /**
  * Derive both EVM and Solana keys from a single mnemonic.
  */
@@ -1729,13 +1731,7 @@ declare function parseCallArgs(raw: string): {
  * Delegates to the local proxy (which handles x402 payment).
  */
 declare function buildImageGenerationProvider(): ImageGenerationProviderPlugin;
-/**
- * This plugin's OpenClaw id. NOT "clawrouter" — OpenClaw bundles its own plugin
- * under that id since the 2026.7.1 line, and a duplicate loses to the bundled
- * one. Kept as one constant so the manifest, the plugin definition and the
- * config migration can never drift apart. See #305.
- */
-declare const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+
 declare const plugin: OpenClawPluginDefinition;
 
 export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };

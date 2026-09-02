@@ -35,7 +35,8 @@
       "blockrun_phone_numbers_list",
       "blockrun_phone_numbers_release",
       "blockrun_voice_call",
-      "blockrun_voice_status"
+      "blockrun_voice_status",
+      "blockrun_polymarket"
     ],
     "webSearchProviders": ["blockrun-exa"]
   },

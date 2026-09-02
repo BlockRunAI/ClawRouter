@@ -21,7 +21,7 @@ Complete reference for ClawRouter configuration options.
 
 | Variable                    | Default                               | Description                                                                       |
 | --------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
-| `BLOCKRUN_WALLET_KEY`       | -                                     | Ethereum private key (hex, 0x-prefixed). Used if no saved wallet exists.          |
+| `BLOCKRUN_WALLET_KEY`       | -                                     | Explicit Base wallet override (hex, 0x-prefixed).                                 |
 | `BLOCKRUN_PROXY_PORT`       | `8402`                                | Port for the local x402 proxy server.                                             |
 | `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                                      |
 | `CLAWROUTER_DISABLED`       | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).             |
@@ -39,11 +39,12 @@ export BLOCKRUN_WALLET_KEY=0x...your_private_key...
 
 **Resolution order:**
 
-1. Saved file (`~/.openclaw/blockrun/wallet.key`) — checked first
-2. `BLOCKRUN_WALLET_KEY` environment variable — used if no saved file
-3. Auto-generate — creates new wallet and saves to file
+1. `BLOCKRUN_WALLET_KEY` environment variable — explicit override
+2. BlockRun Core wallet (`~/.blockrun/.session` and `~/.blockrun/.solana-session`)
+3. Legacy ClawRouter wallet (`~/.openclaw/blockrun/`) — copied into Core automatically
+4. Auto-generate — creates a Core wallet plus legacy recovery files
 
-> **Security Note:** The saved file takes priority to prevent accidentally switching wallets and losing access to funded balances.
+> **Migration safety:** Existing Core files are never overwritten. Legacy files are copied, not moved or deleted, so they remain available for rollback and recovery.
 
 ### BLOCKRUN_PROXY_PORT
 
@@ -162,15 +163,15 @@ Response (dual-chain):
 /wallet base      # Switch to Base (EVM) USDC payments
 ```
 
-The selected chain is persisted across gateway restarts (in `~/.openclaw/blockrun/payment-chain`). New installs default to **Solana** (persisted when the wallet is first generated); existing installs without a saved selection stay on **Base**, where their funds already live. The `CLAWROUTER_PAYMENT_CHAIN` environment variable (`solana` or `base`) overrides the persisted selection.
+The selected chain is persisted across gateway restarts in `~/.blockrun/.chain` (and mirrored to the legacy `~/.openclaw/blockrun/payment-chain` file for rollback compatibility). New installs default to **Solana**; existing installs without a saved selection stay on **Base**, where their funds already live. The `CLAWROUTER_PAYMENT_CHAIN` environment variable (`solana` or `base`) overrides the persisted selection.
 
 ### Switch Wallets
 
 To use a different wallet:
 
 ```bash
-# 1. Remove saved wallet
-rm ~/.openclaw/blockrun/wallet.key
+# 1. Back up the current Core wallet
+cp -R ~/.blockrun ~/blockrun-wallet-backup
 
 # 2. Set new wallet key
 export BLOCKRUN_WALLET_KEY=0x...
@@ -182,16 +183,16 @@ openclaw gateway restart
 ### Backup Wallet
 
 ```bash
-# Backup wallet key
-cp ~/.openclaw/blockrun/wallet.key ~/backup/
-
-# View wallet address from key file
-cat ~/.openclaw/blockrun/wallet.key
+# Back up the complete Core wallet directory
+cp -R ~/.blockrun ~/blockrun-wallet-backup
 ```
+
+Use `/wallet` in OpenClaw chat to view wallet addresses and balances. Never
+print or share `~/.blockrun/.session`—it contains your Base private key.
 
 ### Wallet Backup & Recovery
 
-ClawRouter generates a **BIP-39 mnemonic** on first install — stored at `~/.openclaw/blockrun/wallet.key`. This single mnemonic derives both your EVM (Base) and Solana addresses. **Back up this file before terminating any VPS or machine!**
+BlockRun Core stores the Base private key at `~/.blockrun/.session`, the Solana key at `~/.blockrun/.solana-session`, and the selected chain at `~/.blockrun/.chain`. ClawRouter-generated wallets also retain the recovery mnemonic at `~/.openclaw/blockrun/mnemonic`. **Back up both directories before terminating any VPS or machine.**
 
 #### Using the `/wallet` Command
 
@@ -208,31 +209,32 @@ The `/wallet export` command displays your mnemonic and keys so you can copy the
 #### Manual Backup
 
 ```bash
-# Option 1: Copy the key file
-cp ~/.openclaw/blockrun/wallet.key ~/backup-wallet.key
+# Option 1: Copy the Core wallet directory
+cp -R ~/.blockrun ~/blockrun-wallet-backup
 
 # Option 2: View mnemonic
-cat ~/.openclaw/blockrun/wallet.key
+cat ~/.openclaw/blockrun/mnemonic
 ```
 
 #### Restore on a New Machine
 
 ```bash
-# Option 1: Recover from mnemonic
-npx @blockrun/clawrouter wallet recover "word1 word2 ... word12"
+# Option 1: Restore a complete Core backup
+cp -R ~/blockrun-wallet-backup ~/.blockrun
 
 # Option 2: Set environment variable (before installing ClawRouter)
 export BLOCKRUN_WALLET_KEY=0x...your_private_key...
 openclaw plugins install @blockrun/clawrouter
 
-# Option 3: Create the key file directly
+# Option 3: Restore a ClawRouter recovery mnemonic, then migrate on startup
 mkdir -p ~/.openclaw/blockrun
-echo "your twelve word mnemonic here" > ~/.openclaw/blockrun/wallet.key
-chmod 600 ~/.openclaw/blockrun/wallet.key
+echo "your recovery mnemonic here" > ~/.openclaw/blockrun/mnemonic
+chmod 600 ~/.openclaw/blockrun/mnemonic
+npx @blockrun/clawrouter wallet recover
 openclaw plugins install @blockrun/clawrouter
 ```
 
-**Important:** If a saved wallet file exists, it takes priority over the environment variable. To use a different wallet, delete the existing file first.
+**Important:** `BLOCKRUN_WALLET_KEY` is an explicit Base-wallet override. Back up the existing Core directory before replacing wallet files.
 
 #### Lost Key Recovery
 
@@ -241,7 +243,7 @@ If you lose your wallet key, **there is no way to recover it**. The wallet is se
 **Prevention tips:**
 
 - Run `/wallet export` before terminating any VPS
-- Keep a secure backup of `~/.openclaw/blockrun/wallet.key`
+- Keep secure backups of `~/.blockrun` and any legacy recovery mnemonic
 - For production use, consider using a hardware wallet or key management system
 
 ---

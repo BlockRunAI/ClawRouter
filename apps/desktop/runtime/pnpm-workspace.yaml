@@ -1,0 +1,13 @@
+allowBuilds:
+  "@deepseek-ai/dsh-subprocess-local": true
+  "@google/genai": true
+  esbuild: true
+  koffi: true
+  node-pty: true
+  protobufjs: true
+packages:
+  - "."
+overrides:
+  "@blockrun/clawrouter": 0.12.265
+minimumReleaseAgeExclude:
+  - "@blockrun/clawrouter@0.12.265"
