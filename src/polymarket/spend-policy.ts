@@ -11,6 +11,15 @@
 // is ever called. Amount windows apply too, so signed notional is recorded
 // against the shared ledger (fail-closed when an amount cannot be parsed and
 // a cap is configured — see assertSpendPolicyAllows).
+//
+// DELIBERATELY NOT GATED: the one-time approval batch in setup.ts
+// (`sendWalletBatch(buildApprovalCalls(...))`). It signs ERC-20 `approve` and
+// ERC-1155 `setApprovalForAll`, which grant authority rather than move capital,
+// and gating it would be actively harmful: the spenders are Polymarket's own
+// exchange contracts, so an operator running a tight `allowedPayees` list that
+// (correctly) names only their payout addresses would have setup refused. It is
+// already bounded — targets come from `readApprovals()`, never from agent input,
+// and the batch is `confirm`-gated behind an explicit preview.
 import {
   assertSpendPolicyAllows,
   SpendControl,
