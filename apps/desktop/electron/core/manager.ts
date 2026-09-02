@@ -1,8 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { createECDH } from "node:crypto";
+import { createHmac, createPrivateKey, createPublicKey } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
+import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
+import { wordlist as english } from "@scure/bip39/wordlists/english";
 
 import { CodexAdapter } from "../adapters/codex.js";
 import { DshAdapter } from "../adapters/dsh.js";
@@ -202,44 +205,59 @@ export class ClawRouterManager {
 
   async dashboard(): Promise<DashboardData> {
     const root = this.context.proxyBaseUrl.replace(/\/v1\/?$/, "");
-    if (!(await proxyHealth(this.context))) {
+    const localWalletsPromise = this.localWallets();
+    const localBalancesPromise = localWalletsPromise.then(({ base, solana }) =>
+      fetchUsdcBalances(base, solana, this.context.fetch),
+    );
+    const [reachable, configuredChain, localWallets, localBalances] = await Promise.all([
+      proxyHealth(this.context),
+      this.configuredPaymentChain(),
+      localWalletsPromise,
+      localBalancesPromise,
+    ]);
+    if (!reachable) {
       return {
         proxy: {
           reachable: false,
           error: "ClawRouter is not running or could not prove its identity.",
+          wallet: localWallets.base,
+          solana: localWallets.solana,
+          configuredChain,
+          balance: localBalances[configuredChain],
+          balances: localBalances,
         },
         stats: null,
         models: [],
       };
     }
-    const [health, stats, catalog, configuredChain] = await Promise.all([
+    const [health, stats, catalog] = await Promise.all([
       fetchJson<Record<string, unknown>>(`${root}/health?full=true`, this.context.fetch),
       fetchJson<Record<string, unknown>>(`${root}/stats?days=7`, this.context.fetch),
       fetchCatalog(root, this.context.fetch),
-      this.configuredPaymentChain(),
     ]);
     const activeWallet = stringOrUndefined(health.value?.wallet);
-    const preferredWallet = await this.preferredBaseWallet();
-    // The proxy health response is authoritative: it is the key that signs both
-    // Base and Solana requests. A BlockRun CLI session may use another key and
-    // should only trigger restart guidance, never replace the displayed balance.
+    const preferredWallet = localWallets.base;
+    // The proxy health response is authoritative while it is running. The saved
+    // local wallet lets Desktop show the same addresses and balances before the
+    // proxy starts, without ever exposing private key material to the renderer.
     const wallet = activeWallet ?? preferredWallet;
-    const solana = stringOrUndefined(health.value?.solana);
+    const solana = stringOrUndefined(health.value?.solana) ?? localWallets.solana;
     const paymentChain = paymentChainOrUndefined(health.value?.paymentChain);
     const reportedBalance = currencyNumberOrUndefined(health.value?.balance);
-    const [baseBalance, solanaBalance] = await Promise.all([
-      wallet ? fetchBaseBalances(wallet, this.context.fetch) : Promise.resolve(undefined),
-      solana ? fetchSolanaBalances(solana, this.context.fetch) : Promise.resolve(undefined),
-    ]);
+    const activeBalances = await fetchUsdcBalances(
+      wallet && !sameAddress(wallet, localWallets.base) ? wallet : undefined,
+      solana && solana !== localWallets.solana ? solana : undefined,
+      this.context.fetch,
+    );
     const balances: Partial<Record<PaymentChain, number>> = {
       base:
-        baseBalance?.usdc ??
+        activeBalances.base ??
+        (sameAddress(wallet ?? "", localWallets.base) ? localBalances.base : undefined) ??
         (paymentChain === "base" && wallet === activeWallet ? reportedBalance : undefined),
-      solana: solanaBalance?.usdc ?? (paymentChain === "solana" ? reportedBalance : undefined),
-    };
-    const nativeBalances: Partial<Record<PaymentChain, number>> = {
-      base: baseBalance?.native,
-      solana: solanaBalance?.native,
+      solana:
+        activeBalances.solana ??
+        (solana === localWallets.solana ? localBalances.solana : undefined) ??
+        (paymentChain === "solana" ? reportedBalance : undefined),
     };
     const models: ModelInfo[] = (catalog.value?.data ?? []).map((model) => {
       const id = String(model.id ?? "");
@@ -271,14 +289,21 @@ export class ClawRouterManager {
             chainRestartRequired: Boolean(paymentChain && configuredChain !== paymentChain),
             balance: paymentChain ? (balances[paymentChain] ?? reportedBalance) : reportedBalance,
             balances,
-            nativeBalances,
             walletRestartRequired: Boolean(
               preferredWallet &&
               activeWallet &&
               preferredWallet.toLowerCase() !== activeWallet.toLowerCase(),
             ),
           }
-        : { reachable: false, error: health.error },
+        : {
+            reachable: false,
+            error: health.error,
+            wallet: localWallets.base,
+            solana: localWallets.solana,
+            configuredChain,
+            balance: localBalances[configuredChain],
+            balances: localBalances,
+          },
       stats: stats.value,
       models,
     };
@@ -295,16 +320,19 @@ export class ClawRouterManager {
     }
   }
 
-  private async preferredBaseWallet(): Promise<string | undefined> {
-    try {
-      const key = (
-        await readFile(join(this.context.homeDir, ".blockrun", ".session"), "utf8")
-      ).trim();
-      if (!/^0x[0-9a-f]{64}$/i.test(key)) return undefined;
-      return evmAddressFromPrivateKey(key);
-    } catch {
-      return undefined;
-    }
+  private async localWallets(): Promise<{ base?: string; solana?: string }> {
+    const walletDir = join(this.context.homeDir, ".openclaw", "blockrun");
+    const clawRouterKey = await readPrivateKey(join(walletDir, "wallet.key"));
+    const coreKey =
+      clawRouterKey ?? (await readPrivateKey(join(this.context.homeDir, ".blockrun", ".session")));
+    const mnemonic = await readText(join(walletDir, "mnemonic"));
+    return {
+      base: coreKey ? evmAddressFromPrivateKey(coreKey) : undefined,
+      solana:
+        mnemonic && validateMnemonic(mnemonic, english)
+          ? solanaAddressFromMnemonic(mnemonic)
+          : undefined,
+    };
   }
 
   private async decorateStatus(adapter: AgentAdapter, status: AgentStatus): Promise<AgentStatus> {
@@ -408,59 +436,60 @@ function booleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-async function fetchBaseBalances(
-  address: string,
+async function fetchUsdcBalances(
+  baseAddress: string | undefined,
+  solanaAddress: string | undefined,
   fetcher: typeof fetch,
-): Promise<{ usdc?: number; native?: number } | undefined> {
-  if (!/^0x[0-9a-f]{40}$/i.test(address)) return undefined;
-  const data = `0x70a08231${address.slice(2).toLowerCase().padStart(64, "0")}`;
-  const [token, native] = await Promise.all([
-    fetchRpc<{ result?: unknown }>(
-      BASE_RPC_URL,
-      "eth_call",
-      [{ to: BASE_USDC_CONTRACT, data }, "latest"],
-      fetcher,
-    ),
-    fetchRpc<{ result?: unknown }>(BASE_RPC_URL, "eth_getBalance", [address, "latest"], fetcher),
+): Promise<Partial<Record<PaymentChain, number>>> {
+  const [base, solana] = await Promise.all([
+    baseAddress ? fetchBaseUsdcBalance(baseAddress, fetcher) : Promise.resolve(undefined),
+    solanaAddress ? fetchSolanaUsdcBalance(solanaAddress, fetcher) : Promise.resolve(undefined),
   ]);
-  return {
-    usdc: rpcHexNumber(token?.result, 1_000_000),
-    native: rpcHexNumber(native?.result, 1_000_000_000_000_000_000),
-  };
+  return { base, solana };
 }
 
-async function fetchSolanaBalances(
+async function fetchBaseUsdcBalance(
   address: string,
   fetcher: typeof fetch,
-): Promise<{ usdc?: number; native?: number } | undefined> {
+): Promise<number | undefined> {
+  if (!/^0x[0-9a-f]{40}$/i.test(address)) return undefined;
+  const data = `0x70a08231${address.slice(2).toLowerCase().padStart(64, "0")}`;
+  const token = await fetchRpc<{ result?: unknown }>(
+    BASE_RPC_URL,
+    "eth_call",
+    [{ to: BASE_USDC_CONTRACT, data }, "latest"],
+    fetcher,
+  );
+  return rpcHexNumber(token?.result, 1_000_000);
+}
+
+async function fetchSolanaUsdcBalance(
+  address: string,
+  fetcher: typeof fetch,
+): Promise<number | undefined> {
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) return undefined;
-  const [tokens, native] = await Promise.all([
-    fetchRpc<{
-      result?: {
-        value?: Array<{
-          account?: {
-            data?: { parsed?: { info?: { tokenAmount?: { amount?: string; decimals?: number } } } };
-          };
-        }>;
-      };
-    }>(
-      SOLANA_RPC_URL,
-      "getTokenAccountsByOwner",
-      [address, { mint: SOLANA_USDC_MINT }, { encoding: "jsonParsed" }],
-      fetcher,
-    ),
-    fetchRpc<{ result?: { value?: unknown } }>(SOLANA_RPC_URL, "getBalance", [address], fetcher),
-  ]);
+  const tokens = await fetchRpc<{
+    result?: {
+      value?: Array<{
+        account?: {
+          data?: { parsed?: { info?: { tokenAmount?: { amount?: string; decimals?: number } } } };
+        };
+      }>;
+    };
+  }>(
+    SOLANA_RPC_URL,
+    "getTokenAccountsByOwner",
+    [address, { mint: SOLANA_USDC_MINT }, { encoding: "jsonParsed" }],
+    fetcher,
+  );
   const accounts = tokens?.result?.value;
-  const usdc = Array.isArray(accounts)
+  return Array.isArray(accounts)
     ? accounts.reduce((total, item) => {
         const token = item.account?.data?.parsed?.info?.tokenAmount;
         if (!token?.amount || typeof token.decimals !== "number") return total;
         return total + Number(BigInt(token.amount)) / 10 ** token.decimals;
       }, 0)
     : undefined;
-  const lamports = native?.result?.value;
-  return { usdc, native: typeof lamports === "number" ? lamports / 1_000_000_000 : undefined };
 }
 
 function rpcHexNumber(value: unknown, divisor: number): number | undefined {
@@ -469,10 +498,65 @@ function rpcHexNumber(value: unknown, divisor: number): number | undefined {
 }
 
 function evmAddressFromPrivateKey(key: string): string {
-  const ecdh = createECDH("secp256k1");
-  ecdh.setPrivateKey(Buffer.from(key.slice(2), "hex"));
-  const publicKey = ecdh.getPublicKey(undefined, "uncompressed").subarray(1);
+  const publicKey = secp256k1
+    .getPublicKey(Buffer.from(key.slice(2), "hex"), false)
+    .subarray(1);
   return `0x${Buffer.from(keccak_256(publicKey)).subarray(-20).toString("hex")}`;
+}
+
+function sameAddress(left: string, right: string | undefined): boolean {
+  return Boolean(right && left.toLowerCase() === right.toLowerCase());
+}
+
+async function readPrivateKey(path: string): Promise<string | undefined> {
+  const value = await readText(path);
+  return value && /^0x[0-9a-f]{64}$/i.test(value) ? value : undefined;
+}
+
+async function readText(path: string): Promise<string | undefined> {
+  try {
+    return (await readFile(path, "utf8")).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function solanaAddressFromMnemonic(mnemonic: string): string {
+  const seed = mnemonicToSeedSync(mnemonic);
+  let digest = createHmac("sha512", "ed25519 seed").update(seed).digest();
+  let key = digest.subarray(0, 32);
+  let chainCode = digest.subarray(32);
+  for (const index of [44, 501, 0, 0]) {
+    const hardened = index + 0x80000000;
+    const data = Buffer.alloc(37);
+    data[0] = 0;
+    key.copy(data, 1);
+    data.writeUInt32BE(hardened, 33);
+    digest = createHmac("sha512", chainCode).update(data).digest();
+    key = digest.subarray(0, 32);
+    chainCode = digest.subarray(32);
+  }
+  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), key]);
+  const publicDer = createPublicKey(
+    createPrivateKey({ key: privateDer, format: "der", type: "pkcs8" }),
+  ).export({ format: "der", type: "spki" });
+  return base58Encode(Buffer.from(publicDer).subarray(-32));
+}
+
+function base58Encode(value: Uint8Array): string {
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let number = BigInt(`0x${Buffer.from(value).toString("hex")}`);
+  let encoded = "";
+  while (number > 0n) {
+    const remainder = Number(number % 58n);
+    encoded = alphabet[remainder] + encoded;
+    number /= 58n;
+  }
+  for (const byte of value) {
+    if (byte !== 0) break;
+    encoded = `1${encoded}`;
+  }
+  return encoded || "1";
 }
 
 async function fetchRpc<T>(

@@ -58,7 +58,6 @@ export type DashboardData = {
     chainRestartRequired?: boolean;
     balance?: number;
     balances?: Partial<Record<PaymentChain, number>>;
-    nativeBalances?: Partial<Record<PaymentChain, number>>;
     walletRestartRequired?: boolean;
     error?: string;
   };

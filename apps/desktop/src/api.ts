@@ -104,7 +104,6 @@ const demoDashboard: DashboardData = {
     configuredChain: "base",
     balance: 18.42,
     balances: { base: 18.42, solana: 7.08 },
-    nativeBalances: { base: 0.0034, solana: 0.18 },
   },
   stats: { requests: 284, totalCost: 3.82, savings: 21.14, inputTokens: 812400 },
   models: [

@@ -132,6 +132,59 @@ describe("ClawRouterManager adapter flow", () => {
     expect(dashboard.proxy.balances?.base).toBe(0);
   });
 
+  it("loads both local wallet addresses and USDC balances while the proxy is offline", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-offline-"));
+    const walletDir = join(home, ".openclaw", "blockrun");
+    await mkdir(walletDir, { recursive: true });
+    await writeFile(join(walletDir, "wallet.key"), `0x${"0".repeat(63)}1\n`, { mode: 0o600 });
+    await writeFile(
+      join(walletDir, "mnemonic"),
+      "test test test test test test test test test test test junk\n",
+      { mode: 0o600 },
+    );
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const path = String(url);
+      if (path === "https://mainnet.base.org") {
+        return response({ result: `0x${BigInt(12_500_000).toString(16)}` });
+      }
+      if (path === "https://api.mainnet-beta.solana.com") {
+        const request = JSON.parse(String(init?.body)) as { method: string };
+        expect(request.method).toBe("getTokenAccountsByOwner");
+        return response({
+          result: {
+            value: [
+              {
+                account: {
+                  data: {
+                    parsed: { info: { tokenAmount: { amount: "7250000", decimals: 6 } } },
+                  },
+                },
+              },
+            ],
+          },
+        });
+      }
+      throw new TypeError("proxy offline");
+    }) as typeof fetch;
+    const manager = new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: fetcher,
+    });
+
+    const dashboard = await manager.dashboard();
+    expect(dashboard.proxy).toMatchObject({
+      reachable: false,
+      configuredChain: "base",
+      balance: 12.5,
+      balances: { base: 12.5, solana: 7.25 },
+    });
+    expect(dashboard.proxy.wallet).toMatch(/^0x[0-9a-f]{40}$/i);
+    expect(dashboard.proxy.solana).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+  });
+
   it("shows the active signing wallet and marks a different Core wallet for restart", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-preferred-"));
     await mkdir(join(home, ".blockrun"), { recursive: true });
@@ -143,8 +196,6 @@ describe("ClawRouterManager adapter flow", () => {
         const request = JSON.parse(String(init?.body)) as { method: string };
         if (request.method === "eth_call")
           return response({ result: `0x${BigInt(12_746_213).toString(16)}` });
-        if (request.method === "eth_getBalance")
-          return response({ result: `0x${BigInt(2_000_000_000).toString(16)}` });
       }
       if (path.endsWith("/admin/models")) return new Response("{}", { status: 404 });
       if (path.endsWith("/v1/models")) return response({ data: [] });
@@ -169,7 +220,6 @@ describe("ClawRouterManager adapter flow", () => {
     expect(dashboard.proxy.activeWallet).toBe(staleWallet);
     expect(dashboard.proxy.walletRestartRequired).toBe(true);
     expect(dashboard.proxy.balance).toBe(12.746213);
-    expect(dashboard.proxy.nativeBalances?.base).toBe(0.000000002);
   });
 
   it("disconnects OpenClaw and Hermes safely when their pre-Desktop configs have no backup", async () => {

@@ -18,7 +18,9 @@
     "dist": "npm run build && npm run build:icon && electron-builder --mac dir"
   },
   "dependencies": {
+    "@noble/curves": "2.2.0",
     "@noble/hashes": "2.4.0",
+    "@scure/bip39": "1.6.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "yaml": "2.9.0"

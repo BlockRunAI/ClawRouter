@@ -45,9 +45,19 @@ export function App() {
   });
 
   async function refresh() {
-    const [nextAgents, nextDashboard] = await Promise.all([api.statuses(), api.dashboard()]);
-    setAgents(nextAgents);
-    setDashboard(nextDashboard);
+    await Promise.allSettled([
+      api.statuses().then(setAgents),
+      api.dashboard().then(setDashboard, (error: unknown) =>
+        setDashboard({
+          proxy: {
+            reachable: false,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          stats: null,
+          models: [],
+        }),
+      ),
+    ]);
   }
 
   useEffect(() => {
@@ -142,6 +152,7 @@ export function App() {
         </nav>
         <WalletSummary
           proxy={dashboard?.proxy}
+          loading={dashboard === null}
           busy={chainBusy}
           onSwitch={switchChain}
           onOpen={() => setPage("settings")}
@@ -577,21 +588,17 @@ function Settings({ dashboard, onFund }: { dashboard: DashboardData | null; onFu
             <span>
               <i className="base-coin">B</i>Base
             </span>
-            <strong>{formatWalletBalance(proxy?.balances?.base)}</strong>
-            <small>
-              {formatNativeBalance(proxy?.nativeBalances?.base, "ETH")} ·{" "}
-              {shortAddress(proxy?.wallet ?? "Wallet initializing")}
-            </small>
+            <strong>{formatWalletBalance(proxy?.balances?.base, false, dashboard === null)}</strong>
+            <small>{proxy?.wallet ? shortAddress(proxy.wallet) : "Wallet unavailable"}</small>
           </div>
           <div>
             <span>
               <i className="solana-coin">S</i>Solana
             </span>
-            <strong>{formatWalletBalance(proxy?.balances?.solana)}</strong>
-            <small>
-              {formatNativeBalance(proxy?.nativeBalances?.solana, "SOL")} ·{" "}
-              {shortAddress(proxy?.solana ?? "Wallet initializing")}
-            </small>
+            <strong>
+              {formatWalletBalance(proxy?.balances?.solana, false, dashboard === null)}
+            </strong>
+            <small>{proxy?.solana ? shortAddress(proxy.solana) : "Wallet unavailable"}</small>
           </div>
         </div>
         {proxy?.walletRestartRequired && (
@@ -669,12 +676,14 @@ function RoutingMap() {
 
 function WalletSummary({
   proxy,
+  loading,
   busy,
   onSwitch,
   onOpen,
   onFund,
 }: {
   proxy: DashboardData["proxy"] | undefined;
+  loading: boolean;
   busy: PaymentChain | null;
   onSwitch(chain: PaymentChain): void;
   onOpen(): void;
@@ -707,15 +716,9 @@ function WalletSummary({
           </button>
         ))}
       </div>
-      <strong>{formatWalletBalance(balance)}</strong>
-      <small>
-        {formatNativeBalance(
-          proxy?.nativeBalances?.[selected],
-          selected === "base" ? "ETH" : "SOL",
-        )}
-      </small>
+      <strong>{formatWalletBalance(balance, false, loading)}</strong>
       <button className="wallet-address" onClick={onOpen}>
-        {address ? shortAddress(address) : "Wallet initializing…"}
+        {address ? shortAddress(address) : loading ? "Wallet initializing…" : "Wallet unavailable"}
         <Icon name="external" />
       </button>
       <button className="wallet-fund-button" onClick={onFund}>
@@ -1161,13 +1164,9 @@ function formatModelPrice(model: ModelInfo, value: number | undefined) {
     maximumFractionDigits: 3,
   }).format(value);
 }
-function formatWalletBalance(value: number | undefined, compact = false) {
-  if (value == null) return compact ? "—" : "Checking balance…";
+function formatWalletBalance(value: number | undefined, compact = false, loading = false) {
+  if (value == null) return compact ? "—" : loading ? "Checking balance…" : "Balance unavailable";
   return compact ? `$${value.toFixed(2)}` : `$${value.toFixed(2)} USDC`;
-}
-function formatNativeBalance(value: number | undefined, symbol: "ETH" | "SOL") {
-  if (value == null) return `— ${symbol}`;
-  return `${value.toLocaleString("en-US", { maximumFractionDigits: 9 })} ${symbol}`;
 }
 function removalLabel(agent: AgentStatus) {
   return agent.removalMode === "restore"
