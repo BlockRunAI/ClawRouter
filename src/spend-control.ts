@@ -40,7 +40,15 @@ export const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 
-const POLICY_LISTS: readonly PolicyList[] = [
+/**
+ * Every network the proxy can pay on, as carried on x402
+ * `selectedRequirements.network`. Single source of truth for surfaces that
+ * validate `allowedNetworks` entries: an entry outside this set can never
+ * match a quote and would only block payments.
+ */
+export const PAYABLE_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
+
+export const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",
   "blockedPayees",
   "allowedNetworks",
@@ -174,6 +182,34 @@ export interface SpendControlStorage {
    * back to save() when absent.
    */
   saveHistory?(history: SpendRecord[]): void;
+  /**
+   * Optional: persist limits without touching stored history — the mirror of
+   * saveHistory(). A policy edit from a second process (the CLI) must not
+   * write its own stale history snapshot back over spend the proxy recorded
+   * since, which would reopen a rolling window. Falls back to save() when
+   * absent.
+   */
+  saveLimits?(limits: SpendLimits, expect?: SpendLimits): void;
+}
+
+/** Stored limits as one comparable string: key order does not matter, list order does (setPolicy normalizes it). */
+export function canonicalLimits(limits: SpendLimits): string {
+  return JSON.stringify(
+    Object.fromEntries(Object.entries(limits).sort(([a], [b]) => (a < b ? -1 : 1))),
+  );
+}
+
+/**
+ * Thrown by a compare-and-swap limits write when the stored limits no longer
+ * match what the writer last read: another writer landed in between, and
+ * replacing the whole object would silently drop their change. Nothing is
+ * written; the caller re-reads and decides.
+ */
+export class SpendPolicyConflictError extends Error {
+  constructor() {
+    super("spending.json limits changed underneath this write; nothing was written");
+    this.name = "SpendPolicyConflictError";
+  }
 }
 
 export class FileSpendControlStorage implements SpendControlStorage {
@@ -280,6 +316,29 @@ export class FileSpendControlStorage implements SpendControlStorage {
     }
     this.save({ limits: storedLimits, history });
   }
+
+  /**
+   * Persist limits while leaving the stored history exactly as it is on disk.
+   * With `expect`, refuse when the stored limits are no longer the ones the
+   * writer read — a stale instance must not replace another writer's edit.
+   * The re-read happens immediately before the atomic rename, so the race
+   * window is the write itself, not the whole command.
+   */
+  saveLimits(limits: SpendLimits, expect?: SpendLimits): void {
+    let current: { limits: SpendLimits; history: SpendRecord[] } | null;
+    try {
+      current = this.load();
+    } catch {
+      return; // malformed policy on disk: leave the file alone, as saveHistory does
+    }
+    if (
+      expect !== undefined &&
+      canonicalLimits(current?.limits ?? {}) !== canonicalLimits(expect)
+    ) {
+      throw new SpendPolicyConflictError();
+    }
+    this.save({ limits, history: current?.history ?? [] });
+  }
 }
 
 export class InMemorySpendControlStorage implements SpendControlStorage {
@@ -298,6 +357,19 @@ export class InMemorySpendControlStorage implements SpendControlStorage {
     this.data = {
       limits: cloneLimits(data.limits),
       history: data.history.map((r) => ({ ...r })),
+    };
+  }
+
+  saveLimits(limits: SpendLimits, expect?: SpendLimits): void {
+    if (
+      expect !== undefined &&
+      canonicalLimits(this.data?.limits ?? {}) !== canonicalLimits(expect)
+    ) {
+      throw new SpendPolicyConflictError();
+    }
+    this.data = {
+      limits: cloneLimits(limits),
+      history: this.data?.history.map((r) => ({ ...r })) ?? [],
     };
   }
 }
@@ -323,6 +395,8 @@ export class SpendControl {
   private reservationSeq = 0;
   /** Limits we loaded and have not changed; history-only saves must not clobber operator edits. */
   private limitsDirty = false;
+  /** The limits this instance last read from or wrote to storage — the compare-and-swap baseline. */
+  private diskLimits: SpendLimits = {};
   /** Set when spending.json held an unusable policy list: refuse every payment. */
   private policyFileBroken?: string;
   private readonly storage: SpendControlStorage;
@@ -372,6 +446,16 @@ export class SpendControl {
 
   getLimits(): SpendLimits {
     return cloneLimits(this.limits);
+  }
+
+  /**
+   * Why spending.json could not be loaded, or undefined when it is usable.
+   * While set, every setter mutates memory only: save() refuses to rewrite a
+   * file it could not fully parse, so callers must check this before
+   * reporting a change as applied.
+   */
+  getPolicyFileError(): string | undefined {
+    return this.policyFileBroken;
   }
 
   check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult {
@@ -685,6 +769,27 @@ export class SpendControl {
       this.storage.saveHistory([...this.history]);
       return;
     }
+    if (this.limitsDirty && this.storage.saveLimits) {
+      // Limits changed: write them without this instance's history snapshot,
+      // and only if storage still holds what this instance last read — a
+      // whole-object replace from a stale copy would drop another writer's
+      // edit. On conflict, adopt what landed and let the caller decide;
+      // nothing of this instance's change reaches disk.
+      try {
+        this.storage.saveLimits(cloneLimits(this.limits), cloneLimits(this.diskLimits));
+      } catch (err) {
+        if (err instanceof SpendPolicyConflictError) {
+          const current = this.storage.load();
+          this.limits = cloneLimits(current?.limits ?? {});
+          this.diskLimits = cloneLimits(this.limits);
+          this.limitsDirty = false;
+        }
+        throw err;
+      }
+      this.diskLimits = cloneLimits(this.limits);
+      this.limitsDirty = false;
+      return;
+    }
     this.storage.save({
       limits: cloneLimits(this.limits),
       history: [...this.history],
@@ -710,6 +815,7 @@ export class SpendControl {
     }
     if (data) {
       this.limits = cloneLimits(data.limits);
+      this.diskLimits = cloneLimits(data.limits);
       this.history = data.history;
       this.cleanup();
     }
