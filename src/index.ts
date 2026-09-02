@@ -96,10 +96,10 @@ import { privateKeyToAccount } from "viem/accounts";
 import { getStats } from "./stats.js";
 import { buildPartnerTools, PARTNER_SERVICES } from "./partners/index.js";
 import { buildPolymarketTool } from "./polymarket/tool.js";
+import { getSharedSpendControl } from "./spend-control.js";
 import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
 import { createPolicyCommand } from "./commands/policy.js";
-import { SpendControl } from "./spend-control.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
 import { BLOCKRUN_PLUGIN_ID, prepareBlockRunPluginConfig } from "./openclaw-plugin-config.js";
 
@@ -752,14 +752,6 @@ function removeInjectedAuthPlaceholder(
 
 // Store active proxy handle for cleanup on gateway_stop
 let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
-/**
- * The SpendControl handed to the most recent startProxy(). Only meaningful
- * while activeProxyHandle is set: it is created before startup so it can be
- * passed in, so a failed or superseded start, or a stopped proxy, must not
- * let /policy claim "applied to the running proxy" — the getter below gates
- * on the handle, which every stop/reset path already clears.
- */
-let liveSpendControl: SpendControl | null = null;
 let pendingConfiguredStartupApi: OpenClawPluginApi | null = null;
 type ProcessWithClawRouterState = NodeJS.Process & {
   __clawrouterProxyStarted?: boolean;
@@ -963,7 +955,10 @@ async function startProxyInBackground(
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
-    spendControl: (liveSpendControl = new SpendControl()),
+    // The process-wide ledger: the polymarket tool and the /policy command
+    // registered below use the same instance, so hourly/daily/session windows
+    // cover every surface and a /policy write reaches the live signer.
+    spendControl: getSharedSpendControl(),
     onReady: (port) => {
       api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);
     },
@@ -2042,7 +2037,7 @@ const plugin: OpenClawPluginDefinition = {
       // blockrun_polymarket is a LOCAL trading tool (signs CLOB orders with the
       // ClawRouter wallet key), not an HTTP-proxy partner tool — register it
       // separately so real-money betting works out of the box.
-      api.registerTool(buildPolymarketTool());
+      api.registerTool(buildPolymarketTool({ spendControl: getSharedSpendControl() }));
       if (partnerTools.length > 0 && shouldLogRegistration) {
         api.logger.info(
           `Registered ${partnerTools.length} partner tool(s): ${partnerTools.map((t) => t.name).join(", ")}, blockrun_polymarket`,
@@ -2307,7 +2302,7 @@ const plugin: OpenClawPluginDefinition = {
     api.registerCommand(createExcludeCommand());
     api.registerCommand(
       createPolicyCommand({
-        liveControl: () => (activeProxyHandle ? (liveSpendControl ?? undefined) : undefined),
+        liveControl: () => (activeProxyHandle ? getSharedSpendControl() : undefined),
       }),
     );
     if (shouldLogRegistration) {

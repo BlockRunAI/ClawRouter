@@ -31,7 +31,7 @@ import {
 import { getSolanaAddress } from "./wallet.js";
 import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
-import { registerSpendPolicyHook, SpendControl } from "./spend-control.js";
+import { getSharedSpendControl, registerSpendPolicyHook, SpendControl } from "./spend-control.js";
 import { VERSION } from "./version.js";
 
 // Types
@@ -517,7 +517,7 @@ export function createDoctorX402Client(opts: {
   const publicClient = createPublicClient({ chain: base, transport: http() });
   const evmSigner = toClientEvmSigner(account, publicClient);
   const x402 = new x402Client();
-  registerSpendPolicyHook(x402, opts.spendControl ?? new SpendControl());
+  registerSpendPolicyHook(x402, opts.spendControl ?? getSharedSpendControl());
   registerExactEvmScheme(x402, { signer: evmSigner });
   return x402;
 }
