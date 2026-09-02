@@ -34441,6 +34441,11 @@ function cloneLimits(limits) {
   }
   return clone;
 }
+function canonicalLimits(limits) {
+  return JSON.stringify(
+    Object.fromEntries(Object.entries(limits).sort(([a], [b]) => a < b ? -1 : 1))
+  );
+}
 function parseQuotedAmountUsd(selected) {
   const raw = selected.amount ?? selected.maxAmountRequired;
   if (typeof raw !== "string" || !CANONICAL_AMOUNT.test(raw)) {
@@ -34516,7 +34521,7 @@ function formatDuration(seconds) {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
 }
-var WALLET_DIR, HOUR_MS, DAY_MS, CAIP2_BASE, CAIP2_SOLANA_MAINNET, POLICY_LISTS, ADDRESS_LISTS, EVM_ADDRESS, MalformedSpendPolicyError, FileSpendControlStorage, InMemorySpendControlStorage, RESERVATION_TTL_MS, SpendControl, SpendPolicyError, CANONICAL_AMOUNT;
+var WALLET_DIR, HOUR_MS, DAY_MS, CAIP2_BASE, CAIP2_SOLANA_MAINNET, PAYABLE_NETWORKS, POLICY_LISTS, ADDRESS_LISTS, EVM_ADDRESS, MalformedSpendPolicyError, SpendPolicyConflictError, FileSpendControlStorage, InMemorySpendControlStorage, RESERVATION_TTL_MS, SpendControl, SpendPolicyError, CANONICAL_AMOUNT;
 var init_spend_control = __esm({
   "src/spend-control.ts"() {
     "use strict";
@@ -34526,6 +34531,7 @@ var init_spend_control = __esm({
     DAY_MS = 24 * HOUR_MS;
     CAIP2_BASE = "eip155:8453";
     CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+    PAYABLE_NETWORKS = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
     POLICY_LISTS = [
       "allowedPayees",
       "blockedPayees",
@@ -34540,6 +34546,12 @@ var init_spend_control = __esm({
           `[ClawRouter] refusing to load spending.json: ${key2} is malformed; a corrupted policy file must not widen what the agent may pay`
         );
         this.name = "MalformedSpendPolicyError";
+      }
+    };
+    SpendPolicyConflictError = class extends Error {
+      constructor() {
+        super("spending.json limits changed underneath this write; nothing was written");
+        this.name = "SpendPolicyConflictError";
       }
     };
     FileSpendControlStorage = class {
@@ -34622,6 +34634,25 @@ var init_spend_control = __esm({
         }
         this.save({ limits: storedLimits, history });
       }
+      /**
+       * Persist limits while leaving the stored history exactly as it is on disk.
+       * With `expect`, refuse when the stored limits are no longer the ones the
+       * writer read — a stale instance must not replace another writer's edit.
+       * The re-read happens immediately before the atomic rename, so the race
+       * window is the write itself, not the whole command.
+       */
+      saveLimits(limits, expect) {
+        let current;
+        try {
+          current = this.load();
+        } catch {
+          return;
+        }
+        if (expect !== void 0 && canonicalLimits(current?.limits ?? {}) !== canonicalLimits(expect)) {
+          throw new SpendPolicyConflictError();
+        }
+        this.save({ limits, history: current?.history ?? [] });
+      }
     };
     InMemorySpendControlStorage = class {
       data = null;
@@ -34637,6 +34668,15 @@ var init_spend_control = __esm({
           history: data.history.map((r2) => ({ ...r2 }))
         };
       }
+      saveLimits(limits, expect) {
+        if (expect !== void 0 && canonicalLimits(this.data?.limits ?? {}) !== canonicalLimits(expect)) {
+          throw new SpendPolicyConflictError();
+        }
+        this.data = {
+          limits: cloneLimits(limits),
+          history: this.data?.history.map((r2) => ({ ...r2 })) ?? []
+        };
+      }
     };
     RESERVATION_TTL_MS = 2 * 60 * 1e3;
     SpendControl = class {
@@ -34648,6 +34688,8 @@ var init_spend_control = __esm({
       reservationSeq = 0;
       /** Limits we loaded and have not changed; history-only saves must not clobber operator edits. */
       limitsDirty = false;
+      /** The limits this instance last read from or wrote to storage — the compare-and-swap baseline. */
+      diskLimits = {};
       /** Set when spending.json held an unusable policy list: refuse every payment. */
       policyFileBroken;
       storage;
@@ -34691,6 +34733,15 @@ var init_spend_control = __esm({
       }
       getLimits() {
         return cloneLimits(this.limits);
+      }
+      /**
+       * Why spending.json could not be loaded, or undefined when it is usable.
+       * While set, every setter mutates memory only: save() refuses to rewrite a
+       * file it could not fully parse, so callers must check this before
+       * reporting a change as applied.
+       */
+      getPolicyFileError() {
+        return this.policyFileBroken;
       }
       check(estimatedCost2, counterparty) {
         if (this.policyFileBroken !== void 0) {
@@ -34952,6 +35003,22 @@ var init_spend_control = __esm({
           this.storage.saveHistory([...this.history]);
           return;
         }
+        if (this.limitsDirty && this.storage.saveLimits) {
+          try {
+            this.storage.saveLimits(cloneLimits(this.limits), cloneLimits(this.diskLimits));
+          } catch (err) {
+            if (err instanceof SpendPolicyConflictError) {
+              const current = this.storage.load();
+              this.limits = cloneLimits(current?.limits ?? {});
+              this.diskLimits = cloneLimits(this.limits);
+              this.limitsDirty = false;
+            }
+            throw err;
+          }
+          this.diskLimits = cloneLimits(this.limits);
+          this.limitsDirty = false;
+          return;
+        }
         this.storage.save({
           limits: cloneLimits(this.limits),
           history: [...this.history]
@@ -34972,6 +35039,7 @@ var init_spend_control = __esm({
         }
         if (data) {
           this.limits = cloneLimits(data.limits);
+          this.diskLimits = cloneLimits(data.limits);
           this.history = data.history;
           this.cleanup();
         }
@@ -118085,7 +118153,7 @@ function __addDisposableResource(env, value, async) {
   return value;
 }
 function __disposeResources(env) {
-  function fail(e7) {
+  function fail2(e7) {
     env.error = env.hasError ? new _SuppressedError(e7, env.error, "An error was suppressed during disposal.") : e7;
     env.hasError = true;
   }
@@ -118097,12 +118165,12 @@ function __disposeResources(env) {
         if (r2.dispose) {
           var result = r2.dispose.call(r2.value);
           if (r2.async) return s3 |= 2, Promise.resolve(result).then(next, function(e7) {
-            fail(e7);
+            fail2(e7);
             return next();
           });
         } else s3 |= 1;
       } catch (e7) {
-        fail(e7);
+        fail2(e7);
       }
     }
     if (s3 === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
@@ -179521,7 +179589,7 @@ var require_VirtualMaster = __commonJS({
           terminateAll();
           resolve(result);
         };
-        const fail = (error) => {
+        const fail2 = (error) => {
           if (settled)
             return;
           settled = true;
@@ -179546,14 +179614,14 @@ var require_VirtualMaster = __commonJS({
                 succeed(void 0);
               return;
             case "error":
-              fail(new Errors.BaseError(msg.message));
+              fail2(new Errors.BaseError(msg.message));
               return;
           }
         };
-        const onAbort = () => fail(getAbortError2(value.signal));
+        const onAbort = () => fail2(getAbortError2(value.signal));
         value.signal?.addEventListener("abort", onAbort, { once: true });
         for (let i = 0; i < value.workerCount; i++) {
-          const handle = value.pool.spawn(i, onMessage, fail);
+          const handle = value.pool.spawn(i, onMessage, fail2);
           handles.push(handle);
           handle.postMessage({
             type: "start",
@@ -226883,6 +226951,210 @@ var init_exclude = __esm({
   }
 });
 
+// src/commands/policy.ts
+function unsetMeaning(key2) {
+  switch (key2) {
+    case "allowedPayees":
+      return "every payee is permitted";
+    case "allowedNetworks":
+      return "every network is permitted";
+    case "allowedAssets":
+      return "every asset is permitted";
+    case "blockedPayees":
+      return "no payee is blocked";
+    default:
+      return `spend in the ${key2} window is uncapped`;
+  }
+}
+function fail(text) {
+  return { text, isError: true };
+}
+function isPolicyList2(v) {
+  return POLICY_LISTS.includes(v);
+}
+function isSpendWindow(v) {
+  return SPEND_WINDOWS.includes(v);
+}
+function isListAction(v) {
+  return LIST_ACTIONS.includes(v);
+}
+function rejectValue(list, value) {
+  if (list === "allowedNetworks") {
+    return PAYABLE_NETWORKS.includes(value) ? void 0 : `"${value}" is not a network the proxy can pay on \u2014 allowedNetworks accepts only ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
+  }
+  if (/^0x/i.test(value)) {
+    return EVM_ADDRESS2.test(value) ? void 0 : `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
+  }
+  return BASE58_ADDRESS.test(value) ? void 0 : `"${value}" is not an address \u2014 expected 0x plus 40 hex characters (Base) or a 32\u201344 character base58 id (Solana)`;
+}
+function parsePolicyArgs(argv) {
+  const [sub = "", target = "", ...values] = argv;
+  const action = sub.toLowerCase();
+  if (action === "") return { kind: "show" };
+  if (action === "limit") {
+    if (!isSpendWindow(target)) {
+      return fail(
+        `Unknown window "${target}"; expected one of: ${SPEND_WINDOWS.join(", ")}
+${USAGE}`
+      );
+    }
+    const raw = values[0];
+    if (raw === void 0 || values.length !== 1) {
+      return fail(`policy limit takes exactly one amount (or "clear")
+${USAGE}`);
+    }
+    if (raw === "clear") return { kind: "limit", window: target, usd: void 0 };
+    const usd = Number(raw);
+    if (!USD.test(raw) || !Number.isFinite(usd) || usd <= 0) {
+      return fail(
+        `Rejected amount "${raw}": must be a positive decimal USD value such as 0.10 or 5`
+      );
+    }
+    return { kind: "limit", window: target, usd };
+  }
+  if (!isListAction(action)) return fail(`Unknown subcommand "${sub}"
+${USAGE}`);
+  if (!isPolicyList2(target)) {
+    return fail(`Unknown list "${target}"; expected one of: ${POLICY_LISTS.join(", ")}
+${USAGE}`);
+  }
+  if (action === "clear" ? values.length !== 0 : values.length === 0) {
+    return fail(
+      `policy ${action} <list> ${action === "clear" ? "takes no values" : "needs at least one value"}
+${USAGE}`
+    );
+  }
+  for (const v of values) {
+    const why = rejectValue(target, v);
+    if (why !== void 0) return fail(`Rejected ${target} entry: ${why}`);
+  }
+  return { kind: "list", action, list: target, values };
+}
+function nextListValue(current, plan) {
+  const have = current ?? [];
+  const wanted = [...new Set(plan.values.map(normalizePayee))];
+  switch (plan.action) {
+    case "set":
+      return { next: wanted };
+    case "clear":
+      return { next: void 0 };
+    case "add":
+      return { next: [.../* @__PURE__ */ new Set([...have, ...wanted])] };
+    case "remove": {
+      if (have.length === 0) return { reject: `${plan.list} is not configured; nothing to remove` };
+      const missing = wanted.filter((v) => !have.includes(v));
+      if (missing.length > 0) return { reject: `not in ${plan.list}: ${missing.join(", ")}` };
+      const next = have.filter((v) => !wanted.includes(v));
+      if (next.length === 0 && ALLOW_LISTS.includes(plan.list)) {
+        return {
+          reject: `removing the last ${plan.list} entry would unset the list, and then ${unsetMeaning(plan.list)}. Use "policy clear ${plan.list}" if that is what you want`
+        };
+      }
+      return { next: next.length > 0 ? next : void 0 };
+    }
+  }
+}
+function formatPolicy(limits) {
+  const lines = ["Spend limits (USD):"];
+  for (const w of SPEND_WINDOWS) {
+    const v = limits[w];
+    lines.push(`  ${w}: ${v === void 0 ? `(unset \u2014 ${unsetMeaning(w)})` : `$${v}`}`);
+  }
+  lines.push("Policy lists:");
+  for (const l2 of POLICY_LISTS) {
+    const v = limits[l2];
+    lines.push(`  ${l2}: ${v && v.length > 0 ? v.join(", ") : `(unset \u2014 ${unsetMeaning(l2)})`}`);
+  }
+  return lines.join("\n");
+}
+function runPolicyCommand(argv, options) {
+  const plan = parsePolicyArgs(argv);
+  if (!("kind" in plan)) return plan;
+  const openControl = options?.openControl ?? (() => new SpendControl());
+  const live = options?.liveControl?.();
+  const control = live ?? openControl();
+  const broken = control.getPolicyFileError();
+  if (broken !== void 0) {
+    return fail(`${broken}
+Nothing was written; repair or delete spending.json, then retry.`);
+  }
+  if (plan.kind === "show") return { text: formatPolicy(control.getLimits()) };
+  const before = openControl().getLimits();
+  const key2 = plan.kind === "limit" ? plan.window : plan.list;
+  let expected;
+  try {
+    if (plan.kind === "limit") {
+      expected = plan.usd;
+      if (plan.usd === void 0) control.clearLimit(plan.window);
+      else control.setLimit(plan.window, plan.usd);
+    } else {
+      const outcome = nextListValue(control.getLimits()[plan.list], plan);
+      if ("reject" in outcome) return fail(`${outcome.reject}; nothing written`);
+      expected = outcome.next;
+      if (outcome.next === void 0) control.clearPolicy(plan.list);
+      else control.setPolicy(plan.list, outcome.next);
+    }
+  } catch (err) {
+    if (err instanceof SpendPolicyConflictError) {
+      return fail(
+        `${key2} was not written: another writer changed spending.json while this command ran, and replacing it would have dropped their change. Run "policy" to see what disk holds now, then retry`
+      );
+    }
+    return fail(`Nothing was written: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const expectedAll = { ...before };
+  if (expected === void 0) delete expectedAll[key2];
+  else expectedAll[key2] = expected;
+  const after = openControl().getLimits();
+  const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after), key2])];
+  const drift = keys.filter((k) => JSON.stringify(after[k]) !== JSON.stringify(expectedAll[k]));
+  if (drift.length > 0) {
+    const show = (v) => v === void 0 ? "(unset)" : JSON.stringify(v);
+    const detail = drift.map((k) => `${k} ${show(after[k])} vs ${show(expectedAll[k])}`).join("; ");
+    return fail(
+      `Write did not land cleanly \u2014 on disk vs expected: ${detail}. Another write may have raced this one; run "policy" to see what disk holds now`
+    );
+  }
+  const headline = expected === void 0 ? `${key2} is now unset \u2014 ${unsetMeaning(key2)}.` : `${key2}: ${JSON.stringify(expected)}`;
+  return {
+    text: live ? `${headline}
+${APPLIED_LIVE}` : `${RESTART_REQUIRED}
+${headline}`
+  };
+}
+function createPolicyCommand(options) {
+  return {
+    name: "policy",
+    description: "Spend limits and counterparty policy \u2014 /policy [set|add|remove|clear <list> ...] [limit <window> <usd>|clear]",
+    acceptsArgs: true,
+    requireAuth: true,
+    handler: async (ctx) => runPolicyCommand((ctx.args ?? "").trim().split(/\s+/).filter(Boolean), options)
+  };
+}
+var SPEND_WINDOWS, USD, EVM_ADDRESS2, BASE58_ADDRESS, LIST_ACTIONS, ALLOW_LISTS, USAGE, RESTART_REQUIRED, APPLIED_LIVE;
+var init_policy = __esm({
+  "src/commands/policy.ts"() {
+    "use strict";
+    init_spend_control();
+    SPEND_WINDOWS = ["perRequest", "hourly", "daily", "session"];
+    USD = /^\d+(\.\d+)?$/;
+    EVM_ADDRESS2 = /^0x[0-9a-fA-F]{40}$/;
+    BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    LIST_ACTIONS = ["set", "add", "remove", "clear"];
+    ALLOW_LISTS = ["allowedPayees", "allowedNetworks", "allowedAssets"];
+    USAGE = [
+      "Usage:",
+      "  policy                                 show limits and lists on disk",
+      `  policy set|add|remove <list> <v>...    <list>: ${POLICY_LISTS.join(" | ")}`,
+      "  policy clear <list>",
+      `  policy limit <window> <usd>|clear      <window>: ${SPEND_WINDOWS.join(" | ")}`,
+      `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet).`
+    ].join("\n");
+    RESTART_REQUIRED = "NOT applied to a running proxy \u2014 it reads spending.json once at startup. Restart the proxy (or the OpenClaw gateway) for this to take effect.";
+    APPLIED_LIVE = "Applied to the running proxy and saved to spending.json.";
+  }
+});
+
 // src/mcp-config.ts
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -226934,6 +227206,99 @@ var init_mcp_config = __esm({
 });
 
 // src/openclaw-plugin-config.ts
+function asObject2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function prepareBlockRunPluginConfig(config, options = {}) {
+  if (!options.explicitSetup && !options.legacyBlockRunInstall && !options.stripUnsupportedInstalls) {
+    return false;
+  }
+  let changed = false;
+  let plugins = asObject2(config.plugins);
+  if (!plugins) {
+    plugins = {};
+    config.plugins = plugins;
+    changed = true;
+  }
+  let entries = asObject2(plugins.entries);
+  if (!entries) {
+    entries = {};
+    plugins.entries = entries;
+    changed = true;
+  }
+  const legacyEntry = asObject2(entries.clawrouter);
+  const currentEntry = asObject2(entries[BLOCKRUN_PLUGIN_ID]);
+  if (options.legacyBlockRunInstall && legacyEntry) {
+    const migratedEntry = currentEntry ?? {};
+    if (!currentEntry && typeof legacyEntry.enabled === "boolean") {
+      migratedEntry.enabled = legacyEntry.enabled;
+    }
+    for (const key2 of ["walletKey", "routing"]) {
+      if (!(key2 in migratedEntry) && key2 in legacyEntry) {
+        migratedEntry[key2] = legacyEntry[key2];
+      }
+      if (key2 in legacyEntry) {
+        delete legacyEntry[key2];
+        changed = true;
+      }
+    }
+    const legacyConfig = asObject2(legacyEntry.config);
+    if (legacyConfig) {
+      const currentConfig = asObject2(migratedEntry.config) ?? {};
+      for (const key2 of ["walletKey", "routing"]) {
+        if (!(key2 in currentConfig) && key2 in legacyConfig) {
+          currentConfig[key2] = legacyConfig[key2];
+        }
+        if (key2 in legacyConfig) {
+          delete legacyConfig[key2];
+          changed = true;
+        }
+      }
+      if (Object.keys(currentConfig).length > 0) migratedEntry.config = currentConfig;
+      if (Object.keys(legacyConfig).length === 0) {
+        delete legacyEntry.config;
+        changed = true;
+      }
+    }
+    if (!currentEntry || entries[BLOCKRUN_PLUGIN_ID] !== migratedEntry) {
+      entries[BLOCKRUN_PLUGIN_ID] = migratedEntry;
+      changed = true;
+    }
+  }
+  if (options.explicitSetup) {
+    const next = asObject2(entries[BLOCKRUN_PLUGIN_ID]) ?? {};
+    if (next.enabled !== true) {
+      entries[BLOCKRUN_PLUGIN_ID] = { ...next, enabled: true };
+      changed = true;
+    }
+  }
+  const allow = plugins.allow;
+  if (Array.isArray(allow)) {
+    const shouldAllow = options.explicitSetup || options.legacyBlockRunInstall && allow.includes("clawrouter");
+    if (shouldAllow && !allow.includes(BLOCKRUN_PLUGIN_ID)) {
+      allow.push(BLOCKRUN_PLUGIN_ID);
+      changed = true;
+    }
+  }
+  const deny = plugins.deny;
+  if (Array.isArray(deny)) {
+    if (options.explicitSetup) {
+      const next = deny.filter((id2) => id2 !== BLOCKRUN_PLUGIN_ID);
+      if (next.length !== deny.length) {
+        plugins.deny = next;
+        changed = true;
+      }
+    } else if (options.legacyBlockRunInstall && deny.includes("clawrouter") && !deny.includes(BLOCKRUN_PLUGIN_ID)) {
+      deny.push(BLOCKRUN_PLUGIN_ID);
+      changed = true;
+    }
+  }
+  if (options.stripUnsupportedInstalls && "installs" in plugins) {
+    delete plugins.installs;
+    changed = true;
+  }
+  return changed;
+}
 var BLOCKRUN_PLUGIN_ID;
 var init_openclaw_plugin_config = __esm({
   "src/openclaw-plugin-config.ts"() {
@@ -227218,6 +227583,19 @@ function injectModelsConfig(logger48, options = {}) {
     if (addedCount > 0) {
       logger48.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
     }
+  }
+  const legacyEntry = config.plugins?.entries?.clawrouter;
+  const legacyEntryConfig = legacyEntry?.config;
+  const legacyBlockRunInstall = Boolean(
+    legacyEntry && ["walletKey", "routing"].some(
+      (key2) => key2 in legacyEntry || (legacyEntryConfig ? key2 in legacyEntryConfig : false)
+    )
+  );
+  if (legacyBlockRunInstall && prepareBlockRunPluginConfig(config, { legacyBlockRunInstall })) {
+    needsWrite = true;
+    logger48.info(
+      `Migrated legacy BlockRun plugin config to ${BLOCKRUN_PLUGIN_ID} (renamed from clawrouter; see #305)`
+    );
   }
   if (!config.tools || typeof config.tools !== "object" || Array.isArray(config.tools)) {
     config.tools = {};
@@ -227516,6 +227894,7 @@ async function startProxyInBackground(api, startupGeneration) {
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
+    spendControl: liveSpendControl = new SpendControl(),
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
     },
@@ -228238,7 +228617,7 @@ function createWalletCommand(api) {
     }
   };
 }
-var activeProxyHandle, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, plugin, index_default2;
+var activeProxyHandle, liveSpendControl, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, plugin, index_default2;
 var init_index = __esm({
   "src/index.ts"() {
     init_provider();
@@ -228257,6 +228636,8 @@ var init_index = __esm({
     init_tool();
     init_stats2();
     init_exclude();
+    init_policy();
+    init_spend_control();
     init_mcp_config();
     init_openclaw_plugin_config();
     init_openclaw_plugin_config();
@@ -228278,6 +228659,7 @@ var init_index = __esm({
     init_response_cache();
     init_partners();
     activeProxyHandle = null;
+    liveSpendControl = null;
     pendingConfiguredStartupApi = null;
     IMAGE_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "images");
     AUDIO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "audio");
@@ -228591,9 +228973,14 @@ ${errText}`
         }
         api.registerCommand(createStatsCommand());
         api.registerCommand(createExcludeCommand());
+        api.registerCommand(
+          createPolicyCommand({
+            liveControl: () => activeProxyHandle ? liveSpendControl ?? void 0 : void 0
+          })
+        );
         if (shouldLogRegistration) {
           api.logger.info(
-            "Commands registered: /wallet, /blockrun, /stats, /exclude, /partners, /cr-imagegen, /videogen, /cr-call"
+            "Commands registered: /wallet, /blockrun, /stats, /exclude, /policy, /partners, /cr-imagegen, /videogen, /cr-call"
           );
         }
         api.registerService({
@@ -228778,6 +229165,7 @@ export {
   MalformedSpendPolicyError,
   OPENCLAW_MODELS,
   PARTNER_SERVICES,
+  PAYABLE_NETWORKS,
   RequestDeduplicator,
   ResponseCache,
   RpcError2 as RpcError,

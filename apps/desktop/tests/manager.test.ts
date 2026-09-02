@@ -6,6 +6,7 @@ import { parse } from "yaml";
 import { describe, expect, it, vi } from "vitest";
 
 import { ClawRouterManager } from "../electron/core/manager.js";
+import { CLAWROUTER_PACKAGE_VERSION } from "../electron/core/runtime.js";
 import type { CommandRunner } from "../electron/core/types.js";
 
 function response(body: unknown, headers: Record<string, string> = {}): Response {
@@ -549,7 +550,7 @@ describe("ClawRouterManager adapter flow", () => {
     await mkdir(dirname(binary), { recursive: true });
     await mkdir(dirname(manifest), { recursive: true });
     await writeFile(binary, "#!/bin/sh\n", { mode: 0o755 });
-    await writeFile(manifest, JSON.stringify({ version: "0.12.265" }));
+    await writeFile(manifest, JSON.stringify({ version: CLAWROUTER_PACKAGE_VERSION }));
     const manager = fixtureManager(
       home,
       async (command) => command === "clawrouter",

@@ -621,6 +621,13 @@ declare const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 declare const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 /**
+ * Every network the proxy can pay on, as carried on x402
+ * `selectedRequirements.network`. Single source of truth for surfaces that
+ * validate `allowedNetworks` entries: an entry outside this set can never
+ * match a quote and would only block payments.
+ */
+declare const PAYABLE_NETWORKS: readonly string[];
+/**
  * A policy list on disk is present but unusable. Thrown rather than swallowed:
  * silently dropping a corrupted allow/deny list would widen what the agent may
  * pay, which is the one direction this file must never fail in. Callers
@@ -697,6 +704,14 @@ interface SpendControlStorage {
      * back to save() when absent.
      */
     saveHistory?(history: SpendRecord[]): void;
+    /**
+     * Optional: persist limits without touching stored history — the mirror of
+     * saveHistory(). A policy edit from a second process (the CLI) must not
+     * write its own stale history snapshot back over spend the proxy recorded
+     * since, which would reopen a rolling window. Falls back to save() when
+     * absent.
+     */
+    saveLimits?(limits: SpendLimits, expect?: SpendLimits): void;
 }
 declare class FileSpendControlStorage implements SpendControlStorage {
     private readonly spendingFile;
@@ -716,6 +731,14 @@ declare class FileSpendControlStorage implements SpendControlStorage {
      * erase an operator's hand-edit to spending.json seconds after they made it.
      */
     saveHistory(history: SpendRecord[]): void;
+    /**
+     * Persist limits while leaving the stored history exactly as it is on disk.
+     * With `expect`, refuse when the stored limits are no longer the ones the
+     * writer read — a stale instance must not replace another writer's edit.
+     * The re-read happens immediately before the atomic rename, so the race
+     * window is the write itself, not the whole command.
+     */
+    saveLimits(limits: SpendLimits, expect?: SpendLimits): void;
 }
 declare class InMemorySpendControlStorage implements SpendControlStorage {
     private data;
@@ -727,6 +750,7 @@ declare class InMemorySpendControlStorage implements SpendControlStorage {
         limits: SpendLimits;
         history: SpendRecord[];
     }): void;
+    saveLimits(limits: SpendLimits, expect?: SpendLimits): void;
 }
 interface SpendControlOptions {
     storage?: SpendControlStorage;
@@ -741,6 +765,8 @@ declare class SpendControl {
     private reservationSeq;
     /** Limits we loaded and have not changed; history-only saves must not clobber operator edits. */
     private limitsDirty;
+    /** The limits this instance last read from or wrote to storage — the compare-and-swap baseline. */
+    private diskLimits;
     /** Set when spending.json held an unusable policy list: refuse every payment. */
     private policyFileBroken?;
     private readonly storage;
@@ -751,6 +777,13 @@ declare class SpendControl {
     setPolicy(list: PolicyList, values: string[]): void;
     clearPolicy(list: PolicyList): void;
     getLimits(): SpendLimits;
+    /**
+     * Why spending.json could not be loaded, or undefined when it is usable.
+     * While set, every setter mutates memory only: save() refuses to rewrite a
+     * file it could not fully parse, so callers must check this before
+     * reporting a change as applied.
+     */
+    getPolicyFileError(): string | undefined;
     check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult;
     record(amount: number, metadata?: {
         model?: string;
@@ -1734,4 +1767,4 @@ declare function buildImageGenerationProvider(): ImageGenerationProviderPlugin;
 
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, PAYABLE_NETWORKS, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };

@@ -4,6 +4,48 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.266 — September 2, 2026
+
+### Added — ClawRouter Desktop, a macOS control plane for local coding agents
+
+A macOS app under `apps/desktop` that connects OpenClaw, Codex, Hermes, DeepSeek Harness and Pi to a local ClawRouter in one click: it installs and supervises the proxy, writes each agent's provider config, and restores the original on disconnect. It also shows Base and Solana USDC balances, switches the payment chain, and opens a wallet-bound Coinbase Onramp.
+
+The app ships outside the npm package — `@blockrun/clawrouter` is unchanged in size and contents — and the packaged build stages a frozen, version-pinned runtime so the UI and the router cannot drift apart. It is an unsigned developer preview; Developer ID signing and notarization are still release-pipeline work.
+
+The security surface was reviewed rather than assumed: `contextIsolation` on, `nodeIntegration` off, `sandbox` on, `will-navigate` and `setWindowOpenHandler` both guarded, a CSP in the renderer, every IPC handler behind a trusted-renderer check plus a parser, no shell in process spawning, config writes at `0600` with a symlink-cycle guard, and no private key or mnemonic ever reaching the renderer. Agent configuration additionally requires an authenticated proxy identity and proof that the process holding the port is the one Desktop spawned.
+
+### Changed — `/v1/models` now serves the real catalog metadata
+
+`GET /v1/models` returned four fields (`id`, `object`, `created`, `owned_by`). It now also carries `name`, `context_window`, `max_output`, `input_price`, `output_price`, `reasoning`, `vision`, `agentic` and `tool_calling`, resolved through the alias map to the canonical registry entry.
+
+This replaced a 2,441-line catalog that had been bundled into the Desktop app. That copy had drifted to 197 field disagreements across 110 ids — 16 of them understating price, `claude-opus-5` and the whole `gpt-5.6` family missing outright, and six of the seven free models absent. Pi persists these values into `~/.pi/agent/models.json`, where a wrong `vision` flag makes an image-capable model text-only, so the drift was durable rather than cosmetic. Deleting the bundle removes the class of bug instead of refreshing one instance of it.
+
+### Fixed — the plugin-id migration is back on the gateway-start path
+
+v0.12.265 migrated the renamed plugin id on every gateway start. That had moved to `clawrouter setup`/`update`/`reinstall` only, which left `npm update -g` followed by a gateway restart unmigrated — the same silent non-load v0.12.265 shipped to fix.
+
+It runs from the config-injection hook again, where the write is already behind the gateway-mode guard and so cannot trip OpenClaw's install-time `baseHash` rollback. It fires only when BlockRun-owned fields prove the legacy entry is ours, so OpenClaw's own bundled `clawrouter` entry is never touched on the strength of its id alone.
+
+### Fixed — the install scripts no longer widen `openclaw.json` to `0644`
+
+The `atomicWrite` helper embedded in `scripts/reinstall.sh` and `scripts/update.sh` wrote its temp file at the default mode and let `rename` carry it onto the target. Probed on macOS: `600` before, `644` after. That file can hold a wallet private key — `openclaw.plugin.json` declares `walletKey` as sensitive, and these scripts move it between plugin entries. Every write now passes `{ mode: 0o600 }` and re-`chmod`s after the rename.
+
+### Added — `clawrouter policy` and `/policy`
+
+`SpendControl`'s limits and counterparty lists were library-only: configuring them meant hand-editing `spending.json`. One implementation now backs both a CLI subcommand and a plugin command, with all validation ahead of any write, so a rejected argument leaves the file byte-identical. `/policy` reaches the live signer while a proxy is running rather than only the copy on disk, and limit writes are compare-and-swap, so a stale writer cannot clobber a concurrent update.
+
+Emptying an allow-list is refused rather than silently performed — an emptied `allowedPayees` stops meaning "only these" and starts meaning "everyone" — and every write that leaves a key unset now says what becomes permitted as a result.
+
+### Housekeeping
+
+- Desktop balance reads are cached with stale-on-error fallback instead of hitting shared public RPC endpoints on every 15-second refresh.
+- Runtime installs are version-pinned and run with `--ignore-scripts`; CLI preflight `openclaw` calls are bounded by a timeout.
+- Read-only wallet commands no longer create a wallet as a side effect, and rollback reporting distinguishes an actual rollback from a preflight failure.
+
+Thanks to @KillerQueen-Z for the Desktop control plane and the plugin-config migration, which corrected two real bugs in the v0.12.265 migration — it had deleted `plugins.entries.clawrouter`, a key that belongs to OpenClaw's bundled plugin after the rename, and renamed `plugins.installs.clawrouter` into a key upstream wants removed (#313). Thanks to @twzrd-sol for the policy surface (#303, closes #301).
+
+---
+
 ## v0.12.265 — September 2, 2026
 
 ### Fixed — the plugin silently never loaded on OpenClaw 2026.7.1 and newer
