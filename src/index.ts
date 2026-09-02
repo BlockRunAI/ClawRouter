@@ -91,6 +91,8 @@ import { buildPartnerTools, PARTNER_SERVICES } from "./partners/index.js";
 import { buildPolymarketTool } from "./polymarket/tool.js";
 import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
+import { createPolicyCommand } from "./commands/policy.js";
+import { SpendControl } from "./spend-control.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
 import { BLOCKRUN_PLUGIN_ID } from "./openclaw-plugin-config.js";
 
@@ -713,6 +715,14 @@ function removeInjectedAuthPlaceholder(
 
 // Store active proxy handle for cleanup on gateway_stop
 let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
+/**
+ * The SpendControl handed to the most recent startProxy(). Only meaningful
+ * while activeProxyHandle is set: it is created before startup so it can be
+ * passed in, so a failed or superseded start, or a stopped proxy, must not
+ * let /policy claim "applied to the running proxy" — the getter below gates
+ * on the handle, which every stop/reset path already clears.
+ */
+let liveSpendControl: SpendControl | null = null;
 let pendingConfiguredStartupApi: OpenClawPluginApi | null = null;
 type ProcessWithClawRouterState = NodeJS.Process & {
   __clawrouterProxyStarted?: boolean;
@@ -894,6 +904,7 @@ async function startProxyInBackground(
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
+    spendControl: (liveSpendControl = new SpendControl()),
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
     },
@@ -2208,9 +2219,14 @@ const plugin: OpenClawPluginDefinition = {
     }
     api.registerCommand(createStatsCommand());
     api.registerCommand(createExcludeCommand());
+    api.registerCommand(
+      createPolicyCommand({
+        liveControl: () => (activeProxyHandle ? (liveSpendControl ?? undefined) : undefined),
+      }),
+    );
     if (shouldLogRegistration) {
       api.logger.info(
-        "Commands registered: /wallet, /blockrun, /stats, /exclude, /partners, /cr-imagegen, /videogen, /cr-call",
+        "Commands registered: /wallet, /blockrun, /stats, /exclude, /policy, /partners, /cr-imagegen, /videogen, /cr-call",
       );
     }
 
@@ -2515,6 +2531,7 @@ export {
   MalformedSpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
+  PAYABLE_NETWORKS,
 } from "./spend-control.js";
 export type {
   SpendWindow,
