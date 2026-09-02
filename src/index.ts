@@ -453,6 +453,26 @@ function injectModelsConfig(
     }
   }
 
+  // Plugin-id migration (#305). Until v0.12.265 this plugin declared the id
+  // `clawrouter`, which OpenClaw's own bundled plugin also uses since 2026.7.1.
+  // Installs made before the rename carry `plugins.entries.clawrouter` — an
+  // entry that, after the rename, no longer refers to us at all. Left alone it
+  // would explicitly enable OPENCLAW's router (a different product: its own
+  // provider, API key and endpoint) while ours silently loses its entry.
+  //
+  // Move it rather than delete it, so the user's enabled/disabled choice is
+  // preserved. Only when the new key is absent — never clobber a real one.
+  const pluginEntries = (config.plugins as Record<string, unknown> | undefined)?.entries as
+    Record<string, unknown> | undefined;
+  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries["blockrun-clawrouter"]) {
+    pluginEntries["blockrun-clawrouter"] = pluginEntries.clawrouter;
+    delete pluginEntries.clawrouter;
+    needsWrite = true;
+    logger.info(
+      "Migrated plugins.entries.clawrouter -> blockrun-clawrouter (OpenClaw bundles its own `clawrouter` plugin; see #305)",
+    );
+  }
+
   // web_search: set `enabled = true` (safe — boolean, no provider validator),
   // but DELETE any persisted `provider` value. OpenClaw 2026.5.2+ runs a
   // strict known-providers validator on `tools.web.search.provider` at
@@ -1829,8 +1849,14 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
 }
 
 const plugin: OpenClawPluginDefinition = {
-  id: "clawrouter",
-  name: "ClawRouter",
+  // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
+  // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
+  // CLAWROUTER_API_KEY, clawrouter.openclaw.ai). A duplicate id loses to the
+  // bundled one — "global plugin will be overridden by bundled plugin" — so this
+  // plugin silently never loaded and the local proxy never started. Different
+  // product, different id. See #305.
+  id: "blockrun-clawrouter",
+  name: "BlockRun ClawRouter",
   description: "Smart LLM router — 55+ models, x402 micropayments, 78% cost savings",
   version: VERSION,
 
@@ -2392,7 +2418,12 @@ const plugin: OpenClawPluginDefinition = {
         removeManagedBlockrunMcpServerConfig(config as OpenClawConfig);
 
         // Remove plugin entries (all case variants)
-        for (const key of ["clawrouter", "ClawRouter", "@blockrun/clawrouter"]) {
+        for (const key of [
+          "blockrun-clawrouter",
+          "clawrouter",
+          "ClawRouter",
+          "@blockrun/clawrouter",
+        ]) {
           if (config.plugins?.entries?.[key]) delete config.plugins.entries[key];
           if (config.plugins?.installs?.[key]) delete config.plugins.installs[key];
         }
@@ -2400,7 +2431,11 @@ const plugin: OpenClawPluginDefinition = {
         // Remove from plugins.allow
         if (Array.isArray(config.plugins?.allow)) {
           config.plugins.allow = config.plugins.allow.filter(
-            (p: string) => p !== "clawrouter" && p !== "ClawRouter" && p !== "@blockrun/clawrouter",
+            (p: string) =>
+              p !== "blockrun-clawrouter" &&
+              p !== "clawrouter" &&
+              p !== "ClawRouter" &&
+              p !== "@blockrun/clawrouter",
           );
         }
 
