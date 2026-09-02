@@ -950,6 +950,10 @@ async function startProxyInBackground(
     );
   }
 
+  // Restart semantics for the process-wide ledger: history and rolling
+  // windows survive an in-process proxy restart, but limits are re-read so a
+  // hand-edit to spending.json made while the proxy was up still applies.
+  getSharedSpendControl().reloadLimits();
   const proxy = await startProxy({
     ...(apiKey ? { apiKey } : { wallet: wallet! }),
     routingConfig,

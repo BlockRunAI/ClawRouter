@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Wiring tests for the Polymarket signing paths. Each one builds an in-memory
@@ -78,6 +78,8 @@ vi.mock("./constants.js", async (importOriginal) => ({
   getSigType: () => h.sigType,
 }));
 
+import { x402Client } from "@x402/fetch";
+import { runPolicyCommand } from "../commands/policy.js";
 import { fundVault } from "./fund.js";
 import { executeTrade, getSessionLedger } from "./orders.js";
 import { redeemPosition } from "./redeem.js";
@@ -93,7 +95,10 @@ import {
 } from "./constants.js";
 import {
   InMemorySpendControlStorage,
+  getSharedSpendControl,
+  registerSpendPolicyHook,
   setSharedSpendControl,
+  CAIP2_BASE,
   SpendControl,
 } from "../spend-control.js";
 
@@ -367,5 +372,71 @@ describe("every surface shares ONE ledger at runtime", () => {
     expect(r.isError).toBe(true);
     expect(r.text).toMatch(/Hourly limit exceeded/i);
     expect(h.clob.createAndPostOrder).not.toHaveBeenCalled();
+  });
+});
+
+afterEach(() => {
+  setSharedSpendControl(new SpendControl({ storage: new InMemorySpendControlStorage() }));
+});
+
+describe("the singleton is the one ledger every surface reads and writes", () => {
+  const limitBuy = { action: "buy" as const, token_id: "123", price: 0.5, size: 10, confirm: true };
+
+  beforeEach(() => {
+    h.negRisk = false;
+  });
+
+  it("a /policy write on the singleton is enforced by a Polymarket order placed with no deps", async () => {
+    const storage = new InMemorySpendControlStorage();
+    setSharedSpendControl(new SpendControl({ storage }));
+
+    const res = runPolicyCommand(["set", "blockedPayees", CTF_EXCHANGE_V2], {
+      liveControl: getSharedSpendControl,
+      openControl: () => new SpendControl({ storage }),
+    });
+    expect(res.isError).toBeFalsy();
+    expect(res.text).toContain("Applied to the running proxy");
+
+    const r = await executeTrade(limitBuy);
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/blocked by policy/i);
+    expect(h.clob.createAndPostOrder).not.toHaveBeenCalled();
+  });
+
+  it("Polymarket spend recorded on the singleton refuses a proxy payment over the cap", async () => {
+    const shared = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    shared.setLimit("hourly", 6);
+    setSharedSpendControl(shared);
+
+    expect((await executeTrade(limitBuy)).isError).toBeFalsy(); // $5 notional, allowed
+
+    let signerCalls = 0;
+    const client = new x402Client();
+    registerSpendPolicyHook(client, getSharedSpendControl());
+    client.register(CAIP2_BASE, {
+      scheme: "exact",
+      async createPaymentPayload() {
+        signerCalls += 1;
+        return { x402Version: 2, payload: {} };
+      },
+    });
+    await expect(
+      client.createPaymentPayload({
+        x402Version: 2,
+        resource: { url: "https://example.invalid/pay" },
+        accepts: [
+          {
+            scheme: "exact",
+            network: CAIP2_BASE,
+            amount: "2000000", // $2: 5 + 2 > 6
+            asset: "USDC",
+            payTo: h.ATTACKER,
+            maxTimeoutSeconds: 60,
+            extra: {},
+          },
+        ],
+      }),
+    ).rejects.toThrow(/hourly limit/i);
+    expect(signerCalls).toBe(0);
   });
 });
