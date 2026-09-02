@@ -89,6 +89,13 @@ describe("runPolicyCommand (in-memory store)", () => {
     expect(line(cleared, 1)).toBe("blockedPayees is now unset — no payee is blocked.");
   });
 
+  it("accepts a Solana base58 payee and keeps its case", () => {
+    const { run, openControl } = memory();
+    const sol = "AQqnMFBwGZEoti85aTVRy8XYpKrho7GaMDx9ZB3CEeKA";
+    expect(run(["set", "blockedPayees", sol]).isError).toBeFalsy();
+    expect(openControl().getLimits().blockedPayees).toEqual([sol]);
+  });
+
   it("lowercases EVM entries and dedupes on add", () => {
     const { run, openControl } = memory();
     run(["set", "blockedPayees", payee]);
@@ -162,6 +169,9 @@ describe("runPolicyCommand (in-memory store)", () => {
     [["set", "allowedNetworks", "base"], /not a network the proxy can pay on.*eip155:8453/],
     [["set", "allowedNetworks", "eip155:1"], /well formed but cannot appear in a payment quote/],
     [["set", "blockedPayees", "0xdead"], /exactly 40 hex/],
+    [["set", "blockedPayees", "not-an-address"], /is not an address/],
+    [["set", "allowedPayees", "AQqn0OIl"], /is not an address/], // 0, O, I, l are not base58
+    [["set", "allowedAssets", "usdc"], /is not an address/],
     [["set", "allowedAssets", `0X${"c".repeat(40)}`], /exactly 40 hex/],
     [["limit", "daily", "5abc"], /Rejected amount "5abc"/],
     [["limit", "daily", "0"], /Rejected amount "0"/],

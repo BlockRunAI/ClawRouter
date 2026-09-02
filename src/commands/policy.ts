@@ -32,6 +32,8 @@ const SPEND_WINDOWS: readonly SpendWindow[] = ["perRequest", "hourly", "daily", 
 /** Strict decimal: "5abc" and "1e3" are rejected, not truncated the way parseFloat would. */
 const USD = /^\d+(\.\d+)?$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+/** Solana account or mint: base58 alphabet, 32–44 chars. Exact-match at check time, so case matters. */
+const BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const LIST_ACTIONS = ["set", "add", "remove", "clear"] as const;
 type ListAction = (typeof LIST_ACTIONS)[number];
 const ALLOW_LISTS: readonly PolicyList[] = ["allowedPayees", "allowedNetworks", "allowedAssets"];
@@ -115,10 +117,18 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
       ? undefined
       : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
   }
-  if (/^0x/i.test(value) && !EVM_ADDRESS.test(value)) {
-    return `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
+  if (/^0x/i.test(value)) {
+    return EVM_ADDRESS.test(value)
+      ? undefined
+      : `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
   }
-  return undefined;
+  // Payees and assets are matched exactly against what the 402 quotes, so an
+  // entry that is neither an EVM address nor a Solana base58 id can never
+  // match anything — on an allow-list it blocks everything, on a deny-list it
+  // is dead weight that reads as protection.
+  return BASE58_ADDRESS.test(value)
+    ? undefined
+    : `"${value}" is not an address — expected 0x plus 40 hex characters (Base) or a 32–44 character base58 id (Solana)`;
 }
 
 /** Turn argv into a plan or a rejection. Pure: nothing is read or written here. */
