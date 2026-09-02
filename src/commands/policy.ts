@@ -22,6 +22,7 @@ import {
   PAYABLE_NETWORKS,
   POLICY_LISTS,
   SpendControl,
+  SpendPolicyConflictError,
   normalizePayee,
   type PolicyList,
   type SpendLimits,
@@ -255,6 +256,11 @@ export function runPolicyCommand(
       else control.setPolicy(plan.list, outcome.next);
     }
   } catch (err) {
+    if (err instanceof SpendPolicyConflictError) {
+      return fail(
+        `${key} was not written: another writer changed spending.json while this command ran, and replacing it would have dropped their change. Run "policy" to see what disk holds now, then retry`,
+      );
+    }
     return fail(`Nothing was written: ${err instanceof Error ? err.message : String(err)}`);
   }
 

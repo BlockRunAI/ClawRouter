@@ -202,7 +202,7 @@ describe("runPolicyCommand (in-memory store)", () => {
     expect(res.text).toMatch(/Write did not land/);
   });
 
-  it("reports a stale instance dropping a sibling key instead of claiming success", () => {
+  it("refuses a stale instance's write before it can drop a sibling key, and adopts what landed", () => {
     const { storage, openControl } = memory();
     const stale = new SpendControl({ storage }); // opened before the blocklist landed
     expect(runPolicyCommand(["set", "blockedPayees", payee], { openControl }).isError).toBeFalsy();
@@ -213,8 +213,17 @@ describe("runPolicyCommand (in-memory store)", () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.text).toMatch(/did not land cleanly/);
-    expect(res.text).toMatch(/blockedPayees \(unset\) vs \["0x/);
+    expect(res.text).toMatch(/another writer changed spending.json/);
+    // Nothing was written: the blocklist is intact and the stale cap never landed.
+    expect(storage.load()?.limits).toEqual({ blockedPayees: [payee.toLowerCase()] });
+    // The stale instance now enforces what disk holds, not its own snapshot.
+    expect(stale.getLimits().blockedPayees).toEqual([payee.toLowerCase()]);
+    expect(stale.check(1, { payTo: payee, network: CAIP2_BASE }).allowed).toBe(false);
+    // And a retry from current state succeeds.
+    expect(
+      runPolicyCommand(["limit", "daily", "5"], { openControl, liveControl: () => stale }).isError,
+    ).toBeFalsy();
+    expect(storage.load()?.limits).toEqual({ blockedPayees: [payee.toLowerCase()], daily: 5 });
   });
 
   it("a policy write from a stale instance keeps the spend the proxy recorded in between", () => {
