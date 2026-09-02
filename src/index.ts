@@ -94,7 +94,7 @@ import { createExcludeCommand } from "./commands/exclude.js";
 import { createPolicyCommand } from "./commands/policy.js";
 import { SpendControl } from "./spend-control.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
-import { BLOCKRUN_PLUGIN_ID } from "./openclaw-plugin-config.js";
+import { BLOCKRUN_PLUGIN_ID, prepareBlockRunPluginConfig } from "./openclaw-plugin-config.js";
 
 function writePrivateJsonSync(path: string, value: unknown): void {
   const temporary = `${path}.tmp.${randomUUID()}`;
@@ -391,6 +391,36 @@ function injectModelsConfig(
     if (addedCount > 0) {
       logger.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
     }
+  }
+
+  // Plugin-id migration (#305) on the gateway-start path.
+  //
+  // `prepareBlockRunPluginConfig` is otherwise reached only from `clawrouter
+  // setup`/`update`/`reinstall` (src/cli.ts). v0.12.265 ran this migration on
+  // every gateway start, and dropping that leaves the `npm update -g` + restart
+  // path unmigrated — the same way the plugin silently never loaded before that
+  // release. Restore it here, where the write is already `isGatewayMode()`-gated
+  // below and so cannot trip OpenClaw's install-time baseHash check.
+  //
+  // Gate it on evidence rather than running unconditionally: BlockRun-owned
+  // fields under `plugins.entries.clawrouter` are proof that entry was written
+  // by us and not by OpenClaw's bundled router, which now owns that id.
+  const legacyEntry = (
+    (config.plugins as Record<string, unknown> | undefined)?.entries as
+      Record<string, unknown> | undefined
+  )?.clawrouter as Record<string, unknown> | undefined;
+  const legacyEntryConfig = legacyEntry?.config as Record<string, unknown> | undefined;
+  const legacyBlockRunInstall = Boolean(
+    legacyEntry &&
+    (["walletKey", "routing"] as const).some(
+      (key) => key in legacyEntry || (legacyEntryConfig ? key in legacyEntryConfig : false),
+    ),
+  );
+  if (legacyBlockRunInstall && prepareBlockRunPluginConfig(config, { legacyBlockRunInstall })) {
+    needsWrite = true;
+    logger.info(
+      `Migrated legacy BlockRun plugin config to ${BLOCKRUN_PLUGIN_ID} (renamed from clawrouter; see #305)`,
+    );
   }
 
   // web_search: set `enabled = true` (safe — boolean, no provider validator),
