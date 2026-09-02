@@ -10,7 +10,14 @@ import { tmpdir } from "node:os";
  * `plugins.entries.clawrouter` entry that no longer refers to us.
  */
 type PluginEntry = { enabled?: boolean };
-type PluginsConfig = { plugins: { entries: Record<string, PluginEntry> } };
+type PluginsConfig = {
+  plugins: {
+    entries: Record<string, PluginEntry>;
+    allow?: string[];
+    deny?: string[];
+    installs?: Record<string, unknown>;
+  };
+};
 
 describe("plugin id migration", () => {
   let home: string;
@@ -63,5 +70,39 @@ describe("plugin id migration", () => {
     const out = await run({ plugins: { entries: { other: { enabled: true } } } });
     expect(out.plugins.entries["blockrun-clawrouter"]).toBeUndefined();
     expect(out.plugins.entries.other).toEqual({ enabled: true });
+  });
+
+  // plugins.allow is an EXCLUSIVE allowlist — OpenClaw's docs: "if plugins.allow
+  // is set, the installed plugin id must be in that list before the plugin can
+  // load". Missing this would BLOCK the plugin outright, worse than the
+  // collision the rename fixes.
+  it("adds the new id to plugins.allow so the rename cannot block loading", async () => {
+    const out = await run({
+      plugins: { entries: { clawrouter: { enabled: true } }, allow: ["clawrouter", "other"] },
+    });
+    expect(out.plugins.allow).toContain("blockrun-clawrouter");
+  });
+
+  it("leaves the old id in plugins.allow — it may now permit OpenClaw's bundled plugin", async () => {
+    const out = await run({ plugins: { entries: {}, allow: ["clawrouter"] } });
+    expect(out.plugins.allow).toEqual(["clawrouter", "blockrun-clawrouter"]);
+  });
+
+  it("honours an explicit deny of the old id", async () => {
+    const out = await run({ plugins: { entries: {}, deny: ["clawrouter"] } });
+    expect(out.plugins.deny).toContain("blockrun-clawrouter");
+  });
+
+  it("renames plugins.installs, which is unambiguously ours", async () => {
+    const out = await run({
+      plugins: { entries: {}, installs: { clawrouter: { version: "0.12.264" } } },
+    });
+    expect(out.plugins.installs?.["blockrun-clawrouter"]).toEqual({ version: "0.12.264" });
+    expect(out.plugins.installs?.clawrouter).toBeUndefined();
+  });
+
+  it("does not touch an allowlist that never mentioned the old id", async () => {
+    const out = await run({ plugins: { entries: {}, allow: ["something-else"] } });
+    expect(out.plugins.allow).toEqual(["something-else"]);
   });
 });

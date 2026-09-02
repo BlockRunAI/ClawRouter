@@ -226835,6 +226835,7 @@ var index_exports = {};
 __export(index_exports, {
   BALANCE_THRESHOLDS: () => BALANCE_THRESHOLDS,
   BLOCKRUN_MODELS: () => BLOCKRUN_MODELS,
+  BLOCKRUN_PLUGIN_ID: () => BLOCKRUN_PLUGIN_ID,
   BalanceMonitor: () => BalanceMonitor,
   CAIP2_BASE: () => CAIP2_BASE,
   CAIP2_SOLANA_MAINNET: () => CAIP2_SOLANA_MAINNET,
@@ -227150,13 +227151,33 @@ function injectModelsConfig(logger48, options = {}) {
     }
   }
   const pluginEntries = config.plugins?.entries;
-  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries["blockrun-clawrouter"]) {
-    pluginEntries["blockrun-clawrouter"] = pluginEntries.clawrouter;
+  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries[BLOCKRUN_PLUGIN_ID]) {
+    pluginEntries[BLOCKRUN_PLUGIN_ID] = pluginEntries.clawrouter;
     delete pluginEntries.clawrouter;
     needsWrite = true;
     logger48.info(
       "Migrated plugins.entries.clawrouter -> blockrun-clawrouter (OpenClaw bundles its own `clawrouter` plugin; see #305)"
     );
+  }
+  const pluginsCfg = config.plugins;
+  const allow = pluginsCfg?.allow;
+  if (Array.isArray(allow) && allow.includes("clawrouter") && !allow.includes(BLOCKRUN_PLUGIN_ID)) {
+    allow.push(BLOCKRUN_PLUGIN_ID);
+    needsWrite = true;
+    logger48.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.allow (renamed from clawrouter; see #305)`);
+  }
+  const deny = pluginsCfg?.deny;
+  if (Array.isArray(deny) && deny.includes("clawrouter") && !deny.includes(BLOCKRUN_PLUGIN_ID)) {
+    deny.push(BLOCKRUN_PLUGIN_ID);
+    needsWrite = true;
+    logger48.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.deny (renamed from clawrouter; see #305)`);
+  }
+  const installs = pluginsCfg?.installs;
+  if (installs && installs.clawrouter && !installs[BLOCKRUN_PLUGIN_ID]) {
+    installs[BLOCKRUN_PLUGIN_ID] = installs.clawrouter;
+    delete installs.clawrouter;
+    needsWrite = true;
+    logger48.info(`Migrated plugins.installs.clawrouter -> ${BLOCKRUN_PLUGIN_ID} (see #305)`);
   }
   if (!config.tools || typeof config.tools !== "object" || Array.isArray(config.tools)) {
     config.tools = {};
@@ -228150,7 +228171,7 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
     }
   };
 }
-var activeProxyHandle, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, plugin, index_default2;
+var activeProxyHandle, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, BLOCKRUN_PLUGIN_ID, plugin, index_default2;
 var init_index = __esm({
   "src/index.ts"() {
     "use strict";
@@ -228193,6 +228214,7 @@ var init_index = __esm({
     IMAGE_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "images");
     AUDIO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "audio");
     VIDEO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "videos");
+    BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
     plugin = {
       // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
       // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
@@ -228200,7 +228222,7 @@ var init_index = __esm({
       // bundled one — "global plugin will be overridden by bundled plugin" — so this
       // plugin silently never loaded and the local proxy never started. Different
       // product, different id. See #305.
-      id: "blockrun-clawrouter",
+      id: BLOCKRUN_PLUGIN_ID,
       name: "BlockRun ClawRouter",
       description: "Smart LLM router \u2014 55+ models, x402 micropayments, 78% cost savings",
       version: VERSION,
@@ -228611,7 +228633,7 @@ ${errText}`
             }
             removeManagedBlockrunMcpServerConfig(config);
             for (const key2 of [
-              "blockrun-clawrouter",
+              BLOCKRUN_PLUGIN_ID,
               "clawrouter",
               "ClawRouter",
               "@blockrun/clawrouter"
@@ -228621,7 +228643,7 @@ ${errText}`
             }
             if (Array.isArray(config.plugins?.allow)) {
               config.plugins.allow = config.plugins.allow.filter(
-                (p) => p !== "blockrun-clawrouter" && p !== "clawrouter" && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
+                (p) => p !== BLOCKRUN_PLUGIN_ID && p !== "clawrouter" && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
               );
             }
             if (config.agents?.defaults?.models) {

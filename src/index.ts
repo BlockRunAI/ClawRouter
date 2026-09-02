@@ -464,13 +464,48 @@ function injectModelsConfig(
   // preserved. Only when the new key is absent — never clobber a real one.
   const pluginEntries = (config.plugins as Record<string, unknown> | undefined)?.entries as
     Record<string, unknown> | undefined;
-  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries["blockrun-clawrouter"]) {
-    pluginEntries["blockrun-clawrouter"] = pluginEntries.clawrouter;
+  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries[BLOCKRUN_PLUGIN_ID]) {
+    pluginEntries[BLOCKRUN_PLUGIN_ID] = pluginEntries.clawrouter;
     delete pluginEntries.clawrouter;
     needsWrite = true;
     logger.info(
       "Migrated plugins.entries.clawrouter -> blockrun-clawrouter (OpenClaw bundles its own `clawrouter` plugin; see #305)",
     );
+  }
+
+  // `plugins.allow` is an EXCLUSIVE allowlist: OpenClaw's own docs say "if
+  // plugins.allow is set, the installed plugin id must be in that list before
+  // the plugin can load". A user who allow-listed us under the old id would,
+  // after the rename, have this plugin blocked outright — strictly worse than
+  // the collision the rename fixes.
+  //
+  // ADD rather than replace. `clawrouter` in that list may now also be
+  // permitting OpenClaw's bundled plugin, and silently revoking that is not
+  // ours to decide; adding our new id is enough to get us loading again.
+  const pluginsCfg = config.plugins as Record<string, unknown> | undefined;
+  const allow = pluginsCfg?.allow;
+  if (Array.isArray(allow) && allow.includes("clawrouter") && !allow.includes(BLOCKRUN_PLUGIN_ID)) {
+    allow.push(BLOCKRUN_PLUGIN_ID);
+    needsWrite = true;
+    logger.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.allow (renamed from clawrouter; see #305)`);
+  }
+
+  // Mirror for `plugins.deny`: an explicit deny of the old id was a decision to
+  // keep THIS plugin off, made when no other `clawrouter` existed. Honour it.
+  const deny = pluginsCfg?.deny;
+  if (Array.isArray(deny) && deny.includes("clawrouter") && !deny.includes(BLOCKRUN_PLUGIN_ID)) {
+    deny.push(BLOCKRUN_PLUGIN_ID);
+    needsWrite = true;
+    logger.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.deny (renamed from clawrouter; see #305)`);
+  }
+
+  // Install provenance is unambiguously ours — rename the key outright.
+  const installs = pluginsCfg?.installs as Record<string, unknown> | undefined;
+  if (installs && installs.clawrouter && !installs[BLOCKRUN_PLUGIN_ID]) {
+    installs[BLOCKRUN_PLUGIN_ID] = installs.clawrouter;
+    delete installs.clawrouter;
+    needsWrite = true;
+    logger.info(`Migrated plugins.installs.clawrouter -> ${BLOCKRUN_PLUGIN_ID} (see #305)`);
   }
 
   // web_search: set `enabled = true` (safe — boolean, no provider validator),
@@ -1848,6 +1883,14 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
   };
 }
 
+/**
+ * This plugin's OpenClaw id. NOT "clawrouter" — OpenClaw bundles its own plugin
+ * under that id since the 2026.7.1 line, and a duplicate loses to the bundled
+ * one. Kept as one constant so the manifest, the plugin definition and the
+ * config migration can never drift apart. See #305.
+ */
+export const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+
 const plugin: OpenClawPluginDefinition = {
   // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
   // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
@@ -1855,7 +1898,7 @@ const plugin: OpenClawPluginDefinition = {
   // bundled one — "global plugin will be overridden by bundled plugin" — so this
   // plugin silently never loaded and the local proxy never started. Different
   // product, different id. See #305.
-  id: "blockrun-clawrouter",
+  id: BLOCKRUN_PLUGIN_ID,
   name: "BlockRun ClawRouter",
   description: "Smart LLM router — 55+ models, x402 micropayments, 78% cost savings",
   version: VERSION,
@@ -2419,7 +2462,7 @@ const plugin: OpenClawPluginDefinition = {
 
         // Remove plugin entries (all case variants)
         for (const key of [
-          "blockrun-clawrouter",
+          BLOCKRUN_PLUGIN_ID,
           "clawrouter",
           "ClawRouter",
           "@blockrun/clawrouter",
@@ -2432,7 +2475,7 @@ const plugin: OpenClawPluginDefinition = {
         if (Array.isArray(config.plugins?.allow)) {
           config.plugins.allow = config.plugins.allow.filter(
             (p: string) =>
-              p !== "blockrun-clawrouter" &&
+              p !== BLOCKRUN_PLUGIN_ID &&
               p !== "clawrouter" &&
               p !== "ClawRouter" &&
               p !== "@blockrun/clawrouter",
