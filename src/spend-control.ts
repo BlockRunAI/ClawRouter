@@ -478,6 +478,7 @@ export class SpendControl {
     }
     this.policyFileBroken = undefined;
     this.limits = data ? cloneLimits(data.limits) : {};
+    this.diskLimits = cloneLimits(this.limits); // the CAS baseline follows what was just read
     this.limitsDirty = false;
   }
 
