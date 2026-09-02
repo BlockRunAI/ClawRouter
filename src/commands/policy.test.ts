@@ -96,8 +96,8 @@ describe("runPolicyCommand (in-memory store)", () => {
   });
 
   it.each([
-    [["set", "allowedNetworks", "base"], /not a supported CAIP-2 network id.*eip155:8453/],
-    [["set", "allowedNetworks", "eip155:1"], /not a supported CAIP-2 network id/],
+    [["set", "allowedNetworks", "base"], /not a network the proxy can pay on.*eip155:8453/],
+    [["set", "allowedNetworks", "eip155:1"], /well formed but cannot appear in a payment quote/],
     [["set", "blockedPayees", "0xdead"], /exactly 40 hex/],
     [["set", "allowedAssets", `0X${"c".repeat(40)}`], /exactly 40 hex/],
     [["limit", "daily", "5abc"], /Rejected amount "5abc"/],

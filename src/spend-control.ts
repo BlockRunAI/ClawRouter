@@ -40,6 +40,14 @@ export const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 
+/**
+ * Every network the proxy can pay on, as carried on x402
+ * `selectedRequirements.network`. Single source of truth for surfaces that
+ * validate `allowedNetworks` entries: an entry outside this set can never
+ * match a quote and would only block payments.
+ */
+export const PAYABLE_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
+
 export const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",
   "blockedPayees",

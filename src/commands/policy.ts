@@ -17,6 +17,7 @@ import type {
 import {
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
+  PAYABLE_NETWORKS,
   POLICY_LISTS,
   SpendControl,
   normalizePayee,
@@ -26,8 +27,6 @@ import {
 } from "../spend-control.js";
 
 const SPEND_WINDOWS: readonly SpendWindow[] = ["perRequest", "hourly", "daily", "session"];
-/** The only network ids the proxy ever pays on; any other allowlist entry can never match a quote. */
-const KNOWN_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
 /** Strict decimal: "5abc" and "1e3" are rejected, not truncated the way parseFloat would. */
 const USD = /^\d+(\.\d+)?$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -74,9 +73,9 @@ function isListAction(v: string): v is ListAction {
 /** Why `value` must not enter `list`, or undefined when it may. */
 function rejectValue(list: PolicyList, value: string): string | undefined {
   if (list === "allowedNetworks") {
-    return KNOWN_NETWORKS.includes(value)
+    return PAYABLE_NETWORKS.includes(value)
       ? undefined
-      : `"${value}" is not a supported CAIP-2 network id — use ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname`;
+      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
   }
   if (/^0x/i.test(value) && !EVM_ADDRESS.test(value)) {
     return `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
