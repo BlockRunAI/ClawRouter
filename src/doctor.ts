@@ -23,6 +23,7 @@ import { BalanceMonitor } from "./balance.js";
 import { getSolanaAddress } from "./wallet.js";
 import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
+import { registerSpendPolicyHook, SpendControl } from "./spend-control.js";
 import { VERSION } from "./version.js";
 
 // Types
@@ -380,6 +381,27 @@ const DOCTOR_MODELS: Record<DoctorModel, { id: string; name: string; cost: strin
   },
 };
 
+/**
+ * Build the x402 client doctor pays with. The spend-policy hook is registered
+ * here, before any signing scheme, exactly as startProxy does: doctor's paid
+ * call (~$0.003-$0.01) must not be a way around the operator's allow/deny
+ * lists. This is the only place doctor constructs an x402Client, so the test
+ * that drives it pins the wiring, not just the helper.
+ */
+export function createDoctorX402Client(opts: {
+  walletKey: string;
+  /** Default: the same on-disk policy the proxy reads. Inject in tests. */
+  spendControl?: SpendControl;
+}): x402Client {
+  const account = privateKeyToAccount(opts.walletKey as `0x${string}`);
+  const publicClient = createPublicClient({ chain: base, transport: http() });
+  const evmSigner = toClientEvmSigner(account, publicClient);
+  const x402 = new x402Client();
+  registerSpendPolicyHook(x402, opts.spendControl ?? new SpendControl());
+  registerExactEvmScheme(x402, { signer: evmSigner });
+  return x402;
+}
+
 // Send to AI for analysis
 async function analyzeWithAI(
   diagnostics: DiagnosticResult,
@@ -403,11 +425,7 @@ async function analyzeWithAI(
 
   try {
     const { key } = await resolveOrGenerateWalletKey();
-    const account = privateKeyToAccount(key as `0x${string}`);
-    const publicClient = createPublicClient({ chain: base, transport: http() });
-    const evmSigner = toClientEvmSigner(account, publicClient);
-    const x402 = new x402Client();
-    registerExactEvmScheme(x402, { signer: evmSigner });
+    const x402 = createDoctorX402Client({ walletKey: key });
 
     // Register Solana scheme if user is on Solana chain
     const paymentChain = diagnostics.wallet.paymentChain;

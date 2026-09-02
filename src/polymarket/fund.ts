@@ -12,10 +12,11 @@ import type { Hex } from "viem";
 import { BlockrunClient, createPaymentPayload } from "@blockrun/llm";
 import { getOrCreateWalletKey, getChainBalance } from "./wallet-adapter.js";
 import { getPolymarketAccount } from "./client.js";
-import { BASE_CHAIN_ID, BRIDGE_API_HOST, getSigType } from "./constants.js";
+import { BASE_CHAIN_ID, BASE_USDC, BRIDGE_API_HOST, getSigType } from "./constants.js";
 import { getFundsAddress } from "./positions.js";
 import { getPublicClient } from "./setup.js";
 import type { ToolResult } from "./orders.js";
+import { signUnderSpendPolicy, type PolymarketSpendDeps } from "./spend-policy.js";
 
 const FUND_FEE_USD = 0.01;
 const USDC_DECIMALS = 6;
@@ -38,10 +39,10 @@ async function bridgeAddressFor(vault: string): Promise<string> {
   return evm;
 }
 
-export async function fundVault(input: {
-  amount_usd?: number;
-  confirm?: boolean;
-}): Promise<ToolResult> {
+export async function fundVault(
+  input: { amount_usd?: number; confirm?: boolean },
+  deps?: PolymarketSpendDeps,
+): Promise<ToolResult> {
   if (input.amount_usd === undefined || input.amount_usd <= 0) {
     return {
       text: `Pass amount_usd — the USDC amount to move from your Base wallet into your Polymarket vault (e.g. amount_usd:5).`,
@@ -117,18 +118,25 @@ export async function fundVault(input: {
     }
 
     // Sign the EIP-3009 deposit authorization: Base USDC → bridge address.
+    // Spend policy runs first: the bridge is the counterparty the principal
+    // goes to, so a blocked/unlisted bridge, network, or asset refuses here
+    // before anything is signed (and before the fee leg below is charged).
     const privateKey = getOrCreateWalletKey();
     const amountMicro = String(Math.floor(amountUsd * 10 ** USDC_DECIMALS));
-    const depositAuthorization = await createPaymentPayload(
-      privateKey,
-      agent,
-      bridge,
-      amountMicro,
-      `eip155:${BASE_CHAIN_ID}`,
+    const network = `eip155:${BASE_CHAIN_ID}`;
+    const depositAuthorization = await signUnderSpendPolicy(
+      deps,
+      { payTo: bridge, network, asset: BASE_USDC, amount: amountMicro },
+      "polymarket fund",
+      () => createPaymentPayload(privateKey, agent, bridge, amountMicro, network),
     );
 
     // Call the gateway fund endpoint — it charges $0.01 via x402 automatically
     // and relays the deposit authorization to the CDP facilitator (pays gas).
+    // KNOWN GAP: BlockrunClient signs that $0.01 fee internally with no
+    // pre-sign hook (its options are privateKey/apiUrl/timeout only), so the
+    // fee leg cannot consult policy. It only runs once the principal above
+    // has passed the check, and its payee is BlockRun's own gateway.
     const client = new BlockrunClient({ privateKey });
     const result = (await client.post("/v1/polymarket/fund", {
       depositWallet: vault,
