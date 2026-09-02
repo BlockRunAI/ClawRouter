@@ -30,6 +30,12 @@ const h = vi.hoisted(() => ({
       asks: [{ price: "0.55", size: "100" }],
       bids: [{ price: "0.45", size: "100" }],
     })),
+    getMarket: vi.fn(async () => ({
+      question: "Will it happen?",
+      neg_risk: h.negRisk,
+      closed: true,
+      tokens: [{ token_id: "777", outcome: "Yes", winner: true }],
+    })),
     createAndPostOrder: vi.fn(async () => ({ success: true, orderID: "ord-1", status: "live" })),
     createAndPostMarketOrder: vi.fn(async () => ({ success: true, orderID: "ord-2" })),
   },
@@ -58,6 +64,7 @@ vi.mock("./setup.js", () => ({
     readContract: async () => 5_000_000n, // $5 pUSD in the deposit wallet
     waitForTransactionReceipt: async () => ({}),
   }),
+  getPusdBalance: async () => 5,
 }));
 vi.mock("./relayer.js", () => ({ sendWalletBatch: h.sendWalletBatch }));
 vi.mock("viem", async (importOriginal) => ({
@@ -71,10 +78,13 @@ vi.mock("./constants.js", async (importOriginal) => ({
 
 import { fundVault } from "./fund.js";
 import { executeTrade, getSessionLedger } from "./orders.js";
+import { redeemPosition } from "./redeem.js";
 import { withdrawFunds } from "./withdraw.js";
 import {
   BASE_USDC,
+  CONDITIONAL_TOKENS,
   CTF_EXCHANGE_V2,
+  NEG_RISK_ADAPTER,
   NEG_RISK_CTF_EXCHANGE_V2,
   PUSD_COLLATERAL,
 } from "./constants.js";
@@ -198,5 +208,59 @@ describe("withdrawFunds consults spend policy before signing the transfer", () =
       network: "eip155:8453",
       asset: BASE_USDC,
     });
+  });
+});
+
+describe("redeemPosition consults spend policy before signing the claim", () => {
+  // Redeem moves NO capital out — it burns the wallet's own outcome tokens and
+  // credits collateral back to the same wallet — so the amount checked is 0.
+  // The check is still pinned: payee/network lists govern every signed path,
+  // and the contract called (ConditionalTokens vs NegRiskAdapter) is the payee.
+  const redeem = { condition_id: `0x${"ab".repeat(32)}`, confirm: true };
+
+  beforeEach(() => {
+    h.negRisk = false;
+  });
+
+  it("refuses a blocked ConditionalTokens contract and never signs on either path", async () => {
+    const control = inMemoryControl();
+    control.setPolicy("blockedPayees", [CONDITIONAL_TOKENS]);
+
+    const r = await redeemPosition(redeem, { spendControl: control });
+
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/blocked by policy/i);
+    expect(h.sendTransaction).not.toHaveBeenCalled();
+    expect(h.sendWalletBatch).not.toHaveBeenCalled();
+  });
+
+  it("signs for an allowed contract and hands policy the redeem target with amount 0", async () => {
+    const control = inMemoryControl();
+    const check = vi.spyOn(control, "check");
+
+    const r = await redeemPosition(redeem, { spendControl: control });
+
+    expect(r.isError).toBeFalsy();
+    expect(h.sendTransaction).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledWith(0, {
+      payTo: CONDITIONAL_TOKENS,
+      network: "eip155:137",
+      asset: PUSD_COLLATERAL,
+    });
+  });
+
+  it("routes negRisk markets to the NegRiskAdapter, so an allowlist for ConditionalTokens refuses", async () => {
+    h.negRisk = true;
+    const control = inMemoryControl();
+    control.setPolicy("allowedPayees", [CONDITIONAL_TOKENS]);
+    const check = vi.spyOn(control, "check");
+
+    const r = await redeemPosition(redeem, { spendControl: control });
+
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/not in the configured allowlist/i);
+    expect(h.sendTransaction).not.toHaveBeenCalled();
+    expect(h.sendWalletBatch).not.toHaveBeenCalled();
+    expect(check.mock.calls[0]?.[1]?.payTo).toBe(NEG_RISK_ADAPTER);
   });
 });
