@@ -776,7 +776,13 @@ function removeInjectedAuthPlaceholder(
 
 // Store active proxy handle for cleanup on gateway_stop
 let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
-/** The SpendControl the running proxy signs against; /policy mutates this one, not a fresh copy. */
+/**
+ * The SpendControl handed to the most recent startProxy(). Only meaningful
+ * while activeProxyHandle is set: it is created before startup so it can be
+ * passed in, so a failed or superseded start, or a stopped proxy, must not
+ * let /policy claim "applied to the running proxy" — the getter below gates
+ * on the handle, which every stop/reset path already clears.
+ */
 let liveSpendControl: SpendControl | null = null;
 let pendingConfiguredStartupApi: OpenClawPluginApi | null = null;
 type ProcessWithClawRouterState = NodeJS.Process & {
@@ -2231,7 +2237,11 @@ const plugin: OpenClawPluginDefinition = {
     }
     api.registerCommand(createStatsCommand());
     api.registerCommand(createExcludeCommand());
-    api.registerCommand(createPolicyCommand({ liveControl: () => liveSpendControl ?? undefined }));
+    api.registerCommand(
+      createPolicyCommand({
+        liveControl: () => (activeProxyHandle ? (liveSpendControl ?? undefined) : undefined),
+      }),
+    );
     if (shouldLogRegistration) {
       api.logger.info(
         "Commands registered: /wallet, /blockrun, /stats, /exclude, /policy, /partners, /cr-imagegen, /videogen, /cr-call",
