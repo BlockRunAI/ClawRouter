@@ -4,7 +4,9 @@
  * One implementation behind two entry points: the `clawrouter policy` CLI and
  * the OpenClaw `/policy` plugin command both call runPolicyCommand(), so the
  * validation lives in exactly one place. Fail-closed on input: every argument
- * is checked before the store is opened, and a rejected argument writes nothing.
+ * is validated before anything is written, and a rejected argument writes
+ * nothing. (Membership checks for `remove` need the current list, so they run
+ * after a read-only open.)
  *
  * This edits spending.json. The proxy reads limits once, in the SpendControl
  * constructor, so a change takes effect on its next start.
@@ -224,6 +226,9 @@ export function runPolicyCommand(
     return fail(`${broken}\nNothing was written; repair or delete spending.json, then retry.`);
   }
   if (plan.kind === "show") return { text: formatPolicy(control.getLimits()) };
+  // What disk held before this write — the baseline the landed-check compares
+  // every key against, not just the one being changed.
+  const before = openControl().getLimits();
 
   const key: PolicyList | SpendWindow = plan.kind === "limit" ? plan.window : plan.list;
   let expected: number | string[] | undefined;
@@ -244,12 +249,22 @@ export function runPolicyCommand(
   }
 
   // FileSpendControlStorage.save() logs and swallows write failures, so a setter
-  // returning is not proof of persistence. Re-open the store and compare the one
-  // key this command changed; report anything else as not applied.
-  const landed = openControl().getLimits()[key];
-  if (JSON.stringify(landed) !== JSON.stringify(expected)) {
+  // returning is not proof of persistence. Re-open the store and compare EVERY
+  // key against disk-before-write plus the one change: a limits write is a
+  // whole-object replace, so an instance holding a stale copy (a CLI opened
+  // before another edit landed, or a proxy that never re-reads) silently drops
+  // sibling keys. Surface that rather than report success.
+  const expectedAll = { ...before } as Record<string, unknown>;
+  if (expected === undefined) delete expectedAll[key];
+  else expectedAll[key] = expected;
+  const after = openControl().getLimits() as Record<string, unknown>;
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after), key])];
+  const drift = keys.filter((k) => JSON.stringify(after[k]) !== JSON.stringify(expectedAll[k]));
+  if (drift.length > 0) {
+    const show = (v: unknown) => (v === undefined ? "(unset)" : JSON.stringify(v));
+    const detail = drift.map((k) => `${k} ${show(after[k])} vs ${show(expectedAll[k])}`).join("; ");
     return fail(
-      `Write did not land: ${key} on disk is ${JSON.stringify(landed) ?? "(none)"}, expected ${JSON.stringify(expected) ?? "(none)"}`,
+      `Write did not land cleanly — on disk vs expected: ${detail}. Another write may have raced this one; run "policy" to see what disk holds now`,
     );
   }
   const headline =

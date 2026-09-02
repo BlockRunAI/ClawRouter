@@ -182,6 +182,14 @@ export interface SpendControlStorage {
    * back to save() when absent.
    */
   saveHistory?(history: SpendRecord[]): void;
+  /**
+   * Optional: persist limits without touching stored history — the mirror of
+   * saveHistory(). A policy edit from a second process (the CLI) must not
+   * write its own stale history snapshot back over spend the proxy recorded
+   * since, which would reopen a rolling window. Falls back to save() when
+   * absent.
+   */
+  saveLimits?(limits: SpendLimits): void;
 }
 
 export class FileSpendControlStorage implements SpendControlStorage {
@@ -288,6 +296,18 @@ export class FileSpendControlStorage implements SpendControlStorage {
     }
     this.save({ limits: storedLimits, history });
   }
+
+  /** Persist limits while leaving the stored history exactly as it is on disk. */
+  saveLimits(limits: SpendLimits): void {
+    let storedHistory: SpendRecord[] = [];
+    try {
+      const current = this.load();
+      if (current) storedHistory = current.history;
+    } catch {
+      return; // malformed policy on disk: leave the file alone, as saveHistory does
+    }
+    this.save({ limits, history: storedHistory });
+  }
 }
 
 export class InMemorySpendControlStorage implements SpendControlStorage {
@@ -306,6 +326,13 @@ export class InMemorySpendControlStorage implements SpendControlStorage {
     this.data = {
       limits: cloneLimits(data.limits),
       history: data.history.map((r) => ({ ...r })),
+    };
+  }
+
+  saveLimits(limits: SpendLimits): void {
+    this.data = {
+      limits: cloneLimits(limits),
+      history: this.data?.history.map((r) => ({ ...r })) ?? [],
     };
   }
 }
@@ -701,6 +728,14 @@ export class SpendControl {
     }
     if (!this.limitsDirty && this.storage.saveHistory) {
       this.storage.saveHistory([...this.history]);
+      return;
+    }
+    if (this.limitsDirty && this.storage.saveLimits) {
+      // Limits changed: write them without this instance's history snapshot.
+      // Once on disk they are no longer "ours to protect", so later
+      // history-only saves go back to preserving whatever limits disk holds.
+      this.storage.saveLimits(cloneLimits(this.limits));
+      this.limitsDirty = false;
       return;
     }
     this.storage.save({

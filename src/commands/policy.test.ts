@@ -180,8 +180,9 @@ describe("runPolicyCommand (in-memory store)", () => {
 
   it("reports a write that did not land instead of claiming success", () => {
     class DroppingStorage extends InMemorySpendControlStorage {
-      // FileSpendControlStorage.save() swallows write failures; model that.
+      // FileSpendControlStorage.save() swallows write failures; model that on both write paths.
       override save(): void {}
+      override saveLimits(): void {}
     }
     const storage = new DroppingStorage();
     const res = runPolicyCommand(["limit", "hourly", "1"], {
@@ -189,6 +190,38 @@ describe("runPolicyCommand (in-memory store)", () => {
     });
     expect(res.isError).toBe(true);
     expect(res.text).toMatch(/Write did not land/);
+  });
+
+  it("reports a stale instance dropping a sibling key instead of claiming success", () => {
+    const { storage, openControl } = memory();
+    const stale = new SpendControl({ storage }); // opened before the blocklist landed
+    expect(runPolicyCommand(["set", "blockedPayees", payee], { openControl }).isError).toBeFalsy();
+
+    const res = runPolicyCommand(["limit", "daily", "5"], {
+      openControl,
+      liveControl: () => stale,
+    });
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/did not land cleanly/);
+    expect(res.text).toMatch(/blockedPayees \(unset\) vs \["0x/);
+  });
+
+  it("a policy write from a stale instance keeps the spend the proxy recorded in between", () => {
+    const storage = new InMemorySpendControlStorage();
+    const cli = new SpendControl({ storage }); // opened first: empty history snapshot
+    const proxy = new SpendControl({ storage });
+    proxy.record(0.5, { action: "x402 payment" });
+    expect(storage.load()?.history).toHaveLength(1);
+
+    const res = runPolicyCommand(["set", "blockedPayees", payee], {
+      openControl: () => new SpendControl({ storage }),
+      liveControl: () => cli,
+    });
+
+    expect(res.isError).toBeFalsy();
+    expect(storage.load()?.history).toHaveLength(1);
+    expect(storage.load()?.limits.blockedPayees).toEqual([payee.toLowerCase()]);
   });
 
   it("plugin handler splits ctx.args and shares the same implementation", async () => {
