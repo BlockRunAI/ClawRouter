@@ -306,6 +306,40 @@ export async function executeTrade(
       isError: true,
     };
   }
+  // A non-positive amount_usd would otherwise become the order's notional
+  // (see below) and, being additive, a negative value lets the ledger check
+  // (`ledger.totalUsd + notional > sessionCap`) be satisfied by *reducing*
+  // totalUsd instead of raising it — silently defeating POLYMARKET_MAX_SESSION_USD
+  // for every order placed afterward. Reject before any network call, same as
+  // fund.ts's amount_usd guard.
+  //
+  // Number.isFinite, not just `<= 0`: nothing validates this field at runtime.
+  // tool.ts hands us `params.amount_usd as number | undefined`, a compile-time
+  // cast over `Record<string, unknown>`, so NaN and strings arrive intact.
+  // `NaN <= 0` and `"abc" <= 0` are both false, and a NaN notional poisons
+  // ledger.totalUsd permanently (`totalUsd + NaN > cap` is false forever).
+  if (
+    !isLimit &&
+    input.action === "buy" &&
+    input.amount_usd !== undefined &&
+    !(Number.isFinite(input.amount_usd) && input.amount_usd > 0)
+  ) {
+    return {
+      text: `amount_usd must be a positive dollar amount to spend, got ${input.amount_usd}.`,
+      isError: true,
+    };
+  }
+  // Same class on the limit path, rejected before any network call. A negative
+  // or NaN size makes notional (price * size) negative or NaN, which walks
+  // through both the per-order and session caps. The later `minSize` check
+  // cannot catch it: `book.min_order_size` is often absent, so
+  // `parseFloat(undefined || "0")` is 0 and `minSize > 0` short-circuits.
+  if (isLimit && input.size !== undefined && !(Number.isFinite(input.size) && input.size > 0)) {
+    return {
+      text: `size must be a positive number of shares, got ${input.size}.`,
+      isError: true,
+    };
+  }
   if (!isLimit && input.action === "sell" && input.size === undefined) {
     return { text: `Market sells need size (shares to sell).`, isError: true };
   }

@@ -52,6 +52,24 @@ export async function withdrawFunds(
   input: WithdrawInput,
   deps?: PolymarketSpendDeps,
 ): Promise<ToolResult> {
+  // A non-positive amount_usd would otherwise pass the balance check below
+  // (amountRaw > balanceRaw is false for zero or negative amounts) and reach
+  // the bridge/transfer call. Reject before any network call, same as
+  // fund.ts's amount_usd guard.
+  //
+  // Number.isFinite, not just `<= 0`: nothing validates this field at runtime.
+  // tool.ts hands us `params.amount_usd as number | undefined`, a compile-time
+  // cast over `Record<string, unknown>`, so NaN and strings arrive intact and
+  // both `NaN <= 0` and `"abc" <= 0` are false.
+  if (
+    input.amount_usd !== undefined &&
+    !(Number.isFinite(input.amount_usd) && input.amount_usd > 0)
+  ) {
+    return {
+      text: `amount_usd must be a positive dollar amount, got ${input.amount_usd}. Omit it to withdraw the full balance.`,
+      isError: true,
+    };
+  }
   let owner: Hex;
   try {
     owner = getFundsAddress();
