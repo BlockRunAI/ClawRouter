@@ -20,6 +20,8 @@ and Pi runtimes. ClawRouter itself is installed from the current npm release on
 first use so the Desktop cannot ship an obsolete routing/plugin lifecycle.
 Electron 44 embeds Node 24, so end users do not need a separate Node
 installation. Hermes remains installed in Hermes' own Python environment.
+The distribution command recreates `runtime/node_modules` from the committed,
+frozen pnpm lockfile before packaging; local leftovers cannot affect a release.
 
 ## Shared BlockRun Core wallet
 
@@ -47,7 +49,7 @@ they are inert and do not change the agent's configuration.
 
 - ClawRouter OpenAI-compatible API: `http://127.0.0.1:8402/v1`
 - Codex Responses bridge: `http://127.0.0.1:8403/v1`
-- Control-plane model metadata: `http://127.0.0.1:8402/admin/models`
+- Model catalog and metadata: `http://127.0.0.1:8402/v1/models`
 
 Both services bind to loopback. Port 8402 must prove possession of a private
 Desktop token before it is reused. For newly spawned services, the supervisor

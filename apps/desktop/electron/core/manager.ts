@@ -1,22 +1,22 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { createHmac, createPrivateKey, createPublicKey, randomBytes } from "node:crypto";
+import { createPrivateKey, createPublicKey, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
-import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
+import { validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english";
 
 import { CodexAdapter } from "../adapters/codex.js";
+import { deriveSolanaKeyBytes } from "../../../../src/solana-key.js";
 import { DshAdapter } from "../adapters/dsh.js";
 import { HermesAdapter } from "../adapters/hermes.js";
 import { OpenClawAdapter } from "../adapters/openclaw.js";
 import { PiAdapter } from "../adapters/pi.js";
 import { commandExists, runCommand, withEmbeddedNode } from "./process.js";
-import { BUNDLED_MODEL_METADATA } from "./model-catalog.js";
-import { ensureNpmPackage, proxyHealth } from "./runtime.js";
+import { CLAWROUTER_PACKAGE_VERSION, ensureNpmPackage, proxyHealth } from "./runtime.js";
 import { ServiceSupervisor } from "./supervisor.js";
-import { ConfigurationTransaction } from "./transaction.js";
+import { ConfigurationTransaction, RollbackError, RolledBackError } from "./transaction.js";
 import type {
   AdapterContext,
   AgentAdapter,
@@ -36,12 +36,14 @@ const BASE_RPC_URL = "https://mainnet.base.org";
 const BASE_USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com";
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const BALANCE_CACHE_TTL_MS = 30_000;
 
 export class ClawRouterManager {
   readonly context: AdapterContext;
   readonly supervisor: ServiceSupervisor;
   private readonly transaction: ConfigurationTransaction;
   private readonly adapters: Map<AgentId, AgentAdapter>;
+  private readonly balanceCache = new Map<string, { value: number; fetchedAt: number }>();
 
   constructor(overrides: Partial<AdapterContext> = {}) {
     const homeDir = overrides.homeDir ?? homedir();
@@ -102,7 +104,9 @@ export class ClawRouterManager {
         ok: false,
         status: await this.decorateStatus(adapter, await adapter.status(this.context)),
         message: error instanceof Error ? error.message : String(error),
-        rolledBack: true,
+        ...(error instanceof RollbackError || error instanceof RolledBackError
+          ? { rolledBack: error.rolledBack }
+          : {}),
       };
     }
   }
@@ -149,7 +153,11 @@ export class ClawRouterManager {
 
   async switchPaymentChain(chain: PaymentChain): Promise<PaymentChainSwitchResult> {
     try {
-      const command = await ensureNpmPackage(this.context, "@blockrun/clawrouter", "clawrouter");
+      const command = await ensureNpmPackage(this.context, "@blockrun/clawrouter", "clawrouter", {
+        enforceVersion: true,
+        ignoreScripts: true,
+        version: CLAWROUTER_PACKAGE_VERSION,
+      });
       const result = await this.context.runCommand(command, ["chain", chain], {
         timeoutMs: 30_000,
       });
@@ -179,7 +187,11 @@ export class ClawRouterManager {
 
   async createOnramp(amount: number): Promise<OnrampResult> {
     try {
-      const command = await ensureNpmPackage(this.context, "@blockrun/clawrouter", "clawrouter");
+      const command = await ensureNpmPackage(this.context, "@blockrun/clawrouter", "clawrouter", {
+        enforceVersion: true,
+        ignoreScripts: true,
+        version: CLAWROUTER_PACKAGE_VERSION,
+      });
       const result = await this.context.runCommand(command, ["onramp", String(amount), "--json"], {
         timeoutMs: 45_000,
       });
@@ -261,7 +273,7 @@ export class ClawRouterManager {
       } else {
         const mnemonic = await readText(join(legacyDir, "mnemonic"));
         if (mnemonic && validateMnemonic(mnemonic, english)) {
-          const seed = solanaSeedFromMnemonic(mnemonic);
+          const seed = deriveSolanaKeyBytes(mnemonic);
           const secret = Buffer.concat([Buffer.from(seed), Buffer.from(ed25519PublicKey(seed))]);
           value = JSON.stringify([...secret]);
           address = base58Encode(secret.subarray(32));
@@ -282,7 +294,12 @@ export class ClawRouterManager {
       await mkdir(coreDir, { recursive: true });
       if (current) {
         const backup = `${name}.backup-${Date.now()}`;
-        await writeFileIfMissing(coreDir, backup, current + "\n");
+        const backedUp = await writeFileIfMissing(coreDir, backup, current + "\n");
+        if (!backedUp) {
+          throw new Error(
+            `Could not safely back up the current ${chainLabel(chain)} wallet. No changes were made.`,
+          );
+        }
       }
       await atomicWritePrivateFile(coreDir, name, value + "\n");
       return {
@@ -308,7 +325,7 @@ export class ClawRouterManager {
     const localWalletsPromise = this.localWallets();
     const legacyWalletsPromise = localWalletsPromise.then((local) => this.legacyWallets(local));
     const localBalancesPromise = localWalletsPromise.then(({ base, solana }) =>
-      fetchUsdcBalances(base, solana, this.context.fetch),
+      this.fetchUsdcBalances(base, solana),
     );
     const [reachable, configuredChain, localWallets, legacyWallets, localBalances] =
       await Promise.all([
@@ -318,10 +335,9 @@ export class ClawRouterManager {
         legacyWalletsPromise,
         localBalancesPromise,
       ]);
-    const legacyBalances = await fetchUsdcBalances(
+    const legacyBalances = await this.fetchUsdcBalances(
       legacyWallets.base?.address,
       legacyWallets.solana?.address,
-      this.context.fetch,
     );
     const legacyWalletDetails = withLegacyBalances(legacyWallets, legacyBalances);
     if (!reachable) {
@@ -346,7 +362,7 @@ export class ClawRouterManager {
     const [health, stats, catalog] = await Promise.all([
       fetchJson<Record<string, unknown>>(`${root}/health?full=true`, this.context.fetch),
       fetchJson<Record<string, unknown>>(`${root}/stats?days=7`, this.context.fetch),
-      fetchCatalog(root, this.context.fetch),
+      fetchJson<{ data?: Array<Record<string, unknown>> }>(`${root}/v1/models`, this.context.fetch),
     ]);
     const activeWallet = stringOrUndefined(health.value?.wallet);
     const preferredWallet = localWallets.base;
@@ -358,10 +374,9 @@ export class ClawRouterManager {
     const solana = activeSolana ?? localWallets.solana;
     const paymentChain = paymentChainOrUndefined(health.value?.paymentChain);
     const reportedBalance = currencyNumberOrUndefined(health.value?.balance);
-    const activeBalances = await fetchUsdcBalances(
+    const activeBalances = await this.fetchUsdcBalances(
       wallet && !sameAddress(wallet, localWallets.base) ? wallet : undefined,
       solana && solana !== localWallets.solana ? solana : undefined,
-      this.context.fetch,
     );
     const balances: Partial<Record<PaymentChain, number>> = {
       base:
@@ -375,19 +390,18 @@ export class ClawRouterManager {
     };
     const models: ModelInfo[] = (catalog.value?.data ?? []).map((model) => {
       const id = String(model.id ?? "");
-      const bundled = BUNDLED_MODEL_METADATA[id];
       return {
         id,
-        name: stringOrUndefined(model.name) ?? bundled?.name,
-        ownedBy: stringOrUndefined(model.owned_by) ?? bundled?.owned_by,
-        contextWindow: numberOrUndefined(model.context_window) ?? bundled?.context_window,
-        maxOutput: numberOrUndefined(model.max_output) ?? bundled?.max_output,
-        inputPrice: numberOrUndefined(model.input_price) ?? bundled?.input_price,
-        outputPrice: numberOrUndefined(model.output_price) ?? bundled?.output_price,
-        reasoning: booleanOrUndefined(model.reasoning) ?? bundled?.reasoning,
-        vision: booleanOrUndefined(model.vision) ?? bundled?.vision,
-        agentic: booleanOrUndefined(model.agentic) ?? bundled?.agentic,
-        toolCalling: booleanOrUndefined(model.tool_calling) ?? bundled?.tool_calling,
+        name: stringOrUndefined(model.name),
+        ownedBy: stringOrUndefined(model.owned_by),
+        contextWindow: numberOrUndefined(model.context_window),
+        maxOutput: numberOrUndefined(model.max_output),
+        inputPrice: numberOrUndefined(model.input_price),
+        outputPrice: numberOrUndefined(model.output_price),
+        reasoning: booleanOrUndefined(model.reasoning),
+        vision: booleanOrUndefined(model.vision),
+        agentic: booleanOrUndefined(model.agentic),
+        toolCalling: booleanOrUndefined(model.tool_calling),
       };
     });
     const walletRestartChains: PaymentChain[] = [];
@@ -446,6 +460,38 @@ export class ClawRouterManager {
     return legacyValue === "solana" ? "solana" : "base";
   }
 
+  private async fetchUsdcBalances(
+    baseAddress: string | undefined,
+    solanaAddress: string | undefined,
+  ): Promise<Partial<Record<PaymentChain, number>>> {
+    const [base, solana] = await Promise.all([
+      baseAddress ? this.fetchCachedBalance("base", baseAddress) : Promise.resolve(undefined),
+      solanaAddress ? this.fetchCachedBalance("solana", solanaAddress) : Promise.resolve(undefined),
+    ]);
+    return { base, solana };
+  }
+
+  private async fetchCachedBalance(
+    chain: PaymentChain,
+    address: string,
+  ): Promise<number | undefined> {
+    const normalizedAddress = chain === "base" ? address.toLowerCase() : address;
+    const cacheKey = `${chain}:${normalizedAddress}`;
+    const cached = this.balanceCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now - cached.fetchedAt < BALANCE_CACHE_TTL_MS) return cached.value;
+
+    const value =
+      chain === "base"
+        ? await fetchBaseUsdcBalance(address, this.context.fetch)
+        : await fetchSolanaUsdcBalance(address, this.context.fetch);
+    if (value !== undefined) {
+      this.balanceCache.set(cacheKey, { value, fetchedAt: now });
+      return value;
+    }
+    return cached?.value;
+  }
+
   private async migrateLegacyWalletToCore(): Promise<void> {
     const coreDir = join(this.context.homeDir, ".blockrun");
     const legacyDir = join(this.context.homeDir, ".openclaw", "blockrun");
@@ -464,7 +510,7 @@ export class ClawRouterManager {
       pending.push(writeFileIfMissing(coreDir, ".session", legacyBase + "\n"));
     }
     if (!coreSolana && legacyMnemonic && validateMnemonic(legacyMnemonic, english)) {
-      const seed = solanaSeedFromMnemonic(legacyMnemonic);
+      const seed = deriveSolanaKeyBytes(legacyMnemonic);
       const secret = [...seed, ...ed25519PublicKey(seed)];
       pending.push(writeFileIfMissing(coreDir, ".solana-session", JSON.stringify(secret) + "\n"));
     }
@@ -592,16 +638,6 @@ async function fetchJson<T>(
   }
 }
 
-async function fetchCatalog(root: string, fetcher: typeof fetch) {
-  const detailed = await fetchJson<{ data?: Array<Record<string, unknown>> }>(
-    `${root}/admin/models`,
-    fetcher,
-  );
-  return Array.isArray(detailed.value?.data)
-    ? detailed
-    : fetchJson<{ data?: Array<Record<string, unknown>> }>(`${root}/v1/models`, fetcher);
-}
-
 function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
@@ -623,18 +659,6 @@ function stringOrUndefined(value: unknown): string | undefined {
 
 function booleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
-}
-
-async function fetchUsdcBalances(
-  baseAddress: string | undefined,
-  solanaAddress: string | undefined,
-  fetcher: typeof fetch,
-): Promise<Partial<Record<PaymentChain, number>>> {
-  const [base, solana] = await Promise.all([
-    baseAddress ? fetchBaseUsdcBalance(baseAddress, fetcher) : Promise.resolve(undefined),
-    solanaAddress ? fetchSolanaUsdcBalance(solanaAddress, fetcher) : Promise.resolve(undefined),
-  ]);
-  return { base, solana };
 }
 
 async function fetchBaseUsdcBalance(
@@ -766,26 +790,8 @@ function withLegacyBalances(
   };
 }
 
-function solanaSeedFromMnemonic(mnemonic: string): Uint8Array {
-  const seed = mnemonicToSeedSync(mnemonic);
-  let digest = createHmac("sha512", "ed25519 seed").update(seed).digest();
-  let key = digest.subarray(0, 32);
-  let chainCode = digest.subarray(32);
-  for (const index of [44, 501, 0, 0]) {
-    const hardened = index + 0x80000000;
-    const data = Buffer.alloc(37);
-    data[0] = 0;
-    key.copy(data, 1);
-    data.writeUInt32BE(hardened, 33);
-    digest = createHmac("sha512", chainCode).update(data).digest();
-    key = digest.subarray(0, 32);
-    chainCode = digest.subarray(32);
-  }
-  return key;
-}
-
 function solanaAddressFromMnemonic(mnemonic: string): string {
-  return base58Encode(ed25519PublicKey(solanaSeedFromMnemonic(mnemonic)));
+  return base58Encode(ed25519PublicKey(deriveSolanaKeyBytes(mnemonic)));
 }
 
 function solanaAddressFromCoreKey(value: string): string | undefined {

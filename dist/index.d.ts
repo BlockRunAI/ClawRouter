@@ -1333,6 +1333,9 @@ declare class RequestDeduplicator {
     private prune;
 }
 
+/** Derive the Solana seed at m/44'/501'/0'/0' using SLIP-0010 Ed25519. */
+declare function deriveSolanaKeyBytes(mnemonic: string): Uint8Array;
+
 /**
  * Wallet Key Derivation
  *
@@ -1364,17 +1367,7 @@ declare function deriveEvmKey(mnemonic: string): {
     privateKey: `0x${string}`;
     address: string;
 };
-/**
- * Derive 32-byte Solana private key using SLIP-10 Ed25519 derivation.
- * Path: m/44'/501'/0'/0' (Phantom / Solflare / Backpack compatible)
- *
- * Algorithm (SLIP-0010 for Ed25519):
- *   1. Master: HMAC-SHA512(key="ed25519 seed", data=bip39_seed) → IL=key, IR=chainCode
- *   2. For each hardened child index:
- *      HMAC-SHA512(key=chainCode, data=0x00 || key || ser32(index)) → split again
- *   3. Final IL (32 bytes) = Ed25519 private key seed
- */
-declare function deriveSolanaKeyBytes(mnemonic: string): Uint8Array;
+
 /**
  * Derive both EVM and Solana keys from a single mnemonic.
  */

@@ -1,6 +1,5 @@
 import { join } from "node:path";
 
-import { BUNDLED_MODEL_METADATA } from "../core/model-catalog.js";
 import { upsertPiConfig, type PiModelConfig } from "../core/config.js";
 import { readText } from "../core/files.js";
 import { ensureNpmPackage, findCommand } from "../core/runtime.js";
@@ -42,6 +41,7 @@ export class PiAdapter implements AgentAdapter {
   async install(context: AdapterContext, options: InstallOptions): Promise<void> {
     await ensureNpmPackage(context, "@earendil-works/pi-coding-agent", "pi", {
       ignoreScripts: true,
+      version: "0.84.4",
     });
     const models = await fetchPiModels(context);
     const selected =
@@ -95,16 +95,15 @@ async function fetchPiModels(context: AdapterContext): Promise<PiModelConfig[]> 
 function toPiModel(item: Record<string, unknown>): PiModelConfig | null {
   const id = typeof item.id === "string" ? item.id : "";
   if (!id) return null;
-  const bundled = BUNDLED_MODEL_METADATA[id];
-  const contextWindow = numberValue(item.context_window) ?? bundled?.context_window;
-  const maxTokens = numberValue(item.max_output) ?? bundled?.max_output;
-  const inputPrice = numberValue(item.input_price) ?? bundled?.input_price;
-  const outputPrice = numberValue(item.output_price) ?? bundled?.output_price;
-  const vision = booleanValue(item.vision) ?? bundled?.vision ?? false;
+  const contextWindow = numberValue(item.context_window);
+  const maxTokens = numberValue(item.max_output);
+  const inputPrice = numberValue(item.input_price);
+  const outputPrice = numberValue(item.output_price);
+  const vision = booleanValue(item.vision) ?? false;
   return {
     id,
-    name: stringValue(item.name) ?? bundled?.name ?? displayName(id),
-    reasoning: booleanValue(item.reasoning) ?? bundled?.reasoning ?? false,
+    name: stringValue(item.name) ?? displayName(id),
+    reasoning: booleanValue(item.reasoning) ?? false,
     input: vision ? ["text", "image"] : ["text"],
     ...(contextWindow ? { contextWindow } : {}),
     ...(maxTokens ? { maxTokens } : {}),

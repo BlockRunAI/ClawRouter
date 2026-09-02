@@ -45121,6 +45121,37 @@ var init_sha26 = __esm({
   }
 });
 
+// src/solana-key.ts
+function deriveSolanaKeyBytes(mnemonic) {
+  const seed = mnemonicToSeedSync(mnemonic);
+  let digest = hmac6(sha5123, new TextEncoder().encode("ed25519 seed"), seed);
+  let key2 = digest.slice(0, 32);
+  let chainCode = digest.slice(32);
+  for (const index2 of SOLANA_HARDENED_INDICES) {
+    const data = new Uint8Array(37);
+    data[0] = 0;
+    data.set(key2, 1);
+    data[33] = index2 >>> 24 & 255;
+    data[34] = index2 >>> 16 & 255;
+    data[35] = index2 >>> 8 & 255;
+    data[36] = index2 & 255;
+    digest = hmac6(sha5123, chainCode, data);
+    key2 = digest.slice(0, 32);
+    chainCode = digest.slice(32);
+  }
+  return new Uint8Array(key2);
+}
+var SOLANA_HARDENED_INDICES;
+var init_solana_key = __esm({
+  "src/solana-key.ts"() {
+    "use strict";
+    init_hmac6();
+    init_sha26();
+    init_esm3();
+    SOLANA_HARDENED_INDICES = [44 + 2147483648, 501 + 2147483648, 0 + 2147483648, 0 + 2147483648];
+  }
+});
+
 // node_modules/@solana/errors/dist/index.node.mjs
 function encodeValue(value) {
   if (Array.isArray(value)) {
@@ -59413,25 +59444,6 @@ function deriveEvmKey(mnemonic) {
   const account = privateKeyToAccount(hex);
   return { privateKey: hex, address: account.address };
 }
-function deriveSolanaKeyBytes(mnemonic) {
-  const seed = mnemonicToSeedSync(mnemonic);
-  let I = hmac6(sha5123, new TextEncoder().encode("ed25519 seed"), seed);
-  let key2 = I.slice(0, 32);
-  let chainCode = I.slice(32);
-  for (const index2 of SOLANA_HARDENED_INDICES) {
-    const data = new Uint8Array(37);
-    data[0] = 0;
-    data.set(key2, 1);
-    data[33] = index2 >>> 24 & 255;
-    data[34] = index2 >>> 16 & 255;
-    data[35] = index2 >>> 8 & 255;
-    data[36] = index2 & 255;
-    I = hmac6(sha5123, chainCode, data);
-    key2 = I.slice(0, 32);
-    chainCode = I.slice(32);
-  }
-  return new Uint8Array(key2);
-}
 function deriveAllKeys(mnemonic) {
   const { privateKey: evmPrivateKey, address: evmAddress } = deriveEvmKey(mnemonic);
   const solanaPrivateKeyBytes = deriveSolanaKeyBytes(mnemonic);
@@ -59442,18 +59454,17 @@ async function getSolanaAddress(privateKeyBytes) {
   const signer = await createKeyPairSignerFromPrivateKeyBytes2(privateKeyBytes);
   return signer.address;
 }
-var ETH_DERIVATION_PATH, SOLANA_HARDENED_INDICES;
+var ETH_DERIVATION_PATH;
 var init_wallet2 = __esm({
   "src/wallet.ts"() {
     "use strict";
     init_bip32();
     init_esm3();
     init_english();
-    init_hmac6();
-    init_sha26();
     init_accounts();
+    init_solana_key();
+    init_solana_key();
     ETH_DERIVATION_PATH = "m/44'/60'/0'/0/0";
-    SOLANA_HARDENED_INDICES = [44 + 2147483648, 501 + 2147483648, 0 + 2147483648, 0 + 2147483648];
   }
 });
 
@@ -59469,6 +59480,7 @@ __export(auth_exports, {
   loadPaymentChain: () => loadPaymentChain,
   migrateLegacyWalletToCore: () => migrateLegacyWalletToCore,
   recoverWalletFromMnemonic: () => recoverWalletFromMnemonic,
+  resolveExistingWalletKey: () => resolveExistingWalletKey,
   resolveOrGenerateWalletKey: () => resolveOrGenerateWalletKey,
   resolvePaymentChain: () => resolvePaymentChain,
   savePaymentChain: () => savePaymentChain,
@@ -59589,7 +59601,7 @@ function solanaSecretKeyFromSeed(seed) {
   ).export({ format: "der", type: "spki" });
   return Uint8Array.from([...seed, ...Buffer.from(publicDer).subarray(-32)]);
 }
-async function generateAndSaveWallet() {
+async function generateAndSaveWallet(existingCoreSolanaKey) {
   const existingMnemonic = await loadMnemonic();
   if (existingMnemonic) {
     throw new Error(
@@ -59607,12 +59619,17 @@ Then run: npx @blockrun/clawrouter`
   const derived = deriveAllKeys(mnemonic);
   await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(WALLET_FILE, derived.evmPrivateKey + "\n", { mode: 384 });
-  await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 384 });
+  if (!existingCoreSolanaKey) {
+    await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 384 });
+  }
   await writeCoreFileIfMissing(CORE_WALLET_FILE, derived.evmPrivateKey + "\n");
-  await writeCoreFileIfMissing(
-    CORE_SOLANA_WALLET_FILE,
-    JSON.stringify([...solanaSecretKeyFromSeed(derived.solanaPrivateKeyBytes)]) + "\n"
-  );
+  if (!existingCoreSolanaKey) {
+    await writeCoreFileIfMissing(
+      CORE_SOLANA_WALLET_FILE,
+      JSON.stringify([...solanaSecretKeyFromSeed(derived.solanaPrivateKeyBytes)]) + "\n"
+    );
+  }
+  const solanaPrivateKeyBytes = existingCoreSolanaKey ?? derived.solanaPrivateKeyBytes;
   try {
     const verification = (await readTextFile(WALLET_FILE)).trim();
     if (verification !== derived.evmPrivateKey) {
@@ -59627,7 +59644,7 @@ Then run: npx @blockrun/clawrouter`
   }
   let solanaAddress;
   try {
-    solanaAddress = await getSolanaAddress(derived.solanaPrivateKeyBytes);
+    solanaAddress = await getSolanaAddress(solanaPrivateKeyBytes);
   } catch {
   }
   let solanaDefaultSaved = false;
@@ -59648,7 +59665,9 @@ Then run: npx @blockrun/clawrouter`
   }
   console.log(`[ClawRouter]   Base key       : ${CORE_WALLET_FILE}`);
   console.log(`[ClawRouter]   Solana key     : ${CORE_SOLANA_WALLET_FILE}`);
-  console.log(`[ClawRouter]   Recovery words : ${MNEMONIC_FILE}`);
+  if (!existingCoreSolanaKey) {
+    console.log(`[ClawRouter]   Recovery words : ${MNEMONIC_FILE}`);
+  }
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter]   Both EVM (Base) and Solana wallets are ready.`);
   if (solanaDefaultSaved) {
@@ -59667,13 +59686,12 @@ Then run: npx @blockrun/clawrouter`
   return {
     key: derived.evmPrivateKey,
     address: derived.evmAddress,
-    mnemonic,
-    solanaPrivateKeyBytes: derived.solanaPrivateKeyBytes
+    ...existingCoreSolanaKey ? {} : { mnemonic },
+    solanaPrivateKeyBytes
   };
 }
-async function resolveOrGenerateWalletKey() {
-  await migrateLegacyWalletToCore();
-  const coreSolanaKey = await loadCoreSolanaKey();
+async function resolveExistingWalletKey() {
+  const coreSolanaKey = await loadCoreSolanaKeyForSelectedChain();
   const envKey = process["env"].BLOCKRUN_WALLET_KEY;
   if (typeof envKey === "string" && /^0x[0-9a-f]{64}$/i.test(envKey)) {
     const account = privateKeyToAccount(envKey);
@@ -59704,7 +59722,14 @@ async function resolveOrGenerateWalletKey() {
       ...await resolvedSolanaMaterial(coreSolanaKey)
     };
   }
-  const result = await generateAndSaveWallet();
+  return void 0;
+}
+async function resolveOrGenerateWalletKey() {
+  await migrateLegacyWalletToCore();
+  const existing = await resolveExistingWalletKey();
+  if (existing) return existing;
+  const existingCoreSolanaKey = await loadCoreSolanaKey();
+  const result = await generateAndSaveWallet(existingCoreSolanaKey);
   return {
     key: result.key,
     address: result.address,
@@ -59712,6 +59737,14 @@ async function resolveOrGenerateWalletKey() {
     mnemonic: result.mnemonic,
     solanaPrivateKeyBytes: result.solanaPrivateKeyBytes
   };
+}
+async function loadCoreSolanaKeyForSelectedChain() {
+  try {
+    return await loadCoreSolanaKey();
+  } catch (error) {
+    if (await resolvePaymentChain() === "solana") throw error;
+    return void 0;
+  }
 }
 async function loadCoreWallet() {
   const key2 = (await readExisting(CORE_WALLET_FILE))?.trim();
@@ -59722,7 +59755,8 @@ async function loadCoreWallet() {
   );
 }
 async function loadCoreSolanaKey() {
-  const raw = process["env"].SOLANA_WALLET_KEY ?? (await readExisting(CORE_SOLANA_WALLET_FILE))?.trim();
+  const environmentKey = process["env"].SOLANA_WALLET_KEY?.trim();
+  const raw = environmentKey || (await readExisting(CORE_SOLANA_WALLET_FILE))?.trim();
   if (!raw) return void 0;
   try {
     let bytes;
@@ -90969,12 +91003,25 @@ function buildProxyModelList(createdAt = Math.floor(Date.now() / 1e3)) {
     if (seen.has(model.id)) return false;
     seen.add(model.id);
     return true;
-  }).map((model) => ({
-    id: model.id,
-    object: "model",
-    created: createdAt,
-    owned_by: model.id.includes("/") ? model.id.split("/")[0] ?? "blockrun" : "blockrun"
-  }));
+  }).map((model) => {
+    const targetId = MODEL_ALIASES[model.id] ?? model.id;
+    const canonical = BLOCKRUN_MODELS.find((entry) => entry.id === targetId);
+    return {
+      id: model.id,
+      object: "model",
+      created: createdAt,
+      owned_by: targetId.includes("/") ? targetId.split("/")[0] ?? "blockrun" : "blockrun",
+      name: model.name,
+      context_window: model.contextWindow,
+      max_output: model.maxTokens,
+      input_price: model.cost.input,
+      output_price: model.cost.output,
+      reasoning: model.reasoning,
+      vision: model.input.includes("image"),
+      agentic: canonical?.agentic ?? false,
+      tool_calling: canonical?.toolCalling ?? false
+    };
+  });
 }
 function mergeRoutingConfig(overrides) {
   if (!overrides) return DEFAULT_ROUTING_CONFIG;
@@ -227329,11 +227376,13 @@ import {
   readdirSync,
   mkdirSync as mkdirSync3,
   copyFileSync,
+  chmodSync,
   renameSync as renameSync2,
   unlinkSync
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
 import { homedir as homedir13 } from "os";
+import { randomUUID } from "crypto";
 import { join as join16 } from "path";
 async function waitForProxyHealth(port, timeoutMs = 3e3) {
   const start = Date.now();
@@ -227346,6 +227395,16 @@ async function waitForProxyHealth(port, timeoutMs = 3e3) {
     await new Promise((r2) => setTimeout(r2, 100));
   }
   return false;
+}
+function writePrivateJsonSync(path5, value) {
+  const temporary = `${path5}.tmp.${randomUUID()}`;
+  try {
+    writeFileSync3(temporary, JSON.stringify(value, null, 2), { mode: 384 });
+    renameSync2(temporary, path5);
+    chmodSync(path5, 384);
+  } finally {
+    if (existsSync4(temporary)) unlinkSync(temporary);
+  }
 }
 function hasConfiguredWallet() {
   return Boolean(
@@ -227564,8 +227623,9 @@ function injectModelsConfig(logger48, options = {}) {
     }
     try {
       const tmpPath = `${configPath}.tmp.${process.pid}`;
-      writeFileSync3(tmpPath, JSON.stringify(config, null, 2));
+      writeFileSync3(tmpPath, JSON.stringify(config, null, 2), { mode: 384 });
       renameSync2(tmpPath, configPath);
+      chmodSync(configPath, 384);
       logger48.info("Smart routing enabled (blockrun/auto)");
     } catch (err) {
       logger48.info(`Failed to write config: ${err instanceof Error ? err.message : String(err)}`);
@@ -227600,7 +227660,7 @@ function syncAgentModelCache(logger48, options = {}) {
       const staleCount = Array.isArray(current) ? current.length : 0;
       entry.models = VISIBLE_OPENCLAW_MODELS;
       const tmpPath = `${cachePath}.tmp.${process.pid}`;
-      writeFileSync3(tmpPath, JSON.stringify(cache2, null, 2));
+      writeFileSync3(tmpPath, JSON.stringify(cache2, null, 2), { mode: 384 });
       renameSync2(tmpPath, cachePath);
       logger48.info(
         `Repaired ${agent} model cache: ${staleCount} \u2192 ${expectedIds.length} BlockRun models`
@@ -227671,7 +227731,7 @@ function injectAuthProfile(logger48) {
         key: "x402-proxy-handles-auth"
       };
       try {
-        writeFileSync3(authPath, JSON.stringify(store, null, 2));
+        writePrivateJsonSync(authPath, store);
         logger48.info(`Injected BlockRun auth profile for agent: ${agentId}`);
       } catch (err) {
         logger48.info(
@@ -228294,10 +228354,16 @@ function createWalletCommand(api) {
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
       let wallet;
       try {
-        wallet = await resolveOrGenerateWalletKey();
+        wallet = subcommand === "status" || subcommand === "export" ? await resolveExistingWalletKey() : await resolveOrGenerateWalletKey();
       } catch (error) {
         return {
           text: `Could not load the BlockRun wallet: ${error instanceof Error ? error.message : String(error)}`,
+          isError: true
+        };
+      }
+      if (!wallet) {
+        return {
+          text: "No BlockRun wallet found. Run `clawrouter setup` or connect an agent in ClawRouter Desktop to create one.",
           isError: true
         };
       }
@@ -229026,8 +229092,9 @@ ${errText}`
               delete config.tools.web.search.provider;
             }
             const tmpPath = `${configPath}.tmp.${process.pid}`;
-            writeFileSync3(tmpPath, JSON.stringify(config, null, 2));
+            writeFileSync3(tmpPath, JSON.stringify(config, null, 2), { mode: 384 });
             renameSync2(tmpPath, configPath);
+            chmodSync(configPath, 384);
             api.logger.info("ClawRouter config cleaned up");
           }
         } catch (err) {
@@ -229044,7 +229111,7 @@ ${errText}`
                 const store = JSON.parse(readTextFileSync(authPath));
                 if (store.profiles?.["blockrun:default"]) {
                   delete store.profiles["blockrun:default"];
-                  writeFileSync3(authPath, JSON.stringify(store, null, 2));
+                  writePrivateJsonSync(authPath, store);
                 }
               } catch {
               }
@@ -229950,6 +230017,7 @@ async function cmdSetup() {
     readdirSync: readdirSync2,
     renameSync: renameSync3,
     rmSync,
+    unlinkSync: unlinkSync2,
     writeFileSync: writeFileSync4
   } = await import("fs");
   const { dirname: dirname4, join: join17 } = await import("path");
@@ -230097,7 +230165,8 @@ async function cmdSetup() {
       try {
         execFileSync(openclawPath, ["config", "validate"], {
           encoding: "utf8",
-          stdio: ["ignore", "pipe", "pipe"]
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 3e4
         });
       } catch (error) {
         const output = `${error instanceof Error ? error.message : String(error)} ${typeof error === "object" && error && "stdout" in error ? String(error.stdout) : ""} ${typeof error === "object" && error && "stderr" in error ? String(error.stderr) : ""}`;
@@ -230141,7 +230210,8 @@ async function cmdSetup() {
     try {
       const help = execFileSync(openclawPath, ["plugins", "install", "--help"], {
         encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15e3
       });
       acceptsCapabilities = help.includes("--accept-capabilities");
     } catch {
@@ -230218,6 +230288,9 @@ async function cmdSetup() {
   }
   console.log("\n\u2713 Setup complete.");
   rmSync(setupRollbackRoot, { recursive: true, force: true });
+  if (configRollbackBackup && existsSync5(configRollbackBackup)) {
+    unlinkSync2(configRollbackBackup);
+  }
   console.log("\nNext: restart the gateway to load ClawRouter:");
   console.log("  openclaw gateway restart");
   console.log(

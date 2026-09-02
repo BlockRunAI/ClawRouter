@@ -122,27 +122,34 @@ export async function canonicalWriteDestination(path: string): Promise<string> {
 }
 
 export async function restoreFiles(files: FileSnapshot[]): Promise<void> {
+  const failures: unknown[] = [];
   for (const file of files) {
-    if (!file.existed) {
-      await rm(file.path, { force: true, recursive: false });
-      continue;
-    }
-    if (file.symlinkTarget !== undefined) {
-      await rm(file.path, { force: true, recursive: false });
-      await mkdir(dirname(file.path), { recursive: true });
-      await symlink(file.symlinkTarget, file.path);
-      if (file.symlinkTargetExisted === false) {
-        await rm(resolve(dirname(file.path), file.symlinkTarget), {
-          force: true,
-          recursive: false,
-        });
+    try {
+      if (!file.existed) {
+        await rm(file.path, { force: true, recursive: false });
         continue;
       }
+      if (file.symlinkTarget !== undefined) {
+        await rm(file.path, { force: true, recursive: false });
+        await mkdir(dirname(file.path), { recursive: true });
+        await symlink(file.symlinkTarget, file.path);
+        if (file.symlinkTargetExisted === false) {
+          await rm(resolve(dirname(file.path), file.symlinkTarget), {
+            force: true,
+            recursive: false,
+          });
+          continue;
+        }
+      }
+      await atomicWrite(
+        file.path,
+        Buffer.from(file.contentBase64 ?? "", "base64"),
+        file.mode ?? 0o600,
+      );
+    } catch (error) {
+      failures.push(error);
     }
-    await atomicWrite(
-      file.path,
-      Buffer.from(file.contentBase64 ?? "", "base64"),
-      file.mode ?? 0o600,
-    );
   }
+  if (failures.length)
+    throw new AggregateError(failures, "One or more files could not be restored");
 }

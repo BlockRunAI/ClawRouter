@@ -3,7 +3,7 @@ import { createHmac, createPrivateKey, createPublicKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ClawRouterManager } from "../electron/core/manager.js";
 import type { CommandRunner } from "../electron/core/types.js";
@@ -16,7 +16,7 @@ function response(body: unknown, headers: Record<string, string> = {}): Response
 }
 
 describe("ClawRouterManager adapter flow", () => {
-  it("enriches a standard model list with bundled pricing and context metadata", async () => {
+  it("uses the live model catalog pricing and context metadata", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-manager-"));
     const manager = fixtureManager(home, async () => false);
 
@@ -24,10 +24,14 @@ describe("ClawRouterManager adapter flow", () => {
     const sonnet = dashboard.models.find((model) => model.id === "anthropic/claude-sonnet-4.6");
     expect(sonnet).toMatchObject({
       ownedBy: "anthropic",
-      contextWindow: expect.any(Number),
-      maxOutput: expect.any(Number),
-      inputPrice: expect.any(Number),
-      outputPrice: expect.any(Number),
+      contextWindow: 200_000,
+      maxOutput: 64_000,
+      inputPrice: 3,
+      outputPrice: 15,
+      reasoning: true,
+      vision: true,
+      agentic: true,
+      toolCalling: true,
     });
   });
 
@@ -47,6 +51,32 @@ describe("ClawRouterManager adapter flow", () => {
     const restored = await manager.uninstall("codex");
     expect(restored.ok).toBe(true);
     expect(await readFile(config, "utf8")).toBe(original);
+  });
+
+  it("does not claim rollback when startup fails before configuration starts", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-preflight-failure-"));
+    const manager = fixtureManager(home, async () => false);
+    manager.supervisor.ensureProxy = async () => {
+      throw new Error("proxy unavailable");
+    };
+
+    const result = await manager.install("pi");
+
+    expect(result).toMatchObject({ ok: false, message: "proxy unavailable" });
+    expect(result).not.toHaveProperty("rolledBack");
+  });
+
+  it("reports a completed rollback when an adapter fails inside the transaction", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-transaction-failure-"));
+    const manager = fixtureManager(
+      home,
+      async (command) => command === "openclaw",
+      async () => ({ code: 1, stdout: "", stderr: "install failed" }),
+    );
+
+    const result = await manager.install("openclaw");
+
+    expect(result).toMatchObject({ ok: false, rolledBack: true });
   });
 
   it("installs DSH into the managed runtime and validates its official config shape", async () => {
@@ -188,13 +218,11 @@ describe("ClawRouterManager adapter flow", () => {
     const legacyDir = join(home, ".openclaw", "blockrun");
     const coreDir = join(home, ".blockrun");
     const legacyKey = `0x${"0".repeat(63)}1`;
+    const legacyMnemonic =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
     await mkdir(legacyDir, { recursive: true });
     await writeFile(join(legacyDir, "wallet.key"), legacyKey + "\n", { mode: 0o600 });
-    await writeFile(
-      join(legacyDir, "mnemonic"),
-      "test test test test test test test test test test test junk\n",
-      { mode: 0o600 },
-    );
+    await writeFile(join(legacyDir, "mnemonic"), legacyMnemonic + "\n", { mode: 0o600 });
     await writeFile(join(legacyDir, "payment-chain"), "solana\n", { mode: 0o600 });
 
     const manager = new ClawRouterManager({
@@ -209,11 +237,17 @@ describe("ClawRouterManager adapter flow", () => {
     const dashboard = await manager.dashboard();
 
     expect((await readFile(join(coreDir, ".session"), "utf8")).trim()).toBe(legacyKey);
-    expect(JSON.parse(await readFile(join(coreDir, ".solana-session"), "utf8"))).toHaveLength(64);
+    const coreSolana = JSON.parse(
+      await readFile(join(coreDir, ".solana-session"), "utf8"),
+    ) as number[];
+    expect(coreSolana).toHaveLength(64);
+    expect(Buffer.from(coreSolana.slice(0, 32)).toString("hex")).toBe(
+      "7c139e1a603ca04f5f7cff194e1bb6f6d1b9098470ea90695ab628488a9f921b",
+    );
     expect((await readFile(join(coreDir, ".chain"), "utf8")).trim()).toBe("solana");
     expect(dashboard.proxy.configuredChain).toBe("solana");
     expect(dashboard.proxy.wallet).toMatch(/^0x[0-9a-f]{40}$/i);
-    expect(dashboard.proxy.solana).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect(dashboard.proxy.solana).toBe("3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx");
     expect((await readFile(join(legacyDir, "wallet.key"), "utf8")).trim()).toBe(legacyKey);
   });
 
@@ -238,6 +272,9 @@ describe("ClawRouterManager adapter flow", () => {
     const dashboard = await manager.dashboard();
 
     expect(dashboard.proxy.wallet).toBeUndefined();
+    expect(dashboard.proxy.walletIssues).toEqual({
+      base: "The BlockRun Core Base wallet file is invalid.",
+    });
     expect((await readFile(join(home, ".blockrun", ".session"), "utf8")).trim()).toBe("invalid");
   });
 
@@ -288,6 +325,69 @@ describe("ClawRouterManager adapter flow", () => {
     expect(backup).toBeDefined();
     expect((await readFile(join(coreDir, backup!), "utf8")).trim()).toBe(coreKey);
     expect((await readFile(join(legacyDir, "wallet.key"), "utf8")).trim()).toBe(legacyKey);
+  });
+
+  it("does not replace a Core wallet when its safety backup collides", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-backup-collision-"));
+    const coreDir = join(home, ".blockrun");
+    const legacyDir = join(home, ".openclaw", "blockrun");
+    const coreKey = `0x${"0".repeat(63)}2`;
+    const legacyKey = `0x${"0".repeat(63)}1`;
+    await mkdir(coreDir, { recursive: true });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(coreDir, ".session"), coreKey + "\n", { mode: 0o600 });
+    await writeFile(join(legacyDir, "wallet.key"), legacyKey + "\n", { mode: 0o600 });
+    await writeFile(join(coreDir, ".session.backup-1234"), "sentinel\n", { mode: 0o600 });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1234);
+    const manager = fixtureManager(home, async () => false);
+
+    try {
+      const adopted = await manager.adoptLegacyWallet("base");
+      expect(adopted).toMatchObject({ ok: false, restartRequired: false });
+      expect(adopted.message).toContain("No changes were made");
+      expect((await readFile(join(coreDir, ".session"), "utf8")).trim()).toBe(coreKey);
+      expect((await readFile(join(coreDir, ".session.backup-1234"), "utf8")).trim()).toBe(
+        "sentinel",
+      );
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("caches successful public balances and reuses them during a transient RPC failure", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-cache-"));
+    await mkdir(join(home, ".blockrun"), { recursive: true });
+    await writeFile(join(home, ".blockrun", ".session"), `0x${"0".repeat(63)}1\n`, {
+      mode: 0o600,
+    });
+    let now = 10_000;
+    let rpcCalls = 0;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const manager = new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: (async (url: string | URL | Request) => {
+        if (String(url) === "https://mainnet.base.org") {
+          rpcCalls += 1;
+          if (rpcCalls > 1) throw new TypeError("temporary RPC failure");
+          return response({ result: `0x${BigInt(4_200_000).toString(16)}` });
+        }
+        throw new TypeError("proxy offline");
+      }) as typeof fetch,
+    });
+
+    try {
+      expect((await manager.dashboard()).proxy.balance).toBe(4.2);
+      expect((await manager.dashboard()).proxy.balance).toBe(4.2);
+      expect(rpcCalls).toBe(1);
+      now += 31_000;
+      expect((await manager.dashboard()).proxy.balance).toBe(4.2);
+      expect(rpcCalls).toBe(2);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("shows the active signing wallet and marks a different Core wallet for restart", async () => {
@@ -443,11 +543,18 @@ describe("ClawRouterManager adapter flow", () => {
 
   it("accepts only an exact Coinbase-hosted onramp URL from the bundled ClawRouter CLI", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-onramp-"));
+    const runtime = join(home, ".clawrouter-desktop", "runtime", "node_modules");
+    const binary = join(runtime, ".bin", "clawrouter");
+    const manifest = join(runtime, "@blockrun", "clawrouter", "package.json");
+    await mkdir(dirname(binary), { recursive: true });
+    await mkdir(dirname(manifest), { recursive: true });
+    await writeFile(binary, "#!/bin/sh\n", { mode: 0o755 });
+    await writeFile(manifest, JSON.stringify({ version: "0.12.265" }));
     const manager = fixtureManager(
       home,
       async (command) => command === "clawrouter",
       async (command, args) => {
-        expect(command).toBe("clawrouter");
+        expect(command).toBe(binary);
         expect(args).toEqual(["onramp", "50", "--json"]);
         return {
           code: 0,
@@ -482,11 +589,25 @@ function fixtureManager(
 ) {
   const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
     const path = String(url);
-    if (path.endsWith("/admin/models")) {
-      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
-    }
     if (path.endsWith("/v1/models")) {
-      return response({ data: [{ id: "auto" }, { id: "anthropic/claude-sonnet-4.6" }] });
+      return response({
+        data: [
+          { id: "auto", name: "Auto" },
+          {
+            id: "anthropic/claude-sonnet-4.6",
+            name: "Claude Sonnet 4.6",
+            owned_by: "anthropic",
+            context_window: 200_000,
+            max_output: 64_000,
+            input_price: 3,
+            output_price: 15,
+            reasoning: true,
+            vision: true,
+            agentic: true,
+            tool_calling: true,
+          },
+        ],
+      });
     }
     return authenticatedResponse(homeDir, init, {
       status: "ok",

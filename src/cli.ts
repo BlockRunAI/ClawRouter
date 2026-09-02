@@ -549,6 +549,7 @@ async function cmdSetup(): Promise<void> {
     readdirSync,
     renameSync,
     rmSync,
+    unlinkSync,
     writeFileSync,
   } = await import("node:fs");
   const { dirname, join } = await import("node:path");
@@ -728,6 +729,7 @@ async function cmdSetup(): Promise<void> {
         execFileSync(openclawPath, ["config", "validate"], {
           encoding: "utf8",
           stdio: ["ignore", "pipe", "pipe"],
+          timeout: 30_000,
         });
       } catch (error) {
         const output = `${error instanceof Error ? error.message : String(error)} ${
@@ -785,6 +787,7 @@ async function cmdSetup(): Promise<void> {
       const help = execFileSync(openclawPath, ["plugins", "install", "--help"], {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000,
       });
       acceptsCapabilities = help.includes("--accept-capabilities");
     } catch {
@@ -873,6 +876,9 @@ async function cmdSetup(): Promise<void> {
 
   console.log("\n✓ Setup complete.");
   rmSync(setupRollbackRoot, { recursive: true, force: true });
+  if (configRollbackBackup && existsSync(configRollbackBackup)) {
+    unlinkSync(configRollbackBackup);
+  }
   console.log("\nNext: restart the gateway to load ClawRouter:");
   console.log("  openclaw gateway restart");
   console.log(

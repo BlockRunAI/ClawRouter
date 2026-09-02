@@ -40,6 +40,9 @@ process.exit(1);
 }
 
 cleanup_backups() {
+  if [ -n "$WALLET_BACKUP" ] && [ -f "$WALLET_BACKUP" ]; then
+    rm -f "$WALLET_BACKUP"
+  fi
   if [ -n "$PLUGIN_BACKUP" ] && [ -d "$PLUGIN_BACKUP" ]; then
     rm -rf "$PLUGIN_BACKUP"
   fi
@@ -171,7 +174,7 @@ if [ -f "$WALLET_FILE" ]; then
   WALLET_KEY=$(cat "$WALLET_FILE" | tr -d '[:space:]')
   KEY_LEN=${#WALLET_KEY}
   if [[ "$WALLET_KEY" == 0x* ]] && [ "$KEY_LEN" -eq 66 ]; then
-    WALLET_BACKUP="$HOME/.openclaw/blockrun/wallet.key.bak.$(date +%s)"
+    WALLET_BACKUP="$(mktemp "$HOME/.openclaw/blockrun/wallet.key.bak.XXXXXX")"
     cp "$WALLET_FILE" "$WALLET_BACKUP"
     chmod 600 "$WALLET_BACKUP"
     echo "  ✓ Wallet backed up to: $WALLET_BACKUP"
@@ -218,8 +221,9 @@ const f = require('os').homedir() + '/.openclaw/openclaw.json';
 const fs = require('fs');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 if (!fs.existsSync(f)) {
   console.log('  No openclaw.json found, skipping');
@@ -298,8 +302,9 @@ const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
 const authPath = path.join(authDir, 'auth-profiles.json');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 // Create directory if needed
@@ -346,8 +351,9 @@ const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 if (fs.existsSync(configPath)) {
@@ -409,8 +415,9 @@ try {
 
   if (changed) {
     const tmpPath = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmpPath, configPath);
+    fs.chmodSync(configPath, 0o600);
   } else {
     console.log('  Provider config OK');
   }
@@ -498,8 +505,9 @@ if [ -n "$CHANNEL_CONFIG_BACKUP" ] && [ -f "$CHANNEL_CONFIG_BACKUP" ] && [ -f "$
 const fs = require('fs');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 try {
   const config = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
@@ -614,8 +622,9 @@ const path = require('path');
 const topModelsPath = '$SCRIPT_DIR/../src/top-models.json';
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
@@ -699,8 +708,9 @@ const fs = require('fs');
 const path = require('path');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 if (!fs.existsSync(configPath)) { console.log('  No config, skipping'); process.exit(0); }
@@ -725,8 +735,9 @@ const fs = require('fs');
 const [configPath, backupPath, legacyOwned] = process.argv.slice(2);
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 if (fs.existsSync(configPath)) {
@@ -799,8 +810,9 @@ const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 if (fs.existsSync(configPath)) {
@@ -897,8 +909,9 @@ try {
   }
   if (changed) {
     const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, configPath);
+    fs.chmodSync(configPath, 0o600);
     console.log('  ✓ Registry cleaned');
   } else {
     console.log('  ✓ Registry clean');

@@ -151,7 +151,8 @@ try {
   }
 
   if (changed) {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+    fs.chmodSync(configPath, 0o600);
     console.log('  Config cleaned');
   } else {
     console.log('  No changes needed');
@@ -186,7 +187,8 @@ for (const agentId of agents) {
     const store = JSON.parse(fs.readFileSync(authPath, 'utf8'));
     if (store.profiles?.['blockrun:default']) {
       delete store.profiles['blockrun:default'];
-      fs.writeFileSync(authPath, JSON.stringify(store, null, 2));
+      fs.writeFileSync(authPath, JSON.stringify(store, null, 2), { mode: 0o600 });
+      fs.chmodSync(authPath, 0o600);
       console.log('  Removed blockrun auth from ' + agentId);
     }
   } catch {}

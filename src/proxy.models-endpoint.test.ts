@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveModelAlias } from "./models.js";
+import { BLOCKRUN_MODELS, MODEL_ALIASES, resolveModelAlias } from "./models.js";
 import { buildProxyModelList } from "./proxy.js";
 
 describe("buildProxyModelList", () => {
@@ -42,5 +42,26 @@ describe("buildProxyModelList", () => {
     const list = buildProxyModelList(1234567890);
     const ids = list.map((model) => model.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("returns authoritative pricing, limits, and capabilities for every model", () => {
+    const list = buildProxyModelList(1234567890);
+
+    for (const item of list) {
+      const canonical = BLOCKRUN_MODELS.find(
+        (model) => model.id === (MODEL_ALIASES[item.id] ?? item.id),
+      );
+      expect(canonical, item.id).toBeDefined();
+      expect(item, item.id).toMatchObject({
+        context_window: canonical!.contextWindow,
+        max_output: canonical!.maxOutput,
+        input_price: canonical!.inputPrice,
+        output_price: canonical!.outputPrice,
+        reasoning: canonical!.reasoning ?? false,
+        vision: canonical!.vision ?? false,
+        agentic: canonical!.agentic ?? false,
+        tool_calling: canonical!.toolCalling ?? false,
+      });
+    }
   });
 });

@@ -37,7 +37,9 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async install(context: AdapterContext, options: InstallOptions): Promise<void> {
-    const dsh = await ensureNpmPackage(context, "@deepseek-ai/dsh", "dsh");
+    const dsh = await ensureNpmPackage(context, "@deepseek-ai/dsh", "dsh", {
+      version: "0.1.1-rc.2",
+    });
     const models = await fetchModelIds(context);
     await upsertDshConfig(
       this.managedPaths(context)[0]!,

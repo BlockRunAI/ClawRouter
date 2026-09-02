@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 
-import { ensureNpmPackage } from "./runtime.js";
+import { CLAWROUTER_PACKAGE_VERSION, ensureNpmPackage } from "./runtime.js";
 import { withEmbeddedNode } from "./process.js";
 import { ensureServiceToken, verifyClawRouter } from "./service-auth.js";
 import type { AdapterContext, CommandRunner } from "./types.js";
@@ -36,7 +36,11 @@ export class ServiceSupervisor {
         "Port 8402 is occupied by an unverified or outdated process. Restart ClawRouter/OpenClaw, or stop that process, then try Connect again.",
       );
     }
-    const command = await ensureNpmPackage(this.context, "@blockrun/clawrouter", "clawrouter");
+    const command = await ensureNpmPackage(this.context, "@blockrun/clawrouter", "clawrouter", {
+      enforceVersion: true,
+      ignoreScripts: true,
+      version: CLAWROUTER_PACKAGE_VERSION,
+    });
     const child = await this.start("proxy", command, ["--port", "8402", "--no-reuse"], {
       ...process.env,
       HOME: this.context.homeDir,
@@ -75,6 +79,7 @@ export class ServiceSupervisor {
       this.context,
       "@blockrun/clawrouter-codex",
       "clawrouter-codex",
+      { version: "0.4.0" },
     );
     const child = await this.start("codex-bridge", command, ["bridge"], {
       ...process.env,

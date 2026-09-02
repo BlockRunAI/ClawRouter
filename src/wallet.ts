@@ -11,13 +11,10 @@
 import { HDKey } from "@scure/bip32";
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha512 } from "@noble/hashes/sha2.js";
 import { privateKeyToAccount } from "viem/accounts";
+import { deriveSolanaKeyBytes } from "./solana-key.js";
 
 const ETH_DERIVATION_PATH = "m/44'/60'/0'/0/0";
-const SOLANA_HARDENED_INDICES = [44 + 0x80000000, 501 + 0x80000000, 0 + 0x80000000, 0 + 0x80000000]; // m/44'/501'/0'/0'
-
 export interface DerivedKeys {
   mnemonic: string;
   evmPrivateKey: `0x${string}`;
@@ -63,32 +60,7 @@ export function deriveEvmKey(mnemonic: string): { privateKey: `0x${string}`; add
  *      HMAC-SHA512(key=chainCode, data=0x00 || key || ser32(index)) → split again
  *   3. Final IL (32 bytes) = Ed25519 private key seed
  */
-export function deriveSolanaKeyBytes(mnemonic: string): Uint8Array {
-  const seed = mnemonicToSeedSync(mnemonic);
-
-  // Master key from SLIP-10
-  // @noble/hashes v2 requires Uint8Array keys (v1 accepted strings)
-  let I = hmac(sha512, new TextEncoder().encode("ed25519 seed"), seed);
-  let key = I.slice(0, 32);
-  let chainCode = I.slice(32);
-
-  // Derive each hardened child: m/44'/501'/0'/0'
-  for (const index of SOLANA_HARDENED_INDICES) {
-    const data = new Uint8Array(37);
-    data[0] = 0x00;
-    data.set(key, 1);
-    // ser32 big-endian
-    data[33] = (index >>> 24) & 0xff;
-    data[34] = (index >>> 16) & 0xff;
-    data[35] = (index >>> 8) & 0xff;
-    data[36] = index & 0xff;
-    I = hmac(sha512, chainCode, data);
-    key = I.slice(0, 32);
-    chainCode = I.slice(32);
-  }
-
-  return new Uint8Array(key);
-}
+export { deriveSolanaKeyBytes } from "./solana-key.js";
 
 /**
  * Derive both EVM and Solana keys from a single mnemonic.

@@ -7,7 +7,6 @@ import type {
   ModelInfo,
   PaymentChain,
 } from "../electron/core/types";
-import { BUNDLED_MODEL_METADATA } from "../electron/core/model-catalog";
 import { api } from "./api";
 import { AGENT_ICON_DATA } from "./agent-icons";
 import BLOCKRUN_ICON from "./blockrun-icon.svg";
@@ -383,7 +382,7 @@ function Overview({
 }
 
 function Models({ models }: { models: ModelInfo[] }) {
-  const catalog = useMemo(() => collapseModelAliases(models.map(enrichModel)), [models]);
+  const catalog = useMemo(() => collapseModelAliases(models), [models]);
   const [query, setQuery] = useState("");
   const [provider, setProvider] = useState("all");
   const [capability, setCapability] = useState("all");
@@ -1401,22 +1400,4 @@ function collapseModelAliases(models: ModelInfo[]): CatalogModel[] {
     const aliases = aliasesByTarget.get((model.name ?? "").trim().toLowerCase()) ?? [];
     return [{ ...model, aliases: [...new Set(aliases)].sort() }];
   });
-}
-
-function enrichModel(model: ModelInfo): ModelInfo {
-  const bundled = BUNDLED_MODEL_METADATA[model.id];
-  if (!bundled) return model;
-  return {
-    ...model,
-    name: model.name ?? bundled.name,
-    ownedBy: model.ownedBy ?? bundled.owned_by,
-    contextWindow: model.contextWindow ?? bundled.context_window,
-    maxOutput: model.maxOutput ?? bundled.max_output,
-    inputPrice: model.inputPrice ?? bundled.input_price,
-    outputPrice: model.outputPrice ?? bundled.output_price,
-    reasoning: model.reasoning ?? bundled.reasoning,
-    vision: model.vision ?? bundled.vision,
-    agentic: model.agentic ?? bundled.agentic,
-    toolCalling: model.toolCalling ?? bundled.tool_calling,
-  };
 }

@@ -185,10 +185,10 @@ openclaw gateway restart
 ```bash
 # Back up the complete Core wallet directory
 cp -R ~/.blockrun ~/blockrun-wallet-backup
-
-# View wallet address from key file
-cat ~/.blockrun/.session
 ```
+
+Use `/wallet` in OpenClaw chat to view wallet addresses and balances. Never
+print or share `~/.blockrun/.session`—it contains your Base private key.
 
 ### Wallet Backup & Recovery
 

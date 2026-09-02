@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { hasOpenClawConfig, removeOpenClawConfig } from "../core/config.js";
 import { readText } from "../core/files.js";
-import { findCommand } from "../core/runtime.js";
+import { CLAWROUTER_PACKAGE_VERSION, findCommand } from "../core/runtime.js";
 import type { AdapterContext, AgentAdapter, AgentStatus, InstallOptions } from "../core/types.js";
 import { assertCommand, statusShape } from "./shared.js";
 
@@ -60,10 +60,14 @@ export class OpenClawAdapter implements AgentAdapter {
   async install(context: AdapterContext, _options: InstallOptions): Promise<void> {
     if (!(await findCommand(context, "openclaw")))
       throw new Error("OpenClaw CLI was not found on PATH");
-    const result = await context.runCommand("npx", ["-y", "@blockrun/clawrouter@latest", "setup"], {
-      env: { ...process.env, HOME: context.homeDir },
-      timeoutMs: 180_000,
-    });
+    const result = await context.runCommand(
+      "npx",
+      ["--ignore-scripts", "-y", `@blockrun/clawrouter@${CLAWROUTER_PACKAGE_VERSION}`, "setup"],
+      {
+        env: { ...process.env, HOME: context.homeDir },
+        timeoutMs: 180_000,
+      },
+    );
     assertCommand(result, "ClawRouter setup");
   }
 

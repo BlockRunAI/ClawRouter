@@ -19,9 +19,11 @@ const TEMP_HOME = mkdtempSync(join(tmpdir(), "clawrouter-chain-default-"));
 process.env.HOME = TEMP_HOME;
 process.env.USERPROFILE = TEMP_HOME;
 delete process.env.BLOCKRUN_WALLET_KEY;
+delete process.env.SOLANA_WALLET_KEY;
 delete process.env.CLAWROUTER_PAYMENT_CHAIN;
 
 const {
+  resolveExistingWalletKey,
   resolveOrGenerateWalletKey,
   loadPaymentChain,
   resolvePaymentChain,
@@ -51,6 +53,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.BLOCKRUN_WALLET_KEY;
+  delete process.env.SOLANA_WALLET_KEY;
   delete process.env.CLAWROUTER_PAYMENT_CHAIN;
 });
 
@@ -59,6 +62,12 @@ afterAll(() => {
 });
 
 describe("payment chain default for new installs", () => {
+  it("does not create files when only checking for an existing wallet", async () => {
+    await expect(resolveExistingWalletKey()).resolves.toBeUndefined();
+    expect(existsSync(WALLET_DIR)).toBe(false);
+    expect(existsSync(CORE_DIR)).toBe(false);
+  });
+
   it("fresh wallet generation persists solana as the default chain", async () => {
     const result = await resolveOrGenerateWalletKey();
 
@@ -174,5 +183,64 @@ describe("payment chain default for new installs", () => {
 
     process.env.CLAWROUTER_PAYMENT_CHAIN = "base";
     await expect(resolvePaymentChain()).resolves.toBe("base");
+  });
+
+  it("accepts whitespace around a valid Solana environment key", async () => {
+    process.env.BLOCKRUN_WALLET_KEY = TEST_KEY;
+    process.env.SOLANA_WALLET_KEY = `  ${JSON.stringify(solanaSecret(9))}\n`;
+
+    const result = await resolveOrGenerateWalletKey();
+
+    expect(result.solanaPrivateKeyBytes).toEqual(new Uint8Array(32).fill(9));
+  });
+
+  it("treats a blank Solana environment override as absent", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(CORE_DIR, ".session"), CORE_TEST_KEY + "\n", { mode: 0o600 });
+    writeFileSync(join(CORE_DIR, ".solana-session"), JSON.stringify(solanaSecret(10)), {
+      mode: 0o600,
+    });
+    process.env.SOLANA_WALLET_KEY = "   \n";
+    process.env.CLAWROUTER_PAYMENT_CHAIN = "solana";
+
+    const result = await resolveOrGenerateWalletKey();
+
+    expect(result.solanaPrivateKeyBytes).toEqual(new Uint8Array(32).fill(10));
+  });
+
+  it("ignores malformed optional Solana state while Base is selected", async () => {
+    process.env.BLOCKRUN_WALLET_KEY = TEST_KEY;
+    process.env.SOLANA_WALLET_KEY = "not-a-solana-key";
+    process.env.CLAWROUTER_PAYMENT_CHAIN = "base";
+
+    const result = await resolveOrGenerateWalletKey();
+
+    expect(result.key).toBe(TEST_KEY);
+    expect(result.solanaPrivateKeyBytes).toBeUndefined();
+  });
+
+  it("rejects malformed Solana state while Solana is selected", async () => {
+    process.env.BLOCKRUN_WALLET_KEY = TEST_KEY;
+    process.env.SOLANA_WALLET_KEY = "not-a-solana-key";
+    process.env.CLAWROUTER_PAYMENT_CHAIN = "solana";
+
+    await expect(resolveOrGenerateWalletKey()).rejects.toThrow("invalid format");
+  });
+
+  it("preserves a Solana-only Core wallet when generating the missing Base wallet", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(CORE_DIR, ".solana-session"), JSON.stringify(solanaSecret(11)), {
+      mode: 0o600,
+    });
+
+    const result = await resolveOrGenerateWalletKey();
+
+    expect(result.source).toBe("generated");
+    expect(result.solanaPrivateKeyBytes).toEqual(new Uint8Array(32).fill(11));
+    expect(result.mnemonic).toBeUndefined();
+    expect(existsSync(join(WALLET_DIR, "mnemonic"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(CORE_DIR, ".solana-session"), "utf8"))).toEqual(
+      solanaSecret(11),
+    );
   });
 });

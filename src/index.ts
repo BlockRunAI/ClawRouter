@@ -36,6 +36,7 @@ import { startProxy, getProxyPort } from "./proxy.js";
 import { BLOCKRUN_EXA_PROVIDER_ID, blockrunExaWebSearchProvider } from "./web-search-provider.js";
 import {
   resolveOrGenerateWalletKey,
+  resolveExistingWalletKey,
   setupSolana,
   savePaymentChain,
   resolvePaymentChain,
@@ -73,6 +74,7 @@ import {
   readdirSync,
   mkdirSync,
   copyFileSync,
+  chmodSync,
   renameSync,
   unlinkSync,
 } from "node:fs";
@@ -80,6 +82,7 @@ import { readFile as readFileAsync } from "node:fs/promises";
 import { readTextFileSync } from "./fs-read.js";
 import { TOP_MODELS } from "./top-models.js";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { VERSION } from "./version.js";
 import { privateKeyToAccount } from "viem/accounts";
@@ -90,6 +93,17 @@ import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
 import { BLOCKRUN_PLUGIN_ID } from "./openclaw-plugin-config.js";
+
+function writePrivateJsonSync(path: string, value: unknown): void {
+  const temporary = `${path}.tmp.${randomUUID()}`;
+  try {
+    writeFileSync(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
+    renameSync(temporary, path);
+    chmodSync(path, 0o600);
+  } finally {
+    if (existsSync(temporary)) unlinkSync(temporary);
+  }
+}
 
 function hasConfiguredWallet(): boolean {
   return Boolean(
@@ -449,8 +463,9 @@ function injectModelsConfig(
     }
     try {
       const tmpPath = `${configPath}.tmp.${process.pid}`;
-      writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+      writeFileSync(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
       renameSync(tmpPath, configPath);
+      chmodSync(configPath, 0o600);
       logger.info("Smart routing enabled (blockrun/auto)");
     } catch (err) {
       logger.info(`Failed to write config: ${err instanceof Error ? err.message : String(err)}`);
@@ -526,7 +541,7 @@ function syncAgentModelCache(
       entry.models = VISIBLE_OPENCLAW_MODELS;
 
       const tmpPath = `${cachePath}.tmp.${process.pid}`;
-      writeFileSync(tmpPath, JSON.stringify(cache, null, 2));
+      writeFileSync(tmpPath, JSON.stringify(cache, null, 2), { mode: 0o600 });
       renameSync(tmpPath, cachePath);
       logger.info(
         `Repaired ${agent} model cache: ${staleCount} → ${expectedIds.length} BlockRun models`,
@@ -647,7 +662,7 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
       };
 
       try {
-        writeFileSync(authPath, JSON.stringify(store, null, 2));
+        writePrivateJsonSync(authPath, store);
         logger.info(`Injected BlockRun auth profile for agent: ${agentId}`);
       } catch (err) {
         logger.info(
@@ -1481,12 +1496,21 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
     handler: async (ctx: PluginCommandContext) => {
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
 
-      let wallet: WalletResolution;
+      let wallet: WalletResolution | undefined;
       try {
-        wallet = await resolveOrGenerateWalletKey();
+        wallet =
+          subcommand === "status" || subcommand === "export"
+            ? await resolveExistingWalletKey()
+            : await resolveOrGenerateWalletKey();
       } catch (error) {
         return {
           text: `Could not load the BlockRun wallet: ${error instanceof Error ? error.message : String(error)}`,
+          isError: true,
+        };
+      }
+      if (!wallet) {
+        return {
+          text: "No BlockRun wallet found. Run `clawrouter setup` or connect an agent in ClawRouter Desktop to create one.",
           isError: true,
         };
       }
@@ -2393,8 +2417,9 @@ const plugin: OpenClawPluginDefinition = {
 
         // Atomic write
         const tmpPath = `${configPath}.tmp.${process.pid}`;
-        writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+        writeFileSync(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
         renameSync(tmpPath, configPath);
+        chmodSync(configPath, 0o600);
         api.logger.info("ClawRouter config cleaned up");
       }
     } catch (err) {
@@ -2413,7 +2438,7 @@ const plugin: OpenClawPluginDefinition = {
             const store = JSON.parse(readTextFileSync(authPath));
             if (store.profiles?.["blockrun:default"]) {
               delete store.profiles["blockrun:default"];
-              writeFileSync(authPath, JSON.stringify(store, null, 2));
+              writePrivateJsonSync(authPath, store);
             }
           } catch {
             // Skip corrupt auth files

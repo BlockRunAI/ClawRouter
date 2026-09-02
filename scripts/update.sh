@@ -267,7 +267,7 @@ if [ -f "$WALLET_FILE" ]; then
       }
     " 2>/dev/null || echo "(address check skipped)")
 
-    WALLET_BACKUP="$HOME/.openclaw/blockrun/wallet.key.bak.$(date +%s)"
+    WALLET_BACKUP="$(mktemp "$HOME/.openclaw/blockrun/wallet.key.bak.XXXXXX")"
     cp "$WALLET_FILE" "$WALLET_BACKUP"
     chmod 600 "$WALLET_BACKUP"
 
@@ -386,8 +386,9 @@ try {
 
   if (changed) {
     const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, configPath);
+    fs.chmodSync(configPath, 0o600);
   } else {
     console.log('  Config clean');
   }
@@ -411,8 +412,9 @@ try {
   if (!provider.apiKey) { provider.apiKey = 'x402-proxy-handles-auth'; changed = true; console.log('  Fixed missing apiKey'); }
   if (changed) {
     const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, configPath);
+    fs.chmodSync(configPath, 0o600);
   } else { console.log('  Provider config OK'); }
 } catch (err) { console.log('  Skipped: ' + err.message); }
 "
@@ -546,8 +548,9 @@ if (totalDrop <= 0 || modelListDrop / totalDrop < 0.65) {
 
 active.models.providers.blockrun.models = rejectedModels;
 const tmpPath = `${activePath}.tmp.${process.pid}`;
-fs.writeFileSync(tmpPath, JSON.stringify(active, null, 2));
+fs.writeFileSync(tmpPath, JSON.stringify(active, null, 2), { mode: 0o600 });
 fs.renameSync(tmpPath, activePath);
+fs.chmodSync(activePath, 0o600);
 
 console.log(
   `  ✓ Applied scoped BlockRun model-list trim (${activeModels.length} -> ${rejectedModels.length})`,
@@ -669,8 +672,9 @@ if (Array.isArray(config.plugins.deny)) {
   config.plugins.deny = config.plugins.deny.filter(id => id !== 'blockrun-clawrouter');
 }
 const tmp = configPath + '.tmp.' + process.pid;
-fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
 fs.renameSync(tmp, configPath);
+fs.chmodSync(configPath, 0o600);
 NODE
 
 # Restore credentials after plugin install (always restore to preserve user's channels)
@@ -687,8 +691,9 @@ if [ -n "$CHANNEL_CONFIG_BACKUP" ] && [ -f "$CHANNEL_CONFIG_BACKUP" ] && [ -f "$
 const fs = require('fs');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 try {
   const config = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
@@ -802,8 +807,9 @@ try {
   }
   if (changed) {
     const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, configPath);
+    fs.chmodSync(configPath, 0o600);
     console.log('  ✓ Duplicate entries cleaned');
   } else {
     console.log('  ✓ No duplicates found');
@@ -829,8 +835,9 @@ try {
   if (!provider.apiKey) { provider.apiKey = 'x402-proxy-handles-auth'; changed = true; console.log('  Fixed missing apiKey'); }
   if (changed) {
     const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, configPath);
+    fs.chmodSync(configPath, 0o600);
   } else { console.log('  ✓ Provider config OK'); }
 } catch (err) { console.log('  Skipped: ' + err.message); }
 "
@@ -877,8 +884,9 @@ const authDir = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent');
 const authPath = path.join(authDir, 'auth-profiles.json');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 fs.mkdirSync(authDir, { recursive: true });
@@ -956,8 +964,9 @@ try {
 
   // Atomic write
   const tmpPath = configPath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2));
+  fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
   fs.renameSync(tmpPath, configPath);
+  fs.chmodSync(configPath, 0o600);
 
   if (removed > 0) {
     console.log('  Removed ' + removed + ' deprecated models from allowlist');
@@ -982,8 +991,9 @@ const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmpPath, data);
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 if (fs.existsSync(configPath)) {
@@ -1080,8 +1090,9 @@ try {
   }
   if (changed) {
     const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, configPath);
+    fs.chmodSync(configPath, 0o600);
     console.log('  ✓ Registry cleaned');
   } else {
     console.log('  ✓ Registry clean');
@@ -1162,9 +1173,10 @@ function newestCurrentPackage() {
 }
 
 function atomicWrite(filePath, data) {
-  const tmp = filePath + '.tmp.' + process.pid;
-  fs.writeFileSync(tmp, data);
-  fs.renameSync(tmp, filePath);
+  const tmpPath = filePath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, data, { mode: 0o600 });
+  fs.renameSync(tmpPath, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 try {

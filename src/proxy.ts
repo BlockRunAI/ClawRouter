@@ -61,6 +61,7 @@ import {
 import { classifyByRules } from "./router/index.js";
 import {
   BLOCKRUN_MODELS,
+  MODEL_ALIASES,
   OPENCLAW_MODELS,
   resolveModelAlias,
   isReasoningModel,
@@ -1567,6 +1568,15 @@ type ModelListEntry = {
   object: "model";
   created: number;
   owned_by: string;
+  name: string;
+  context_window: number;
+  max_output: number;
+  input_price: number;
+  output_price: number;
+  reasoning: boolean;
+  vision: boolean;
+  agentic: boolean;
+  tool_calling: boolean;
 };
 
 /**
@@ -1583,12 +1593,25 @@ export function buildProxyModelList(
     if (seen.has(model.id)) return false;
     seen.add(model.id);
     return true;
-  }).map((model) => ({
-    id: model.id,
-    object: "model",
-    created: createdAt,
-    owned_by: model.id.includes("/") ? (model.id.split("/")[0] ?? "blockrun") : "blockrun",
-  }));
+  }).map((model) => {
+    const targetId = MODEL_ALIASES[model.id] ?? model.id;
+    const canonical = BLOCKRUN_MODELS.find((entry) => entry.id === targetId);
+    return {
+      id: model.id,
+      object: "model",
+      created: createdAt,
+      owned_by: targetId.includes("/") ? (targetId.split("/")[0] ?? "blockrun") : "blockrun",
+      name: model.name,
+      context_window: model.contextWindow,
+      max_output: model.maxTokens,
+      input_price: model.cost.input,
+      output_price: model.cost.output,
+      reasoning: model.reasoning,
+      vision: model.input.includes("image"),
+      agentic: canonical?.agentic ?? false,
+      tool_calling: canonical?.toolCalling ?? false,
+    };
+  });
 }
 
 /**

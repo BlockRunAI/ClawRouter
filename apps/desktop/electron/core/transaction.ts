@@ -16,6 +16,29 @@ type SnapshotManifest = {
   files: FileSnapshot[];
 };
 
+export class RollbackError extends Error {
+  readonly rolledBack = false;
+
+  constructor(operationError: unknown, options: { cause: unknown }) {
+    super(
+      `Configuration failed and rollback was incomplete: ${operationError instanceof Error ? operationError.message : String(operationError)}`,
+      options,
+    );
+    this.name = "RollbackError";
+  }
+}
+
+export class RolledBackError extends Error {
+  readonly rolledBack = true;
+
+  constructor(operationError: unknown) {
+    super(operationError instanceof Error ? operationError.message : String(operationError), {
+      cause: operationError,
+    });
+    this.name = "RolledBackError";
+  }
+}
+
 export class ConfigurationTransaction {
   constructor(private readonly stateDir: string) {}
 
@@ -44,8 +67,12 @@ export class ConfigurationTransaction {
     try {
       return await operation();
     } catch (error) {
-      await restoreFiles(beforeAttempt);
-      throw error;
+      try {
+        await restoreFiles(beforeAttempt);
+      } catch (rollbackError) {
+        throw new RollbackError(error, { cause: rollbackError });
+      }
+      throw new RolledBackError(error);
     }
   }
 
