@@ -17,8 +17,9 @@ import { DEFAULT_ROUTING_CONFIG, getFallbackChain } from "../../src/router/index
 const HEALTH_POLL_INTERVAL_MS = 200;
 const HEALTH_TIMEOUT_MS = 5_000;
 
-// Use a unique port to avoid collision with other integration tests
-const TEST_PORT = 8490;
+// Use a process-scoped port so this file can run in parallel with other suites
+// and with a real ClawRouter desktop proxy on 8402.
+const TEST_PORT = 50_000 + (process.pid % 10_000);
 
 describe("exclude-models e2e", () => {
   let proxy: ProxyHandle;
@@ -26,16 +27,19 @@ describe("exclude-models e2e", () => {
   const consoleLogs: string[] = [];
   let originalLog: typeof console.log;
 
+  const ecoSimpleChain = getFallbackChain("SIMPLE", DEFAULT_ROUTING_CONFIG.ecoTiers!);
+  const excludedEcoModel = ecoSimpleChain[0];
+
   // Models to exclude for this test
   // Three exclusions, each exercising a different filter path: the eco-chain
-  // member (nvidia/step-3.7-flash), a mid-chain paid model, and the proxy's
+  // current first member, a mid-chain paid model, and the proxy's
   // FREE_MODEL append target. free/gpt-oss-120b is ClawRouter's picker id for
   // that append — the literal free/* id 400s at the gateway, but the proxy
   // maps free/* to nvidia/* upstream and nvidia/gpt-oss-120b is served
   // (hidden from the catalog, probed 200 on 2026-08-21), so the append path
   // is healthy and excluding its id is purely about exercising the filter.
   const EXCLUDED_MODELS = new Set([
-    "nvidia/step-3.7-flash",
+    excludedEcoModel,
     "google/gemini-2.5-flash-lite",
     "free/gpt-oss-120b",
   ]);
@@ -78,8 +82,7 @@ describe("exclude-models e2e", () => {
 
   it("exclude filter log appears for excluded models in eco SIMPLE tier", async () => {
     // Verify excluded models ARE in the unfiltered eco SIMPLE chain
-    const ecoSimpleChain = getFallbackChain("SIMPLE", DEFAULT_ROUTING_CONFIG.ecoTiers!);
-    expect(ecoSimpleChain).toContain("nvidia/step-3.7-flash");
+    expect(ecoSimpleChain).toContain(excludedEcoModel);
 
     consoleLogs.length = 0;
 
@@ -88,6 +91,7 @@ describe("exclude-models e2e", () => {
     await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(2_000),
       body: JSON.stringify({
         model: "blockrun/eco",
         messages: [{ role: "user", content: "hello" }],
@@ -126,6 +130,7 @@ describe("exclude-models e2e", () => {
     await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(2_000),
       body: JSON.stringify({
         model: "blockrun/auto",
         messages: [{ role: "user", content: "what is 1+1" }],
@@ -148,6 +153,7 @@ describe("exclude-models e2e", () => {
     await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(2_000),
       body: JSON.stringify({
         model: "blockrun/eco",
         messages: [{ role: "user", content: "hi" }],

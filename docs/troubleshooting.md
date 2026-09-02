@@ -19,7 +19,7 @@ Quick solutions for common ClawRouter issues.
 
 ```bash
 # 1. Check your version (should be 0.12+)
-cat ~/.openclaw/extensions/clawrouter/package.json | grep version
+cat ~/.openclaw/extensions/blockrun-clawrouter/package.json | grep version
 
 # 2. Check proxy is running
 curl http://localhost:8402/health
@@ -51,11 +51,15 @@ Auth profile is missing or wasn't created properly.
 
 **Fix:** See [How to Update](#how-to-update) — the reinstall script automatically injects the auth profile.
 
-### "Config validation failed: plugin not found: clawrouter"
+### "Config validation failed: plugin not found: blockrun-clawrouter"
 
 Plugin directory was removed but config still references it. This blocks all OpenClaw commands until fixed.
 
 **Fix:** See [How to Update](#how-to-update) for complete cleanup steps.
+
+If the missing id is the legacy `clawrouter`, first update ClawRouter. The
+migration moves only BlockRun-owned settings to `blockrun-clawrouter` and
+preserves OpenClaw's unrelated official `clawrouter` plugin.
 
 ### "No USDC balance" / "Insufficient funds"
 

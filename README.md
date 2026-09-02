@@ -80,6 +80,14 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 > **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
 
+### Desktop control plane (macOS)
+
+The Electron app in [`apps/desktop`](apps/desktop) provides one-click connections
+for OpenClaw, Codex, Hermes, DeepSeek Harness, and Pi, plus model pricing/context,
+wallet balances, Base/Solana switching, and Coinbase Onramp. It snapshots each
+agent's existing config before changing it and restores the original bytes when
+you disconnect.
+
 ### Option A — OpenClaw Agent
 
 [OpenClaw](https://openclaw.ai) is an AI coding agent. If you're using it, ClawRouter installs as a plugin. **Two paths:**
@@ -93,6 +101,11 @@ openclaw gateway restart
 
 This handles everything: registration, models config, auth profile, wallet setup. Smart routing (`blockrun/auto`) is now your default model.
 
+> OpenClaw now also bundles an unrelated plugin named `clawrouter`
+> (`@openclaw/clawrouter`). BlockRun uses the distinct plugin id
+> `blockrun-clawrouter`; the installer preserves the official plugin and allows
+> both products to coexist.
+
 **A2. If you prefer pure npm:**
 
 ```bash
@@ -101,7 +114,7 @@ clawrouter setup            # finishes OpenClaw integration — REQUIRED
 openclaw gateway restart
 ```
 
-> ⚠️ **Skipping `clawrouter setup` will leave you broken.** Bare `npm install -g` only puts the package on disk; it does NOT register the plugin with OpenClaw, sync the models allowlist, or write the auth profile. Symptom: `/models` in your bot shows only ~7 entries (OpenClaw's hardcoded defaults) instead of the full ~44 BlockRun models. Run `clawrouter setup` to repair, or use path A1 to begin with.
+> ⚠️ **Skipping `clawrouter setup` will leave you broken.** Bare `npm install -g` only puts the package on disk; it does NOT register the plugin with OpenClaw, sync the models allowlist, or write the auth profile. Symptom: `/models` in your bot shows only OpenClaw's defaults instead of the 55 BlockRun models. Run `clawrouter setup` to repair, or use path A1 to begin with.
 
 ### Option B — Standalone (continue.dev, Cursor, VS Code, any OpenAI-compatible client)
 

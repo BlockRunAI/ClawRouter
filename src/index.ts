@@ -78,8 +78,7 @@ import { readFile as readFileAsync } from "node:fs/promises";
 import { readTextFileSync } from "./fs-read.js";
 import { TOP_MODELS } from "./top-models.js";
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { VERSION } from "./version.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { getStats } from "./stats.js";
@@ -88,90 +87,7 @@ import { buildPolymarketTool } from "./polymarket/tool.js";
 import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
-
-function getPackageRoot(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), "..");
-}
-
-/**
- * Install ClawRouter skills into OpenClaw's workspace skills directory.
- *
- * OpenClaw agents discover skills by scanning {workspaceDir}/skills/ for SKILL.md
- * files. While the plugin manifest (`openclaw.plugin.json`) exposes skills for
- * OpenClaw's internal registry, agents often try to read skills from the workspace
- * path directly. This copies our bundled skills so they're always resolvable.
- *
- * Workspace path follows OpenClaw's convention:
- *   - Default: ~/.openclaw/workspace/skills/
- *   - With profile: ~/.openclaw/workspace-{profile}/skills/
- *
- * Only copies if the skill is missing or the content has changed.
- */
-function installSkillsToWorkspace(logger: {
-  info: (msg: string) => void;
-  warn: (msg: string) => void;
-}) {
-  try {
-    // Resolve the package root: dist/index.js -> package root
-    const packageRoot = getPackageRoot();
-    const bundledSkillsDir = join(packageRoot, "skills");
-
-    if (!existsSync(bundledSkillsDir)) {
-      // Skills directory not bundled (dev mode or stripped package)
-      return;
-    }
-
-    // Match OpenClaw's workspace resolution: ~/.openclaw/workspace[-{profile}]/
-    const profile = (process["env"].OPENCLAW_PROFILE ?? "").trim().toLowerCase();
-    const workspaceDirName =
-      profile && profile !== "default" ? `workspace-${profile}` : "workspace";
-    const workspaceSkillsDir = join(homedir(), ".openclaw", workspaceDirName, "skills");
-    mkdirSync(workspaceSkillsDir, { recursive: true });
-
-    // Scan bundled skills: each subdirectory contains a SKILL.md
-    // Skip internal-only skills (release is for ClawRouter maintainers, not end users)
-    const INTERNAL_SKILLS = new Set(["release"]);
-    const entries = readdirSync(bundledSkillsDir, { withFileTypes: true });
-    let installed = 0;
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-
-      const skillName = entry.name;
-      if (INTERNAL_SKILLS.has(skillName)) continue;
-      const srcSkillFile = join(bundledSkillsDir, skillName, "SKILL.md");
-      if (!existsSync(srcSkillFile)) continue;
-
-      // Use original skill name as folder (matches what agents expect)
-      const destDir = join(workspaceSkillsDir, skillName);
-      const destSkillFile = join(destDir, "SKILL.md");
-
-      // Check if update needed: compare content
-      let needsUpdate = true;
-      if (existsSync(destSkillFile)) {
-        try {
-          const srcContent = readTextFileSync(srcSkillFile);
-          const destContent = readTextFileSync(destSkillFile);
-          if (srcContent === destContent) needsUpdate = false;
-        } catch {
-          // Can't read — overwrite
-        }
-      }
-
-      if (needsUpdate) {
-        mkdirSync(destDir, { recursive: true });
-        copyFileSync(srcSkillFile, destSkillFile);
-        installed++;
-      }
-    }
-
-    if (installed > 0) {
-      logger.info(`Installed ${installed} skill(s) to ${workspaceSkillsDir}`);
-    }
-  } catch (err) {
-    logger.warn(`Failed to install skills: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
+import { BLOCKRUN_PLUGIN_ID } from "./openclaw-plugin-config.js";
 
 /**
  * Detect if we're running in shell completion mode.
@@ -451,61 +367,6 @@ function injectModelsConfig(
     if (addedCount > 0) {
       logger.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
     }
-  }
-
-  // Plugin-id migration (#305). Until v0.12.265 this plugin declared the id
-  // `clawrouter`, which OpenClaw's own bundled plugin also uses since 2026.7.1.
-  // Installs made before the rename carry `plugins.entries.clawrouter` — an
-  // entry that, after the rename, no longer refers to us at all. Left alone it
-  // would explicitly enable OPENCLAW's router (a different product: its own
-  // provider, API key and endpoint) while ours silently loses its entry.
-  //
-  // Move it rather than delete it, so the user's enabled/disabled choice is
-  // preserved. Only when the new key is absent — never clobber a real one.
-  const pluginEntries = (config.plugins as Record<string, unknown> | undefined)?.entries as
-    Record<string, unknown> | undefined;
-  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries[BLOCKRUN_PLUGIN_ID]) {
-    pluginEntries[BLOCKRUN_PLUGIN_ID] = pluginEntries.clawrouter;
-    delete pluginEntries.clawrouter;
-    needsWrite = true;
-    logger.info(
-      "Migrated plugins.entries.clawrouter -> blockrun-clawrouter (OpenClaw bundles its own `clawrouter` plugin; see #305)",
-    );
-  }
-
-  // `plugins.allow` is an EXCLUSIVE allowlist: OpenClaw's own docs say "if
-  // plugins.allow is set, the installed plugin id must be in that list before
-  // the plugin can load". A user who allow-listed us under the old id would,
-  // after the rename, have this plugin blocked outright — strictly worse than
-  // the collision the rename fixes.
-  //
-  // ADD rather than replace. `clawrouter` in that list may now also be
-  // permitting OpenClaw's bundled plugin, and silently revoking that is not
-  // ours to decide; adding our new id is enough to get us loading again.
-  const pluginsCfg = config.plugins as Record<string, unknown> | undefined;
-  const allow = pluginsCfg?.allow;
-  if (Array.isArray(allow) && allow.includes("clawrouter") && !allow.includes(BLOCKRUN_PLUGIN_ID)) {
-    allow.push(BLOCKRUN_PLUGIN_ID);
-    needsWrite = true;
-    logger.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.allow (renamed from clawrouter; see #305)`);
-  }
-
-  // Mirror for `plugins.deny`: an explicit deny of the old id was a decision to
-  // keep THIS plugin off, made when no other `clawrouter` existed. Honour it.
-  const deny = pluginsCfg?.deny;
-  if (Array.isArray(deny) && deny.includes("clawrouter") && !deny.includes(BLOCKRUN_PLUGIN_ID)) {
-    deny.push(BLOCKRUN_PLUGIN_ID);
-    needsWrite = true;
-    logger.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.deny (renamed from clawrouter; see #305)`);
-  }
-
-  // Install provenance is unambiguously ours — rename the key outright.
-  const installs = pluginsCfg?.installs as Record<string, unknown> | undefined;
-  if (installs && installs.clawrouter && !installs[BLOCKRUN_PLUGIN_ID]) {
-    installs[BLOCKRUN_PLUGIN_ID] = installs.clawrouter;
-    delete installs.clawrouter;
-    needsWrite = true;
-    logger.info(`Migrated plugins.installs.clawrouter -> ${BLOCKRUN_PLUGIN_ID} (see #305)`);
   }
 
   // web_search: set `enabled = true` (safe — boolean, no provider validator),
@@ -1889,7 +1750,7 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
  * one. Kept as one constant so the manifest, the plugin definition and the
  * config migration can never drift apart. See #305.
  */
-export const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+export { BLOCKRUN_PLUGIN_ID } from "./openclaw-plugin-config.js";
 
 const plugin: OpenClawPluginDefinition = {
   // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
@@ -1912,10 +1773,6 @@ const plugin: OpenClawPluginDefinition = {
       api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
       return;
     }
-
-    // Install skills into OpenClaw workspace so agents can discover them
-    // Must run before completion short-circuit so skills are available even on first install
-    installSkillsToWorkspace(api.logger);
 
     // Guard against repeated proxy startup within the same process.
     // OpenClaw calls register() multiple times (discovery, activation, per-session)
@@ -2461,12 +2318,7 @@ const plugin: OpenClawPluginDefinition = {
         removeManagedBlockrunMcpServerConfig(config as OpenClawConfig);
 
         // Remove plugin entries (all case variants)
-        for (const key of [
-          BLOCKRUN_PLUGIN_ID,
-          "clawrouter",
-          "ClawRouter",
-          "@blockrun/clawrouter",
-        ]) {
+        for (const key of [BLOCKRUN_PLUGIN_ID, "ClawRouter", "@blockrun/clawrouter"]) {
           if (config.plugins?.entries?.[key]) delete config.plugins.entries[key];
           if (config.plugins?.installs?.[key]) delete config.plugins.installs[key];
         }
@@ -2475,10 +2327,17 @@ const plugin: OpenClawPluginDefinition = {
         if (Array.isArray(config.plugins?.allow)) {
           config.plugins.allow = config.plugins.allow.filter(
             (p: string) =>
-              p !== BLOCKRUN_PLUGIN_ID &&
-              p !== "clawrouter" &&
-              p !== "ClawRouter" &&
-              p !== "@blockrun/clawrouter",
+              p !== BLOCKRUN_PLUGIN_ID && p !== "ClawRouter" && p !== "@blockrun/clawrouter",
+          );
+        }
+
+        // A previous uninstall/disable may have left the managed id denied.
+        // Remove only BlockRun-owned aliases; the official `clawrouter` id is
+        // intentionally preserved.
+        if (Array.isArray(config.plugins?.deny)) {
+          config.plugins.deny = config.plugins.deny.filter(
+            (p: string) =>
+              p !== BLOCKRUN_PLUGIN_ID && p !== "ClawRouter" && p !== "@blockrun/clawrouter",
           );
         }
 

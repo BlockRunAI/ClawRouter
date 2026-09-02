@@ -3,19 +3,54 @@ set -e
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="$HOME/.openclaw/extensions/clawrouter"
+PLUGIN_DIR="$HOME/.openclaw/extensions/blockrun-clawrouter"
+LEGACY_PLUGIN_DIR="$HOME/.openclaw/extensions/clawrouter"
 CONFIG_PATH="$HOME/.openclaw/openclaw.json"
 WALLET_FILE="$HOME/.openclaw/blockrun/wallet.key"
 WALLET_BACKUP=""
+WALLET_EXISTED=0
 PLUGIN_BACKUP=""
+LEGACY_PLUGIN_BACKUP=""
+LEGACY_BLOCKRUN_INSTALL=0
 CONFIG_BACKUP=""
+CONFIG_EXISTED=0
+CREDS_DIR="$HOME/.openclaw/credentials"
+CREDS_BACKUP=""
+CREDS_EXISTED=0
+INSTALL_SPEC="${BLOCKRUN_CLAWROUTER_INSTALL_SPEC:-@blockrun/clawrouter}"
+
+[ -f "$WALLET_FILE" ] && WALLET_EXISTED=1
+[ -f "$CONFIG_PATH" ] && CONFIG_EXISTED=1
+[ -d "$CREDS_DIR" ] && CREDS_EXISTED=1
+
+is_blockrun_plugin_dir() {
+  local candidate_dir="$1"
+  [ -d "$candidate_dir" ] || return 1
+  node -e '
+const fs = require("fs");
+const path = require("path");
+const dir = process.argv[1];
+for (const candidate of [path.join(dir, "package.json"), path.join(dir, "package", "package.json")]) {
+  try {
+    if (JSON.parse(fs.readFileSync(candidate, "utf8")).name === "@blockrun/clawrouter") process.exit(0);
+  } catch {}
+}
+process.exit(1);
+' "$candidate_dir"
+}
 
 cleanup_backups() {
   if [ -n "$PLUGIN_BACKUP" ] && [ -d "$PLUGIN_BACKUP" ]; then
     rm -rf "$PLUGIN_BACKUP"
   fi
+  if [ -n "$LEGACY_PLUGIN_BACKUP" ] && [ -d "$LEGACY_PLUGIN_BACKUP" ]; then
+    rm -rf "$LEGACY_PLUGIN_BACKUP"
+  fi
   if [ -n "$CONFIG_BACKUP" ] && [ -f "$CONFIG_BACKUP" ]; then
     rm -f "$CONFIG_BACKUP"
+  fi
+  if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
+    rm -rf "$(dirname "$CREDS_BACKUP")"
   fi
 }
 
@@ -35,9 +70,34 @@ restore_previous_install() {
       echo "  ✓ Restored previous plugin files"
     fi
 
+    if [ -n "$LEGACY_PLUGIN_BACKUP" ] && [ -d "$LEGACY_PLUGIN_BACKUP" ]; then
+      mv "$LEGACY_PLUGIN_BACKUP" "$LEGACY_PLUGIN_DIR"
+      echo "  ✓ Restored previous legacy BlockRun plugin files"
+    fi
+
     if [ -n "$CONFIG_BACKUP" ] && [ -f "$CONFIG_BACKUP" ]; then
       cp "$CONFIG_BACKUP" "$CONFIG_PATH"
       echo "  ✓ Restored previous OpenClaw config"
+    elif [ "$CONFIG_EXISTED" = "0" ]; then
+      rm -f "$CONFIG_PATH"
+    fi
+
+    if [ "$WALLET_EXISTED" = "1" ] && [ -n "$WALLET_BACKUP" ] && [ -f "$WALLET_BACKUP" ]; then
+      mkdir -p "$(dirname "$WALLET_FILE")"
+      cp "$WALLET_BACKUP" "$WALLET_FILE"
+      chmod 600 "$WALLET_FILE"
+      echo "  ✓ Restored previous wallet"
+    elif [ "$WALLET_EXISTED" = "0" ]; then
+      rm -f "$WALLET_FILE"
+    fi
+
+    if [ "$CREDS_EXISTED" = "1" ] && [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
+      rm -rf "$CREDS_DIR"
+      mkdir -p "$CREDS_DIR"
+      cp -a "$CREDS_BACKUP/." "$CREDS_DIR/"
+      echo "  ✓ Restored OpenClaw credentials"
+    elif [ "$CREDS_EXISTED" = "0" ]; then
+      rm -rf "$CREDS_DIR"
     fi
   fi
 
@@ -107,6 +167,7 @@ validate_config
 # 0. Back up wallet key BEFORE removing anything
 echo "→ Backing up wallet..."
 if [ -f "$WALLET_FILE" ]; then
+  WALLET_EXISTED=1
   WALLET_KEY=$(cat "$WALLET_FILE" | tr -d '[:space:]')
   KEY_LEN=${#WALLET_KEY}
   if [[ "$WALLET_KEY" == 0x* ]] && [ "$KEY_LEN" -eq 66 ]; then
@@ -132,51 +193,27 @@ else
   echo "  ℹ No existing plugin files found"
 fi
 
+if is_blockrun_plugin_dir "$LEGACY_PLUGIN_DIR"; then
+  LEGACY_BLOCKRUN_INSTALL=1
+  LEGACY_PLUGIN_BACKUP="$HOME/.openclaw/blockrun/clawrouter.legacy.backup.$(date +%s)"
+  mv "$LEGACY_PLUGIN_DIR" "$LEGACY_PLUGIN_BACKUP"
+  echo "  ✓ Legacy BlockRun plugin staged at: $LEGACY_PLUGIN_BACKUP"
+fi
+
 if [ -f "$CONFIG_PATH" ]; then
+  CONFIG_EXISTED=1
   CONFIG_BACKUP="$CONFIG_PATH.clawrouter-reinstall.$(date +%s).bak"
   cp "$CONFIG_PATH" "$CONFIG_BACKUP"
   echo "  ✓ Config backed up to: $CONFIG_BACKUP"
 fi
 echo ""
 
-# 1b. Remove Crossmint/lobster extension
-# lobster.cash conflicts with /wallet command — remove it so ClawRouter owns /wallet.
-echo "→ Removing Crossmint/lobster extension..."
-LOBSTER_DIR="$HOME/.openclaw/extensions/lobster.cash"
-if [ -d "$LOBSTER_DIR" ]; then
-  rm -rf "$LOBSTER_DIR"
-  echo "  ✓ Removed $LOBSTER_DIR"
-else
-  echo "  ✓ Not installed"
-fi
-node -e "
-const fs = require('fs');
-const configPath = '$CONFIG_PATH';
-if (!fs.existsSync(configPath)) process.exit(0);
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  let changed = false;
-  for (const key of ['lobster.cash', 'lobster', 'crossmint']) {
-    if (config?.plugins?.entries?.[key]) { delete config.plugins.entries[key]; changed = true; console.log('  Removed plugins.entries.' + key); }
-    if (config?.plugins?.installs?.[key]) { delete config.plugins.installs[key]; changed = true; }
-  }
-  if (Array.isArray(config?.plugins?.allow)) {
-    const before = config.plugins.allow.length;
-    config.plugins.allow = config.plugins.allow.filter(p => !['lobster.cash','lobster','crossmint'].includes(p));
-    if (config.plugins.allow.length !== before) { changed = true; console.log('  Removed lobster/crossmint from plugins.allow'); }
-  }
-  if (changed) {
-    const tmp = configPath + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
-    fs.renameSync(tmp, configPath);
-  } else { console.log('  Config clean'); }
-} catch (e) { console.log('  Skipped: ' + e.message); }
-"
-echo ""
+# Third-party plugins are never removed by a ClawRouter reinstall. OpenClaw's
+# conflict diagnostics let the user choose which slash-command owner wins.
 
 # 2. Clean config entries
 echo "→ Cleaning config entries..."
-node -e "
+LEGACY_BLOCKRUN_INSTALL="$LEGACY_BLOCKRUN_INSTALL" node -e "
 const f = require('os').homedir() + '/.openclaw/openclaw.json';
 const fs = require('fs');
 function atomicWrite(filePath, data) {
@@ -204,19 +241,29 @@ try {
   process.exit(0);
 }
 
-// Clean plugin entries (all case variants to prevent duplicate plugin warnings)
-for (const key of ['clawrouter', 'ClawRouter', '@blockrun/clawrouter']) {
+// Never remove lowercase clawrouter: OpenClaw's official router owns it.
+for (const key of ['blockrun-clawrouter', 'ClawRouter', '@blockrun/clawrouter']) {
   if (c.plugins?.entries?.[key]) delete c.plugins.entries[key];
   if (c.plugins?.installs?.[key]) delete c.plugins.installs[key];
+}
+if (process.env.LEGACY_BLOCKRUN_INSTALL === '1' && c.plugins?.entries?.clawrouter) {
+  const legacy = c.plugins.entries.clawrouter;
+  for (const key of ['walletKey', 'routing']) {
+    delete legacy[key];
+    if (legacy.config) delete legacy.config[key];
+  }
+  if (legacy.config && Object.keys(legacy.config).length === 0) delete legacy.config;
 }
 
 // Clean plugins.allow — remove only ClawRouter entries; preserve every other
 // plugin the user has allowed, including bare local/custom plugin IDs.
 if (Array.isArray(c.plugins?.allow)) {
   const before = c.plugins.allow.length;
-  c.plugins.allow = c.plugins.allow.filter(p => p !== 'clawrouter' && p !== 'ClawRouter' && p !== '@blockrun/clawrouter');
+  c.plugins.allow = c.plugins.allow.filter(
+    p => p !== 'blockrun-clawrouter' && p !== 'ClawRouter' && p !== '@blockrun/clawrouter'
+  );
   const removed = before - c.plugins.allow.length;
-  if (removed > 0) console.log('  Removed ClawRouter from plugins.allow (re-added after install)');
+  if (removed > 0) console.log('  Staged BlockRun plugin config for reinstall');
 }
 
 // OpenClaw 2026.5.2+ validates tools.web.search.provider at config-load time.
@@ -293,8 +340,8 @@ if (!store.profiles[profileKey]) {
 # 5. Ensure apiKey is present for /model picker (but DON'T override default model)
 echo "→ Finalizing setup..."
 node -e "
-const os = require('os');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 function atomicWrite(filePath, data) {
@@ -374,9 +421,8 @@ try {
 
 # 6. Install plugin (config is ready, but no allow list yet to avoid validation error)
 # Back up OpenClaw credentials (channels, WhatsApp/Telegram state) before plugin install
-CREDS_DIR="$HOME/.openclaw/credentials"
-CREDS_BACKUP=""
-if [ -d "$CREDS_DIR" ] && [ "$(ls -A "$CREDS_DIR" 2>/dev/null)" ]; then
+if [ -d "$CREDS_DIR" ]; then
+  CREDS_EXISTED=1
   CREDS_BACKUP="$(mktemp -d)/openclaw-credentials-backup"
   cp -a "$CREDS_DIR" "$CREDS_BACKUP"
   echo "  ✓ Backed up OpenClaw credentials"
@@ -406,10 +452,16 @@ fi
 # openclaw plugins install scans the directory. If they exist during install,
 # OpenClaw writes them into config as duplicate plugins.
 for stale in "$HOME/.openclaw/extensions/clawrouter.backup."* "$HOME/.openclaw/extensions/.openclaw-install-stage-"*; do
-  [ -d "$stale" ] && rm -rf "$stale"
+  if is_blockrun_plugin_dir "$stale"; then
+    rm -rf "$stale"
+  fi
 done
 
 echo "→ Installing ClawRouter..."
+OPENCLAW_CAPABILITY_ARGS=()
+if openclaw plugins install --help 2>&1 | grep -q -- '--accept-capabilities'; then
+  OPENCLAW_CAPABILITY_ARGS=(--accept-capabilities)
+fi
 # `--force` is required when the plugin is already installed at the same path.
 # Reinstall.sh covers both fresh and re-install flows; without --force the
 # re-install flow fails with "plugin already exists", our EXIT trap rolls back,
@@ -419,7 +471,7 @@ echo "→ Installing ClawRouter..."
 # "Installed plugin: clawrouter" in OpenClaw v2026.4.5 (parallel plugin loading).
 # 120s is enough for slow connections; the install itself completes in ~30s.
 if command -v timeout >/dev/null 2>&1; then
-  timeout 120 openclaw plugins install --force @blockrun/clawrouter || {
+  timeout 120 openclaw plugins install --force "${OPENCLAW_CAPABILITY_ARGS[@]}" "$INSTALL_SPEC" || {
     exit_code=$?
     if [ $exit_code -eq 124 ]; then
       echo "  (install command timed out — this is normal with OpenClaw v2026.4.5)"
@@ -429,17 +481,13 @@ if command -v timeout >/dev/null 2>&1; then
     fi
   }
 else
-  openclaw plugins install --force @blockrun/clawrouter
+  openclaw plugins install --force "${OPENCLAW_CAPABILITY_ARGS[@]}" "$INSTALL_SPEC"
 fi
-
-# Install is complete — clear the rollback trap immediately.
-# From this point on, Ctrl+C or errors should NOT roll back the install.
-trap - EXIT INT TERM
 
 # Restore credentials after plugin install (always restore to preserve user's channels)
 if [ -n "$CREDS_BACKUP" ] && [ -d "$CREDS_BACKUP" ]; then
   mkdir -p "$CREDS_DIR"
-  cp -a "$CREDS_BACKUP/"* "$CREDS_DIR/"
+  cp -a "$CREDS_BACKUP/." "$CREDS_DIR/"
   echo "  ✓ Restored OpenClaw credentials (channels preserved)"
   rm -rf "$(dirname "$CREDS_BACKUP")"
 fi
@@ -672,11 +720,9 @@ try {
 
 # 7. Add plugin to allow list (done AFTER install so plugin files exist for validation)
 echo "→ Adding to plugins allow list..."
-node -e "
-const os = require('os');
+node - "$CONFIG_PATH" "$CONFIG_BACKUP" "$LEGACY_BLOCKRUN_INSTALL" <<'NODE'
 const fs = require('fs');
-const path = require('path');
-const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+const [configPath, backupPath, legacyOwned] = process.argv.slice(2);
 function atomicWrite(filePath, data) {
   const tmpPath = filePath + '.tmp.' + process.pid;
   fs.writeFileSync(tmpPath, data);
@@ -687,16 +733,52 @@ if (fs.existsSync(configPath)) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    // Ensure plugins.allow exists and includes clawrouter
+    // Ensure the distinct BlockRun id is enabled only after its package exists.
     if (!config.plugins) config.plugins = {};
+    if (!config.plugins.entries) config.plugins.entries = {};
+    const preserved = backupPath && fs.existsSync(backupPath)
+      ? JSON.parse(fs.readFileSync(backupPath, 'utf8'))
+      : {};
+    const current = config.plugins.entries['blockrun-clawrouter'] || {};
+    const moveOwnedFields = (source, destination, removeFromSource = false) => {
+      if (!source || typeof source !== 'object') return;
+      for (const key of ['walletKey', 'routing']) {
+        if (!(key in destination) && key in source) destination[key] = source[key];
+        if (removeFromSource) delete source[key];
+      }
+      if (source.config && typeof source.config === 'object') {
+        destination.config ??= {};
+        for (const key of ['walletKey', 'routing']) {
+          if (!(key in destination.config) && key in source.config) destination.config[key] = source.config[key];
+          if (removeFromSource) delete source.config[key];
+        }
+        if (Object.keys(destination.config).length === 0) delete destination.config;
+        if (removeFromSource && Object.keys(source.config).length === 0) delete source.config;
+      }
+    };
+    moveOwnedFields(preserved?.plugins?.entries?.['blockrun-clawrouter'], current);
+    if (legacyOwned === '1') {
+      const legacy = config.plugins.entries.clawrouter;
+      const preservedLegacy = preserved?.plugins?.entries?.clawrouter;
+      if (typeof preservedLegacy?.enabled === 'boolean' && typeof current.enabled !== 'boolean') {
+        current.enabled = preservedLegacy.enabled;
+      }
+      moveOwnedFields(preservedLegacy, current);
+      moveOwnedFields(legacy, current, true);
+    }
+    current.enabled = true;
+    config.plugins.entries['blockrun-clawrouter'] = current;
     if (!Array.isArray(config.plugins.allow)) {
       config.plugins.allow = [];
     }
-    if (!config.plugins.allow.includes('clawrouter') && !config.plugins.allow.includes('@blockrun/clawrouter')) {
-      config.plugins.allow.push('clawrouter');
-      console.log('  Added clawrouter to plugins.allow');
+    if (!config.plugins.allow.includes('blockrun-clawrouter')) {
+      config.plugins.allow.push('blockrun-clawrouter');
+      console.log('  Added blockrun-clawrouter to plugins.allow');
     } else {
       console.log('  Plugin already in allow list');
+    }
+    if (Array.isArray(config.plugins.deny)) {
+      config.plugins.deny = config.plugins.deny.filter(id => id !== 'blockrun-clawrouter');
     }
 
     atomicWrite(configPath, JSON.stringify(config, null, 2));
@@ -706,7 +788,7 @@ if (fs.existsSync(configPath)) {
 } else {
   console.log('  No openclaw.json found, skipping');
 }
-"
+NODE
 
 # 8. Ensure gateway.mode is set (required by OpenClaw v2026.4.5+)
 echo "→ Ensuring gateway.mode is set..."
@@ -747,7 +829,7 @@ if (fs.existsSync(configPath)) {
 echo "→ Cleaning up stale install stages..."
 CLEANED=0
 for stage_dir in "$HOME/.openclaw/extensions/.openclaw-install-stage-"*; do
-  if [ -d "$stage_dir" ]; then
+  if is_blockrun_plugin_dir "$stage_dir"; then
     rm -rf "$stage_dir"
     CLEANED=$((CLEANED + 1))
   fi
@@ -762,7 +844,13 @@ fi
 # plugin detection), new ones live in blockrun/. Clean both locations.
 echo "→ Cleaning up stale plugin backups..."
 CLEANED=0
-for backup_dir in "$HOME/.openclaw/extensions/clawrouter.backup."* "$HOME/.openclaw/blockrun/clawrouter.backup."*; do
+for backup_dir in "$HOME/.openclaw/extensions/clawrouter.backup."*; do
+  if is_blockrun_plugin_dir "$backup_dir"; then
+    rm -rf "$backup_dir"
+    CLEANED=$((CLEANED + 1))
+  fi
+done
+for backup_dir in "$HOME/.openclaw/blockrun/clawrouter.backup."*; do
   if [ -d "$backup_dir" ]; then
     rm -rf "$backup_dir"
     CLEANED=$((CLEANED + 1))
@@ -784,11 +872,12 @@ try {
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   let changed = false;
   const isStale = (p) => p.includes('.openclaw-install-stage-') || p.includes('clawrouter.backup.');
+  const blockrunIds = new Set(['blockrun-clawrouter', 'ClawRouter', '@blockrun/clawrouter']);
   // Remove plugins.entries pointing to stale directories
   if (config?.plugins?.entries) {
     for (const [key, val] of Object.entries(config.plugins.entries)) {
       const path = typeof val === 'string' ? val : val?.path || val?.main || '';
-      if (isStale(path)) {
+      if (blockrunIds.has(key) && isStale(path)) {
         delete config.plugins.entries[key];
         changed = true;
         console.log('  Removed plugins.entries.' + key + ' (stale)');
@@ -799,7 +888,7 @@ try {
   if (config?.plugins?.installs) {
     for (const [key, val] of Object.entries(config.plugins.installs)) {
       const path = typeof val === 'string' ? val : val?.path || val?.main || '';
-      if (isStale(path)) {
+      if (blockrunIds.has(key) && isStale(path)) {
         delete config.plugins.installs[key];
         changed = true;
         console.log('  Removed plugins.installs.' + key + ' (stale)');
@@ -840,6 +929,8 @@ else
   fi
 fi
 
+cleanup_backups
+trap - EXIT INT TERM
 echo ""
 echo "✓ Done! Smart routing enabled by default."
 echo ""
@@ -910,4 +1001,4 @@ echo "  npx @blockrun/clawrouter report weekly      # weekly report"
 echo "  npx @blockrun/clawrouter report monthly     # monthly report"
 echo "  npx @blockrun/clawrouter doctor             # AI diagnostics"
 echo ""
-echo "To uninstall: bash ~/.openclaw/extensions/clawrouter/scripts/uninstall.sh"
+echo "To uninstall: bash ~/.openclaw/extensions/blockrun-clawrouter/scripts/uninstall.sh"

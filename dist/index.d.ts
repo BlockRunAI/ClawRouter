@@ -359,6 +359,9 @@ type OpenClawPluginDefinition = {
     };
 };
 
+/** OpenClaw's bundled router owns `clawrouter`; BlockRun must never claim it. */
+declare const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+
 /**
  * Response Cache for LLM Completions
  *
@@ -1004,6 +1007,12 @@ type ProxyOptions = {
     paymentChain?: PaymentChain;
     /** Port to listen on (default: 8402) */
     port?: number;
+    /**
+     * Reuse a compatible process already listening on the requested port.
+     * Desktop disables this because it must only configure agents against a
+     * process whose lifecycle it owns.
+     */
+    allowExistingProxy?: boolean;
     routingConfig?: Partial<RoutingConfig>;
     /** Request timeout in ms (default: 180000 = 3 minutes). Covers on-chain tx + LLM response. */
     requestTimeoutMs?: number;
@@ -1729,13 +1738,7 @@ declare function parseCallArgs(raw: string): {
  * Delegates to the local proxy (which handles x402 payment).
  */
 declare function buildImageGenerationProvider(): ImageGenerationProviderPlugin;
-/**
- * This plugin's OpenClaw id. NOT "clawrouter" — OpenClaw bundles its own plugin
- * under that id since the 2026.7.1 line, and a duplicate loses to the bundled
- * one. Kept as one constant so the manifest, the plugin definition and the
- * config migration can never drift apart. See #305.
- */
-declare const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+
 declare const plugin: OpenClawPluginDefinition;
 
 export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };

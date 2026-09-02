@@ -40597,7 +40597,7 @@ var init_errors5 = __esm({
           `Options:`,
           `  1. Fund wallet: ${walletAddress}`,
           `  2. Use free model: /model free`,
-          `  3. Uninstall: bash ~/.openclaw/extensions/clawrouter/scripts/uninstall.sh`
+          `  3. Uninstall: bash ~/.openclaw/extensions/blockrun-clawrouter/scripts/uninstall.sh`
         ].join("\n");
         super(msg);
         this.name = "EmptyWalletError";
@@ -75731,7 +75731,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir5 } = __require("fs/promises");
-    var { dirname: dirname5, resolve } = __require("path");
+    var { dirname: dirname4, resolve } = __require("path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("timers");
     var { InvalidArgumentError, UndiciError } = require_errors();
     var { hashId, isUrlExcludedFactory, normalizeHeaders: normalizeHeaders3, createHeaderFilters } = require_snapshot_utils();
@@ -75977,7 +75977,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         const resolvedPath = resolve(path5);
-        await mkdir5(dirname5(resolvedPath), { recursive: true });
+        await mkdir5(dirname4(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash5, snapshot]) => ({
           hash: hash5,
           snapshot
@@ -90053,6 +90053,7 @@ var init_client3 = __esm({
 
 // src/proxy.ts
 import { AsyncLocalStorage } from "async_hooks";
+import { createHmac } from "crypto";
 import { createServer } from "http";
 import { finished } from "stream";
 import { homedir as homedir7 } from "os";
@@ -90923,7 +90924,7 @@ async function startProxy(options) {
   }
   void loadGatewayCatalog(apiBase);
   const listenPort = options.port ?? getProxyPort();
-  const existingProxy = await checkExistingProxy(listenPort);
+  const existingProxy = options.allowExistingProxy === false ? void 0 : await checkExistingProxy(listenPort);
   if (existingProxy) {
     const account2 = privateKeyToAccount(walletKey);
     const baseUrl2 = `http://127.0.0.1:${listenPort}`;
@@ -91078,7 +91079,22 @@ async function startProxy(options) {
             response.balanceError = "Could not fetch balance";
           }
         }
-        res.writeHead(200, { "Content-Type": "application/json" });
+        const headers = {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        };
+        const challengeValue = req.headers["x-clawrouter-challenge"];
+        const challenge2 = Array.isArray(challengeValue) ? challengeValue[0] : challengeValue;
+        if (challenge2 && /^[a-f0-9]{64}$/i.test(challenge2)) {
+          try {
+            const token = readFileSync2(DESKTOP_SERVICE_TOKEN_FILE, "utf8").trim();
+            if (/^[a-f0-9]{64}$/i.test(token)) {
+              headers["X-ClawRouter-Proof"] = createHmac("sha256", token).update(challenge2).digest("hex");
+            }
+          } catch {
+          }
+        }
+        res.writeHead(200, headers);
         res.end(JSON.stringify(response));
         return;
       }
@@ -91947,6 +91963,10 @@ async function startProxy(options) {
       const onError = async (err) => {
         server.removeListener("error", onError);
         if (err.code === "EADDRINUSE") {
+          if (options.allowExistingProxy === false) {
+            rejectAttempt(err);
+            return;
+          }
           const existingProxy2 = await checkExistingProxy(listenPort);
           if (existingProxy2) {
             console.log(`[ClawRouter] Existing proxy detected on port ${listenPort}, reusing`);
@@ -94351,7 +94371,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, gatewayModelIds, FREE_MODEL, FREE_UPSTREAM_OVERRIDES, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, GATEWAY_CATALOG_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, DESKTOP_SERVICE_TOKEN_FILE, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, gatewayModelIds, FREE_MODEL, FREE_UPSTREAM_OVERRIDES, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, GATEWAY_CATALOG_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -94389,6 +94409,7 @@ var init_proxy = __esm({
     paymentStore = new AsyncLocalStorage();
     BLOCKRUN_API = "https://blockrun.ai/api";
     BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
+    DESKTOP_SERVICE_TOKEN_FILE = process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ?? join10(homedir7(), ".clawrouter-desktop", "service-token");
     IMAGE_DIR = join10(homedir7(), ".openclaw", "blockrun", "images");
     AUDIO_DIR = join10(homedir7(), ".openclaw", "blockrun", "audio");
     VIDEO_DIR = join10(homedir7(), ".openclaw", "blockrun", "videos");
@@ -226768,6 +226789,113 @@ var init_mcp_config = __esm({
   }
 });
 
+// src/openclaw-plugin-config.ts
+var openclaw_plugin_config_exports = {};
+__export(openclaw_plugin_config_exports, {
+  BLOCKRUN_PLUGIN_ID: () => BLOCKRUN_PLUGIN_ID,
+  prepareBlockRunPluginConfig: () => prepareBlockRunPluginConfig
+});
+function asObject2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function prepareBlockRunPluginConfig(config, options = {}) {
+  if (!options.explicitSetup && !options.legacyBlockRunInstall && !options.stripUnsupportedInstalls) {
+    return false;
+  }
+  let changed = false;
+  let plugins = asObject2(config.plugins);
+  if (!plugins) {
+    plugins = {};
+    config.plugins = plugins;
+    changed = true;
+  }
+  let entries = asObject2(plugins.entries);
+  if (!entries) {
+    entries = {};
+    plugins.entries = entries;
+    changed = true;
+  }
+  const legacyEntry = asObject2(entries.clawrouter);
+  const currentEntry = asObject2(entries[BLOCKRUN_PLUGIN_ID]);
+  if (options.legacyBlockRunInstall && legacyEntry) {
+    const migratedEntry = currentEntry ?? {};
+    if (!currentEntry && typeof legacyEntry.enabled === "boolean") {
+      migratedEntry.enabled = legacyEntry.enabled;
+    }
+    for (const key2 of ["walletKey", "routing"]) {
+      if (!(key2 in migratedEntry) && key2 in legacyEntry) {
+        migratedEntry[key2] = legacyEntry[key2];
+      }
+      if (key2 in legacyEntry) {
+        delete legacyEntry[key2];
+        changed = true;
+      }
+    }
+    const legacyConfig = asObject2(legacyEntry.config);
+    if (legacyConfig) {
+      const currentConfig = asObject2(migratedEntry.config) ?? {};
+      for (const key2 of ["walletKey", "routing"]) {
+        if (!(key2 in currentConfig) && key2 in legacyConfig) {
+          currentConfig[key2] = legacyConfig[key2];
+        }
+        if (key2 in legacyConfig) {
+          delete legacyConfig[key2];
+          changed = true;
+        }
+      }
+      if (Object.keys(currentConfig).length > 0) migratedEntry.config = currentConfig;
+      if (Object.keys(legacyConfig).length === 0) {
+        delete legacyEntry.config;
+        changed = true;
+      }
+    }
+    if (!currentEntry || entries[BLOCKRUN_PLUGIN_ID] !== migratedEntry) {
+      entries[BLOCKRUN_PLUGIN_ID] = migratedEntry;
+      changed = true;
+    }
+  }
+  if (options.explicitSetup) {
+    const next = asObject2(entries[BLOCKRUN_PLUGIN_ID]) ?? {};
+    if (next.enabled !== true) {
+      entries[BLOCKRUN_PLUGIN_ID] = { ...next, enabled: true };
+      changed = true;
+    }
+  }
+  const allow = plugins.allow;
+  if (Array.isArray(allow)) {
+    const shouldAllow = options.explicitSetup || options.legacyBlockRunInstall && allow.includes("clawrouter");
+    if (shouldAllow && !allow.includes(BLOCKRUN_PLUGIN_ID)) {
+      allow.push(BLOCKRUN_PLUGIN_ID);
+      changed = true;
+    }
+  }
+  const deny = plugins.deny;
+  if (Array.isArray(deny)) {
+    if (options.explicitSetup) {
+      const next = deny.filter((id2) => id2 !== BLOCKRUN_PLUGIN_ID);
+      if (next.length !== deny.length) {
+        plugins.deny = next;
+        changed = true;
+      }
+    } else if (options.legacyBlockRunInstall && deny.includes("clawrouter") && !deny.includes(BLOCKRUN_PLUGIN_ID)) {
+      deny.push(BLOCKRUN_PLUGIN_ID);
+      changed = true;
+    }
+  }
+  if (options.stripUnsupportedInstalls && "installs" in plugins) {
+    delete plugins.installs;
+    changed = true;
+  }
+  return changed;
+}
+var BLOCKRUN_PLUGIN_ID;
+var init_openclaw_plugin_config = __esm({
+  "src/openclaw-plugin-config.ts"() {
+    "use strict";
+    BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+  }
+});
+
 // src/retry.ts
 function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -226916,8 +227044,7 @@ import {
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
 import { homedir as homedir13 } from "os";
-import { join as join16, dirname as dirname4 } from "path";
-import { fileURLToPath as fileURLToPath2 } from "url";
+import { join as join16 } from "path";
 async function waitForProxyHealth(port, timeoutMs = 3e3) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -226929,53 +227056,6 @@ async function waitForProxyHealth(port, timeoutMs = 3e3) {
     await new Promise((r2) => setTimeout(r2, 100));
   }
   return false;
-}
-function getPackageRoot() {
-  return join16(dirname4(fileURLToPath2(import.meta.url)), "..");
-}
-function installSkillsToWorkspace(logger48) {
-  try {
-    const packageRoot = getPackageRoot();
-    const bundledSkillsDir = join16(packageRoot, "skills");
-    if (!existsSync4(bundledSkillsDir)) {
-      return;
-    }
-    const profile = (process["env"].OPENCLAW_PROFILE ?? "").trim().toLowerCase();
-    const workspaceDirName = profile && profile !== "default" ? `workspace-${profile}` : "workspace";
-    const workspaceSkillsDir = join16(homedir13(), ".openclaw", workspaceDirName, "skills");
-    mkdirSync3(workspaceSkillsDir, { recursive: true });
-    const INTERNAL_SKILLS = /* @__PURE__ */ new Set(["release"]);
-    const entries = readdirSync(bundledSkillsDir, { withFileTypes: true });
-    let installed = 0;
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillName = entry.name;
-      if (INTERNAL_SKILLS.has(skillName)) continue;
-      const srcSkillFile = join16(bundledSkillsDir, skillName, "SKILL.md");
-      if (!existsSync4(srcSkillFile)) continue;
-      const destDir = join16(workspaceSkillsDir, skillName);
-      const destSkillFile = join16(destDir, "SKILL.md");
-      let needsUpdate = true;
-      if (existsSync4(destSkillFile)) {
-        try {
-          const srcContent = readTextFileSync(srcSkillFile);
-          const destContent = readTextFileSync(destSkillFile);
-          if (srcContent === destContent) needsUpdate = false;
-        } catch {
-        }
-      }
-      if (needsUpdate) {
-        mkdirSync3(destDir, { recursive: true });
-        copyFileSync(srcSkillFile, destSkillFile);
-        installed++;
-      }
-    }
-    if (installed > 0) {
-      logger48.info(`Installed ${installed} skill(s) to ${workspaceSkillsDir}`);
-    }
-  } catch (err) {
-    logger48.warn(`Failed to install skills: ${err instanceof Error ? err.message : String(err)}`);
-  }
 }
 function isCompletionMode() {
   const args = process.argv;
@@ -227149,35 +227229,6 @@ function injectModelsConfig(logger48, options = {}) {
     if (addedCount > 0) {
       logger48.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
     }
-  }
-  const pluginEntries = config.plugins?.entries;
-  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries[BLOCKRUN_PLUGIN_ID]) {
-    pluginEntries[BLOCKRUN_PLUGIN_ID] = pluginEntries.clawrouter;
-    delete pluginEntries.clawrouter;
-    needsWrite = true;
-    logger48.info(
-      "Migrated plugins.entries.clawrouter -> blockrun-clawrouter (OpenClaw bundles its own `clawrouter` plugin; see #305)"
-    );
-  }
-  const pluginsCfg = config.plugins;
-  const allow = pluginsCfg?.allow;
-  if (Array.isArray(allow) && allow.includes("clawrouter") && !allow.includes(BLOCKRUN_PLUGIN_ID)) {
-    allow.push(BLOCKRUN_PLUGIN_ID);
-    needsWrite = true;
-    logger48.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.allow (renamed from clawrouter; see #305)`);
-  }
-  const deny = pluginsCfg?.deny;
-  if (Array.isArray(deny) && deny.includes("clawrouter") && !deny.includes(BLOCKRUN_PLUGIN_ID)) {
-    deny.push(BLOCKRUN_PLUGIN_ID);
-    needsWrite = true;
-    logger48.info(`Added ${BLOCKRUN_PLUGIN_ID} to plugins.deny (renamed from clawrouter; see #305)`);
-  }
-  const installs = pluginsCfg?.installs;
-  if (installs && installs.clawrouter && !installs[BLOCKRUN_PLUGIN_ID]) {
-    installs[BLOCKRUN_PLUGIN_ID] = installs.clawrouter;
-    delete installs.clawrouter;
-    needsWrite = true;
-    logger48.info(`Migrated plugins.installs.clawrouter -> ${BLOCKRUN_PLUGIN_ID} (see #305)`);
   }
   if (!config.tools || typeof config.tools !== "object" || Array.isArray(config.tools)) {
     config.tools = {};
@@ -228171,7 +228222,7 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
     }
   };
 }
-var activeProxyHandle, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, BLOCKRUN_PLUGIN_ID, plugin, index_default2;
+var activeProxyHandle, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, plugin, index_default2;
 var init_index = __esm({
   "src/index.ts"() {
     "use strict";
@@ -228192,6 +228243,8 @@ var init_index = __esm({
     init_stats2();
     init_exclude();
     init_mcp_config();
+    init_openclaw_plugin_config();
+    init_openclaw_plugin_config();
     init_proxy();
     init_provider();
     init_models();
@@ -228214,7 +228267,6 @@ var init_index = __esm({
     IMAGE_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "images");
     AUDIO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "audio");
     VIDEO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "videos");
-    BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
     plugin = {
       // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
       // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
@@ -228232,7 +228284,6 @@ var init_index = __esm({
           api.logger.info("ClawRouter disabled (CLAWROUTER_DISABLED=true). Using default routing.");
           return;
         }
-        installSkillsToWorkspace(api.logger);
         const proc = process;
         const proxyAlreadyStarted = !!proc.__clawrouterProxyStarted;
         if (isCompletionMode()) {
@@ -228632,18 +228683,18 @@ ${errText}`
               delete config.models.providers.blockrun;
             }
             removeManagedBlockrunMcpServerConfig(config);
-            for (const key2 of [
-              BLOCKRUN_PLUGIN_ID,
-              "clawrouter",
-              "ClawRouter",
-              "@blockrun/clawrouter"
-            ]) {
+            for (const key2 of [BLOCKRUN_PLUGIN_ID, "ClawRouter", "@blockrun/clawrouter"]) {
               if (config.plugins?.entries?.[key2]) delete config.plugins.entries[key2];
               if (config.plugins?.installs?.[key2]) delete config.plugins.installs[key2];
             }
             if (Array.isArray(config.plugins?.allow)) {
               config.plugins.allow = config.plugins.allow.filter(
-                (p) => p !== BLOCKRUN_PLUGIN_ID && p !== "clawrouter" && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
+                (p) => p !== BLOCKRUN_PLUGIN_ID && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
+              );
+            }
+            if (Array.isArray(config.plugins?.deny)) {
+              config.plugins.deny = config.plugins.deny.filter(
+                (p) => p !== BLOCKRUN_PLUGIN_ID && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
               );
             }
             if (config.agents?.defaults?.models) {
@@ -229182,6 +229233,7 @@ Options:
   --version, -v     Show version number
   --help, -h        Show this help message
   --port <number>   Port to listen on (default: ${getProxyPort()})
+  --no-reuse        Refuse an existing listener (used by managed Desktop startup)
 
 Query Commands (talk to running proxy on localhost:${getProxyPort()}):
   status            Proxy status: wallet, balance, payment chain
@@ -229571,10 +229623,21 @@ Cache Stats
 }
 async function cmdSetup() {
   const { execFileSync, execSync } = await import("child_process");
-  const { existsSync: existsSync5 } = await import("fs");
-  const { dirname: dirname5, join: join17 } = await import("path");
+  const {
+    copyFileSync: copyFileSync2,
+    cpSync,
+    existsSync: existsSync5,
+    mkdirSync: mkdirSync4,
+    readFileSync: readFileSync4,
+    readdirSync: readdirSync2,
+    renameSync: renameSync3,
+    rmSync,
+    writeFileSync: writeFileSync4
+  } = await import("fs");
+  const { dirname: dirname4, join: join17 } = await import("path");
   const { homedir: homedir14 } = await import("os");
   const { injectModelsConfig: injectModelsConfig2, injectAuthProfile: injectAuthProfile2, syncAgentModelCache: syncAgentModelCache2, VISIBLE_OPENCLAW_MODELS: VISIBLE_OPENCLAW_MODELS2 } = await Promise.resolve().then(() => (init_index(), index_exports));
+  const { BLOCKRUN_PLUGIN_ID: BLOCKRUN_PLUGIN_ID2, prepareBlockRunPluginConfig: prepareBlockRunPluginConfig2 } = await Promise.resolve().then(() => (init_openclaw_plugin_config(), openclaw_plugin_config_exports));
   console.log("\u{1F99E} ClawRouter setup\n");
   const openclawPath = (() => {
     const candidates = [];
@@ -229594,7 +229657,7 @@ async function cmdSetup() {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "ignore"]
       }).trim();
-      if (npmRoot) candidates.push(join17(dirname5(dirname5(npmRoot)), "bin", "openclaw"));
+      if (npmRoot) candidates.push(join17(dirname4(dirname4(npmRoot)), "bin", "openclaw"));
     } catch {
     }
     candidates.push(
@@ -229611,39 +229674,232 @@ async function cmdSetup() {
     process.exit(1);
   }
   console.log(`  \u2713 Found openclaw at ${openclawPath}`);
-  console.log("\n\u2192 Registering ClawRouter with OpenClaw...");
-  let installOk = false;
-  try {
-    execFileSync(openclawPath, ["plugins", "install", "--force", "@blockrun/clawrouter"], {
-      stdio: "inherit"
+  const configPath = join17(homedir14(), ".openclaw", "openclaw.json");
+  const configInitiallyExisted = existsSync5(configPath);
+  const configRollbackBackup = configInitiallyExisted ? `${configPath}.before-${BLOCKRUN_PLUGIN_ID2}.${Date.now()}` : void 0;
+  if (configRollbackBackup) copyFileSync2(configPath, configRollbackBackup);
+  const ensureConfigRollbackBackup = () => {
+    return configRollbackBackup;
+  };
+  let installAttempted = false;
+  const openclawRoot = join17(homedir14(), ".openclaw");
+  const findManagedBlockRunInstalls = () => {
+    const candidates = [
+      join17(openclawRoot, "extensions", BLOCKRUN_PLUGIN_ID2),
+      join17(openclawRoot, "extensions", "clawrouter"),
+      join17(openclawRoot, "npm", "node_modules", "@blockrun", "clawrouter")
+    ];
+    const projectsDir = join17(openclawRoot, "npm", "projects");
+    try {
+      for (const project of readdirSync2(projectsDir)) {
+        candidates.push(join17(projectsDir, project, "node_modules", "@blockrun", "clawrouter"));
+      }
+    } catch {
+    }
+    return [...new Set(candidates)].filter((candidate) => {
+      try {
+        const metadata = JSON.parse(readFileSync4(join17(candidate, "package.json"), "utf8"));
+        return metadata.name === "@blockrun/clawrouter";
+      } catch {
+        return false;
+      }
     });
-    installOk = true;
+  };
+  const initialPluginDirs = findManagedBlockRunInstalls();
+  const setupRollbackRoot = join17(
+    openclawRoot,
+    "blockrun",
+    "setup-rollbacks",
+    `${Date.now()}-${process.pid}`
+  );
+  const pluginRollbackBackups = /* @__PURE__ */ new Map();
+  if (initialPluginDirs.length > 0) {
+    mkdirSync4(setupRollbackRoot, { recursive: true, mode: 448 });
+    for (const [index2, pluginDir] of initialPluginDirs.entries()) {
+      const backup = join17(setupRollbackRoot, String(index2));
+      cpSync(pluginDir, backup, { recursive: true });
+      pluginRollbackBackups.set(pluginDir, backup);
+    }
+  }
+  const restoreSetupConfig = () => {
+    if (configRollbackBackup && existsSync5(configRollbackBackup)) {
+      copyFileSync2(configRollbackBackup, configPath);
+      console.error(`  \u2713 Restored original OpenClaw config from ${configRollbackBackup}`);
+    } else if (!configInitiallyExisted && existsSync5(configPath)) {
+      rmSync(configPath);
+      console.error("  \u2713 Removed the partially created OpenClaw config");
+    }
+  };
+  const rollbackSetup = () => {
+    if (installAttempted) {
+      if (initialPluginDirs.length === 0) {
+        try {
+          execFileSync(openclawPath, ["plugins", "uninstall", "--force", BLOCKRUN_PLUGIN_ID2], {
+            stdio: "ignore",
+            timeout: 3e4
+          });
+        } catch {
+        }
+      }
+      for (const currentDir of findManagedBlockRunInstalls()) {
+        if (!pluginRollbackBackups.has(currentDir)) {
+          rmSync(currentDir, { recursive: true, force: true });
+        }
+      }
+      for (const [pluginDir, backup] of pluginRollbackBackups) {
+        if (!existsSync5(backup)) continue;
+        rmSync(pluginDir, { recursive: true, force: true });
+        mkdirSync4(dirname4(pluginDir), { recursive: true });
+        cpSync(backup, pluginDir, { recursive: true });
+      }
+    }
+    restoreSetupConfig();
+    rmSync(setupRollbackRoot, { recursive: true, force: true });
+  };
+  let legacyBlockRunInstall = false;
+  let stagedLegacyEntry;
+  if (existsSync5(configPath)) {
+    try {
+      const config = JSON.parse(readFileSync4(configPath, "utf8"));
+      const legacyPackagePath = join17(
+        homedir14(),
+        ".openclaw",
+        "extensions",
+        "clawrouter",
+        "package.json"
+      );
+      if (existsSync5(legacyPackagePath)) {
+        try {
+          const legacyPackage = JSON.parse(readFileSync4(legacyPackagePath, "utf8"));
+          legacyBlockRunInstall = legacyPackage.name === "@blockrun/clawrouter";
+        } catch {
+        }
+      }
+      let stripUnsupportedInstalls = false;
+      try {
+        execFileSync(openclawPath, ["config", "validate"], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+      } catch (error) {
+        const output = `${error instanceof Error ? error.message : String(error)} ${typeof error === "object" && error && "stdout" in error ? String(error.stdout) : ""} ${typeof error === "object" && error && "stderr" in error ? String(error.stderr) : ""}`;
+        stripUnsupportedInstalls = output.includes("Unrecognized key") && output.includes("installs");
+      }
+      let configChanged = false;
+      if (legacyBlockRunInstall) {
+        const stagedConfig = structuredClone(config);
+        prepareBlockRunPluginConfig2(stagedConfig, { legacyBlockRunInstall: true });
+        const stagedPlugins = stagedConfig.plugins;
+        const stagedEntries = stagedPlugins?.entries;
+        stagedLegacyEntry = stagedEntries?.[BLOCKRUN_PLUGIN_ID2];
+        const livePlugins = config.plugins;
+        if (stagedEntries?.clawrouter && livePlugins?.entries?.clawrouter) {
+          if (JSON.stringify(livePlugins.entries.clawrouter) !== JSON.stringify(stagedEntries.clawrouter)) {
+            livePlugins.entries.clawrouter = stagedEntries.clawrouter;
+            configChanged = true;
+          }
+        }
+      }
+      configChanged = prepareBlockRunPluginConfig2(config, { stripUnsupportedInstalls }) || configChanged;
+      if (configChanged) {
+        const backupPath = ensureConfigRollbackBackup();
+        const tmpPath = `${configPath}.tmp.${process.pid}`;
+        writeFileSync4(tmpPath, `${JSON.stringify(config, null, 2)}
+`, { mode: 384 });
+        renameSync3(tmpPath, configPath);
+        console.log(`  \u2713 Prepared OpenClaw 2.0 config (backup: ${backupPath})`);
+      }
+    } catch (err) {
+      rollbackSetup();
+      console.error(
+        `  \u2717 Cannot safely prepare OpenClaw config: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  }
+  console.log("\n\u2192 Registering ClawRouter with OpenClaw...");
+  try {
+    let acceptsCapabilities = false;
+    try {
+      const help = execFileSync(openclawPath, ["plugins", "install", "--help"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      acceptsCapabilities = help.includes("--accept-capabilities");
+    } catch {
+    }
+    const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC ?? "@blockrun/clawrouter";
+    const installArgs = ["plugins", "install", "--force"];
+    if (acceptsCapabilities) installArgs.push("--accept-capabilities");
+    installArgs.push(installSpec);
+    installAttempted = true;
+    execFileSync(openclawPath, installArgs, {
+      stdio: "inherit",
+      timeout: 18e4
+    });
   } catch (err) {
-    console.warn(
-      `  \u26A0 openclaw plugins install reported a problem: ${err instanceof Error ? err.message : String(err)}`
+    rollbackSetup();
+    console.error(
+      `  \u2717 OpenClaw plugin install failed: ${err instanceof Error ? err.message : String(err)}`
     );
-    console.warn("    Continuing with manual config sync \u2014 if validation rejected the install,");
-    console.warn(
-      "    re-run `openclaw plugins install --force @blockrun/clawrouter` after gateway start."
+    console.error(
+      "    Configuration was rolled back. Fix the error and run `clawrouter setup` again."
     );
+    process.exit(1);
+  }
+  if (existsSync5(configPath)) {
+    try {
+      const config = JSON.parse(readFileSync4(configPath, "utf8"));
+      if (stagedLegacyEntry) {
+        const plugins = config.plugins ??= {};
+        const entries = plugins.entries ??= {};
+        const current = entries[BLOCKRUN_PLUGIN_ID2] ?? {};
+        const stagedConfig = stagedLegacyEntry.config;
+        const currentConfig = current.config;
+        entries[BLOCKRUN_PLUGIN_ID2] = {
+          ...stagedLegacyEntry,
+          ...current,
+          ...stagedConfig || currentConfig ? { config: { ...stagedConfig, ...currentConfig } } : {}
+        };
+      }
+      const configChanged = prepareBlockRunPluginConfig2(config, {
+        explicitSetup: true,
+        legacyBlockRunInstall
+      });
+      if (stagedLegacyEntry || configChanged) {
+        const backupPath = ensureConfigRollbackBackup();
+        const tmpPath = `${configPath}.tmp.${process.pid}`;
+        writeFileSync4(tmpPath, `${JSON.stringify(config, null, 2)}
+`, { mode: 384 });
+        renameSync3(tmpPath, configPath);
+        console.log(
+          `  \u2713 Enabled ${BLOCKRUN_PLUGIN_ID2}${backupPath ? ` (backup: ${backupPath})` : ""}`
+        );
+      }
+    } catch (err) {
+      rollbackSetup();
+      console.error(
+        `  \u2717 Plugin installed, but its config could not be enabled safely: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
   }
   console.log("\n\u2192 Syncing models allowlist + auth profile...");
   const setupLogger = {
     info: (msg) => console.log(`  ${msg}`)
   };
   try {
+    if (existsSync5(configPath)) ensureConfigRollbackBackup();
     injectModelsConfig2(setupLogger, { forceWrite: true });
     syncAgentModelCache2(setupLogger, { forceWrite: true });
     injectAuthProfile2(setupLogger);
   } catch (err) {
+    rollbackSetup();
     console.error(`  \u2717 Config sync failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
-  if (installOk) {
-    console.log("\n\u2713 Setup complete.");
-  } else {
-    console.log("\n\u2713 Models config synced (plugin registration may need a manual retry).");
-  }
+  console.log("\n\u2713 Setup complete.");
+  rmSync(setupRollbackRoot, { recursive: true, force: true });
   console.log("\nNext: restart the gateway to load ClawRouter:");
   console.log("  openclaw gateway restart");
   console.log(
@@ -229666,6 +229922,7 @@ function parseArgs(args) {
     walletRecover: false,
     chain: void 0,
     port: void 0,
+    noReuse: false,
     queryStatus: false,
     queryWallet: false,
     queryModels: false,
@@ -229746,6 +230003,8 @@ function parseArgs(args) {
     } else if (arg === "--port" && args[i + 1]) {
       result.port = parseInt(args[i + 1], 10);
       i++;
+    } else if (arg === "--no-reuse") {
+      result.noReuse = true;
     } else if (arg === "setup") {
       result.setup = true;
     } else if (arg === "phone") {
@@ -230006,6 +230265,7 @@ ClawRouter Partner APIs (v${VERSION})
   const proxy = await startProxy({
     wallet,
     port: args.port,
+    allowExistingProxy: !args.noReuse,
     onReady: (port) => {
       console.log(`[ClawRouter] v${VERSION} | Proxy listening on http://127.0.0.1:${port}`);
       console.log(`[ClawRouter] Health check: http://127.0.0.1:${port}/health`);

@@ -1,0 +1,84 @@
+{
+  "name": "@blockrun/clawrouter-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One-click ClawRouter control plane for OpenClaw, Codex, Hermes, DeepSeek Harness, and Pi",
+  "author": "BlockRun <hello@blockrun.ai>",
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build:renderer": "vite build",
+    "build:electron": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outdir=dist-electron --out-extension:.js=.cjs",
+    "build:icon": "electron scripts/render-icon.cjs",
+    "build": "npm run build:renderer && npm run build:electron",
+    "start": "electron .",
+    "dist": "npm run build && npm run build:icon && electron-builder --mac dir"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "build": {
+    "appId": "ai.blockrun.clawrouter.desktop",
+    "productName": "ClawRouter",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "package.json",
+          "pnpm-lock.yaml",
+          "pnpm-workspace.yaml"
+        ]
+      },
+      {
+        "from": "runtime/node_modules",
+        "to": "runtime/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    }
+  }
+}
