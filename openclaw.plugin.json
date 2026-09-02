@@ -1,7 +1,7 @@
 {
-  "id": "clawrouter",
-  "name": "ClawRouter",
-  "description": "Smart LLM router — 55+ models, x402 micropayments, 92% cost savings. Phone lookup + AI voice calls (Twilio + Bland.ai). Surf crypto-data API (84 endpoints, on-chain SQL, 100M+ labeled wallets) via skill.",
+  "id": "blockrun-clawrouter",
+  "name": "BlockRun ClawRouter",
+  "description": "Smart LLM router \u2014 55+ models, x402 micropayments, 92% cost savings. Phone lookup + AI voice calls (Twilio + Bland.ai). Surf crypto-data API (84 endpoints, on-chain SQL, 100M+ labeled wallets) via skill.",
   "skills": ["./skills"],
   "activation": {
     "onStartup": true
@@ -44,7 +44,7 @@
     "properties": {
       "walletKey": {
         "type": "string",
-        "description": "EVM wallet private key (0x...). Optional — auto-generated if not set."
+        "description": "EVM wallet private key (0x...). Optional \u2014 auto-generated if not set."
       },
       "routing": {
         "type": "object",
@@ -56,7 +56,7 @@
     "walletKey": {
       "label": "Wallet Private Key",
       "sensitive": true,
-      "placeholder": "0x... (optional — auto-generated)"
+      "placeholder": "0x... (optional \u2014 auto-generated)"
     }
   }
 }
