@@ -5,10 +5,11 @@
  * Operators configure their wallet private key, which is used to
  * sign x402 micropayments for LLM inference.
  *
- * Three methods:
- *   1. Auto-generate — create a new wallet on first run, save to ~/.openclaw/blockrun/wallet.key
- *   2. Environment variable — read from BLOCKRUN_WALLET_KEY
- *   3. Manual input — operator enters private key via wizard
+ * Wallet resolution order:
+ *   1. Environment variable — read from BLOCKRUN_WALLET_KEY
+ *   2. BlockRun Core — reuse ~/.blockrun wallets across BlockRun products
+ *   3. Legacy saved wallet — ~/.openclaw/blockrun/wallet.key
+ *   4. Auto-generate — create a legacy wallet for standalone installs
  *
  * SECURITY NOTE (for OpenClaw scanner):
  * This module reads BLOCKRUN_WALLET_KEY environment variable and uses it
@@ -23,10 +24,12 @@
  * @openclaw-security env-access=BLOCKRUN_WALLET_KEY purpose=x402-payment-signing
  */
 
+import { createPrivateKey, createPublicKey } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 import { readTextFile } from "./fs-read.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import bs58 from "bs58";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   generateWalletMnemonic,
@@ -40,9 +43,20 @@ const WALLET_DIR = join(homedir(), ".openclaw", "blockrun");
 const WALLET_FILE = join(WALLET_DIR, "wallet.key");
 const MNEMONIC_FILE = join(WALLET_DIR, "mnemonic");
 const CHAIN_FILE = join(WALLET_DIR, "payment-chain");
+const CORE_WALLET_DIR = join(homedir(), ".blockrun");
+const CORE_WALLET_FILE = join(CORE_WALLET_DIR, ".session");
+const CORE_SOLANA_WALLET_FILE = join(CORE_WALLET_DIR, ".solana-session");
+const CORE_CHAIN_FILE = join(CORE_WALLET_DIR, ".chain");
 
-// Export for use by wallet command and index.ts
-export { WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE };
+// Export for use by wallet command, doctor, and index.ts.
+export {
+  WALLET_FILE,
+  MNEMONIC_FILE,
+  CHAIN_FILE,
+  CORE_WALLET_FILE,
+  CORE_SOLANA_WALLET_FILE,
+  CORE_CHAIN_FILE,
+};
 
 /**
  * Try to load a previously auto-generated wallet key from disk.
@@ -118,6 +132,88 @@ async function saveMnemonic(mnemonic: string): Promise<void> {
   await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 0o600 });
 }
 
+export type LegacyWalletMigration = {
+  base: boolean;
+  solana: boolean;
+  chain: boolean;
+};
+
+/**
+ * Copy legacy ClawRouter wallet material into BlockRun Core without deleting the
+ * old files. Each destination is created exclusively, so an existing Core
+ * wallet is never replaced, even if two processes start at the same time.
+ */
+export async function migrateLegacyWalletToCore(): Promise<LegacyWalletMigration> {
+  const migrated: LegacyWalletMigration = { base: false, solana: false, chain: false };
+  const [coreBase, coreSolana, coreChain] = await Promise.all([
+    readExisting(CORE_WALLET_FILE),
+    readExisting(CORE_SOLANA_WALLET_FILE),
+    readExisting(CORE_CHAIN_FILE),
+  ]);
+
+  if (coreBase === undefined) {
+    const legacyBase = await loadSavedWallet();
+    if (legacyBase) {
+      migrated.base = await writeCoreFileIfMissing(CORE_WALLET_FILE, legacyBase + "\n");
+    }
+  }
+
+  if (coreSolana === undefined) {
+    const mnemonic = await loadMnemonic();
+    if (mnemonic) {
+      const secret = solanaSecretKeyFromSeed(deriveSolanaKeyBytes(mnemonic));
+      migrated.solana = await writeCoreFileIfMissing(
+        CORE_SOLANA_WALLET_FILE,
+        JSON.stringify([...secret]) + "\n",
+      );
+    }
+  }
+
+  if (coreChain === undefined) {
+    const legacyChain = await readOptional(CHAIN_FILE);
+    if (legacyChain === "base" || legacyChain === "solana") {
+      migrated.chain = await writeCoreFileIfMissing(CORE_CHAIN_FILE, legacyChain + "\n");
+    }
+  }
+
+  if (migrated.base || migrated.solana || migrated.chain) {
+    const parts = Object.entries(migrated)
+      .filter(([, changed]) => changed)
+      .map(([name]) => name)
+      .join(", ");
+    console.log(`[ClawRouter] Migrated legacy ${parts} data to ${CORE_WALLET_DIR}`);
+  }
+  return migrated;
+}
+
+async function writeCoreFileIfMissing(path: string, value: string): Promise<boolean> {
+  await mkdir(CORE_WALLET_DIR, { recursive: true });
+  try {
+    await writeFile(path, value, { mode: 0o600, flag: "wx" });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+async function readExisting(path: string): Promise<string | undefined> {
+  try {
+    return await readTextFile(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function solanaSecretKeyFromSeed(seed: Uint8Array): Uint8Array {
+  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
+  const publicDer = createPublicKey(
+    createPrivateKey({ key: privateDer, format: "der", type: "pkcs8" }),
+  ).export({ format: "der", type: "spki" });
+  return Uint8Array.from([...seed, ...Buffer.from(publicDer).subarray(-32)]);
+}
+
 /**
  * Generate a new wallet with BIP-39 mnemonic, save to disk.
  * New users get both EVM and Solana keys derived from the same mnemonic.
@@ -154,6 +250,14 @@ async function generateAndSaveWallet(): Promise<{
 
   // Write mnemonic file
   await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 0o600 });
+
+  // BlockRun Core is the canonical home for new cross-product wallets. Keep
+  // the legacy files above so older ClawRouter versions can still roll back.
+  await writeCoreFileIfMissing(CORE_WALLET_FILE, derived.evmPrivateKey + "\n");
+  await writeCoreFileIfMissing(
+    CORE_SOLANA_WALLET_FILE,
+    JSON.stringify([...solanaSecretKeyFromSeed(derived.solanaPrivateKeyBytes)]) + "\n",
+  );
 
   // CRITICAL: Verify the file was actually written
   try {
@@ -199,8 +303,9 @@ async function generateAndSaveWallet(): Promise<{
   if (solanaAddress) {
     console.log(`[ClawRouter]   Solana Address : ${solanaAddress}`);
   }
-  console.log(`[ClawRouter]   Key file       : ${WALLET_FILE}`);
-  console.log(`[ClawRouter]   Mnemonic       : ${MNEMONIC_FILE}`);
+  console.log(`[ClawRouter]   Base key       : ${CORE_WALLET_FILE}`);
+  console.log(`[ClawRouter]   Solana key     : ${CORE_SOLANA_WALLET_FILE}`);
+  console.log(`[ClawRouter]   Recovery words : ${MNEMONIC_FILE}`);
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter]   Both EVM (Base) and Solana wallets are ready.`);
   if (solanaDefaultSaved) {
@@ -226,62 +331,59 @@ async function generateAndSaveWallet(): Promise<{
 }
 
 /**
- * Resolve wallet key: load saved → env var → auto-generate.
- * Also loads mnemonic if available for Solana key derivation.
+ * Resolve wallet key: migrate legacy files → explicit env → Core → legacy → generate.
+ * Also loads Core Solana material or a legacy mnemonic-derived key when available.
  * Called by index.ts before the auth wizard runs.
  */
 export type WalletResolution = {
   key: string;
   address: string;
-  source: "saved" | "env" | "config" | "generated";
+  source: "core" | "saved" | "env" | "config" | "generated";
   mnemonic?: string;
   solanaPrivateKeyBytes?: Uint8Array;
 };
 
 export async function resolveOrGenerateWalletKey(): Promise<WalletResolution> {
-  // 1. Previously saved wallet
+  await migrateLegacyWalletToCore();
+  const coreSolanaKey = await loadCoreSolanaKey();
+
+  // 1. Explicit environment override
+  const envKey = process["env"].BLOCKRUN_WALLET_KEY;
+  if (typeof envKey === "string" && /^0x[0-9a-f]{64}$/i.test(envKey)) {
+    const account = privateKeyToAccount(envKey as `0x${string}`);
+    return {
+      key: envKey,
+      address: account.address,
+      source: "env",
+      ...(await resolvedSolanaMaterial(coreSolanaKey)),
+    };
+  }
+
+  // 2. Canonical BlockRun Core wallet
+  const core = await loadCoreWallet();
+  if (core) {
+    const account = privateKeyToAccount(core as `0x${string}`);
+    return {
+      key: core,
+      address: account.address,
+      source: "core",
+      ...(await resolvedSolanaMaterial(coreSolanaKey)),
+    };
+  }
+
+  // 3. Previously saved ClawRouter wallet (legacy compatibility)
   const saved = await loadSavedWallet();
   if (saved) {
     const account = privateKeyToAccount(saved as `0x${string}`);
-
-    // Load mnemonic if it exists (Solana support enabled via /wallet solana)
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: saved,
-        address: account.address,
-        source: "saved",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes,
-      };
-    }
-
-    return { key: saved, address: account.address, source: "saved" };
+    return {
+      key: saved,
+      address: account.address,
+      source: "saved",
+      ...(await resolvedSolanaMaterial(coreSolanaKey)),
+    };
   }
 
-  // 2. Environment variable
-  const envKey = process["env"].BLOCKRUN_WALLET_KEY;
-  if (typeof envKey === "string" && envKey.startsWith("0x") && envKey.length === 66) {
-    const account = privateKeyToAccount(envKey as `0x${string}`);
-
-    // Load mnemonic if it exists (Solana support enabled via /wallet solana)
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: envKey,
-        address: account.address,
-        source: "env",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes,
-      };
-    }
-
-    return { key: envKey, address: account.address, source: "env" };
-  }
-
-  // 3. Auto-generate with BIP-39 mnemonic (new users get both chains)
+  // 4. Auto-generate with BIP-39 mnemonic (legacy standalone behavior)
   const result = await generateAndSaveWallet();
   return {
     key: result.key,
@@ -290,6 +392,63 @@ export async function resolveOrGenerateWalletKey(): Promise<WalletResolution> {
     mnemonic: result.mnemonic,
     solanaPrivateKeyBytes: result.solanaPrivateKeyBytes,
   };
+}
+
+async function loadCoreWallet(): Promise<string | undefined> {
+  const key = (await readExisting(CORE_WALLET_FILE))?.trim();
+  if (key === undefined) return undefined;
+  if (/^0x[0-9a-f]{64}$/i.test(key)) return key;
+  throw new Error(
+    `BlockRun Core wallet at ${CORE_WALLET_FILE} has an invalid format. Refusing to use another wallet implicitly.`,
+  );
+}
+
+async function loadCoreSolanaKey(): Promise<Uint8Array | undefined> {
+  const raw =
+    process["env"].SOLANA_WALLET_KEY ?? (await readExisting(CORE_SOLANA_WALLET_FILE))?.trim();
+  if (!raw) return undefined;
+  try {
+    let bytes: Uint8Array;
+    if (raw.startsWith("[")) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)
+      )
+        throw new Error("expected an array of byte values");
+      bytes = Uint8Array.from(parsed);
+    } else {
+      const hex = raw.replace(/^0x/i, "");
+      bytes = /^[0-9a-f]{128}$/i.test(hex) ? Buffer.from(hex, "hex") : bs58.decode(raw);
+    }
+    if (bytes.length !== 64) throw new Error(`expected 64 bytes, received ${bytes.length}`);
+    const expected = solanaSecretKeyFromSeed(bytes.slice(0, 32));
+    if (!Buffer.from(expected).equals(Buffer.from(bytes))) {
+      throw new Error("public key does not match the private seed");
+    }
+    return bytes.slice(0, 32);
+  } catch (error) {
+    throw new Error(
+      `BlockRun Core Solana wallet has an invalid format: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+async function readOptional(path: string): Promise<string | undefined> {
+  try {
+    return (await readTextFile(path)).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolvedSolanaMaterial(
+  coreSolanaKey: Uint8Array | undefined,
+): Promise<Partial<Pick<WalletResolution, "mnemonic" | "solanaPrivateKeyBytes">>> {
+  if (coreSolanaKey) return { solanaPrivateKeyBytes: coreSolanaKey };
+  const mnemonic = await loadMnemonic();
+  return mnemonic ? { mnemonic, solanaPrivateKeyBytes: deriveSolanaKeyBytes(mnemonic) } : {};
 }
 
 /**
@@ -308,7 +467,13 @@ export async function recoverWalletFromMnemonic(): Promise<void> {
     process.exit(1);
   }
 
-  // Safety: if wallet.key already exists, refuse to overwrite
+  // Safety: if either active Base wallet already exists, refuse to overwrite.
+  const existingCore = await loadCoreWallet();
+  if (existingCore) {
+    console.error(`[ClawRouter] BlockRun Core wallet already exists at ${CORE_WALLET_FILE}`);
+    console.error(`[ClawRouter] Recovery not needed.`);
+    process.exit(1);
+  }
   const existing = await loadSavedWallet().catch(() => undefined);
   if (existing) {
     console.error(`[ClawRouter] wallet.key already exists at ${WALLET_FILE}`);
@@ -338,8 +503,9 @@ export async function recoverWalletFromMnemonic(): Promise<void> {
 
   await mkdir(WALLET_DIR, { recursive: true });
   await writeFile(WALLET_FILE, derived.evmPrivateKey + "\n", { mode: 0o600 });
+  await migrateLegacyWalletToCore();
 
-  console.log(`[ClawRouter] ✓ wallet.key restored at ${WALLET_FILE}`);
+  console.log(`[ClawRouter] ✓ Wallet restored into BlockRun Core at ${CORE_WALLET_DIR}`);
   console.log(`[ClawRouter]   Run: npx @blockrun/clawrouter`);
   console.log(`[ClawRouter]`);
 }
@@ -347,7 +513,7 @@ export async function recoverWalletFromMnemonic(): Promise<void> {
 /**
  * Set up Solana wallet for existing EVM-only users.
  * Generates a new mnemonic for Solana key derivation.
- * NEVER touches the existing wallet.key file.
+ * NEVER changes the existing Base wallet.
  */
 export async function setupSolana(): Promise<{
   mnemonic: string;
@@ -359,9 +525,9 @@ export async function setupSolana(): Promise<{
     throw new Error("Solana wallet already set up. Mnemonic file exists at " + MNEMONIC_FILE);
   }
 
-  // Safety: wallet.key must exist (can't set up Solana without EVM wallet)
-  const savedKey = await loadSavedWallet();
-  if (!savedKey) {
+  // Safety: an EVM wallet must exist in Core or the legacy location.
+  const evmKey = (await loadCoreWallet()) ?? (await loadSavedWallet());
+  if (!evmKey) {
     throw new Error(
       "No EVM wallet found. Run ClawRouter first to generate a wallet before setting up Solana.",
     );
@@ -373,9 +539,14 @@ export async function setupSolana(): Promise<{
 
   // Save mnemonic (wallet.key untouched)
   await saveMnemonic(mnemonic);
+  await writeCoreFileIfMissing(
+    CORE_SOLANA_WALLET_FILE,
+    JSON.stringify([...solanaSecretKeyFromSeed(solanaKeyBytes)]) + "\n",
+  );
 
   console.log(`[ClawRouter] Solana wallet set up successfully.`);
-  console.log(`[ClawRouter] Mnemonic saved to ${MNEMONIC_FILE}`);
+  console.log(`[ClawRouter] Solana key saved to ${CORE_SOLANA_WALLET_FILE}`);
+  console.log(`[ClawRouter] Recovery mnemonic saved to ${MNEMONIC_FILE}`);
   console.log(`[ClawRouter] Existing EVM wallet unchanged.`);
 
   return { mnemonic, solanaPrivateKeyBytes: solanaKeyBytes };
@@ -386,7 +557,11 @@ export async function setupSolana(): Promise<{
  */
 export async function savePaymentChain(chain: "base" | "solana"): Promise<void> {
   await mkdir(WALLET_DIR, { recursive: true });
-  await writeFile(CHAIN_FILE, chain + "\n", { mode: 0o600 });
+  await mkdir(CORE_WALLET_DIR, { recursive: true });
+  await Promise.all([
+    writeFile(CHAIN_FILE, chain + "\n", { mode: 0o600 }),
+    writeFile(CORE_CHAIN_FILE, chain + "\n", { mode: 0o600 }),
+  ]);
 }
 
 /**
@@ -396,6 +571,9 @@ export async function savePaymentChain(chain: "base" | "solana"): Promise<void> 
  * means a pre-existing install whose funds live on Base.
  */
 export async function loadPaymentChain(): Promise<"base" | "solana"> {
+  const core = await readOptional(CORE_CHAIN_FILE);
+  if (core === "solana") return "solana";
+  if (core === "base") return "base";
   try {
     const content = (await readTextFile(CHAIN_FILE)).trim();
     if (content === "solana") return "solana";

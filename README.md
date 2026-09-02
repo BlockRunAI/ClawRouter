@@ -86,7 +86,8 @@ The Electron app in [`apps/desktop`](apps/desktop) provides one-click connection
 for OpenClaw, Codex, Hermes, DeepSeek Harness, and Pi, plus model pricing/context,
 wallet balances, Base/Solana switching, and Coinbase Onramp. It snapshots each
 agent's existing config before changing it and restores the original bytes when
-you disconnect.
+you disconnect. Wallets are shared through `~/.blockrun`; older ClawRouter
+wallets are copied there automatically without overwriting existing Core files.
 
 ### Option A — OpenClaw Agent
 

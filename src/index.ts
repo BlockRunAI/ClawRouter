@@ -41,6 +41,8 @@ import {
   resolvePaymentChain,
   WALLET_FILE,
   MNEMONIC_FILE,
+  CORE_WALLET_FILE,
+  CORE_SOLANA_WALLET_FILE,
 } from "./auth.js";
 import type { WalletResolution } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
@@ -88,6 +90,12 @@ import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
 import { BLOCKRUN_PLUGIN_ID } from "./openclaw-plugin-config.js";
+
+function hasConfiguredWallet(): boolean {
+  return Boolean(
+    process["env"].BLOCKRUN_WALLET_KEY || existsSync(CORE_WALLET_FILE) || existsSync(WALLET_FILE),
+  );
+}
 
 /**
  * Detect if we're running in shell completion mode.
@@ -813,7 +821,7 @@ async function startProxyInBackground(
     proc.__clawrouterStartupPhase = "starting";
   }
 
-  // Resolve wallet key: plugin config → saved file → env var → auto-generate.
+  // Resolve wallet key: plugin config → explicit env → BlockRun Core → legacy migration → generate.
   // pluginConfig.walletKey is declared in openclaw.plugin.json configSchema but
   // was previously never read here — that was a bug.
   const configKey = api.pluginConfig?.walletKey as string | undefined;
@@ -825,7 +833,7 @@ async function startProxyInBackground(
   } else {
     if (configKey !== undefined) {
       api.logger.warn(
-        `pluginConfig.walletKey is set but invalid (expected 0x + 64 hex chars) — falling back to saved wallet`,
+        `pluginConfig.walletKey is set but invalid (expected 0x + 64 hex chars) — falling back to the BlockRun wallet`,
       );
     }
     wallet = await resolveOrGenerateWalletKey();
@@ -839,6 +847,8 @@ async function startProxyInBackground(
     api.logger.warn(`  Run /wallet export to get your private key`);
     api.logger.warn(`  Losing this key = losing your USDC funds`);
     api.logger.warn(`════════════════════════════════════════════════`);
+  } else if (wallet.source === "core") {
+    api.logger.info(`Using BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
@@ -1217,7 +1227,7 @@ export function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
         ],
       },
     },
-    isConfigured: () => existsSync(WALLET_FILE),
+    isConfigured: hasConfiguredWallet,
     generateImage: async (req: ImageGenerationRequest) => {
       const port = getProxyPort();
       const body = JSON.stringify({
@@ -1282,7 +1292,7 @@ function buildMusicGenerationProvider(): MusicGenerationProviderPlugin {
       supportsFormat: true,
       supportedFormats: ["mp3"],
     },
-    isConfigured: () => existsSync(WALLET_FILE),
+    isConfigured: hasConfiguredWallet,
     generateMusic: async (req: MusicGenerationRequest) => {
       const port = getProxyPort();
       const body = JSON.stringify({
@@ -1373,7 +1383,7 @@ function buildVideoGenerationProvider(): VideoGenerationProviderPlugin {
         supportedDurationSeconds: [5, 8, 10],
       },
     },
-    isConfigured: () => existsSync(WALLET_FILE),
+    isConfigured: hasConfiguredWallet,
     generateVideo: async (req: VideoGenerationRequest) => {
       const port = getProxyPort();
       const imageUrl = req.inputImages?.[0]?.url;
@@ -1471,27 +1481,19 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
     handler: async (ctx: PluginCommandContext) => {
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
 
-      // Read wallet key if it exists
-      let walletKey: string | undefined;
-      let address: string | undefined;
+      let wallet: WalletResolution;
       try {
-        if (existsSync(WALLET_FILE)) {
-          walletKey = readTextFileSync(WALLET_FILE).trim();
-          if (walletKey.startsWith("0x") && walletKey.length === 66) {
-            const account = privateKeyToAccount(walletKey as `0x${string}`);
-            address = account.address;
-          }
-        }
-      } catch {
-        // Wallet file doesn't exist or is invalid
-      }
-
-      if (!walletKey || !address) {
+        wallet = await resolveOrGenerateWalletKey();
+      } catch (error) {
         return {
-          text: `No ClawRouter wallet found.\n\nRun \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
+          text: `Could not load the BlockRun wallet: ${error instanceof Error ? error.message : String(error)}`,
           isError: true,
         };
       }
+      const walletKey = wallet.key;
+      const address = wallet.address;
+      const resolvedSolanaKey = wallet.solanaPrivateKeyBytes;
+      const walletPath = wallet.source === "core" ? CORE_WALLET_FILE : WALLET_FILE;
 
       if (subcommand === "export") {
         // Export private key + mnemonic for backup
@@ -1536,13 +1538,30 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
           // No mnemonic - EVM-only wallet
         }
 
+        if (!hasMnemonic && resolvedSolanaKey) {
+          try {
+            const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+            const signer = await createKeyPairSignerFromPrivateKeyBytes(resolvedSolanaKey);
+            lines.push(
+              "",
+              "**Solana:**",
+              `  Address: \`${signer.address}\``,
+              wallet.source === "core"
+                ? `  Private key managed by BlockRun Core: \`${CORE_SOLANA_WALLET_FILE}\``
+                : "  Private key is managed by the configured wallet source.",
+            );
+          } catch {
+            // Base export remains usable if Solana address derivation is unavailable.
+          }
+        }
+
         lines.push(
           "",
           "**To restore on a new machine:**",
           "1. Set the environment variable before running OpenClaw:",
           `   \`export BLOCKRUN_WALLET_KEY=${walletKey}\``,
           "2. Or save to file:",
-          `   \`mkdir -p ~/.openclaw/blockrun && echo "${walletKey}" > ~/.openclaw/blockrun/wallet.key && chmod 600 ~/.openclaw/blockrun/wallet.key\``,
+          `   \`mkdir -p ~/.blockrun && echo "${walletKey}" > ~/.blockrun/.session && chmod 600 ~/.blockrun/.session\``,
         );
 
         if (hasMnemonic) {
@@ -1560,6 +1579,23 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
         // If no mnemonic, set up Solana wallet first.
         try {
           let solanaAddr: string | undefined;
+
+          if (resolvedSolanaKey) {
+            await savePaymentChain("solana");
+            const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+            const signer = await createKeyPairSignerFromPrivateKeyBytes(resolvedSolanaKey);
+            solanaAddr = signer.address;
+            if (api) restartProxyForChainSwitch(api);
+            return {
+              text: [
+                "✓ Payment chain switched to **Solana**.",
+                api ? "Proxy restarting in background (~2s)." : "Restart the gateway to apply.",
+                "",
+                `**Solana Address:** \`${solanaAddr}\``,
+                `**Fund with USDC on Solana:** https://solscan.io/account/${solanaAddr}`,
+              ].join("\n"),
+            };
+          }
 
           // Check if Solana wallet is already set up (mnemonic exists)
           if (existsSync(MNEMONIC_FILE)) {
@@ -1645,13 +1681,9 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
 
       const solanaPromise = (async () => {
         try {
-          if (!existsSync(MNEMONIC_FILE)) return "";
-          const { deriveSolanaKeyBytes } = await import("./wallet.js");
-          const mnemonic = readTextFileSync(MNEMONIC_FILE).trim();
-          if (!mnemonic) return "";
-          const solKeyBytes = deriveSolanaKeyBytes(mnemonic);
+          if (!resolvedSolanaKey) return "";
           const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
-          const signer = await createKeyPairSignerFromPrivateKeyBytes(solKeyBytes);
+          const signer = await createKeyPairSignerFromPrivateKeyBytes(resolvedSolanaKey);
           const solAddr = signer.address;
 
           let solBalanceText = "Balance: (could not check)";
@@ -1727,7 +1759,7 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
           solanaSection,
           usageSection,
           "",
-          `**Key File:** \`${WALLET_FILE}\``,
+          `**Key File:** \`${walletPath}\``,
           "",
           "**Commands:**",
           "• `/wallet` - Show this status",
@@ -2198,6 +2230,8 @@ const plugin: OpenClawPluginDefinition = {
               api.logger.warn(`  Run /wallet export to get your private key`);
               api.logger.warn(`  Losing this key = losing your USDC funds`);
               api.logger.warn(`════════════════════════════════════════════════`);
+            } else if (source === "core") {
+              api.logger.info(`Using BlockRun Core wallet: ${address}`);
             } else if (source === "saved") {
               api.logger.info(`Using saved wallet: ${address}`);
             } else if (source === "config") {

@@ -1115,21 +1115,21 @@ type ProxyHandle = {
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
 
 /**
- * Resolve wallet key: load saved → env var → auto-generate.
- * Also loads mnemonic if available for Solana key derivation.
+ * Resolve wallet key: migrate legacy files → explicit env → Core → legacy → generate.
+ * Also loads Core Solana material or a legacy mnemonic-derived key when available.
  * Called by index.ts before the auth wizard runs.
  */
 type WalletResolution = {
     key: string;
     address: string;
-    source: "saved" | "env" | "config" | "generated";
+    source: "core" | "saved" | "env" | "config" | "generated";
     mnemonic?: string;
     solanaPrivateKeyBytes?: Uint8Array;
 };
 /**
  * Set up Solana wallet for existing EVM-only users.
  * Generates a new mnemonic for Solana key derivation.
- * NEVER touches the existing wallet.key file.
+ * NEVER changes the existing Base wallet.
  */
 declare function setupSolana(): Promise<{
     mnemonic: string;

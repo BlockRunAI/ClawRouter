@@ -17,6 +17,7 @@ import {
   resolveOrGenerateWalletKey,
   resolvePaymentChain,
   WALLET_FILE,
+  CORE_WALLET_FILE,
   MNEMONIC_FILE,
 } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
@@ -43,7 +44,7 @@ interface WalletInfo {
   balance: string | null;
   isLow: boolean;
   isEmpty: boolean;
-  source: "saved" | "env" | "config" | "generated" | null;
+  source: "core" | "saved" | "env" | "config" | "generated" | null;
   paymentChain: "base" | "solana";
 }
 
@@ -307,7 +308,8 @@ function printDiagnostics(result: DiagnosticResult): void {
   // Wallet
   console.log("\nWallet");
   if (result.wallet.exists && result.wallet.valid) {
-    console.log(`  ${green(`Key: ${WALLET_FILE} (${result.wallet.source})`)}`);
+    const walletPath = result.wallet.source === "core" ? CORE_WALLET_FILE : WALLET_FILE;
+    console.log(`  ${green(`Key: ${walletPath} (${result.wallet.source})`)}`);
     console.log(`  ${green(`EVM Address:    ${result.wallet.address}`)}`);
     if (result.wallet.solanaAddress) {
       console.log(`  ${green(`Solana Address: ${result.wallet.solanaAddress}`)}`);

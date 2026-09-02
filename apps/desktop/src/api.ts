@@ -7,6 +7,7 @@ import type {
   OnrampResult,
   PaymentChain,
   PaymentChainSwitchResult,
+  WalletMutationResult,
 } from "../electron/core/types";
 
 export type ClawRouterApi = {
@@ -15,6 +16,8 @@ export type ClawRouterApi = {
   uninstall(agent: AgentId): Promise<OperationResult>;
   dashboard(): Promise<DashboardData>;
   switchPaymentChain(chain: PaymentChain): Promise<PaymentChainSwitchResult>;
+  createWallet(chain: PaymentChain): Promise<WalletMutationResult>;
+  adoptLegacyWallet(chain: PaymentChain): Promise<WalletMutationResult>;
   createOnramp(amount: number): Promise<OnrampResult>;
   openExternal(url: string): Promise<void>;
 };
@@ -200,6 +203,19 @@ const fallbackApi: ClawRouterApi = {
     demoDashboard.proxy.balance = demoDashboard.proxy.balances?.[chain];
     return { ok: true, chain, restartRequired: false, message: `${chain} selected.` };
   },
+  createWallet: async (chain) => ({
+    ok: true,
+    chain,
+    address: chain === "base" ? "0x4d20…81b2" : "7WzH…9xKe",
+    restartRequired: false,
+    message: `${chain} wallet created.`,
+  }),
+  adoptLegacyWallet: async (chain) => ({
+    ok: true,
+    chain,
+    restartRequired: false,
+    message: `Legacy ${chain} wallet is now current.`,
+  }),
   createOnramp: async (amount) => ({
     ok: true,
     url: `https://pay.coinbase.com/buy/select-asset?sessionToken=demo&defaultAsset=USDC&defaultNetwork=base&presetFiatAmount=${amount}`,
@@ -220,6 +236,22 @@ export const api: ClawRouterApi = desktopBridge
           chain,
           restartRequired: false,
           message: "Wallet switching requires the latest ClawRouter Desktop runtime.",
+        })),
+      createWallet:
+        desktopBridge.createWallet ??
+        (async (chain) => ({
+          ok: false,
+          chain,
+          restartRequired: false,
+          message: "Wallet creation requires the latest ClawRouter Desktop runtime.",
+        })),
+      adoptLegacyWallet:
+        desktopBridge.adoptLegacyWallet ??
+        (async (chain) => ({
+          ok: false,
+          chain,
+          restartRequired: false,
+          message: "Legacy wallet adoption requires the latest ClawRouter Desktop runtime.",
         })),
       createOnramp:
         desktopBridge.createOnramp ??

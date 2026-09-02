@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { createHmac, createPrivateKey, createPublicKey } from "node:crypto";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { createHmac, createPrivateKey, createPublicKey, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
@@ -29,6 +29,7 @@ import type {
   OperationResult,
   PaymentChain,
   PaymentChainSwitchResult,
+  WalletMutationResult,
 } from "./types.js";
 
 const BASE_RPC_URL = "https://mainnet.base.org";
@@ -203,18 +204,126 @@ export class ClawRouterManager {
     }
   }
 
+  async createWallet(chain: PaymentChain): Promise<WalletMutationResult> {
+    const coreDir = join(this.context.homeDir, ".blockrun");
+    const name = chain === "base" ? ".session" : ".solana-session";
+    try {
+      const existing = await readText(join(coreDir, name));
+      if (existing) {
+        return {
+          ok: false,
+          chain,
+          restartRequired: false,
+          message: `A ${chainLabel(chain)} Core wallet file already exists. It was not overwritten.`,
+        };
+      }
+
+      let value: string;
+      let address: string;
+      if (chain === "base") {
+        value = `0x${Buffer.from(secp256k1.utils.randomSecretKey()).toString("hex")}`;
+        address = evmAddressFromPrivateKey(value);
+      } else {
+        const seed = randomBytes(32);
+        const secret = Buffer.concat([seed, ed25519PublicKey(seed)]);
+        value = JSON.stringify([...secret]);
+        address = base58Encode(secret.subarray(32));
+      }
+      const created = await writeFileIfMissing(coreDir, name, value + "\n");
+      if (!created) throw new Error(`The ${chainLabel(chain)} wallet changed while creating it.`);
+      return {
+        ok: true,
+        chain,
+        address,
+        restartRequired: true,
+        message: `${chainLabel(chain)} wallet created in BlockRun Core. Restart ClawRouter before using it.`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        chain,
+        restartRequired: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  async adoptLegacyWallet(chain: PaymentChain): Promise<WalletMutationResult> {
+    const coreDir = join(this.context.homeDir, ".blockrun");
+    const legacyDir = join(this.context.homeDir, ".openclaw", "blockrun");
+    const name = chain === "base" ? ".session" : ".solana-session";
+    try {
+      let value: string | undefined;
+      let address: string | undefined;
+      if (chain === "base") {
+        value = await readPrivateKey(join(legacyDir, "wallet.key"));
+        if (value) address = evmAddressFromPrivateKey(value);
+      } else {
+        const mnemonic = await readText(join(legacyDir, "mnemonic"));
+        if (mnemonic && validateMnemonic(mnemonic, english)) {
+          const seed = solanaSeedFromMnemonic(mnemonic);
+          const secret = Buffer.concat([Buffer.from(seed), Buffer.from(ed25519PublicKey(seed))]);
+          value = JSON.stringify([...secret]);
+          address = base58Encode(secret.subarray(32));
+        }
+      }
+      if (!value || !address) throw new Error(`No valid legacy ${chainLabel(chain)} wallet found.`);
+
+      const current = await readText(join(coreDir, name));
+      if (current === value) {
+        return {
+          ok: true,
+          chain,
+          address,
+          restartRequired: false,
+          message: `This ${chainLabel(chain)} wallet is already current.`,
+        };
+      }
+      await mkdir(coreDir, { recursive: true });
+      if (current) {
+        const backup = `${name}.backup-${Date.now()}`;
+        await writeFileIfMissing(coreDir, backup, current + "\n");
+      }
+      await atomicWritePrivateFile(coreDir, name, value + "\n");
+      return {
+        ok: true,
+        chain,
+        address,
+        restartRequired: true,
+        message: `Legacy ${chainLabel(chain)} wallet is now current. The previous Core wallet was backed up. Restart ClawRouter to apply it.`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        chain,
+        restartRequired: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   async dashboard(): Promise<DashboardData> {
+    await this.migrateLegacyWalletToCore();
     const root = this.context.proxyBaseUrl.replace(/\/v1\/?$/, "");
     const localWalletsPromise = this.localWallets();
+    const legacyWalletsPromise = localWalletsPromise.then((local) => this.legacyWallets(local));
     const localBalancesPromise = localWalletsPromise.then(({ base, solana }) =>
       fetchUsdcBalances(base, solana, this.context.fetch),
     );
-    const [reachable, configuredChain, localWallets, localBalances] = await Promise.all([
-      proxyHealth(this.context),
-      this.configuredPaymentChain(),
-      localWalletsPromise,
-      localBalancesPromise,
-    ]);
+    const [reachable, configuredChain, localWallets, legacyWallets, localBalances] =
+      await Promise.all([
+        proxyHealth(this.context),
+        this.configuredPaymentChain(),
+        localWalletsPromise,
+        legacyWalletsPromise,
+        localBalancesPromise,
+      ]);
+    const legacyBalances = await fetchUsdcBalances(
+      legacyWallets.base?.address,
+      legacyWallets.solana?.address,
+      this.context.fetch,
+    );
+    const legacyWalletDetails = withLegacyBalances(legacyWallets, legacyBalances);
     if (!reachable) {
       return {
         proxy: {
@@ -222,9 +331,13 @@ export class ClawRouterManager {
           error: "ClawRouter is not running or could not prove its identity.",
           wallet: localWallets.base,
           solana: localWallets.solana,
+          configuredWallet: localWallets.base,
+          configuredSolana: localWallets.solana,
           configuredChain,
           balance: localBalances[configuredChain],
           balances: localBalances,
+          walletIssues: localWallets.issues,
+          legacyWallets: legacyWalletDetails,
         },
         stats: null,
         models: [],
@@ -241,7 +354,8 @@ export class ClawRouterManager {
     // local wallet lets Desktop show the same addresses and balances before the
     // proxy starts, without ever exposing private key material to the renderer.
     const wallet = activeWallet ?? preferredWallet;
-    const solana = stringOrUndefined(health.value?.solana) ?? localWallets.solana;
+    const activeSolana = stringOrUndefined(health.value?.solana);
+    const solana = activeSolana ?? localWallets.solana;
     const paymentChain = paymentChainOrUndefined(health.value?.paymentChain);
     const reportedBalance = currencyNumberOrUndefined(health.value?.balance);
     const activeBalances = await fetchUsdcBalances(
@@ -276,6 +390,13 @@ export class ClawRouterManager {
         toolCalling: booleanOrUndefined(model.tool_calling) ?? bundled?.tool_calling,
       };
     });
+    const walletRestartChains: PaymentChain[] = [];
+    if (preferredWallet && activeWallet && !sameAddress(activeWallet, preferredWallet)) {
+      walletRestartChains.push("base");
+    }
+    if (localWallets.solana && activeSolana && activeSolana !== localWallets.solana) {
+      walletRestartChains.push("solana");
+    }
     return {
       proxy: health.value
         ? {
@@ -284,25 +405,31 @@ export class ClawRouterManager {
             wallet,
             activeWallet,
             solana,
+            activeSolana,
+            configuredWallet: localWallets.base,
+            configuredSolana: localWallets.solana,
             paymentChain,
             configuredChain,
             chainRestartRequired: Boolean(paymentChain && configuredChain !== paymentChain),
             balance: paymentChain ? (balances[paymentChain] ?? reportedBalance) : reportedBalance,
             balances,
-            walletRestartRequired: Boolean(
-              preferredWallet &&
-              activeWallet &&
-              preferredWallet.toLowerCase() !== activeWallet.toLowerCase(),
-            ),
+            walletRestartRequired: walletRestartChains.length > 0,
+            walletRestartChains,
+            walletIssues: localWallets.issues,
+            legacyWallets: legacyWalletDetails,
           }
         : {
             reachable: false,
             error: health.error,
             wallet: localWallets.base,
             solana: localWallets.solana,
+            configuredWallet: localWallets.base,
+            configuredSolana: localWallets.solana,
             configuredChain,
             balance: localBalances[configuredChain],
             balances: localBalances,
+            walletIssues: localWallets.issues,
+            legacyWallets: legacyWalletDetails,
           },
       stats: stats.value,
       models,
@@ -310,28 +437,90 @@ export class ClawRouterManager {
   }
 
   private async configuredPaymentChain(): Promise<PaymentChain> {
-    try {
-      const value = (
-        await readFile(join(this.context.homeDir, ".openclaw", "blockrun", "payment-chain"), "utf8")
-      ).trim();
-      return value === "solana" ? "solana" : "base";
-    } catch {
-      return "base";
-    }
+    const coreValue = await readText(join(this.context.homeDir, ".blockrun", ".chain"));
+    if (coreValue === "base" || coreValue === "solana") return coreValue;
+
+    const legacyValue = await readText(
+      join(this.context.homeDir, ".openclaw", "blockrun", "payment-chain"),
+    );
+    return legacyValue === "solana" ? "solana" : "base";
   }
 
-  private async localWallets(): Promise<{ base?: string; solana?: string }> {
-    const walletDir = join(this.context.homeDir, ".openclaw", "blockrun");
-    const clawRouterKey = await readPrivateKey(join(walletDir, "wallet.key"));
-    const coreKey =
-      clawRouterKey ?? (await readPrivateKey(join(this.context.homeDir, ".blockrun", ".session")));
-    const mnemonic = await readText(join(walletDir, "mnemonic"));
+  private async migrateLegacyWalletToCore(): Promise<void> {
+    const coreDir = join(this.context.homeDir, ".blockrun");
+    const legacyDir = join(this.context.homeDir, ".openclaw", "blockrun");
+    const [coreBase, coreSolana, coreChain, legacyBase, legacyMnemonic, legacyChain] =
+      await Promise.all([
+        readText(join(coreDir, ".session")),
+        readText(join(coreDir, ".solana-session")),
+        readText(join(coreDir, ".chain")),
+        readPrivateKey(join(legacyDir, "wallet.key")),
+        readText(join(legacyDir, "mnemonic")),
+        readText(join(legacyDir, "payment-chain")),
+      ]);
+
+    const pending: Array<Promise<boolean>> = [];
+    if (!coreBase && legacyBase) {
+      pending.push(writeFileIfMissing(coreDir, ".session", legacyBase + "\n"));
+    }
+    if (!coreSolana && legacyMnemonic && validateMnemonic(legacyMnemonic, english)) {
+      const seed = solanaSeedFromMnemonic(legacyMnemonic);
+      const secret = [...seed, ...ed25519PublicKey(seed)];
+      pending.push(writeFileIfMissing(coreDir, ".solana-session", JSON.stringify(secret) + "\n"));
+    }
+    if (!coreChain && (legacyChain === "base" || legacyChain === "solana")) {
+      pending.push(writeFileIfMissing(coreDir, ".chain", legacyChain + "\n"));
+    }
+    await Promise.all(pending);
+  }
+
+  private async localWallets(): Promise<{
+    base?: string;
+    solana?: string;
+    issues: Partial<Record<PaymentChain, string>>;
+  }> {
+    const coreDir = join(this.context.homeDir, ".blockrun");
+    const coreBaseValue = await readText(join(coreDir, ".session"));
+    const coreBaseKey =
+      coreBaseValue && /^0x[0-9a-f]{64}$/i.test(coreBaseValue) ? coreBaseValue : undefined;
+    const coreSolanaKey = await readText(join(coreDir, ".solana-session"));
+    const base = coreBaseKey ? evmAddressFromPrivateKey(coreBaseKey) : undefined;
+    const solana = coreSolanaKey ? solanaAddressFromCoreKey(coreSolanaKey) : undefined;
     return {
-      base: coreKey ? evmAddressFromPrivateKey(coreKey) : undefined,
-      solana:
-        mnemonic && validateMnemonic(mnemonic, english)
-          ? solanaAddressFromMnemonic(mnemonic)
-          : undefined,
+      base,
+      solana,
+      issues: {
+        ...(coreBaseValue && !base
+          ? { base: "The BlockRun Core Base wallet file is invalid." }
+          : {}),
+        ...(coreSolanaKey && !solana
+          ? { solana: "The BlockRun Core Solana wallet file is invalid." }
+          : {}),
+      },
+    };
+  }
+
+  private async legacyWallets(local: {
+    base?: string;
+    solana?: string;
+  }): Promise<Partial<Record<PaymentChain, { address: string; source: "ClawRouter legacy" }>>> {
+    const legacyDir = join(this.context.homeDir, ".openclaw", "blockrun");
+    const [baseKey, mnemonic] = await Promise.all([
+      readPrivateKey(join(legacyDir, "wallet.key")),
+      readText(join(legacyDir, "mnemonic")),
+    ]);
+    const base = baseKey ? evmAddressFromPrivateKey(baseKey) : undefined;
+    const solana =
+      mnemonic && validateMnemonic(mnemonic, english)
+        ? solanaAddressFromMnemonic(mnemonic)
+        : undefined;
+    return {
+      ...(base && !sameAddress(base, local.base)
+        ? { base: { address: base, source: "ClawRouter legacy" as const } }
+        : {}),
+      ...(solana && solana !== local.solana
+        ? { solana: { address: solana, source: "ClawRouter legacy" as const } }
+        : {}),
     };
   }
 
@@ -519,7 +708,65 @@ async function readText(path: string): Promise<string | undefined> {
   }
 }
 
-function solanaAddressFromMnemonic(mnemonic: string): string {
+async function writeFileIfMissing(
+  directory: string,
+  name: string,
+  value: string,
+): Promise<boolean> {
+  await mkdir(directory, { recursive: true });
+  try {
+    await writeFile(join(directory, name), value, { mode: 0o600, flag: "wx" });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+async function atomicWritePrivateFile(
+  directory: string,
+  name: string,
+  value: string,
+): Promise<void> {
+  const temporaryName = `.${name}.tmp-${process.pid}-${Date.now()}`;
+  const temporaryPath = join(directory, temporaryName);
+  await writeFile(temporaryPath, value, { mode: 0o600, flag: "wx" });
+  try {
+    await rename(temporaryPath, join(directory, name));
+  } catch (error) {
+    try {
+      await unlink(temporaryPath);
+    } catch {
+      // Preserve the original filesystem error.
+    }
+    throw error;
+  }
+}
+
+function chainLabel(chain: PaymentChain): string {
+  return chain === "base" ? "Base" : "Solana";
+}
+
+function withLegacyBalances(
+  wallets: Partial<Record<PaymentChain, { address: string; source: "ClawRouter legacy" }>>,
+  balances: Partial<Record<PaymentChain, number>>,
+): DashboardData["proxy"]["legacyWallets"] {
+  return {
+    ...(wallets.base
+      ? { base: { ...wallets.base, ...(balances.base == null ? {} : { balance: balances.base }) } }
+      : {}),
+    ...(wallets.solana
+      ? {
+          solana: {
+            ...wallets.solana,
+            ...(balances.solana == null ? {} : { balance: balances.solana }),
+          },
+        }
+      : {}),
+  };
+}
+
+function solanaSeedFromMnemonic(mnemonic: string): Uint8Array {
   const seed = mnemonicToSeedSync(mnemonic);
   let digest = createHmac("sha512", "ed25519 seed").update(seed).digest();
   let key = digest.subarray(0, 32);
@@ -534,11 +781,44 @@ function solanaAddressFromMnemonic(mnemonic: string): string {
     key = digest.subarray(0, 32);
     chainCode = digest.subarray(32);
   }
-  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), key]);
+  return key;
+}
+
+function solanaAddressFromMnemonic(mnemonic: string): string {
+  return base58Encode(ed25519PublicKey(solanaSeedFromMnemonic(mnemonic)));
+}
+
+function solanaAddressFromCoreKey(value: string): string | undefined {
+  try {
+    let bytes: Uint8Array;
+    if (value.startsWith("[")) {
+      const parsed = JSON.parse(value) as unknown;
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((item) => Number.isInteger(item) && item >= 0 && item <= 255)
+      )
+        return undefined;
+      bytes = Uint8Array.from(parsed);
+    } else {
+      const hex = value.replace(/^0x/i, "");
+      bytes = /^[0-9a-f]{128}$/i.test(hex) ? Buffer.from(hex, "hex") : base58Decode(value);
+    }
+    if (bytes.length !== 64) return undefined;
+    const expectedPublic = ed25519PublicKey(bytes.subarray(0, 32));
+    const storedPublic = bytes.subarray(32);
+    if (!Buffer.from(expectedPublic).equals(Buffer.from(storedPublic))) return undefined;
+    return base58Encode(storedPublic);
+  } catch {
+    return undefined;
+  }
+}
+
+function ed25519PublicKey(seed: Uint8Array): Uint8Array {
+  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
   const publicDer = createPublicKey(
     createPrivateKey({ key: privateDer, format: "der", type: "pkcs8" }),
   ).export({ format: "der", type: "spki" });
-  return base58Encode(Buffer.from(publicDer).subarray(-32));
+  return Buffer.from(publicDer).subarray(-32);
 }
 
 function base58Encode(value: Uint8Array): string {
@@ -555,6 +835,22 @@ function base58Encode(value: Uint8Array): string {
     encoded = `1${encoded}`;
   }
   return encoded || "1";
+}
+
+function base58Decode(value: string): Uint8Array {
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let number = 0n;
+  for (const character of value) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) throw new Error("Invalid base58 character");
+    number = number * 58n + BigInt(index);
+  }
+  let hex = number.toString(16);
+  if (hex.length % 2) hex = `0${hex}`;
+  const decoded = number === 0n ? Buffer.alloc(0) : Buffer.from(hex, "hex");
+  let leadingZeros = 0;
+  while (leadingZeros < value.length && value[leadingZeros] === "1") leadingZeros += 1;
+  return Buffer.concat([Buffer.alloc(leadingZeros), decoded]);
 }
 
 async function fetchRpc<T>(

@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("clawrouter", {
   uninstall: (agent: AgentId) => ipcRenderer.invoke("agents:uninstall", agent),
   dashboard: () => ipcRenderer.invoke("dashboard:get"),
   switchPaymentChain: (chain: PaymentChain) => ipcRenderer.invoke("wallet:switch-chain", chain),
+  createWallet: (chain: PaymentChain) => ipcRenderer.invoke("wallet:create", chain),
+  adoptLegacyWallet: (chain: PaymentChain) => ipcRenderer.invoke("wallet:adopt-legacy", chain),
   createOnramp: (amount: number) => ipcRenderer.invoke("wallet:create-onramp", amount),
   openExternal: (url: string) => ipcRenderer.invoke("external:open", url),
 });

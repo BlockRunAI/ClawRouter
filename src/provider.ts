@@ -51,7 +51,7 @@ export const blockrunProvider: ProviderPlugin = {
   },
 
   // No auth required — the x402 proxy handles wallet-based payments internally.
-  // The proxy auto-generates a wallet on first run and stores it at
-  // ~/.openclaw/blockrun/wallet.key. Users just fund that wallet with USDC.
+  // The proxy uses the shared BlockRun Core wallet under ~/.blockrun, with
+  // automatic non-destructive migration from older ClawRouter wallet files.
   auth: [],
 };

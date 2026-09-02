@@ -8006,15 +8006,15 @@ function wNAF(c, bits) {
       const { windows, windowSize } = calcWOpts(W, bits);
       const points = [];
       let p = elm;
-      let base3 = p;
+      let base4 = p;
       for (let window2 = 0; window2 < windows; window2++) {
-        base3 = p;
-        points.push(base3);
+        base4 = p;
+        points.push(base4);
         for (let i = 1; i < windowSize; i++) {
-          base3 = base3.add(p);
-          points.push(base3);
+          base4 = base4.add(p);
+          points.push(base4);
         }
-        p = base3.double();
+        p = base4.double();
       }
       return points;
     },
@@ -10652,7 +10652,7 @@ async function internal_estimateFeesPerGas(client, args) {
     throw new BaseFeeScalarError();
   const decimals = baseFeeMultiplier.toString().split(".")[1]?.length ?? 0;
   const denominator = 10 ** decimals;
-  const multiply = (base3) => base3 * BigInt(Math.round(baseFeeMultiplier * denominator)) / BigInt(denominator);
+  const multiply = (base4) => base4 * BigInt(Math.round(baseFeeMultiplier * denominator)) / BigInt(denominator);
   const block = block_ ? block_ : await getAction(client, getBlock, "getBlock")({});
   if (typeof chain3?.fees?.estimateFeesPerGas === "function") {
     const fees = await chain3.fees.estimateFeesPerGas({
@@ -11123,7 +11123,7 @@ async function fillTransaction(client, parameters) {
       throw new BaseFeeScalarError();
     const decimals = feeMultiplier.toString().split(".")[1]?.length ?? 0;
     const denominator = 10 ** decimals;
-    const multiplyFee = (base3) => base3 * BigInt(Math.round(feeMultiplier * denominator)) / BigInt(denominator);
+    const multiplyFee = (base4) => base4 * BigInt(Math.round(feeMultiplier * denominator)) / BigInt(denominator);
     if (!transaction.feePayerSignature) {
       if (transaction.maxFeePerGas && !parameters.maxFeePerGas)
         transaction.maxFeePerGas = multiplyFee(transaction.maxFeePerGas);
@@ -14081,17 +14081,17 @@ async function call(client, args) {
       }
     }
     const params = (() => {
-      const base3 = [
+      const base4 = [
         request2,
         block
       ];
       if (rpcStateOverride && rpcBlockOverrides)
-        return [...base3, rpcStateOverride, rpcBlockOverrides];
+        return [...base4, rpcStateOverride, rpcBlockOverrides];
       if (rpcStateOverride)
-        return [...base3, rpcStateOverride];
+        return [...base4, rpcStateOverride];
       if (rpcBlockOverrides)
-        return [...base3, {}, rpcBlockOverrides];
-      return base3;
+        return [...base4, {}, rpcBlockOverrides];
+      return base4;
     })();
     const response = await client.request({
       method: "eth_call",
@@ -15497,14 +15497,14 @@ function createClient(parameters) {
     uid: uid(),
     ...experimental_blockTag ? { experimental_blockTag } : {}
   };
-  function extend2(base3) {
+  function extend2(base4) {
     return (extendFn) => {
-      const extended = extendFn(base3);
+      const extended = extendFn(base4);
       for (const key3 in client)
         delete extended[key3];
-      const combined = { ...base3, ...extended };
+      const combined = { ...base4, ...extended };
       for (const key3 in extended) {
-        const a = base3[key3];
+        const a = base4[key3];
         const b = extended[key3];
         if (isPlainObject(a) && isPlainObject(b))
           combined[key3] = { ...a, ...b };
@@ -17257,10 +17257,10 @@ function defineChain(chain3) {
     serializers: void 0,
     ...chain3
   };
-  function extend2(base3) {
+  function extend2(base4) {
     return (fnOrExtended) => {
-      const properties = typeof fnOrExtended === "function" ? fnOrExtended(base3) : fnOrExtended;
-      const combined = { ...base3, ...properties };
+      const properties = typeof fnOrExtended === "function" ? fnOrExtended(base4) : fnOrExtended;
+      const combined = { ...base4, ...properties };
       return Object.assign(combined, { extend: extend2(combined) });
     };
   }
@@ -17624,9 +17624,9 @@ function validateTypedData(parameters) {
         throw new InvalidTypedDataTypeError({ type });
       const integerMatch = type.match(integerRegex2);
       if (integerMatch && (typeof value === "number" || typeof value === "bigint")) {
-        const [_type, base3, size_] = integerMatch;
+        const [_type, base4, size_] = integerMatch;
         numberToHex(value, {
-          signed: base3 === "int",
+          signed: base4 === "int",
           size: Number.parseInt(size_, 10) / 8
         });
       }
@@ -20255,15 +20255,15 @@ function wNAF2(c, bits) {
       const { windows, windowSize } = calcWOpts2(W, bits);
       const points = [];
       let p = elm;
-      let base3 = p;
+      let base4 = p;
       for (let window2 = 0; window2 < windows; window2++) {
-        base3 = p;
-        points.push(base3);
+        base4 = p;
+        points.push(base4);
         for (let i = 1; i < windowSize; i++) {
-          base3 = base3.add(p);
-          points.push(base3);
+          base4 = base4.add(p);
+          points.push(base4);
         }
-        p = base3.double();
+        p = base4.double();
       }
       return points;
     },
@@ -32847,23 +32847,23 @@ var init_types = __esm({
         }
         if (effect.type === "transform") {
           if (ctx.common.async === false) {
-            const base3 = this._def.schema._parseSync({
+            const base4 = this._def.schema._parseSync({
               data: ctx.data,
               path: ctx.path,
               parent: ctx
             });
-            if (!isValid(base3))
+            if (!isValid(base4))
               return INVALID;
-            const result = effect.transform(base3.value, checkCtx);
+            const result = effect.transform(base4.value, checkCtx);
             if (result instanceof Promise) {
               throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
             }
             return { status: status.value, value: result };
           } else {
-            return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base3) => {
-              if (!isValid(base3))
+            return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base4) => {
+              if (!isValid(base4))
                 return INVALID;
-              return Promise.resolve(effect.transform(base3.value, checkCtx)).then((result) => ({
+              return Promise.resolve(effect.transform(base4.value, checkCtx)).then((result) => ({
                 status: status.value,
                 value: result
               }));
@@ -36624,12 +36624,12 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
   const id2 = modelId.toLowerCase();
   const modelName = id2.slice(id2.indexOf("/") + 1);
   const match = (values, score) => values.some((value) => modelName === value) ? score : 0;
-  const base3 = 0.68;
+  const base4 = 0.68;
   switch (task) {
     case "code_agent":
       if (terminalToolSignal && agentRisk === "complex_high") {
         return Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5.3-codex"], 0.87),
           match(["gpt-5-mini"], 0.78),
@@ -36637,7 +36637,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         );
       }
       return Math.max(
-        base3,
+        base4,
         match(["gpt-5.3-codex"], 1),
         match(["claude-sonnet-5"], 0.98),
         match(["gpt-5-mini"], 0.96),
@@ -36648,7 +36648,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
     case "tool_agent":
       if (terminalToolSignal && agentRisk === "complex_high") {
         return Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5.3-codex"], 0.87),
           match(["gpt-5-mini"], 0.78),
@@ -36657,7 +36657,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       }
       if (terminalToolSignal && !terminalSafetySensitive) {
         return Math.max(
-          base3,
+          base4,
           match(["gpt-5-mini"], 1),
           match(["gpt-5.3-codex"], 0.98),
           match(["claude-sonnet-5"], 0.9),
@@ -36666,7 +36666,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       }
       if (terminalToolSignal && terminalSafetySensitive) {
         return Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["claude-opus-4.8"], 0.9),
           match(["gpt-5.3-codex"], 0.84)
@@ -36674,14 +36674,14 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       }
       if (agentDomain === "web_research") {
         return deepWebResearch ? Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5-mini"], 0.88),
           match(["gemini-3.5-flash"], 0.84),
           match(["claude-opus-5"], 0.8),
           match(["claude-opus-4.8"], 0.78)
         ) : Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5-mini"], 0.88),
           match(["gemini-3.5-flash"], 0.86),
@@ -36692,7 +36692,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       if (agentDomain === "retail") {
         if (agentRisk === "standard") {
           return Math.max(
-            base3,
+            base4,
             match(["gpt-5-mini"], 1),
             match(["claude-sonnet-5"], 0.88),
             match(["gemini-3.5-flash"], 0.82),
@@ -36703,7 +36703,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         }
         if (agentRisk === "policy_exception") {
           return Math.max(
-            base3,
+            base4,
             match(["gpt-4.1"], 1),
             match(["claude-sonnet-5"], 0.9),
             match(["deepseek-v4-pro"], 0.82),
@@ -36713,7 +36713,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         }
         if (agentRisk === "policy_exception_simple") {
           return Math.max(
-            base3,
+            base4,
             match(["gpt-5-mini"], 1),
             match(["gpt-4.1"], 0.86),
             match(["deepseek-v4-pro"], 0.82),
@@ -36721,7 +36721,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
           );
         }
         return Math.max(
-          base3,
+          base4,
           match(["deepseek-v4-pro"], 1),
           match(["claude-sonnet-5"], 0.88),
           match(["gemini-3.5-flash"], 0.82),
@@ -36733,7 +36733,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       if (agentDomain === "airline") {
         if (agentRisk === "complex_high") {
           return Math.max(
-            base3,
+            base4,
             match(["claude-sonnet-5"], 1),
             match(["gpt-5-mini"], 0.78),
             match(["gemini-3.5-flash"], 0.76),
@@ -36741,7 +36741,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
           );
         }
         return Math.max(
-          base3,
+          base4,
           match(["gpt-5-mini"], 1),
           match(["claude-sonnet-5"], 0.9),
           match(["gemini-3.5-flash"], 0.8),
@@ -36749,7 +36749,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         );
       }
       return Math.max(
-        base3,
+        base4,
         match(["claude-sonnet-5"], 1),
         match(["gemini-3.5-flash"], 0.88),
         match(["gpt-5.3-codex"], 0.87),
@@ -36760,12 +36760,12 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
     case "tool_agent_parallel":
       if (terminalToolSignal) {
         return terminalSafetySensitive ? Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["claude-opus-4.8"], 0.9),
           match(["gpt-5.3-codex"], 0.86)
         ) : Math.max(
-          base3,
+          base4,
           match(["gpt-5-mini"], 1),
           match(["gpt-5.3-codex"], 0.98),
           match(["claude-sonnet-5"], 0.92),
@@ -36774,14 +36774,14 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       }
       if (agentDomain === "web_research") {
         return deepWebResearch ? Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5-mini"], 0.88),
           match(["gemini-3.5-flash"], 0.84),
           match(["claude-opus-5"], 0.8),
           match(["claude-opus-4.8"], 0.78)
         ) : Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5-mini"], 0.88),
           match(["gemini-3.5-flash"], 0.86),
@@ -36792,7 +36792,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       if (agentDomain === "retail") {
         if (agentRisk === "policy_exception") {
           return Math.max(
-            base3,
+            base4,
             match(["gpt-4.1"], 1),
             match(["claude-sonnet-5"], 0.9),
             match(["deepseek-v4-pro"], 0.82),
@@ -36802,7 +36802,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
         }
         if (agentRisk === "policy_exception_simple") {
           return Math.max(
-            base3,
+            base4,
             match(["gpt-5-mini"], 1),
             match(["gpt-4.1"], 0.86),
             match(["deepseek-v4-pro"], 0.82),
@@ -36810,7 +36810,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
           );
         }
         return Math.max(
-          base3,
+          base4,
           match(["deepseek-v4-pro"], 1),
           match(["claude-sonnet-5"], 0.88),
           match(["claude-opus-4.8"], 0.84),
@@ -36820,20 +36820,20 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       }
       if (agentDomain === "airline") {
         return agentRisk === "complex_high" ? Math.max(
-          base3,
+          base4,
           match(["claude-sonnet-5"], 1),
           match(["gpt-5-mini"], 0.78),
           match(["claude-opus-4.8"], 0.76),
           match(["gemini-3.5-flash"], 0.74)
         ) : Math.max(
-          base3,
+          base4,
           match(["gpt-5-mini"], 1),
           match(["claude-sonnet-5"], 0.9),
           match(["gemini-3.5-flash"], 0.8)
         );
       }
       return Math.max(
-        base3,
+        base4,
         match(["claude-opus-4.8"], 1),
         match(["claude-sonnet-5"], 0.84),
         match(["grok-4.5"], 0.82),
@@ -36843,7 +36843,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
     case "code_edit":
     case "debug":
       return Math.max(
-        base3,
+        base4,
         match(["gpt-5.3-codex"], 1),
         match(["claude-sonnet-4.6"], 0.94),
         match(["glm-5.2"], 0.9),
@@ -36851,7 +36851,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       );
     case "reasoning":
       return Math.max(
-        base3,
+        base4,
         match(["claude-sonnet-5", "claude-sonnet-4.6"], 0.98),
         match(["deepseek-v4-pro"], 0.95),
         match(["grok-4.5"], 0.94),
@@ -36859,7 +36859,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       );
     case "reasoning_mcq":
       return Math.max(
-        base3,
+        base4,
         match(["gemini-3-flash-preview"], 1),
         match(["gemini-3.5-flash"], 0.91),
         match(["grok-4.5"], 0.9),
@@ -36868,20 +36868,20 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       );
     case "reasoning_math":
       return Math.max(
-        base3,
+        base4,
         match(["gemini-3.5-flash"], 1),
         match(["grok-4.5"], 0.93),
         match(["claude-sonnet-5", "deepseek-v4-pro", "kimi-k3"], 0.9)
       );
     case "vision":
       return Math.max(
-        base3,
+        base4,
         match(["gemini-3.1-pro"], 0.96),
         match(["qwen3.7-max", "claude-sonnet-4.6", "kimi-k3", "grok-4.3"], 0.9)
       );
     case "long_context":
       return Math.max(
-        base3,
+        base4,
         match(["gemini-3.1-pro"], 1),
         match(["qwen3.7-max", "glm-5.2"], 0.89),
         match(["gemini-3.5-flash"], 0.88),
@@ -36891,7 +36891,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
       const kimiExtractionAffinity = language === "zh" ? 1 : 0.9;
       const otherExtractionAffinity = language === "zh" ? 0.88 : 0.9;
       return Math.max(
-        base3,
+        base4,
         match(["gemini-3.5-flash", "gemini-2.5-flash", "gpt-4o-mini"], otherExtractionAffinity),
         match(["claude-sonnet-5", "claude-sonnet-4.6"], otherExtractionAffinity),
         match(["kimi-k3"], kimiExtractionAffinity)
@@ -36899,7 +36899,7 @@ function affinity(modelId, task, language = "other", agentDomain = "other", deep
     }
     default:
       return Math.max(
-        base3,
+        base4,
         match(["gemini-3.5-flash", "gemini-2.5-flash", "kimi-k3"], 0.86)
       );
   }
@@ -38174,13 +38174,13 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       name = "portfolio";
       route(prompt, systemPrompt, maxOutputTokens, options) {
         const features = classifyTask(prompt, systemPrompt, options);
-        const base3 = new RulesStrategy().route(prompt, systemPrompt, maxOutputTokens, {
+        const base4 = new RulesStrategy().route(prompt, systemPrompt, maxOutputTokens, {
           ...options,
           requiresTools: features.needsTools
         });
-        const tierConfigs = base3.tierConfigs;
-        if (!tierConfigs) return base3;
-        const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base3.tier === "SIMPLE" || base3.tier === "MEDIUM") ? "REASONING" : base3.tier;
+        const tierConfigs = base4.tierConfigs;
+        if (!tierConfigs) return base4;
+        const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base4.tier === "SIMPLE" || base4.tier === "MEDIUM") ? "REASONING" : base4.tier;
         const tierConfig = tierConfigs[targetTier];
         const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
         const unavailable = new Set(options.unavailableModels ?? []);
@@ -38193,7 +38193,7 @@ ${value.slice(-(scanLimit - prefixLength))}`;
           (model2) => isEligible(model2, features, maxOutputTokens, options)
         );
         const eligibleCandidates = eligible.length > 0 ? eligible : chain3;
-        if (eligibleCandidates.length === 0) return base3;
+        if (eligibleCandidates.length === 0) return base4;
         const profileName = options.routingProfile === "eco" ? "eco" : options.routingProfile === "premium" ? "premium" : "auto";
         const portfolio = options.config.portfolio ?? DEFAULT_PORTFOLIO_WEIGHTS;
         const getAffinity = (model2) => affinity(
@@ -38266,27 +38266,27 @@ ${value.slice(-(scanLimit - prefixLength))}`;
             (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
           )
         ] : [...scoredModels, ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))];
-        const model = ranked[0] ?? base3.model;
+        const model = ranked[0] ?? base4.model;
         const selectedTierConfigs = {
           ...tierConfigs,
           [targetTier]: { primary: model, fallback: ranked.slice(1) }
         };
         const decision = selectModel(
           targetTier,
-          base3.confidence,
+          base4.confidence,
           "portfolio",
-          `${base3.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
+          `${base4.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
           selectedTierConfigs,
           options.modelPricing,
           features.estimatedInputTokens,
           maxOutputTokens,
           options.routingProfile,
-          base3.agenticScore
+          base4.agenticScore
         );
         return {
           ...decision,
           tierConfigs: selectedTierConfigs,
-          profile: base3.profile,
+          profile: base4.profile,
           candidates: ranked,
           candidateScores: rankedEntries.map(({ model: model2, score, quality, cost, speed, reliability }) => ({
             model: model2,
@@ -40617,6 +40617,154 @@ var init_balance = __esm({
   }
 });
 
+// node_modules/base-x/src/esm/index.js
+function base2(ALPHABET3) {
+  if (ALPHABET3.length >= 255) {
+    throw new TypeError("Alphabet too long");
+  }
+  const BASE_MAP = new Uint8Array(256);
+  for (let j = 0; j < BASE_MAP.length; j++) {
+    BASE_MAP[j] = 255;
+  }
+  for (let i = 0; i < ALPHABET3.length; i++) {
+    const x = ALPHABET3.charAt(i);
+    const xc = x.charCodeAt(0);
+    if (BASE_MAP[xc] !== 255) {
+      throw new TypeError(x + " is ambiguous");
+    }
+    BASE_MAP[xc] = i;
+  }
+  const BASE = ALPHABET3.length;
+  const LEADER = ALPHABET3.charAt(0);
+  const FACTOR = Math.log(BASE) / Math.log(256);
+  const iFACTOR = Math.log(256) / Math.log(BASE);
+  function encode9(source) {
+    if (source instanceof Uint8Array) {
+    } else if (ArrayBuffer.isView(source)) {
+      source = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    } else if (Array.isArray(source)) {
+      source = Uint8Array.from(source);
+    }
+    if (!(source instanceof Uint8Array)) {
+      throw new TypeError("Expected Uint8Array");
+    }
+    if (source.length === 0) {
+      return "";
+    }
+    let zeroes = 0;
+    let length = 0;
+    let pbegin = 0;
+    const pend = source.length;
+    while (pbegin !== pend && source[pbegin] === 0) {
+      pbegin++;
+      zeroes++;
+    }
+    const size5 = (pend - pbegin) * iFACTOR + 1 >>> 0;
+    const b58 = new Uint8Array(size5);
+    while (pbegin !== pend) {
+      let carry2 = source[pbegin];
+      let i = 0;
+      for (let it1 = size5 - 1; (carry2 !== 0 || i < length) && it1 !== -1; it1--, i++) {
+        carry2 += 256 * b58[it1] >>> 0;
+        b58[it1] = carry2 % BASE >>> 0;
+        carry2 = carry2 / BASE >>> 0;
+      }
+      if (carry2 !== 0) {
+        throw new Error("Non-zero carry");
+      }
+      length = i;
+      pbegin++;
+    }
+    let it2 = size5 - length;
+    while (it2 !== size5 && b58[it2] === 0) {
+      it2++;
+    }
+    let str = LEADER.repeat(zeroes);
+    for (; it2 < size5; ++it2) {
+      str += ALPHABET3.charAt(b58[it2]);
+    }
+    return str;
+  }
+  function decodeUnsafe(source) {
+    if (typeof source !== "string") {
+      throw new TypeError("Expected String");
+    }
+    if (source.length === 0) {
+      return new Uint8Array();
+    }
+    let psz = 0;
+    let zeroes = 0;
+    let length = 0;
+    while (source[psz] === LEADER) {
+      zeroes++;
+      psz++;
+    }
+    const size5 = (source.length - psz) * FACTOR + 1 >>> 0;
+    const b256 = new Uint8Array(size5);
+    while (psz < source.length) {
+      const charCode = source.charCodeAt(psz);
+      if (charCode > 255) {
+        return;
+      }
+      let carry2 = BASE_MAP[charCode];
+      if (carry2 === 255) {
+        return;
+      }
+      let i = 0;
+      for (let it3 = size5 - 1; (carry2 !== 0 || i < length) && it3 !== -1; it3--, i++) {
+        carry2 += BASE * b256[it3] >>> 0;
+        b256[it3] = carry2 % 256 >>> 0;
+        carry2 = carry2 / 256 >>> 0;
+      }
+      if (carry2 !== 0) {
+        throw new Error("Non-zero carry");
+      }
+      length = i;
+      psz++;
+    }
+    let it4 = size5 - length;
+    while (it4 !== size5 && b256[it4] === 0) {
+      it4++;
+    }
+    const vch = new Uint8Array(zeroes + (size5 - it4));
+    let j = zeroes;
+    while (it4 !== size5) {
+      vch[j++] = b256[it4++];
+    }
+    return vch;
+  }
+  function decode4(string) {
+    const buffer2 = decodeUnsafe(string);
+    if (buffer2) {
+      return buffer2;
+    }
+    throw new Error("Non-base" + BASE + " character");
+  }
+  return {
+    encode: encode9,
+    decodeUnsafe,
+    decode: decode4
+  };
+}
+var esm_default;
+var init_esm6 = __esm({
+  "node_modules/base-x/src/esm/index.js"() {
+    "use strict";
+    esm_default = base2;
+  }
+});
+
+// node_modules/bs58/src/esm/index.js
+var ALPHABET, esm_default2;
+var init_esm7 = __esm({
+  "node_modules/bs58/src/esm/index.js"() {
+    "use strict";
+    init_esm6();
+    ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    esm_default2 = esm_default(ALPHABET);
+  }
+});
+
 // node_modules/@noble/curves/node_modules/@noble/hashes/utils.js
 function isBytes7(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
@@ -41785,15 +41933,15 @@ var init_curve3 = __esm({
         const { windows, windowSize } = calcWOpts3(W, this.bits);
         const points = [];
         let p = point3;
-        let base3 = p;
+        let base4 = p;
         for (let window2 = 0; window2 < windows; window2++) {
-          base3 = p;
-          points.push(base3);
+          base4 = p;
+          points.push(base4);
           for (let i = 1; i < windowSize; i++) {
-            base3 = base3.add(p);
-            points.push(base3);
+            base4 = base4.add(p);
+            points.push(base4);
           }
-          p = base3.double();
+          p = base4.double();
         }
         return points;
       }
@@ -46282,20 +46430,20 @@ function partitionLeadingZeroes(value, zeroCharacter) {
   return [leadingZeros, tailChars];
 }
 function getBigIntFromBaseX(value, alphabet4) {
-  const base3 = BigInt(alphabet4.length);
+  const base4 = BigInt(alphabet4.length);
   let sum = 0n;
   for (const char of value) {
-    sum *= base3;
+    sum *= base4;
     sum += BigInt(alphabet4.indexOf(char));
   }
   return sum;
 }
 function getBaseXFromBigInt(value, alphabet4) {
-  const base3 = BigInt(alphabet4.length);
+  const base4 = BigInt(alphabet4.length);
   const tailChars = [];
   while (value > 0n) {
-    tailChars.unshift(alphabet4[Number(value % base3)]);
-    value /= base3;
+    tailChars.unshift(alphabet4[Number(value % base4)]);
+    value /= base4;
   }
   return tailChars.join("");
 }
@@ -48342,20 +48490,20 @@ function partitionLeadingZeroes2(value, zeroCharacter) {
   return [leadingZeros, tailChars];
 }
 function getBigIntFromBaseX2(value, alphabet4) {
-  const base3 = BigInt(alphabet4.length);
+  const base4 = BigInt(alphabet4.length);
   let sum = 0n;
   for (const char of value) {
-    sum *= base3;
+    sum *= base4;
     sum += BigInt(alphabet4.indexOf(char));
   }
   return sum;
 }
 function getBaseXFromBigInt2(value, alphabet4) {
-  const base3 = BigInt(alphabet4.length);
+  const base4 = BigInt(alphabet4.length);
   const tailChars = [];
   while (value > 0n) {
-    tailChars.unshift(alphabet4[Number(value % base3)]);
-    value /= base3;
+    tailChars.unshift(alphabet4[Number(value % base4)]);
+    value /= base4;
   }
   return tailChars.join("");
 }
@@ -59178,6 +59326,7 @@ var init_wallet2 = __esm({
 });
 
 // src/auth.ts
+import { createPrivateKey, createPublicKey } from "crypto";
 import { writeFile, mkdir as mkdir2 } from "fs/promises";
 import { join as join7 } from "path";
 import { homedir as homedir4 } from "os";
@@ -59232,6 +59381,66 @@ async function saveMnemonic(mnemonic) {
   await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 384 });
 }
+async function migrateLegacyWalletToCore() {
+  const migrated = { base: false, solana: false, chain: false };
+  const [coreBase, coreSolana, coreChain] = await Promise.all([
+    readExisting(CORE_WALLET_FILE),
+    readExisting(CORE_SOLANA_WALLET_FILE),
+    readExisting(CORE_CHAIN_FILE)
+  ]);
+  if (coreBase === void 0) {
+    const legacyBase = await loadSavedWallet();
+    if (legacyBase) {
+      migrated.base = await writeCoreFileIfMissing(CORE_WALLET_FILE, legacyBase + "\n");
+    }
+  }
+  if (coreSolana === void 0) {
+    const mnemonic = await loadMnemonic();
+    if (mnemonic) {
+      const secret = solanaSecretKeyFromSeed(deriveSolanaKeyBytes(mnemonic));
+      migrated.solana = await writeCoreFileIfMissing(
+        CORE_SOLANA_WALLET_FILE,
+        JSON.stringify([...secret]) + "\n"
+      );
+    }
+  }
+  if (coreChain === void 0) {
+    const legacyChain = await readOptional(CHAIN_FILE);
+    if (legacyChain === "base" || legacyChain === "solana") {
+      migrated.chain = await writeCoreFileIfMissing(CORE_CHAIN_FILE, legacyChain + "\n");
+    }
+  }
+  if (migrated.base || migrated.solana || migrated.chain) {
+    const parts = Object.entries(migrated).filter(([, changed]) => changed).map(([name]) => name).join(", ");
+    console.log(`[ClawRouter] Migrated legacy ${parts} data to ${CORE_WALLET_DIR}`);
+  }
+  return migrated;
+}
+async function writeCoreFileIfMissing(path5, value) {
+  await mkdir2(CORE_WALLET_DIR, { recursive: true });
+  try {
+    await writeFile(path5, value, { mode: 384, flag: "wx" });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
+}
+async function readExisting(path5) {
+  try {
+    return await readTextFile(path5);
+  } catch (error) {
+    if (error.code === "ENOENT") return void 0;
+    throw error;
+  }
+}
+function solanaSecretKeyFromSeed(seed) {
+  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
+  const publicDer = createPublicKey(
+    createPrivateKey({ key: privateDer, format: "der", type: "pkcs8" })
+  ).export({ format: "der", type: "spki" });
+  return Uint8Array.from([...seed, ...Buffer.from(publicDer).subarray(-32)]);
+}
 async function generateAndSaveWallet() {
   const existingMnemonic = await loadMnemonic();
   if (existingMnemonic) {
@@ -59251,6 +59460,11 @@ Then run: npx @blockrun/clawrouter`
   await mkdir2(WALLET_DIR2, { recursive: true });
   await writeFile(WALLET_FILE, derived.evmPrivateKey + "\n", { mode: 384 });
   await writeFile(MNEMONIC_FILE, mnemonic + "\n", { mode: 384 });
+  await writeCoreFileIfMissing(CORE_WALLET_FILE, derived.evmPrivateKey + "\n");
+  await writeCoreFileIfMissing(
+    CORE_SOLANA_WALLET_FILE,
+    JSON.stringify([...solanaSecretKeyFromSeed(derived.solanaPrivateKeyBytes)]) + "\n"
+  );
   try {
     const verification = (await readTextFile(WALLET_FILE)).trim();
     if (verification !== derived.evmPrivateKey) {
@@ -59284,8 +59498,9 @@ Then run: npx @blockrun/clawrouter`
   if (solanaAddress) {
     console.log(`[ClawRouter]   Solana Address : ${solanaAddress}`);
   }
-  console.log(`[ClawRouter]   Key file       : ${WALLET_FILE}`);
-  console.log(`[ClawRouter]   Mnemonic       : ${MNEMONIC_FILE}`);
+  console.log(`[ClawRouter]   Base key       : ${CORE_WALLET_FILE}`);
+  console.log(`[ClawRouter]   Solana key     : ${CORE_SOLANA_WALLET_FILE}`);
+  console.log(`[ClawRouter]   Recovery words : ${MNEMONIC_FILE}`);
   console.log(`[ClawRouter]`);
   console.log(`[ClawRouter]   Both EVM (Base) and Solana wallets are ready.`);
   if (solanaDefaultSaved) {
@@ -59309,37 +59524,37 @@ Then run: npx @blockrun/clawrouter`
   };
 }
 async function resolveOrGenerateWalletKey() {
+  await migrateLegacyWalletToCore();
+  const coreSolanaKey = await loadCoreSolanaKey();
+  const envKey = process["env"].BLOCKRUN_WALLET_KEY;
+  if (typeof envKey === "string" && /^0x[0-9a-f]{64}$/i.test(envKey)) {
+    const account = privateKeyToAccount(envKey);
+    return {
+      key: envKey,
+      address: account.address,
+      source: "env",
+      ...await resolvedSolanaMaterial(coreSolanaKey)
+    };
+  }
+  const core = await loadCoreWallet();
+  if (core) {
+    const account = privateKeyToAccount(core);
+    return {
+      key: core,
+      address: account.address,
+      source: "core",
+      ...await resolvedSolanaMaterial(coreSolanaKey)
+    };
+  }
   const saved = await loadSavedWallet();
   if (saved) {
     const account = privateKeyToAccount(saved);
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: saved,
-        address: account.address,
-        source: "saved",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes
-      };
-    }
-    return { key: saved, address: account.address, source: "saved" };
-  }
-  const envKey = process["env"].BLOCKRUN_WALLET_KEY;
-  if (typeof envKey === "string" && envKey.startsWith("0x") && envKey.length === 66) {
-    const account = privateKeyToAccount(envKey);
-    const mnemonic = await loadMnemonic();
-    if (mnemonic) {
-      const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
-      return {
-        key: envKey,
-        address: account.address,
-        source: "env",
-        mnemonic,
-        solanaPrivateKeyBytes: solanaKeyBytes
-      };
-    }
-    return { key: envKey, address: account.address, source: "env" };
+    return {
+      key: saved,
+      address: account.address,
+      source: "saved",
+      ...await resolvedSolanaMaterial(coreSolanaKey)
+    };
   }
   const result = await generateAndSaveWallet();
   return {
@@ -59350,13 +59565,60 @@ async function resolveOrGenerateWalletKey() {
     solanaPrivateKeyBytes: result.solanaPrivateKeyBytes
   };
 }
+async function loadCoreWallet() {
+  const key2 = (await readExisting(CORE_WALLET_FILE))?.trim();
+  if (key2 === void 0) return void 0;
+  if (/^0x[0-9a-f]{64}$/i.test(key2)) return key2;
+  throw new Error(
+    `BlockRun Core wallet at ${CORE_WALLET_FILE} has an invalid format. Refusing to use another wallet implicitly.`
+  );
+}
+async function loadCoreSolanaKey() {
+  const raw = process["env"].SOLANA_WALLET_KEY ?? (await readExisting(CORE_SOLANA_WALLET_FILE))?.trim();
+  if (!raw) return void 0;
+  try {
+    let bytes;
+    if (raw.startsWith("[")) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.every((item) => Number.isInteger(item) && item >= 0 && item <= 255))
+        throw new Error("expected an array of byte values");
+      bytes = Uint8Array.from(parsed);
+    } else {
+      const hex = raw.replace(/^0x/i, "");
+      bytes = /^[0-9a-f]{128}$/i.test(hex) ? Buffer.from(hex, "hex") : esm_default2.decode(raw);
+    }
+    if (bytes.length !== 64) throw new Error(`expected 64 bytes, received ${bytes.length}`);
+    const expected = solanaSecretKeyFromSeed(bytes.slice(0, 32));
+    if (!Buffer.from(expected).equals(Buffer.from(bytes))) {
+      throw new Error("public key does not match the private seed");
+    }
+    return bytes.slice(0, 32);
+  } catch (error) {
+    throw new Error(
+      `BlockRun Core Solana wallet has an invalid format: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+}
+async function readOptional(path5) {
+  try {
+    return (await readTextFile(path5)).trim() || void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function resolvedSolanaMaterial(coreSolanaKey) {
+  if (coreSolanaKey) return { solanaPrivateKeyBytes: coreSolanaKey };
+  const mnemonic = await loadMnemonic();
+  return mnemonic ? { mnemonic, solanaPrivateKeyBytes: deriveSolanaKeyBytes(mnemonic) } : {};
+}
 async function setupSolana() {
   const existing = await loadMnemonic();
   if (existing) {
     throw new Error("Solana wallet already set up. Mnemonic file exists at " + MNEMONIC_FILE);
   }
-  const savedKey = await loadSavedWallet();
-  if (!savedKey) {
+  const evmKey = await loadCoreWallet() ?? await loadSavedWallet();
+  if (!evmKey) {
     throw new Error(
       "No EVM wallet found. Run ClawRouter first to generate a wallet before setting up Solana."
     );
@@ -59364,16 +59626,28 @@ async function setupSolana() {
   const mnemonic = generateWalletMnemonic();
   const solanaKeyBytes = deriveSolanaKeyBytes(mnemonic);
   await saveMnemonic(mnemonic);
+  await writeCoreFileIfMissing(
+    CORE_SOLANA_WALLET_FILE,
+    JSON.stringify([...solanaSecretKeyFromSeed(solanaKeyBytes)]) + "\n"
+  );
   console.log(`[ClawRouter] Solana wallet set up successfully.`);
-  console.log(`[ClawRouter] Mnemonic saved to ${MNEMONIC_FILE}`);
+  console.log(`[ClawRouter] Solana key saved to ${CORE_SOLANA_WALLET_FILE}`);
+  console.log(`[ClawRouter] Recovery mnemonic saved to ${MNEMONIC_FILE}`);
   console.log(`[ClawRouter] Existing EVM wallet unchanged.`);
   return { mnemonic, solanaPrivateKeyBytes: solanaKeyBytes };
 }
 async function savePaymentChain(chain3) {
   await mkdir2(WALLET_DIR2, { recursive: true });
-  await writeFile(CHAIN_FILE, chain3 + "\n", { mode: 384 });
+  await mkdir2(CORE_WALLET_DIR, { recursive: true });
+  await Promise.all([
+    writeFile(CHAIN_FILE, chain3 + "\n", { mode: 384 }),
+    writeFile(CORE_CHAIN_FILE, chain3 + "\n", { mode: 384 })
+  ]);
 }
 async function loadPaymentChain() {
+  const core = await readOptional(CORE_CHAIN_FILE);
+  if (core === "solana") return "solana";
+  if (core === "base") return "base";
   try {
     const content = (await readTextFile(CHAIN_FILE)).trim();
     if (content === "solana") return "solana";
@@ -59387,17 +59661,22 @@ async function resolvePaymentChain() {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "base") return "base";
   return loadPaymentChain();
 }
-var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE;
+var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE, CORE_WALLET_DIR, CORE_WALLET_FILE, CORE_SOLANA_WALLET_FILE, CORE_CHAIN_FILE;
 var init_auth = __esm({
   "src/auth.ts"() {
     "use strict";
     init_fs_read();
+    init_esm7();
     init_accounts();
     init_wallet2();
     WALLET_DIR2 = join7(homedir4(), ".openclaw", "blockrun");
     WALLET_FILE = join7(WALLET_DIR2, "wallet.key");
     MNEMONIC_FILE = join7(WALLET_DIR2, "mnemonic");
     CHAIN_FILE = join7(WALLET_DIR2, "payment-chain");
+    CORE_WALLET_DIR = join7(homedir4(), ".blockrun");
+    CORE_WALLET_FILE = join7(CORE_WALLET_DIR, ".session");
+    CORE_SOLANA_WALLET_FILE = join7(CORE_WALLET_DIR, ".solana-session");
+    CORE_CHAIN_FILE = join7(CORE_WALLET_DIR, ".chain");
   }
 });
 
@@ -94484,8 +94763,8 @@ var init_provider = __esm({
         return buildProviderModels(`http://127.0.0.1:${port}/v1`);
       },
       // No auth required — the x402 proxy handles wallet-based payments internally.
-      // The proxy auto-generates a wallet on first run and stores it at
-      // ~/.openclaw/blockrun/wallet.key. Users just fund that wallet with USDC.
+      // The proxy uses the shared BlockRun Core wallet under ~/.blockrun, with
+      // automatic non-destructive migration from older ClawRouter wallet files.
       auth: []
     };
   }
@@ -108854,7 +109133,7 @@ var init_URLSearchParams = __esm({
 
 // node_modules/axios/lib/platform/node/index.js
 import crypto6 from "crypto";
-var ALPHA, DIGIT, ALPHABET, generateString, node_default;
+var ALPHA, DIGIT, ALPHABET2, generateString, node_default;
 var init_node2 = __esm({
   "node_modules/axios/lib/platform/node/index.js"() {
     "use strict";
@@ -108862,12 +109141,12 @@ var init_node2 = __esm({
     init_FormData();
     ALPHA = "abcdefghijklmnopqrstuvwxyz";
     DIGIT = "0123456789";
-    ALPHABET = {
+    ALPHABET2 = {
       DIGIT,
       ALPHA,
       ALPHA_DIGIT: ALPHA + ALPHA.toUpperCase() + DIGIT
     };
-    generateString = (size5 = 16, alphabet4 = ALPHABET.ALPHA_DIGIT) => {
+    generateString = (size5 = 16, alphabet4 = ALPHABET2.ALPHA_DIGIT) => {
       let str = "";
       const { length } = alphabet4;
       const randomValues = new Uint32Array(size5);
@@ -108884,7 +109163,7 @@ var init_node2 = __esm({
         FormData: FormData_default,
         Blob: typeof Blob !== "undefined" && Blob || null
       },
-      ALPHABET,
+      ALPHABET: ALPHABET2,
       generateString,
       protocols: ["http", "https", "file", "data"]
     };
@@ -110948,8 +111227,8 @@ var require_follow_redirects = __commonJS({
       }
       return parsed;
     }
-    function resolveUrl(relative, base3) {
-      return useNativeURL ? new URL3(relative, base3) : parseUrl3(url2.resolve(base3, relative));
+    function resolveUrl(relative, base4) {
+      return useNativeURL ? new URL3(relative, base4) : parseUrl3(url2.resolve(base4, relative));
     }
     function validateUrl(input) {
       if (/^\[/.test(input.hostname) && !/^\[[:0-9a-f]+\]$/i.test(input.hostname)) {
@@ -124947,15 +125226,15 @@ var require_curve = __commonJS({
           const { windows, windowSize } = calcWOpts4(W, bits);
           const points = [];
           let p = elm;
-          let base3 = p;
+          let base4 = p;
           for (let window2 = 0; window2 < windows; window2++) {
-            base3 = p;
-            points.push(base3);
+            base4 = p;
+            points.push(base4);
             for (let i = 1; i < windowSize; i++) {
-              base3 = base3.add(p);
-              points.push(base3);
+              base4 = base4.add(p);
+              points.push(base4);
             }
-            p = base3.double();
+            p = base4.double();
           }
           return points;
         },
@@ -127713,7 +127992,7 @@ var require_estimateFeesPerGas = __commonJS({
         throw new fee_js_1.BaseFeeScalarError();
       const decimals = baseFeeMultiplier.toString().split(".")[1]?.length ?? 0;
       const denominator = 10 ** decimals;
-      const multiply = (base3) => base3 * BigInt(Math.round(baseFeeMultiplier * denominator)) / BigInt(denominator);
+      const multiply = (base4) => base4 * BigInt(Math.round(baseFeeMultiplier * denominator)) / BigInt(denominator);
       const block = block_ ? block_ : await (0, getAction_js_1.getAction)(client, getBlock_js_1.getBlock, "getBlock")({});
       if (typeof chain3?.fees?.estimateFeesPerGas === "function") {
         const fees = await chain3.fees.estimateFeesPerGas({
@@ -128223,7 +128502,7 @@ var require_fillTransaction = __commonJS({
           throw new fee_js_1.BaseFeeScalarError();
         const decimals = feeMultiplier.toString().split(".")[1]?.length ?? 0;
         const denominator = 10 ** decimals;
-        const multiplyFee = (base3) => base3 * BigInt(Math.round(feeMultiplier * denominator)) / BigInt(denominator);
+        const multiplyFee = (base4) => base4 * BigInt(Math.round(feeMultiplier * denominator)) / BigInt(denominator);
         if (!transaction.feePayerSignature) {
           if (transaction.maxFeePerGas && !parameters.maxFeePerGas)
             transaction.maxFeePerGas = multiplyFee(transaction.maxFeePerGas);
@@ -132981,17 +133260,17 @@ var require_call = __commonJS({
           }
         }
         const params = (() => {
-          const base3 = [
+          const base4 = [
             request2,
             block
           ];
           if (rpcStateOverride && rpcBlockOverrides)
-            return [...base3, rpcStateOverride, rpcBlockOverrides];
+            return [...base4, rpcStateOverride, rpcBlockOverrides];
           if (rpcStateOverride)
-            return [...base3, rpcStateOverride];
+            return [...base4, rpcStateOverride];
           if (rpcBlockOverrides)
-            return [...base3, {}, rpcBlockOverrides];
-          return base3;
+            return [...base4, {}, rpcBlockOverrides];
+          return base4;
         })();
         const response = await client.request({
           method: "eth_call",
@@ -134603,14 +134882,14 @@ var require_createClient = __commonJS({
         uid: (0, uid_js_1.uid)(),
         ...experimental_blockTag ? { experimental_blockTag } : {}
       };
-      function extend2(base3) {
+      function extend2(base4) {
         return (extendFn) => {
-          const extended = extendFn(base3);
+          const extended = extendFn(base4);
           for (const key3 in client)
             delete extended[key3];
-          const combined = { ...base3, ...extended };
+          const combined = { ...base4, ...extended };
           for (const key3 in extended) {
-            const a = base3[key3];
+            const a = base4[key3];
             const b = extended[key3];
             if (isPlainObject4(a) && isPlainObject4(b))
               combined[key3] = { ...a, ...b };
@@ -136628,10 +136907,10 @@ var require_defineChain = __commonJS({
         serializers: void 0,
         ...chain3
       };
-      function extend2(base3) {
+      function extend2(base4) {
         return (fnOrExtended) => {
-          const properties = typeof fnOrExtended === "function" ? fnOrExtended(base3) : fnOrExtended;
-          const combined = { ...base3, ...properties };
+          const properties = typeof fnOrExtended === "function" ? fnOrExtended(base4) : fnOrExtended;
+          const combined = { ...base4, ...properties };
           return Object.assign(combined, { extend: extend2(combined) });
         };
       }
@@ -137966,9 +138245,9 @@ var require_typedData2 = __commonJS({
             throw new typedData_js_1.InvalidTypedDataTypeError({ type });
           const integerMatch = type.match(regex_js_1.integerRegex);
           if (integerMatch && (typeof value === "number" || typeof value === "bigint")) {
-            const [_type, base3, size_] = integerMatch;
+            const [_type, base4, size_] = integerMatch;
             (0, toHex_js_1.numberToHex)(value, {
-              signed: base3 === "int",
+              signed: base4 === "int",
               size: Number.parseInt(size_, 10) / 8
             });
           }
@@ -141760,15 +142039,15 @@ var require_curve2 = __commonJS({
           const { windows, windowSize } = calcWOpts4(W, bits);
           const points = [];
           let p = elm;
-          let base3 = p;
+          let base4 = p;
           for (let window2 = 0; window2 < windows; window2++) {
-            base3 = p;
-            points.push(base3);
+            base4 = p;
+            points.push(base4);
             for (let i = 1; i < windowSize; i++) {
-              base3 = base3.add(p);
-              points.push(base3);
+              base4 = base4.add(p);
+              points.push(base4);
             }
-            p = base3.double();
+            p = base4.double();
           }
           return points;
         },
@@ -175281,14 +175560,14 @@ var require_Authenticator = __commonJS({
       const rpIdHash = Hash4.sha256(Hex.fromString(rpId));
       const flag_bytes = Hex.fromNumber(flag, { size: 1 });
       const signCount_bytes = Hex.fromNumber(signCount, { size: 4 });
-      const base3 = Hex.concat(rpIdHash, flag_bytes, signCount_bytes);
+      const base4 = Hex.concat(rpIdHash, flag_bytes, signCount_bytes);
       if (!credential)
-        return base3;
+        return base4;
       const aaguid = Hex.fromBytes(new Uint8Array(16));
       const credentialId = Hex.fromBytes(credential.id);
       const credIdLen = Hex.fromNumber(credential.id.length, { size: 2 });
       const coseKey = CoseKey.fromPublicKey(credential.publicKey);
-      return Hex.concat(base3, aaguid, credIdLen, credentialId, coseKey);
+      return Hex.concat(base4, aaguid, credIdLen, credentialId, coseKey);
     }
     function getSignCount(authenticatorData) {
       const bytes = Bytes.fromHex(authenticatorData);
@@ -179372,8 +179651,8 @@ var require_ZoneId = __commonJS({
       return chainId - getChainIdConfig(sourceId2).base;
     }
     function toChainId(zoneId, sourceId2 = defaultSourceId) {
-      const { base: base3, range } = getChainIdConfig(sourceId2);
-      return base3 + zoneId % range;
+      const { base: base4, range } = getChainIdConfig(sourceId2);
+      return base4 + zoneId % range;
     }
     var UnsupportedSourceIdError = class extends Errors.BaseError {
       constructor({ sourceId: sourceId2 }) {
@@ -192979,7 +193258,7 @@ var require_bn = __commonJS({
         ctor.prototype = new TempCtor();
         ctor.prototype.constructor = ctor;
       }
-      function BN3(number, base3, endian) {
+      function BN3(number, base4, endian) {
         if (BN3.isBN(number)) {
           return number;
         }
@@ -192988,11 +193267,11 @@ var require_bn = __commonJS({
         this.length = 0;
         this.red = null;
         if (number !== null) {
-          if (base3 === "le" || base3 === "be") {
-            endian = base3;
-            base3 = 10;
+          if (base4 === "le" || base4 === "be") {
+            endian = base4;
+            base4 = 10;
           }
-          this._init(number || 0, base3 || 10, endian || "be");
+          this._init(number || 0, base4 || 10, endian || "be");
         }
       }
       if (typeof module2 === "object") {
@@ -193025,17 +193304,17 @@ var require_bn = __commonJS({
         if (left.cmp(right) < 0) return left;
         return right;
       };
-      BN3.prototype._init = function init2(number, base3, endian) {
+      BN3.prototype._init = function init2(number, base4, endian) {
         if (typeof number === "number") {
-          return this._initNumber(number, base3, endian);
+          return this._initNumber(number, base4, endian);
         }
         if (typeof number === "object") {
-          return this._initArray(number, base3, endian);
+          return this._initArray(number, base4, endian);
         }
-        if (base3 === "hex") {
-          base3 = 16;
+        if (base4 === "hex") {
+          base4 = 16;
         }
-        assert10(base3 === (base3 | 0) && base3 >= 2 && base3 <= 36);
+        assert10(base4 === (base4 | 0) && base4 >= 2 && base4 <= 36);
         number = number.toString().replace(/\s+/g, "");
         var start = 0;
         if (number[0] === "-") {
@@ -193043,17 +193322,17 @@ var require_bn = __commonJS({
           this.negative = 1;
         }
         if (start < number.length) {
-          if (base3 === 16) {
+          if (base4 === 16) {
             this._parseHex(number, start, endian);
           } else {
-            this._parseBase(number, base3, start);
+            this._parseBase(number, base4, start);
             if (endian === "le") {
-              this._initArray(this.toArray(), base3, endian);
+              this._initArray(this.toArray(), base4, endian);
             }
           }
         }
       };
-      BN3.prototype._initNumber = function _initNumber(number, base3, endian) {
+      BN3.prototype._initNumber = function _initNumber(number, base4, endian) {
         if (number < 0) {
           this.negative = 1;
           number = -number;
@@ -193077,9 +193356,9 @@ var require_bn = __commonJS({
           this.length = 3;
         }
         if (endian !== "le") return;
-        this._initArray(this.toArray(), base3, endian);
+        this._initArray(this.toArray(), base4, endian);
       };
-      BN3.prototype._initArray = function _initArray(number, base3, endian) {
+      BN3.prototype._initArray = function _initArray(number, base4, endian) {
         assert10(typeof number.length === "number");
         if (number.length <= 0) {
           this.words = [0];
@@ -193193,20 +193472,20 @@ var require_bn = __commonJS({
         }
         return r2;
       }
-      BN3.prototype._parseBase = function _parseBase(number, base3, start) {
+      BN3.prototype._parseBase = function _parseBase(number, base4, start) {
         this.words = [0];
         this.length = 1;
-        for (var limbLen = 0, limbPow = 1; limbPow <= 67108863; limbPow *= base3) {
+        for (var limbLen = 0, limbPow = 1; limbPow <= 67108863; limbPow *= base4) {
           limbLen++;
         }
         limbLen--;
-        limbPow = limbPow / base3 | 0;
+        limbPow = limbPow / base4 | 0;
         var total = number.length - start;
         var mod5 = total % limbLen;
         var end = Math.min(total, total - mod5) + start;
         var word = 0;
         for (var i = start; i < end; i += limbLen) {
-          word = parseBase(number, i, i + limbLen, base3);
+          word = parseBase(number, i, i + limbLen, base4);
           this.imuln(limbPow);
           if (this.words[0] + word < 67108864) {
             this.words[0] += word;
@@ -193216,9 +193495,9 @@ var require_bn = __commonJS({
         }
         if (mod5 !== 0) {
           var pow = 1;
-          word = parseBase(number, i, number.length, base3);
+          word = parseBase(number, i, number.length, base4);
           for (i = 0; i < mod5; i++) {
-            pow *= base3;
+            pow *= base4;
           }
           this.imuln(pow);
           if (this.words[0] + word < 67108864) {
@@ -193388,11 +193667,11 @@ var require_bn = __commonJS({
         52521875,
         60466176
       ];
-      BN3.prototype.toString = function toString4(base3, padding3) {
-        base3 = base3 || 10;
+      BN3.prototype.toString = function toString4(base4, padding3) {
+        base4 = base4 || 10;
         padding3 = padding3 | 0 || 1;
         var out;
-        if (base3 === 16 || base3 === "hex") {
+        if (base4 === 16 || base4 === "hex") {
           out = "";
           var off = 0;
           var carry2 = 0;
@@ -193422,14 +193701,14 @@ var require_bn = __commonJS({
           }
           return out;
         }
-        if (base3 === (base3 | 0) && base3 >= 2 && base3 <= 36) {
-          var groupSize = groupSizes[base3];
-          var groupBase = groupBases[base3];
+        if (base4 === (base4 | 0) && base4 >= 2 && base4 <= 36) {
+          var groupSize = groupSizes[base4];
+          var groupBase = groupBases[base4];
           out = "";
           var c = this.clone();
           c.negative = 0;
           while (!c.isZero()) {
-            var r2 = c.modrn(groupBase).toString(base3);
+            var r2 = c.modrn(groupBase).toString(base4);
             c = c.idivn(groupBase);
             if (!c.isZero()) {
               out = zeros2[groupSize - r2.length] + r2 + out;
@@ -203998,8 +204277,8 @@ function createCommonjsModule(fn, basedir, module) {
   return module = {
     path: basedir,
     exports: {},
-    require: function(path5, base3) {
-      return commonjsRequire(path5, base3 === void 0 || base3 === null ? module.path : base3);
+    require: function(path5, base4) {
+      return commonjsRequire(path5, base4 === void 0 || base4 === null ? module.path : base4);
     }
   }, fn(module, module.exports), module.exports;
 }
@@ -204038,7 +204317,7 @@ function BasePoint(curve, type) {
   this.precomputed = null;
 }
 function ShortCurve(conf) {
-  base2.call(this, "short", conf);
+  base3.call(this, "short", conf);
   this.a = new import_bn2.default(conf.a, 16).toRed(this.red);
   this.b = new import_bn2.default(conf.b, 16).toRed(this.red);
   this.tinv = this.two.redInvm();
@@ -204049,7 +204328,7 @@ function ShortCurve(conf) {
   this._endoWnafT2 = new Array(4);
 }
 function Point3(curve, x, y, isRed) {
-  base2.BasePoint.call(this, curve, "affine");
+  base3.BasePoint.call(this, curve, "affine");
   if (x === null && y === null) {
     this.x = null;
     this.y = null;
@@ -204069,7 +204348,7 @@ function Point3(curve, x, y, isRed) {
   }
 }
 function JPoint(curve, x, y, z) {
-  base2.BasePoint.call(this, curve, "jacobian");
+  base3.BasePoint.call(this, curve, "jacobian");
   if (x === null && y === null && z === null) {
     this.x = this.curve.one;
     this.y = this.curve.one;
@@ -204199,7 +204478,7 @@ function EC(options) {
   this.g.precompute(options.curve.n.bitLength() + 1);
   this.hash = options.hash || options.curve.hash;
 }
-var import_bn2, import_hash2, minimalisticAssert, utils_1, utils_1$1, getNAF, getJSF, assert$1, base2, inherits_browser, assert$2, short_1, curve_1, curves_1, hmacDrbg, assert$3, key, assert$4, signature2, rand, assert$5, ec, elliptic_1, EC$1;
+var import_bn2, import_hash2, minimalisticAssert, utils_1, utils_1$1, getNAF, getJSF, assert$1, base3, inherits_browser, assert$2, short_1, curve_1, curves_1, hmacDrbg, assert$3, key, assert$4, signature2, rand, assert$5, ec, elliptic_1, EC$1;
 var init_elliptic = __esm({
   "node_modules/@ethersproject/signing-key/lib.esm/elliptic.js"() {
     "use strict";
@@ -204367,7 +204646,7 @@ var init_elliptic = __esm({
     getNAF = utils_1$1.getNAF;
     getJSF = utils_1$1.getJSF;
     assert$1 = utils_1$1.assert;
-    base2 = BaseCurve;
+    base3 = BaseCurve;
     BaseCurve.prototype.point = function point() {
       throw new Error("Not implemented");
     };
@@ -204679,7 +204958,7 @@ var init_elliptic = __esm({
       }
     });
     assert$2 = utils_1$1.assert;
-    inherits_browser(ShortCurve, base2);
+    inherits_browser(ShortCurve, base3);
     short_1 = ShortCurve;
     ShortCurve.prototype._getEndomorphism = function _getEndomorphism(conf) {
       if (!this.zeroA || !this.g || !this.n || this.p.modn(3) !== 1)
@@ -204853,7 +205132,7 @@ var init_elliptic = __esm({
       }
       return res;
     };
-    inherits_browser(Point3, base2.BasePoint);
+    inherits_browser(Point3, base3.BasePoint);
     ShortCurve.prototype.point = function point2(x, y, isRed) {
       return new Point3(this, x, y, isRed);
     };
@@ -205028,7 +205307,7 @@ var init_elliptic = __esm({
       var res = this.curve.jpoint(this.x, this.y, this.curve.one);
       return res;
     };
-    inherits_browser(JPoint, base2.BasePoint);
+    inherits_browser(JPoint, base3.BasePoint);
     ShortCurve.prototype.jpoint = function jpoint(x, y, z) {
       return new JPoint(this, x, y, z);
     };
@@ -205318,7 +205597,7 @@ var init_elliptic = __esm({
     curve_1 = createCommonjsModule(function(module, exports) {
       "use strict";
       var curve = exports;
-      curve.base = base2;
+      curve.base = base3;
       curve.short = short_1;
       curve.mont = /*RicMoo:ethers:require(./mont)*/
       null;
@@ -210539,10 +210818,10 @@ var init_lib28 = __esm({
 var require_bech32 = __commonJS({
   "node_modules/bech32/index.js"(exports, module) {
     "use strict";
-    var ALPHABET2 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    var ALPHABET3 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
     var ALPHABET_MAP = {};
-    for (z = 0; z < ALPHABET2.length; z++) {
-      x = ALPHABET2.charAt(z);
+    for (z = 0; z < ALPHABET3.length; z++) {
+      x = ALPHABET3.charAt(z);
       if (ALPHABET_MAP[x] !== void 0) throw new TypeError(x + " is ambiguous");
       ALPHABET_MAP[x] = z;
     }
@@ -210577,7 +210856,7 @@ var require_bech32 = __commonJS({
         var x2 = words2[i];
         if (x2 >> 5 !== 0) throw new Error("Non 5-bit word");
         chk = polymodStep(chk) ^ x2;
-        result += ALPHABET2.charAt(x2);
+        result += ALPHABET3.charAt(x2);
       }
       for (i = 0; i < 6; ++i) {
         chk = polymodStep(chk);
@@ -210585,7 +210864,7 @@ var require_bech32 = __commonJS({
       chk ^= 1;
       for (i = 0; i < 6; ++i) {
         var v = chk >> (5 - i) * 5 & 31;
-        result += ALPHABET2.charAt(v);
+        result += ALPHABET3.charAt(v);
       }
       return result;
     }
@@ -217965,12 +218244,12 @@ var require_axios = __commonJS({
     var URLSearchParams2 = url2.URLSearchParams;
     var ALPHA2 = "abcdefghijklmnopqrstuvwxyz";
     var DIGIT2 = "0123456789";
-    var ALPHABET2 = {
+    var ALPHABET3 = {
       DIGIT: DIGIT2,
       ALPHA: ALPHA2,
       ALPHA_DIGIT: ALPHA2 + ALPHA2.toUpperCase() + DIGIT2
     };
-    var generateString2 = (size5 = 16, alphabet4 = ALPHABET2.ALPHA_DIGIT) => {
+    var generateString2 = (size5 = 16, alphabet4 = ALPHABET3.ALPHA_DIGIT) => {
       let str = "";
       const {
         length
@@ -217989,7 +218268,7 @@ var require_axios = __commonJS({
         FormData: FormData$1,
         Blob: typeof Blob !== "undefined" && Blob || null
       },
-      ALPHABET: ALPHABET2,
+      ALPHABET: ALPHABET3,
       generateString: generateString2,
       protocols: ["http", "https", "file", "data"]
     };
@@ -225315,10 +225594,10 @@ async function redeemPosition(input, deps) {
       structured: { conditionId, negRisk, transactionHash: txHash, pusdBalance: balanceAfter }
     };
   } catch (err) {
-    const base3 = await mapClobError(err);
+    const base4 = await mapClobError(err);
     const legacyHint = ` If this market predates the 2026-04-28 V2 cutover it may settle in legacy USDC.e collateral, which this tool does not auto-detect yet \u2014 redeem it once via the Polymarket UI.`;
     return {
-      text: `${base3}${/revert|execution reverted|failed/i.test(base3) ? legacyHint : ""}`,
+      text: `${base4}${/revert|execution reverted|failed/i.test(base4) ? legacyHint : ""}`,
       isError: true
     };
   }
@@ -225964,8 +226243,8 @@ var init_dist7 = __esm({
         if (normalized.startsWith("/api/")) {
           normalized = normalized.slice(4);
         }
-        const base3 = `${this.apiUrl}${normalized}`;
-        if (!params) return base3;
+        const base4 = `${this.apiUrl}${normalized}`;
+        if (!params) return base4;
         const qs = new URLSearchParams();
         for (const [key2, value] of Object.entries(params)) {
           if (value === void 0 || value === null) continue;
@@ -225979,12 +226258,12 @@ var init_dist7 = __esm({
           }
         }
         const query = qs.toString();
-        return query ? `${base3}?${query}` : base3;
+        return query ? `${base4}?${query}` : base4;
       }
       absolute(url2) {
         if (url2.startsWith("http://") || url2.startsWith("https://")) return url2;
-        const base3 = this.apiUrl.endsWith("/api") ? this.apiUrl.slice(0, -"/api".length) : this.apiUrl;
-        return `${base3}${url2}`;
+        const base4 = this.apiUrl.endsWith("/api") ? this.apiUrl.slice(0, -"/api".length) : this.apiUrl;
+        return `${base4}${url2}`;
       }
       async requestWithPayment(url2, method, body) {
         const init2 = { method };
@@ -226704,6 +226983,11 @@ async function waitForProxyHealth(port, timeoutMs = 3e3) {
   }
   return false;
 }
+function hasConfiguredWallet() {
+  return Boolean(
+    process["env"].BLOCKRUN_WALLET_KEY || existsSync3(CORE_WALLET_FILE) || existsSync3(WALLET_FILE)
+  );
+}
 function isCompletionMode() {
   const args = process.argv;
   return args.some((arg, i) => arg === "completion" && i >= 1 && i <= 3);
@@ -227139,7 +227423,7 @@ async function startProxyInBackground(api, startupGeneration) {
   } else {
     if (configKey !== void 0) {
       api.logger.warn(
-        `pluginConfig.walletKey is set but invalid (expected 0x + 64 hex chars) \u2014 falling back to saved wallet`
+        `pluginConfig.walletKey is set but invalid (expected 0x + 64 hex chars) \u2014 falling back to the BlockRun wallet`
       );
     }
     wallet = await resolveOrGenerateWalletKey();
@@ -227151,6 +227435,8 @@ async function startProxyInBackground(api, startupGeneration) {
     api.logger.warn(`  Run /wallet export to get your private key`);
     api.logger.warn(`  Losing this key = losing your USDC funds`);
     api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
+  } else if (wallet.source === "core") {
+    api.logger.info(`Using BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "saved") {
     api.logger.info(`Using saved wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {
@@ -227437,7 +227723,7 @@ function buildImageGenerationProvider() {
         ]
       }
     },
-    isConfigured: () => existsSync3(WALLET_FILE),
+    isConfigured: hasConfiguredWallet,
     generateImage: async (req) => {
       const port = getProxyPort();
       const body = JSON.stringify({
@@ -227487,7 +227773,7 @@ function buildMusicGenerationProvider() {
       supportsFormat: true,
       supportedFormats: ["mp3"]
     },
-    isConfigured: () => existsSync3(WALLET_FILE),
+    isConfigured: hasConfiguredWallet,
     generateMusic: async (req) => {
       const port = getProxyPort();
       const body = JSON.stringify({
@@ -227563,7 +227849,7 @@ function buildVideoGenerationProvider() {
         supportedDurationSeconds: [5, 8, 10]
       }
     },
-    isConfigured: () => existsSync3(WALLET_FILE),
+    isConfigured: hasConfiguredWallet,
     generateVideo: async (req) => {
       const port = getProxyPort();
       const imageUrl = req.inputImages?.[0]?.url;
@@ -227642,26 +227928,19 @@ function createWalletCommand(api) {
     requireAuth: true,
     handler: async (ctx) => {
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
-      let walletKey;
-      let address2;
+      let wallet;
       try {
-        if (existsSync3(WALLET_FILE)) {
-          walletKey = readTextFileSync(WALLET_FILE).trim();
-          if (walletKey.startsWith("0x") && walletKey.length === 66) {
-            const account = privateKeyToAccount(walletKey);
-            address2 = account.address;
-          }
-        }
-      } catch {
-      }
-      if (!walletKey || !address2) {
+        wallet = await resolveOrGenerateWalletKey();
+      } catch (error) {
         return {
-          text: `No ClawRouter wallet found.
-
-Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
+          text: `Could not load the BlockRun wallet: ${error instanceof Error ? error.message : String(error)}`,
           isError: true
         };
       }
+      const walletKey = wallet.key;
+      const address2 = wallet.address;
+      const resolvedSolanaKey = wallet.solanaPrivateKeyBytes;
+      const walletPath = wallet.source === "core" ? CORE_WALLET_FILE : WALLET_FILE;
       if (subcommand === "export") {
         const lines = [
           "**ClawRouter Wallet Export**",
@@ -227698,13 +227977,26 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
           }
         } catch {
         }
+        if (!hasMnemonic3 && resolvedSolanaKey) {
+          try {
+            const { createKeyPairSignerFromPrivateKeyBytes: createKeyPairSignerFromPrivateKeyBytes2 } = await Promise.resolve().then(() => (init_index_node37(), index_node_exports));
+            const signer = await createKeyPairSignerFromPrivateKeyBytes2(resolvedSolanaKey);
+            lines.push(
+              "",
+              "**Solana:**",
+              `  Address: \`${signer.address}\``,
+              wallet.source === "core" ? `  Private key managed by BlockRun Core: \`${CORE_SOLANA_WALLET_FILE}\`` : "  Private key is managed by the configured wallet source."
+            );
+          } catch {
+          }
+        }
         lines.push(
           "",
           "**To restore on a new machine:**",
           "1. Set the environment variable before running OpenClaw:",
           `   \`export BLOCKRUN_WALLET_KEY=${walletKey}\``,
           "2. Or save to file:",
-          `   \`mkdir -p ~/.openclaw/blockrun && echo "${walletKey}" > ~/.openclaw/blockrun/wallet.key && chmod 600 ~/.openclaw/blockrun/wallet.key\``
+          `   \`mkdir -p ~/.blockrun && echo "${walletKey}" > ~/.blockrun/.session && chmod 600 ~/.blockrun/.session\``
         );
         if (hasMnemonic3) {
           lines.push(
@@ -227717,6 +228009,22 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
       if (subcommand === "solana") {
         try {
           let solanaAddr;
+          if (resolvedSolanaKey) {
+            await savePaymentChain("solana");
+            const { createKeyPairSignerFromPrivateKeyBytes: createKeyPairSignerFromPrivateKeyBytes3 } = await Promise.resolve().then(() => (init_index_node37(), index_node_exports));
+            const signer2 = await createKeyPairSignerFromPrivateKeyBytes3(resolvedSolanaKey);
+            solanaAddr = signer2.address;
+            if (api) restartProxyForChainSwitch(api);
+            return {
+              text: [
+                "\u2713 Payment chain switched to **Solana**.",
+                api ? "Proxy restarting in background (~2s)." : "Restart the gateway to apply.",
+                "",
+                `**Solana Address:** \`${solanaAddr}\``,
+                `**Fund with USDC on Solana:** https://solscan.io/account/${solanaAddr}`
+              ].join("\n")
+            };
+          }
           if (existsSync3(MNEMONIC_FILE)) {
             const existingMnemonic = readTextFileSync(MNEMONIC_FILE).trim();
             if (existingMnemonic) {
@@ -227788,13 +228096,9 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
       })();
       const solanaPromise = (async () => {
         try {
-          if (!existsSync3(MNEMONIC_FILE)) return "";
-          const { deriveSolanaKeyBytes: deriveSolanaKeyBytes2 } = await Promise.resolve().then(() => (init_wallet2(), wallet_exports));
-          const mnemonic = readTextFileSync(MNEMONIC_FILE).trim();
-          if (!mnemonic) return "";
-          const solKeyBytes = deriveSolanaKeyBytes2(mnemonic);
+          if (!resolvedSolanaKey) return "";
           const { createKeyPairSignerFromPrivateKeyBytes: createKeyPairSignerFromPrivateKeyBytes2 } = await Promise.resolve().then(() => (init_index_node37(), index_node_exports));
-          const signer = await createKeyPairSignerFromPrivateKeyBytes2(solKeyBytes);
+          const signer = await createKeyPairSignerFromPrivateKeyBytes2(resolvedSolanaKey);
           const solAddr = signer.address;
           let solBalanceText = "Balance: (could not check)";
           try {
@@ -227855,7 +228159,7 @@ Run \`openclaw plugins install @blockrun/clawrouter\` to generate a wallet.`,
           solanaSection,
           usageSection,
           "",
-          `**Key File:** \`${WALLET_FILE}\``,
+          `**Key File:** \`${walletPath}\``,
           "",
           "**Commands:**",
           "\u2022 `/wallet` - Show this status",
@@ -228256,6 +228560,8 @@ ${errText}`
                 api.logger.warn(`  Run /wallet export to get your private key`);
                 api.logger.warn(`  Losing this key = losing your USDC funds`);
                 api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
+              } else if (source === "core") {
+                api.logger.info(`Using BlockRun Core wallet: ${address2}`);
               } else if (source === "saved") {
                 api.logger.info(`Using saved wallet: ${address2}`);
               } else if (source === "config") {

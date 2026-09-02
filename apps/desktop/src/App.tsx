@@ -13,7 +13,7 @@ import { AGENT_ICON_DATA } from "./agent-icons";
 import BLOCKRUN_ICON from "./blockrun-icon.svg";
 import OPENCLAW_ICON from "./openclaw-x-avatar.jpg";
 
-type Page = "overview" | "models" | "usage" | "settings";
+type Page = "overview" | "models" | "usage" | "wallet" | "settings";
 type Theme = "dark" | "light";
 type IconName =
   "home" | "models" | "usage" | "settings" | "refresh" | "sun" | "moon" | "external" | "wallet";
@@ -34,6 +34,7 @@ export function App() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [busy, setBusy] = useState<AgentId | null>(null);
   const [chainBusy, setChainBusy] = useState<PaymentChain | null>(null);
+  const [walletBusy, setWalletBusy] = useState<PaymentChain | null>(null);
   const [fundingOpen, setFundingOpen] = useState(false);
   const [fundingAmount, setFundingAmount] = useState(50);
   const [fundingBusy, setFundingBusy] = useState(false);
@@ -119,6 +120,28 @@ export function App() {
     }
   }
 
+  async function createWallet(chain: PaymentChain) {
+    setWalletBusy(chain);
+    setNotice(null);
+    const result = await api.createWallet(chain);
+    setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
+    await refresh();
+    setWalletBusy(null);
+  }
+
+  async function adoptLegacyWallet(chain: PaymentChain, address: string) {
+    const confirmed = window.confirm(
+      `Use ${shortAddress(address)} as your current ${chain === "base" ? "Base" : "Solana"} wallet? Your current Core wallet will be backed up and ClawRouter will need a restart.`,
+    );
+    if (!confirmed) return;
+    setWalletBusy(chain);
+    setNotice(null);
+    const result = await api.adoptLegacyWallet(chain);
+    setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
+    await refresh();
+    setWalletBusy(null);
+  }
+
   const configured = agents.filter((agent) => agent.configured).length;
   return (
     <div className="shell">
@@ -142,6 +165,9 @@ export function App() {
           <NavButton active={page === "usage"} onClick={() => setPage("usage")} icon="usage">
             Usage
           </NavButton>
+          <NavButton active={page === "wallet"} onClick={() => setPage("wallet")} icon="wallet">
+            Wallet
+          </NavButton>
           <NavButton
             active={page === "settings"}
             onClick={() => setPage("settings")}
@@ -155,7 +181,7 @@ export function App() {
           loading={dashboard === null}
           busy={chainBusy}
           onSwitch={switchChain}
-          onOpen={() => setPage("settings")}
+          onOpen={() => setPage("wallet")}
           onFund={() => setFundingOpen(true)}
         />
         <button className="sidebar-github" onClick={() => void api.openExternal(CLAWROUTER_REPO)}>
@@ -224,15 +250,24 @@ export function App() {
         )}
         {page === "models" && <Models models={dashboard?.models ?? []} />}
         {page === "usage" && <Usage dashboard={dashboard} />}
-        {page === "settings" && (
-          <Settings dashboard={dashboard} onFund={() => setFundingOpen(true)} />
+        {page === "wallet" && (
+          <WalletCenter
+            dashboard={dashboard}
+            chainBusy={chainBusy}
+            walletBusy={walletBusy}
+            onSwitch={switchChain}
+            onCreate={createWallet}
+            onAdopt={adoptLegacyWallet}
+            onFund={() => setFundingOpen(true)}
+          />
         )}
+        {page === "settings" && <Settings />}
       </main>
       {fundingOpen && (
         <FundingDialog
           amount={fundingAmount}
           busy={fundingBusy}
-          wallet={dashboard?.proxy.wallet}
+          wallet={dashboard?.proxy.configuredWallet ?? dashboard?.proxy.wallet}
           onAmount={setFundingAmount}
           onClose={() => !fundingBusy && setFundingOpen(false)}
           onContinue={() => void startOnramp()}
@@ -566,48 +601,179 @@ function Usage({ dashboard }: { dashboard: DashboardData | null }) {
   );
 }
 
-function Settings({ dashboard, onFund }: { dashboard: DashboardData | null; onFund(): void }) {
+function WalletCenter({
+  dashboard,
+  chainBusy,
+  walletBusy,
+  onSwitch,
+  onCreate,
+  onAdopt,
+  onFund,
+}: {
+  dashboard: DashboardData | null;
+  chainBusy: PaymentChain | null;
+  walletBusy: PaymentChain | null;
+  onSwitch(chain: PaymentChain): void;
+  onCreate(chain: PaymentChain): void;
+  onAdopt(chain: PaymentChain, address: string): void;
+  onFund(): void;
+}) {
   const proxy = dashboard?.proxy;
+  const selected = proxy?.configuredChain ?? "base";
+  return (
+    <section className="wallet-center">
+      <div className="wallet-center-intro">
+        <div>
+          <span className="eyebrow">BLOCKRUN CORE</span>
+          <h2>Your payment wallet</h2>
+          <p>One current wallet per network, shared by every connected agent.</p>
+        </div>
+        <button className="coinbase-fund-button" onClick={onFund}>
+          <span>＋</span>
+          <b>Buy USDC</b>
+          <small>on Base</small>
+        </button>
+      </div>
+
+      <div className="payment-rail" aria-label="ClawRouter payment path">
+        <span>
+          <Icon name="wallet" />
+          <b>Core wallet</b>
+        </span>
+        <i>→</i>
+        <span>
+          <b>{selected === "base" ? "Base" : "Solana"}</b>
+          <small>default network</small>
+        </span>
+        <i>→</i>
+        <span>
+          <b>All agents</b>
+          <small>shared payment</small>
+        </span>
+      </div>
+
+      <div className="wallet-network-grid">
+        {(["base", "solana"] as PaymentChain[]).map((chain) => {
+          const address =
+            chain === "base"
+              ? (proxy?.configuredWallet ?? proxy?.wallet)
+              : (proxy?.configuredSolana ?? proxy?.solana);
+          const activeAddress = chain === "base" ? proxy?.activeWallet : proxy?.activeSolana;
+          const restart = proxy?.walletRestartChains?.includes(chain) ?? false;
+          const issue = proxy?.walletIssues?.[chain];
+          return (
+            <article
+              className={`wallet-network-card ${selected === chain ? "selected" : ""}`}
+              key={chain}
+            >
+              <header>
+                <span className="wallet-network-name">
+                  <i className={chain === "base" ? "base-coin" : "solana-coin"}>
+                    {chain === "base" ? "B" : "S"}
+                  </i>
+                  <span>
+                    <b>{chain === "base" ? "Base" : "Solana"}</b>
+                    <small>USDC</small>
+                  </span>
+                </span>
+                {selected === chain && <em>Default network</em>}
+              </header>
+              <strong>
+                {formatWalletBalance(proxy?.balances?.[chain], false, dashboard === null)}
+              </strong>
+              <code>{address ? shortAddress(address) : "No Core wallet"}</code>
+              {issue && <p className="wallet-card-warning">{issue}</p>}
+              {restart && activeAddress && (
+                <p className="wallet-card-warning">
+                  Running router still uses {shortAddress(activeAddress)}.
+                </p>
+              )}
+              <footer>
+                {address ? (
+                  <button
+                    className={selected === chain ? "secondary" : "primary"}
+                    disabled={chainBusy !== null || selected === chain}
+                    onClick={() => onSwitch(chain)}
+                  >
+                    {chainBusy === chain
+                      ? "Switching…"
+                      : selected === chain
+                        ? "Current default"
+                        : "Use this network"}
+                  </button>
+                ) : (
+                  <button
+                    className="primary"
+                    disabled={walletBusy !== null || Boolean(issue)}
+                    onClick={() => onCreate(chain)}
+                  >
+                    {walletBusy === chain
+                      ? "Creating…"
+                      : `Create ${chain === "base" ? "Base" : "Solana"} wallet`}
+                  </button>
+                )}
+              </footer>
+            </article>
+          );
+        })}
+      </div>
+
+      {(proxy?.legacyWallets?.base || proxy?.legacyWallets?.solana) && (
+        <section className="legacy-wallet-panel">
+          <div>
+            <span className="eyebrow">MIGRATION</span>
+            <h3>Older ClawRouter wallet found</h3>
+            <p>
+              It is not active. Choose it only if this is the funded wallet you want to keep using.
+            </p>
+          </div>
+          <div className="legacy-wallet-list">
+            {(["base", "solana"] as PaymentChain[]).map((chain) => {
+              const legacy = proxy.legacyWallets?.[chain];
+              if (!legacy) return null;
+              return (
+                <div key={chain}>
+                  <span>
+                    <b>{chain === "base" ? "Base" : "Solana"}</b>
+                    <code>{shortAddress(legacy.address)}</code>
+                  </span>
+                  <strong>{formatWalletBalance(legacy.balance, false, dashboard === null)}</strong>
+                  <button
+                    disabled={walletBusy !== null}
+                    onClick={() => onAdopt(chain, legacy.address)}
+                  >
+                    {walletBusy === chain ? "Switching…" : "Use legacy wallet"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <div className="wallet-notes">
+        <div>
+          <b>Network selection is not wallet selection</b>
+          <p>
+            Base / Solana chooses which network pays for requests. It does not switch between
+            multiple wallets on the same network.
+          </p>
+        </div>
+        <div>
+          <b>Secrets stay local</b>
+          <p>
+            Private keys never enter the renderer or agent configuration. Wallet changes are applied
+            after ClawRouter restarts.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Settings() {
   return (
     <section className="settings-grid">
-      <div className="panel wallet-setting-card">
-        <div className="wallet-setting-head">
-          <div>
-            <span className="eyebrow">SHARED WALLET</span>
-            <h3>Funds available to every agent</h3>
-            <p>One local wallet pays for requests across all connected tools.</p>
-          </div>
-          <button className="coinbase-fund-button" onClick={onFund}>
-            <span>＋</span>
-            <b>Buy USDC</b>
-            <small>with Coinbase</small>
-          </button>
-        </div>
-        <div className="wallet-ledger">
-          <div>
-            <span>
-              <i className="base-coin">B</i>Base
-            </span>
-            <strong>{formatWalletBalance(proxy?.balances?.base, false, dashboard === null)}</strong>
-            <small>{proxy?.wallet ? shortAddress(proxy.wallet) : "Wallet unavailable"}</small>
-          </div>
-          <div>
-            <span>
-              <i className="solana-coin">S</i>Solana
-            </span>
-            <strong>
-              {formatWalletBalance(proxy?.balances?.solana, false, dashboard === null)}
-            </strong>
-            <small>{proxy?.solana ? shortAddress(proxy.solana) : "Wallet unavailable"}</small>
-          </div>
-        </div>
-        {proxy?.walletRestartRequired && (
-          <p className="wallet-restart">
-            The running proxy is still using {shortAddress(proxy.activeWallet ?? "another wallet")}.
-            Restart it to use the shared Core wallet above.
-          </p>
-        )}
-      </div>
       <div className="panel setting-card">
         <span className="setting-icon">↔</span>
         <div>
@@ -690,7 +856,10 @@ function WalletSummary({
   onFund(): void;
 }) {
   const selected = proxy?.configuredChain ?? (proxy?.paymentChain === "solana" ? "solana" : "base");
-  const address = selected === "solana" ? proxy?.solana : proxy?.wallet;
+  const address =
+    selected === "solana"
+      ? (proxy?.configuredSolana ?? proxy?.solana)
+      : (proxy?.configuredWallet ?? proxy?.wallet);
   const balance =
     proxy?.balances?.[selected] ?? (proxy?.paymentChain === selected ? proxy?.balance : undefined);
   return (
@@ -703,18 +872,26 @@ function WalletSummary({
         <em>{proxy?.chainRestartRequired || proxy?.walletRestartRequired ? "Restart" : "Live"}</em>
       </span>
       <div className="chain-switch" aria-label="Payment chain">
-        {(["base", "solana"] as PaymentChain[]).map((chain) => (
-          <button
-            key={chain}
-            className={selected === chain ? "active" : ""}
-            aria-pressed={selected === chain}
-            disabled={busy !== null}
-            onClick={() => onSwitch(chain)}
-          >
-            <span>{chain === "base" ? "Base" : "Solana"}</span>
-            <small>{formatWalletBalance(proxy?.balances?.[chain], true)}</small>
-          </button>
-        ))}
+        {(["base", "solana"] as PaymentChain[]).map((chain) => {
+          const available = Boolean(
+            chain === "base"
+              ? (proxy?.configuredWallet ?? proxy?.wallet)
+              : (proxy?.configuredSolana ?? proxy?.solana),
+          );
+          return (
+            <button
+              key={chain}
+              className={selected === chain ? "active" : ""}
+              aria-pressed={selected === chain}
+              disabled={busy !== null || !available}
+              title={available ? undefined : `Create a ${chain} wallet first`}
+              onClick={() => onSwitch(chain)}
+            >
+              <span>{chain === "base" ? "Base" : "Solana"}</span>
+              <small>{formatWalletBalance(proxy?.balances?.[chain], true)}</small>
+            </button>
+          );
+        })}
       </div>
       <strong>{formatWalletBalance(balance, false, loading)}</strong>
       <button className="wallet-address" onClick={onOpen}>
@@ -730,7 +907,7 @@ function WalletSummary({
           Restart gateway to activate {selected === "solana" ? "Solana" : "Base"}
         </small>
       )}
-      {proxy?.walletRestartRequired && selected === "base" && (
+      {proxy?.walletRestartChains?.includes(selected) && (
         <small className="wallet-restart">Restart gateway to activate the shared wallet</small>
       )}
     </div>
@@ -1088,6 +1265,7 @@ function titleFor(page: Page) {
     overview: "Overview",
     models: "Model catalog",
     usage: "Usage & routing",
+    wallet: "Wallet",
     settings: "Settings",
   }[page];
 }

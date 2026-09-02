@@ -76,6 +76,14 @@ function registerIpc() {
     requireTrustedRenderer(event);
     return manager.switchPaymentChain(parsePaymentChain(chain));
   });
+  ipcMain.handle("wallet:create", (event, chain: unknown) => {
+    requireTrustedRenderer(event);
+    return manager.createWallet(parsePaymentChain(chain));
+  });
+  ipcMain.handle("wallet:adopt-legacy", (event, chain: unknown) => {
+    requireTrustedRenderer(event);
+    return manager.adoptLegacyWallet(parsePaymentChain(chain));
+  });
   ipcMain.handle("wallet:create-onramp", (event, amount: unknown) => {
     requireTrustedRenderer(event);
     return manager.createOnramp(parseOnrampAmount(amount));

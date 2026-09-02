@@ -1251,21 +1251,18 @@ async function main(): Promise<void> {
     const targetChain = args.chain;
 
     if (targetChain === "solana") {
-      // Ensure Solana wallet is set up (mnemonic → keypair)
-      const { existsSync } = await import("fs");
+      // Reuse the BlockRun Core Solana wallet, migrating a legacy mnemonic on
+      // first use. Only generate a new Solana key if neither source exists.
       const { MNEMONIC_FILE, setupSolana } = await import("./auth.js");
-      const { deriveSolanaKeyBytes, getSolanaAddress } = await import("./wallet.js");
+      const { getSolanaAddress } = await import("./wallet.js");
+      const wallet = await resolveOrGenerateWalletKey();
 
       let solanaAddr: string;
-      if (existsSync(MNEMONIC_FILE)) {
-        // Already set up — derive address from existing mnemonic
-        const { readFileSync } = await import("fs");
-        const mnemonic = readFileSync(MNEMONIC_FILE, "utf8").trim();
-        const keyBytes = deriveSolanaKeyBytes(mnemonic);
-        solanaAddr = await getSolanaAddress(keyBytes);
-        console.log(`[ClawRouter] Solana wallet already set up.`);
+      if (wallet.solanaPrivateKeyBytes) {
+        solanaAddr = await getSolanaAddress(wallet.solanaPrivateKeyBytes);
+        console.log(`[ClawRouter] Using BlockRun Core Solana wallet.`);
       } else {
-        // First time — generate mnemonic + keypair
+        // First time — generate a Core Solana key and keep a recovery mnemonic.
         console.log(`[ClawRouter] Setting up Solana wallet...`);
         const { solanaPrivateKeyBytes } = await setupSolana();
         solanaAddr = await getSolanaAddress(solanaPrivateKeyBytes);
@@ -1300,6 +1297,8 @@ async function main(): Promise<void> {
 
   if (wallet.source === "generated") {
     console.log(`[ClawRouter] Generated new wallet: ${wallet.address}`);
+  } else if (wallet.source === "core") {
+    console.log(`[ClawRouter] Using BlockRun Core wallet: ${wallet.address}`);
   } else if (wallet.source === "saved") {
     console.log(`[ClawRouter] Using saved wallet: ${wallet.address}`);
   } else if (wallet.source === "config") {

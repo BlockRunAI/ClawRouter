@@ -53,16 +53,32 @@ export type DashboardData = {
     wallet?: string;
     activeWallet?: string;
     solana?: string;
+    activeSolana?: string;
+    configuredWallet?: string;
+    configuredSolana?: string;
     paymentChain?: string;
     configuredChain?: PaymentChain;
     chainRestartRequired?: boolean;
     balance?: number;
     balances?: Partial<Record<PaymentChain, number>>;
     walletRestartRequired?: boolean;
+    walletRestartChains?: PaymentChain[];
+    walletIssues?: Partial<Record<PaymentChain, string>>;
+    legacyWallets?: Partial<
+      Record<PaymentChain, { address: string; balance?: number; source: "ClawRouter legacy" }>
+    >;
     error?: string;
   };
   stats: Record<string, unknown> | null;
   models: ModelInfo[];
+};
+
+export type WalletMutationResult = {
+  ok: boolean;
+  chain: PaymentChain;
+  address?: string;
+  restartRequired: boolean;
+  message: string;
 };
 
 export type PaymentChainSwitchResult = {

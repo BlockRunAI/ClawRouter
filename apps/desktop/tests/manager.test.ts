@@ -1,5 +1,5 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { createHmac } from "node:crypto";
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { createHmac, createPrivateKey, createPublicKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
@@ -134,14 +134,12 @@ describe("ClawRouterManager adapter flow", () => {
 
   it("loads both local wallet addresses and USDC balances while the proxy is offline", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-offline-"));
-    const walletDir = join(home, ".openclaw", "blockrun");
+    const walletDir = join(home, ".blockrun");
     await mkdir(walletDir, { recursive: true });
-    await writeFile(join(walletDir, "wallet.key"), `0x${"0".repeat(63)}1\n`, { mode: 0o600 });
-    await writeFile(
-      join(walletDir, "mnemonic"),
-      "test test test test test test test test test test test junk\n",
-      { mode: 0o600 },
-    );
+    await writeFile(join(walletDir, ".session"), `0x${"0".repeat(63)}1\n`, { mode: 0o600 });
+    await writeFile(join(walletDir, ".solana-session"), JSON.stringify(solanaSecret(7)), {
+      mode: 0o600,
+    });
     const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
       const path = String(url);
       if (path === "https://mainnet.base.org") {
@@ -185,6 +183,113 @@ describe("ClawRouterManager adapter flow", () => {
     expect(dashboard.proxy.solana).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
   });
 
+  it("copies legacy wallet files into BlockRun Core without deleting the originals", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-migration-"));
+    const legacyDir = join(home, ".openclaw", "blockrun");
+    const coreDir = join(home, ".blockrun");
+    const legacyKey = `0x${"0".repeat(63)}1`;
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, "wallet.key"), legacyKey + "\n", { mode: 0o600 });
+    await writeFile(
+      join(legacyDir, "mnemonic"),
+      "test test test test test test test test test test test junk\n",
+      { mode: 0o600 },
+    );
+    await writeFile(join(legacyDir, "payment-chain"), "solana\n", { mode: 0o600 });
+
+    const manager = new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: async () => {
+        throw new TypeError("proxy offline");
+      },
+    });
+    const dashboard = await manager.dashboard();
+
+    expect((await readFile(join(coreDir, ".session"), "utf8")).trim()).toBe(legacyKey);
+    expect(JSON.parse(await readFile(join(coreDir, ".solana-session"), "utf8"))).toHaveLength(64);
+    expect((await readFile(join(coreDir, ".chain"), "utf8")).trim()).toBe("solana");
+    expect(dashboard.proxy.configuredChain).toBe("solana");
+    expect(dashboard.proxy.wallet).toMatch(/^0x[0-9a-f]{40}$/i);
+    expect(dashboard.proxy.solana).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect((await readFile(join(legacyDir, "wallet.key"), "utf8")).trim()).toBe(legacyKey);
+  });
+
+  it("never hides an invalid Core wallet by silently showing a different legacy wallet", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-invalid-core-"));
+    await mkdir(join(home, ".blockrun"), { recursive: true });
+    await mkdir(join(home, ".openclaw", "blockrun"), { recursive: true });
+    await writeFile(join(home, ".blockrun", ".session"), "invalid\n", { mode: 0o600 });
+    await writeFile(join(home, ".openclaw", "blockrun", "wallet.key"), `0x${"0".repeat(63)}1\n`, {
+      mode: 0o600,
+    });
+    const manager = new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: async () => {
+        throw new TypeError("proxy offline");
+      },
+    });
+
+    const dashboard = await manager.dashboard();
+
+    expect(dashboard.proxy.wallet).toBeUndefined();
+    expect((await readFile(join(home, ".blockrun", ".session"), "utf8")).trim()).toBe("invalid");
+  });
+
+  it("creates missing Base and Solana wallets securely without overwriting an existing wallet", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-create-"));
+    const manager = fixtureManager(home, async () => false);
+
+    const base = await manager.createWallet("base");
+    const solana = await manager.createWallet("solana");
+    expect(base).toMatchObject({ ok: true, chain: "base", restartRequired: true });
+    expect(base.address).toMatch(/^0x[0-9a-f]{40}$/i);
+    expect(solana).toMatchObject({ ok: true, chain: "solana", restartRequired: true });
+    expect(solana.address).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect((await stat(join(home, ".blockrun", ".session"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(home, ".blockrun", ".solana-session"))).mode & 0o777).toBe(0o600);
+
+    const original = await readFile(join(home, ".blockrun", ".session"), "utf8");
+    expect(await manager.createWallet("base")).toMatchObject({ ok: false });
+    expect(await readFile(join(home, ".blockrun", ".session"), "utf8")).toBe(original);
+  });
+
+  it("lists a conflicting legacy wallet and adopts it only after backing up Core", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-adopt-"));
+    const coreDir = join(home, ".blockrun");
+    const legacyDir = join(home, ".openclaw", "blockrun");
+    const coreKey = `0x${"0".repeat(63)}2`;
+    const legacyKey = `0x${"0".repeat(63)}1`;
+    await mkdir(coreDir, { recursive: true });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(coreDir, ".session"), coreKey + "\n", { mode: 0o600 });
+    await writeFile(join(legacyDir, "wallet.key"), legacyKey + "\n", { mode: 0o600 });
+    const manager = new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: async () => {
+        throw new TypeError("offline");
+      },
+    });
+
+    const before = await manager.dashboard();
+    expect(before.proxy.legacyWallets?.base?.address).toMatch(/^0x[0-9a-f]{40}$/i);
+    const adopted = await manager.adoptLegacyWallet("base");
+    expect(adopted).toMatchObject({ ok: true, chain: "base", restartRequired: true });
+    expect((await readFile(join(coreDir, ".session"), "utf8")).trim()).toBe(legacyKey);
+    const backup = (await readdir(coreDir)).find((name) => name.startsWith(".session.backup-"));
+    expect(backup).toBeDefined();
+    expect((await readFile(join(coreDir, backup!), "utf8")).trim()).toBe(coreKey);
+    expect((await readFile(join(legacyDir, "wallet.key"), "utf8")).trim()).toBe(legacyKey);
+  });
+
   it("shows the active signing wallet and marks a different Core wallet for restart", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-wallet-preferred-"));
     await mkdir(join(home, ".blockrun"), { recursive: true });
@@ -220,6 +325,43 @@ describe("ClawRouterManager adapter flow", () => {
     expect(dashboard.proxy.activeWallet).toBe(staleWallet);
     expect(dashboard.proxy.walletRestartRequired).toBe(true);
     expect(dashboard.proxy.balance).toBe(12.746213);
+  });
+
+  it("detects when the running proxy still uses a different Solana wallet", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-solana-restart-"));
+    await mkdir(join(home, ".blockrun"), { recursive: true });
+    await writeFile(join(home, ".blockrun", ".solana-session"), JSON.stringify(solanaSecret(7)), {
+      mode: 0o600,
+    });
+    const activeSolana = "11111111111111111111111111111111";
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const path = String(url);
+      if (path === "https://api.mainnet-beta.solana.com") {
+        return response({ result: { value: [] } });
+      }
+      if (path.endsWith("/admin/models")) return new Response("{}", { status: 404 });
+      if (path.endsWith("/v1/models")) return response({ data: [] });
+      if (path.includes("/stats")) return response({});
+      return authenticatedResponse(home, init, {
+        status: "ok",
+        wallet: "0x0000000000000000000000000000000000000001",
+        solana: activeSolana,
+        paymentChain: "solana",
+        balance: "$0.00",
+      });
+    }) as typeof fetch;
+    const manager = new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: fetcher,
+    });
+
+    const dashboard = await manager.dashboard();
+    expect(dashboard.proxy.activeSolana).toBe(activeSolana);
+    expect(dashboard.proxy.walletRestartChains).toContain("solana");
+    expect(dashboard.proxy.walletRestartRequired).toBe(true);
   });
 
   it("disconnects OpenClaw and Hermes safely when their pre-Desktop configs have no backup", async () => {
@@ -378,4 +520,13 @@ async function authenticatedResponse(
   return response(body, {
     "X-ClawRouter-Proof": createHmac("sha256", token).update(challenge).digest("hex"),
   });
+}
+
+function solanaSecret(fill: number): number[] {
+  const seed = Buffer.alloc(32, fill);
+  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
+  const publicDer = createPublicKey(
+    createPrivateKey({ key: privateDer, format: "der", type: "pkcs8" }),
+  ).export({ format: "der", type: "spki" });
+  return [...seed, ...Buffer.from(publicDer).subarray(-32)];
 }

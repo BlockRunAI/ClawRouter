@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
+import { createPrivateKey, createPublicKey } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -20,14 +21,32 @@ process.env.USERPROFILE = TEMP_HOME;
 delete process.env.BLOCKRUN_WALLET_KEY;
 delete process.env.CLAWROUTER_PAYMENT_CHAIN;
 
-const { resolveOrGenerateWalletKey, loadPaymentChain, resolvePaymentChain, CHAIN_FILE } =
-  await import("./auth.js");
+const {
+  resolveOrGenerateWalletKey,
+  loadPaymentChain,
+  resolvePaymentChain,
+  setupSolana,
+  CHAIN_FILE,
+} = await import("./auth.js");
 
 const WALLET_DIR = join(TEMP_HOME, ".openclaw", "blockrun");
+const CORE_DIR = join(TEMP_HOME, ".blockrun");
 const TEST_KEY = "0x" + "ab".repeat(32);
+const CORE_TEST_KEY = "0x" + "cd".repeat(32);
+const TEST_MNEMONIC = "test test test test test test test test test test test junk";
+
+function solanaSecret(fill: number): number[] {
+  const seed = Buffer.alloc(32, fill);
+  const privateDer = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), seed]);
+  const publicDer = createPublicKey(
+    createPrivateKey({ key: privateDer, format: "der", type: "pkcs8" }),
+  ).export({ format: "der", type: "spki" });
+  return [...seed, ...Buffer.from(publicDer).subarray(-32)];
+}
 
 beforeEach(() => {
   if (existsSync(WALLET_DIR)) rmSync(WALLET_DIR, { recursive: true });
+  if (existsSync(CORE_DIR)) rmSync(CORE_DIR, { recursive: true });
 });
 
 afterEach(() => {
@@ -49,15 +68,32 @@ describe("payment chain default for new installs", () => {
     await expect(loadPaymentChain()).resolves.toBe("solana");
   });
 
-  it("existing wallet.key is left on base — no chain file is created", async () => {
+  it("copies an existing wallet.key into Core and leaves its chain on base", async () => {
     mkdirSync(WALLET_DIR, { recursive: true });
     writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n", { mode: 0o600 });
 
     const result = await resolveOrGenerateWalletKey();
 
-    expect(result.source).toBe("saved");
+    expect(result.source).toBe("core");
+    expect(readFileSync(join(CORE_DIR, ".session"), "utf8").trim()).toBe(TEST_KEY);
     expect(existsSync(CHAIN_FILE)).toBe(false);
     await expect(loadPaymentChain()).resolves.toBe("base");
+  });
+
+  it("migrates legacy Solana and chain data while retaining the recovery files", async () => {
+    mkdirSync(WALLET_DIR, { recursive: true });
+    writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n", { mode: 0o600 });
+    writeFileSync(join(WALLET_DIR, "mnemonic"), TEST_MNEMONIC + "\n", { mode: 0o600 });
+    writeFileSync(CHAIN_FILE, "solana\n", { mode: 0o600 });
+
+    const result = await resolveOrGenerateWalletKey();
+    const coreSolana = JSON.parse(readFileSync(join(CORE_DIR, ".solana-session"), "utf8"));
+
+    expect(result.source).toBe("core");
+    expect(result.solanaPrivateKeyBytes).toHaveLength(32);
+    expect(coreSolana).toHaveLength(64);
+    expect(readFileSync(join(CORE_DIR, ".chain"), "utf8").trim()).toBe("solana");
+    expect(readFileSync(join(WALLET_DIR, "mnemonic"), "utf8").trim()).toBe(TEST_MNEMONIC);
   });
 
   it("env-var wallet restore does not write a chain file", async () => {
@@ -70,6 +106,56 @@ describe("payment chain default for new installs", () => {
     await expect(loadPaymentChain()).resolves.toBe("base");
   });
 
+  it("reuses the canonical BlockRun Core wallets before a legacy saved wallet", async () => {
+    mkdirSync(WALLET_DIR, { recursive: true });
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n", { mode: 0o600 });
+    writeFileSync(join(CORE_DIR, ".session"), CORE_TEST_KEY + "\n", { mode: 0o600 });
+    writeFileSync(join(CORE_DIR, ".solana-session"), JSON.stringify(solanaSecret(7)), {
+      mode: 0o600,
+    });
+    writeFileSync(join(CORE_DIR, ".chain"), "solana\n", { mode: 0o600 });
+
+    const result = await resolveOrGenerateWalletKey();
+
+    expect(result.source).toBe("core");
+    expect(result.key).toBe(CORE_TEST_KEY);
+    expect(result.solanaPrivateKeyBytes).toEqual(new Uint8Array(32).fill(7));
+    await expect(loadPaymentChain()).resolves.toBe("solana");
+  });
+
+  it("refuses to replace an invalid Core wallet with a legacy wallet", async () => {
+    mkdirSync(WALLET_DIR, { recursive: true });
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n", { mode: 0o600 });
+    writeFileSync(join(CORE_DIR, ".session"), "invalid\n", { mode: 0o600 });
+
+    await expect(resolveOrGenerateWalletKey()).rejects.toThrow("invalid format");
+    expect(readFileSync(join(CORE_DIR, ".session"), "utf8").trim()).toBe("invalid");
+  });
+
+  it("keeps BLOCKRUN_WALLET_KEY as an explicit override of BlockRun Core", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(CORE_DIR, ".session"), CORE_TEST_KEY + "\n", { mode: 0o600 });
+    process.env.BLOCKRUN_WALLET_KEY = TEST_KEY;
+
+    const result = await resolveOrGenerateWalletKey();
+
+    expect(result.source).toBe("env");
+    expect(result.key).toBe(TEST_KEY);
+  });
+
+  it("adds a Solana wallet to an existing Base-only Core wallet", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(CORE_DIR, ".session"), CORE_TEST_KEY + "\n", { mode: 0o600 });
+
+    const result = await setupSolana();
+
+    expect(result.solanaPrivateKeyBytes).toHaveLength(32);
+    expect(JSON.parse(readFileSync(join(CORE_DIR, ".solana-session"), "utf8"))).toHaveLength(64);
+    expect(existsSync(join(WALLET_DIR, "mnemonic"))).toBe(true);
+  });
+
   it("an explicit base selection is preserved for existing wallets", async () => {
     mkdirSync(WALLET_DIR, { recursive: true });
     writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n", { mode: 0o600 });
@@ -77,7 +163,7 @@ describe("payment chain default for new installs", () => {
 
     const result = await resolveOrGenerateWalletKey();
 
-    expect(result.source).toBe("saved");
+    expect(result.source).toBe("core");
     expect(readFileSync(CHAIN_FILE, "utf8").trim()).toBe("base");
     await expect(loadPaymentChain()).resolves.toBe("base");
   });

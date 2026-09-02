@@ -21,6 +21,14 @@ first use so the Desktop cannot ship an obsolete routing/plugin lifecycle.
 Electron 44 embeds Node 24, so end users do not need a separate Node
 installation. Hermes remains installed in Hermes' own Python environment.
 
+## Shared BlockRun Core wallet
+
+Desktop reads Base, Solana, and payment-chain state from `~/.blockrun/.session`,
+`~/.blockrun/.solana-session`, and `~/.blockrun/.chain`. On first use, an older
+ClawRouter wallet under `~/.openclaw/blockrun/` is copied into the corresponding
+Core files only when those files do not already exist. The legacy files are
+retained for rollback; Desktop never overwrites an existing Core wallet.
+
 ## One-click contract
 
 Every adapter follows the same transaction:
