@@ -34,6 +34,7 @@
     "docs/*.png",
     "scripts",
     "!scripts/smoke-dist.mjs",
+    "!scripts/sync-brand-numbers.mjs",
     "skills",
     "src/top-models.json",
     "openclaw.plugin.json"
