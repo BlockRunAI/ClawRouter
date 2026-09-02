@@ -4,6 +4,36 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.264 — September 2, 2026
+
+### Fixed — five signing paths spent the user's capital without consulting the spend policy
+
+`registerSpendPolicyHook` had exactly one call site, on the proxy's x402 client. Five other places signed with the same wallet and never consulted it, so a strict `allowedPayees` / `allowedNetworks` list refused every payee on the proxy while governing nothing here: `doctor`'s paid probe, and the Polymarket fund, order, withdraw and redeem paths.
+
+All five now run the same check before the signer, throwing the proxy's `SpendPolicyError` if the counterparty or amount is refused. The withdraw gate is the notable one: policy sees the **destination** leg (the agent-chosen `to_address`, Base, USDC) rather than the one-time bridge address, because the bridge cannot be allowlisted and `to_address` is what an operator's payee list has to govern.
+
+Amounts are canonicalised to micro-USDC and fail closed: `NaN`, `Infinity`, negatives and values past `Number.MAX_SAFE_INTEGER` all fail the `/^\d+$/` check and are refused whenever any amount cap is configured.
+
+The one-time approval batch in `setup.ts` stays deliberately ungated, and now says so in the module header. Gating it would be actively harmful — the spenders are Polymarket's own exchange contracts, so an operator running a tight `allowedPayees` list naming only their payout addresses would have setup refused. It is bounded already: targets come from `readApprovals()`, never agent input, and it is confirm-gated behind an explicit preview.
+
+Thanks to @twzrd-sol (#304).
+
+### Fixed — non-positive and non-numeric `amount_usd` reached the Polymarket signer
+
+`executeTrade()`'s market-buy path and `withdrawFunds()` accepted any `amount_usd`. A negative became the order's notional, and since `reserveBet()` is `ledger.totalUsd += notional`, a negative _lowered_ the running total — leaving `ledger.totalUsd + notional > sessionCap` satisfiable indefinitely and silently defeating `POLYMARKET_MAX_SESSION_USD` for every later order. On withdraw, `amountRaw > balanceRaw` is false for zero or negative, so it sailed past the balance check into the bridge transfer.
+
+Both now reject with `Number.isFinite(x) && x > 0`, not merely `x <= 0`. Nothing validates these fields at runtime — `tool.ts` hands them over as `params.amount_usd as number | undefined`, a compile-time cast over `Record<string, unknown>` — so `NaN` and strings arrive intact and both `NaN <= 0` and `"abc" <= 0` are false. That case was worse than the negative one: a `NaN` notional poisons `ledger.totalUsd` permanently, because `totalUsd + NaN > cap` stays false forever.
+
+Limit orders are covered too. Their notional is `price * size`, and the existing minimum-size check could not catch a negative: `book.min_order_size` is often absent, so `parseFloat(undefined || "0")` is `0` and the `minSize > 0` term short-circuits the guard. The new check sits in the cross-field block, before any network call.
+
+Thanks to @erhnysr (#294).
+
+### Fixed — a stray code-block indent turned CI red for every open PR
+
+The v0.12.263 CHANGELOG used aligned trailing comments inside a fenced block, which Prettier collapses, so `prettier --check .` failed on `main` and every PR branched from it inherited a red `Lint & Typecheck` (#300).
+
+---
+
 ## v0.12.263 — September 1, 2026
 
 ### Fixed — a live-clock race let in-flight reservations vanish from the spend caps

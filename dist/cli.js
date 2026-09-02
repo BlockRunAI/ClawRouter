@@ -227149,6 +227149,15 @@ function injectModelsConfig(logger48, options = {}) {
       logger48.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
     }
   }
+  const pluginEntries = config.plugins?.entries;
+  if (pluginEntries && pluginEntries.clawrouter && !pluginEntries["blockrun-clawrouter"]) {
+    pluginEntries["blockrun-clawrouter"] = pluginEntries.clawrouter;
+    delete pluginEntries.clawrouter;
+    needsWrite = true;
+    logger48.info(
+      "Migrated plugins.entries.clawrouter -> blockrun-clawrouter (OpenClaw bundles its own `clawrouter` plugin; see #305)"
+    );
+  }
   if (!config.tools || typeof config.tools !== "object" || Array.isArray(config.tools)) {
     config.tools = {};
     needsWrite = true;
@@ -228185,8 +228194,14 @@ var init_index = __esm({
     AUDIO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "audio");
     VIDEO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "videos");
     plugin = {
-      id: "clawrouter",
-      name: "ClawRouter",
+      // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
+      // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
+      // CLAWROUTER_API_KEY, clawrouter.openclaw.ai). A duplicate id loses to the
+      // bundled one — "global plugin will be overridden by bundled plugin" — so this
+      // plugin silently never loaded and the local proxy never started. Different
+      // product, different id. See #305.
+      id: "blockrun-clawrouter",
+      name: "BlockRun ClawRouter",
       description: "Smart LLM router \u2014 55+ models, x402 micropayments, 78% cost savings",
       version: VERSION,
       register(api) {
@@ -228595,13 +228610,18 @@ ${errText}`
               delete config.models.providers.blockrun;
             }
             removeManagedBlockrunMcpServerConfig(config);
-            for (const key2 of ["clawrouter", "ClawRouter", "@blockrun/clawrouter"]) {
+            for (const key2 of [
+              "blockrun-clawrouter",
+              "clawrouter",
+              "ClawRouter",
+              "@blockrun/clawrouter"
+            ]) {
               if (config.plugins?.entries?.[key2]) delete config.plugins.entries[key2];
               if (config.plugins?.installs?.[key2]) delete config.plugins.installs[key2];
             }
             if (Array.isArray(config.plugins?.allow)) {
               config.plugins.allow = config.plugins.allow.filter(
-                (p) => p !== "clawrouter" && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
+                (p) => p !== "blockrun-clawrouter" && p !== "clawrouter" && p !== "ClawRouter" && p !== "@blockrun/clawrouter"
               );
             }
             if (config.agents?.defaults?.models) {
