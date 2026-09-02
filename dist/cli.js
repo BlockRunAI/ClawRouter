@@ -117032,6 +117032,35 @@ var init_client5 = __esm({
   }
 });
 
+// src/polymarket/spend-policy.ts
+function resolveSpendControl(deps) {
+  if (deps?.spendControl) return deps.spendControl;
+  defaultControl ??= new SpendControl();
+  return defaultControl;
+}
+function usdToMicros(usd) {
+  return String(Math.ceil(usd * 1e6));
+}
+async function signUnderSpendPolicy(deps, quote, action, sign4) {
+  const control = resolveSpendControl(deps);
+  const reservation = assertSpendPolicyAllows(control, quote);
+  try {
+    const signed2 = await sign4();
+    if (reservation !== void 0) control.settleReservation(reservation, { action });
+    return signed2;
+  } catch (err) {
+    if (reservation !== void 0) control.releaseReservation(reservation);
+    throw err;
+  }
+}
+var defaultControl;
+var init_spend_policy = __esm({
+  "src/polymarket/spend-policy.ts"() {
+    "use strict";
+    init_spend_control();
+  }
+});
+
 // src/polymarket/orders.ts
 function getSessionLedger() {
   return {
@@ -117100,6 +117129,9 @@ function isCredsMismatchError(err) {
   return msg.includes("unauthorized") || msg.includes("api key not found") || msg.includes("invalid api key");
 }
 async function mapClobError(err) {
+  if (err instanceof SpendPolicyError) {
+    return `Refused by spend policy \u2014 nothing was signed. ${err.message} (see ~/.openclaw/blockrun/spending.json)`;
+  }
   const e7 = err;
   const dataText = e7?.data ? ` \u2014 ${typeof e7.data === "string" ? e7.data : JSON.stringify(e7.data)}` : "";
   const message = `${e7?.message ?? String(err)}${dataText}`;
@@ -117146,7 +117178,7 @@ async function withCredsRetry(fn) {
     return fn(fresh);
   }
 }
-async function executeTrade(input) {
+async function executeTrade(input, deps) {
   const side = input.action === "buy" ? Side.BUY : Side.SELL;
   const isLimit = input.price !== void 0;
   if (isLimit && input.size === void 0) {
@@ -117155,6 +117187,18 @@ async function executeTrade(input) {
   if (!isLimit && input.action === "buy" && input.amount_usd === void 0) {
     return {
       text: `Market buys need amount_usd (pUSD dollars to spend). For a limit order pass price + size.`,
+      isError: true
+    };
+  }
+  if (!isLimit && input.action === "buy" && input.amount_usd !== void 0 && !(Number.isFinite(input.amount_usd) && input.amount_usd > 0)) {
+    return {
+      text: `amount_usd must be a positive dollar amount to spend, got ${input.amount_usd}.`,
+      isError: true
+    };
+  }
+  if (isLimit && input.size !== void 0 && !(Number.isFinite(input.size) && input.size > 0)) {
+    return {
+      text: `size must be a positive number of shares, got ${input.size}.`,
       isError: true
     };
   }
@@ -117257,38 +117301,43 @@ Re-call with confirm:true to sign and submit.`,
       }
       const options = { tickSize, negRisk };
       reserveBet(notional, input.agent_id);
-      let response;
+      const policyQuote = {
+        payTo: negRisk ? NEG_RISK_CTF_EXCHANGE_V2 : CTF_EXCHANGE_V2,
+        network: `eip155:${POLYGON_CHAIN_ID}`,
+        asset: PUSD_COLLATERAL,
+        amount: usdToMicros(notional)
+      };
+      let r2;
       try {
-        response = isLimit ? await clob.createAndPostOrder(
-          {
-            tokenID: token.tokenId,
-            price,
-            size: size5,
-            side,
-            ...orderKind === "GTD" && input.expires_at ? { expiration: input.expires_at } : {}
-          },
-          options,
-          orderKind === "GTD" ? OrderType.GTD : OrderType.GTC,
-          input.post_only ?? false
-        ) : await clob.createAndPostMarketOrder(
-          {
-            tokenID: token.tokenId,
-            amount: input.action === "buy" ? input.amount_usd : size5,
-            side,
-            orderType: orderKind === "FAK" ? OrderType.FAK : OrderType.FOK
-          },
-          options,
-          orderKind === "FAK" ? OrderType.FAK : OrderType.FOK
-        );
+        r2 = await signUnderSpendPolicy(deps, policyQuote, "polymarket order", async () => {
+          const res = await (isLimit ? clob.createAndPostOrder(
+            {
+              tokenID: token.tokenId,
+              price,
+              size: size5,
+              side,
+              ...orderKind === "GTD" && input.expires_at ? { expiration: input.expires_at } : {}
+            },
+            options,
+            orderKind === "GTD" ? OrderType.GTD : OrderType.GTC,
+            input.post_only ?? false
+          ) : clob.createAndPostMarketOrder(
+            {
+              tokenID: token.tokenId,
+              amount: input.action === "buy" ? input.amount_usd : size5,
+              side,
+              orderType: orderKind === "FAK" ? OrderType.FAK : OrderType.FOK
+            },
+            options,
+            orderKind === "FAK" ? OrderType.FAK : OrderType.FOK
+          ));
+          const placed = res?.success !== false && (res?.orderID || res?.status === "matched");
+          if (!placed) throw new Error(res?.errorMsg || "order rejected");
+          return res;
+        });
       } catch (submitErr) {
         releaseBet(notional, input.agent_id);
         throw submitErr;
-      }
-      const r2 = response;
-      const placed = r2?.success !== false && (r2?.orderID || r2?.status === "matched");
-      if (!placed) {
-        releaseBet(notional, input.agent_id);
-        throw new Error(r2?.errorMsg || "order rejected");
       }
       commitBet();
       const filled = r2?.status === "matched" || (r2?.transactionsHashes?.length ?? 0) > 0;
@@ -117378,6 +117427,8 @@ var init_orders = __esm({
     init_client5();
     init_constants3();
     init_creds();
+    init_spend_control();
+    init_spend_policy();
     ledger = {
       totalUsd: 0,
       count: 0,
@@ -225312,7 +225363,7 @@ var init_setup = __esm({
 });
 
 // src/polymarket/redeem.ts
-async function redeemPosition(input) {
+async function redeemPosition(input, deps) {
   if (!input.condition_id) {
     return {
       text: `Pass condition_id:"0x\u2026" (see action:"positions" for redeemable markets).`,
@@ -225388,20 +225439,31 @@ async function redeemPosition(input) {
       ]
     });
     const target = negRisk ? NEG_RISK_ADAPTER : CONDITIONAL_TOKENS;
-    let txHash;
-    if (getSigType() === 3) {
-      const res = await sendWalletBatch([{ target, value: "0", data }], owner, "Redeem");
-      txHash = res.transactionHash;
-    } else {
-      const account = getPolymarketAccount();
-      const wallet = createWalletClient({
-        account,
-        chain: polygon,
-        transport: http(POLYGON_RPC_URLS[0])
-      });
-      txHash = await wallet.sendTransaction({ to: target, data, chain: polygon, account });
-      await pc.waitForTransactionReceipt({ hash: txHash });
-    }
+    const eoa = getSigType() !== 3;
+    const txHash = await signUnderSpendPolicy(
+      deps,
+      {
+        payTo: target,
+        network: `eip155:${POLYGON_CHAIN_ID}`,
+        asset: PUSD_COLLATERAL,
+        amount: "0"
+      },
+      "polymarket redeem",
+      async () => {
+        if (!eoa) {
+          const res = await sendWalletBatch([{ target, value: "0", data }], owner, "Redeem");
+          return res.transactionHash;
+        }
+        const account = getPolymarketAccount();
+        const wallet = createWalletClient({
+          account,
+          chain: polygon,
+          transport: http(POLYGON_RPC_URLS[0])
+        });
+        return wallet.sendTransaction({ to: target, data, chain: polygon, account });
+      }
+    );
+    if (eoa) await pc.waitForTransactionReceipt({ hash: txHash });
     const balanceAfter = await getPusdBalance(owner).catch(() => null);
     return {
       text: [
@@ -225432,6 +225494,7 @@ var init_redeem = __esm({
     init_positions();
     init_relayer();
     init_setup();
+    init_spend_policy();
   }
 });
 
@@ -225444,7 +225507,13 @@ async function rawPusdBalance(owner) {
     args: [owner]
   });
 }
-async function withdrawFunds(input) {
+async function withdrawFunds(input, deps) {
+  if (input.amount_usd !== void 0 && !(Number.isFinite(input.amount_usd) && input.amount_usd > 0)) {
+    return {
+      text: `amount_usd must be a positive dollar amount, got ${input.amount_usd}. Omit it to withdraw the full balance.`,
+      isError: true
+    };
+  }
   let owner;
   try {
     owner = getFundsAddress();
@@ -225515,29 +225584,40 @@ async function withdrawFunds(input) {
       functionName: "transfer",
       args: [bridgeEvm, amountRaw]
     });
-    let txHash;
-    if (getSigType() === 3) {
-      const res = await sendWalletBatch(
-        [{ target: PUSD_COLLATERAL, value: "0", data }],
-        owner,
-        "Withdraw"
-      );
-      txHash = res.transactionHash;
-    } else {
-      const account = getPolymarketAccount();
-      const wallet = createWalletClient({
-        account,
-        chain: polygon,
-        transport: http(POLYGON_RPC_URLS[0])
-      });
-      txHash = await wallet.sendTransaction({
-        to: PUSD_COLLATERAL,
-        data,
-        chain: polygon,
-        account
-      });
-      await getPublicClient().waitForTransactionReceipt({ hash: txHash });
-    }
+    const eoa = getSigType() !== 3;
+    const txHash = await signUnderSpendPolicy(
+      deps,
+      {
+        payTo: recipient,
+        network: `eip155:${BASE_CHAIN_ID}`,
+        asset: BASE_USDC,
+        amount: amountRaw.toString()
+      },
+      "polymarket withdraw",
+      async () => {
+        if (!eoa) {
+          const res = await sendWalletBatch(
+            [{ target: PUSD_COLLATERAL, value: "0", data }],
+            owner,
+            "Withdraw"
+          );
+          return res.transactionHash;
+        }
+        const account = getPolymarketAccount();
+        const wallet = createWalletClient({
+          account,
+          chain: polygon,
+          transport: http(POLYGON_RPC_URLS[0])
+        });
+        return wallet.sendTransaction({
+          to: PUSD_COLLATERAL,
+          data,
+          chain: polygon,
+          account
+        });
+      }
+    );
+    if (eoa) await getPublicClient().waitForTransactionReceipt({ hash: txHash });
     return {
       text: [
         `\u2705 Withdrawal submitted: $${amountUsd.toFixed(2)} pUSD \u2192 USDC on Base`,
@@ -225572,6 +225652,7 @@ var init_withdraw = __esm({
     init_positions();
     init_relayer();
     init_setup();
+    init_spend_policy();
   }
 });
 
@@ -226217,7 +226298,7 @@ async function bridgeAddressFor(vault) {
     throw new Error(`Bridge did not return a deposit address (got: ${JSON.stringify(res.data)}).`);
   return evm;
 }
-async function fundVault(input) {
+async function fundVault(input, deps) {
   if (input.amount_usd === void 0 || input.amount_usd <= 0) {
     return {
       text: `Pass amount_usd \u2014 the USDC amount to move from your Base wallet into your Polymarket vault (e.g. amount_usd:5).`,
@@ -226274,12 +226355,12 @@ async function fundVault(input) {
     }
     const privateKey = getOrCreateWalletKey();
     const amountMicro = String(Math.floor(amountUsd * 10 ** USDC_DECIMALS));
-    const depositAuthorization = await createPaymentPayload(
-      privateKey,
-      agent,
-      bridge,
-      amountMicro,
-      `eip155:${BASE_CHAIN_ID}`
+    const network = `eip155:${BASE_CHAIN_ID}`;
+    const depositAuthorization = await signUnderSpendPolicy(
+      deps,
+      { payTo: bridge, network, asset: BASE_USDC, amount: amountMicro },
+      "polymarket fund",
+      () => createPaymentPayload(privateKey, agent, bridge, amountMicro, network)
     );
     const client = new BlockrunClient({ privateKey });
     const result = await client.post("/v1/polymarket/fund", {
@@ -226329,6 +226410,7 @@ var init_fund = __esm({
     init_constants3();
     init_positions();
     init_setup();
+    init_spend_policy();
     FUND_FEE_USD = 0.01;
     USDC_DECIMALS = 6;
     FUND_MIN_USD = Number(process.env.POLYMARKET_FUND_MIN_USD || "2");
@@ -228628,6 +228710,7 @@ init_balance();
 init_wallet2();
 init_stats();
 init_proxy();
+init_spend_control();
 init_version4();
 import { platform, arch, freemem, totalmem } from "os";
 import { existsSync as existsSync3, readFileSync as readFileSync3 } from "fs";
@@ -228894,6 +228977,15 @@ var DOCTOR_MODELS = {
     cost: "~$0.01"
   }
 };
+function createDoctorX402Client(opts) {
+  const account = privateKeyToAccount(opts.walletKey);
+  const publicClient = createPublicClient({ chain: base, transport: http() });
+  const evmSigner = toClientEvmSigner(account, publicClient);
+  const x402 = new x402Client();
+  registerSpendPolicyHook(x402, opts.spendControl ?? new SpendControl());
+  registerExactEvmScheme(x402, { signer: evmSigner });
+  return x402;
+}
 async function analyzeWithAI(diagnostics, userQuestion, model = "sonnet") {
   if (diagnostics.wallet.isEmpty) {
     console.log("\n\u{1F4B3} Wallet is empty - cannot call AI for analysis.");
@@ -228911,11 +229003,7 @@ async function analyzeWithAI(diagnostics, userQuestion, model = "sonnet") {
 `);
   try {
     const { key: key2 } = await resolveOrGenerateWalletKey();
-    const account = privateKeyToAccount(key2);
-    const publicClient = createPublicClient({ chain: base, transport: http() });
-    const evmSigner = toClientEvmSigner(account, publicClient);
-    const x402 = new x402Client();
-    registerExactEvmScheme(x402, { signer: evmSigner });
+    const x402 = createDoctorX402Client({ walletKey: key2 });
     const paymentChain = diagnostics.wallet.paymentChain;
     if (paymentChain === "solana") {
       try {
