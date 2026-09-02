@@ -88,6 +88,7 @@ import { buildPolymarketTool } from "./polymarket/tool.js";
 import { createStatsCommand } from "./commands/stats.js";
 import { createExcludeCommand } from "./commands/exclude.js";
 import { createPolicyCommand } from "./commands/policy.js";
+import { SpendControl } from "./spend-control.js";
 import { BLOCKRUN_MCP_SERVER_NAME, removeManagedBlockrunMcpServerConfig } from "./mcp-config.js";
 
 function getPackageRoot(): string {
@@ -775,6 +776,8 @@ function removeInjectedAuthPlaceholder(
 
 // Store active proxy handle for cleanup on gateway_stop
 let activeProxyHandle: Awaited<ReturnType<typeof startProxy>> | null = null;
+/** The SpendControl the running proxy signs against; /policy mutates this one, not a fresh copy. */
+let liveSpendControl: SpendControl | null = null;
 let pendingConfiguredStartupApi: OpenClawPluginApi | null = null;
 type ProcessWithClawRouterState = NodeJS.Process & {
   __clawrouterProxyStarted?: boolean;
@@ -954,6 +957,7 @@ async function startProxyInBackground(
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
+    spendControl: (liveSpendControl = new SpendControl()),
     onReady: (port) => {
       api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
     },
@@ -2227,7 +2231,7 @@ const plugin: OpenClawPluginDefinition = {
     }
     api.registerCommand(createStatsCommand());
     api.registerCommand(createExcludeCommand());
-    api.registerCommand(createPolicyCommand());
+    api.registerCommand(createPolicyCommand({ liveControl: () => liveSpendControl ?? undefined }));
     if (shouldLogRegistration) {
       api.logger.info(
         "Commands registered: /wallet, /blockrun, /stats, /exclude, /policy, /partners, /cr-imagegen, /videogen, /cr-call",

@@ -63,8 +63,16 @@ const USAGE = [
   `  policy limit <window> <usd>|clear      <window>: ${SPEND_WINDOWS.join(" | ")}`,
   `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet).`,
 ].join("\n");
-const RESTART_NOTE =
-  "Saved to spending.json. The proxy reads limits once at startup — restart it (or the OpenClaw gateway) to apply.";
+/**
+ * Without a handle on the running proxy's SpendControl this command can only
+ * edit spending.json, which the proxy reads once at startup. That must be the
+ * FIRST thing an operator reads — blocking a draining payee mid-incident and
+ * seeing "blockedPayees: [...]" while the live signer keeps paying it is the
+ * wrong failure mode.
+ */
+const RESTART_REQUIRED =
+  "NOT applied to a running proxy — it reads spending.json once at startup. Restart the proxy (or the OpenClaw gateway) for this to take effect.";
+const APPLIED_LIVE = "Applied to the running proxy and saved to spending.json.";
 
 type Plan =
   | { kind: "show" }
@@ -72,8 +80,14 @@ type Plan =
   | { kind: "list"; action: ListAction; list: PolicyList; values: string[] };
 
 export interface PolicyCommandOptions {
-  /** Opens the store; called again after a write to prove it landed. Defaults to the on-disk store. */
+  /** Fresh store from disk. Used for writes when no live instance is available, and always for the write-landed check. */
   openControl?: () => SpendControl;
+  /**
+   * The SpendControl the running proxy signs against, if this process has
+   * one. Writes mutate it directly and persist through it, so the live
+   * signer enforces the change with no restart.
+   */
+  liveControl?: () => SpendControl | undefined;
 }
 
 function fail(text: string): PluginCommandResult {
@@ -203,7 +217,8 @@ export function runPolicyCommand(
   if (!("kind" in plan)) return plan;
 
   const openControl = options?.openControl ?? (() => new SpendControl());
-  const control = openControl();
+  const live = options?.liveControl?.();
+  const control = live ?? openControl();
   const broken = control.getPolicyFileError();
   if (broken !== undefined) {
     return fail(`${broken}\nNothing was written; repair or delete spending.json, then retry.`);
@@ -241,7 +256,9 @@ export function runPolicyCommand(
     expected === undefined
       ? `${key} is now unset — ${unsetMeaning(key)}.`
       : `${key}: ${JSON.stringify(expected)}`;
-  return { text: `${headline}\n${RESTART_NOTE}` };
+  return {
+    text: live ? `${headline}\n${APPLIED_LIVE}` : `${RESTART_REQUIRED}\n${headline}`,
+  };
 }
 
 export function createPolicyCommand(

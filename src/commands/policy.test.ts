@@ -18,14 +18,16 @@ import {
 
 const payee = "0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa";
 const other = `0x${"b".repeat(40)}`;
-const firstLine = (res: { text?: string }) => (res.text ?? "").split("\n")[0];
+const line = (res: { text?: string }, n = 0) => (res.text ?? "").split("\n")[n];
+const firstLine = (res: { text?: string }) => line(res);
 
 /** A store shared across command invocations, the way spending.json is on disk. */
 function memory() {
   const storage = new InMemorySpendControlStorage();
   const openControl = () => new SpendControl({ storage });
-  const run = (argv: string[]) => runPolicyCommand(argv, { openControl });
-  return { storage, openControl, run };
+  const live = openControl();
+  const run = (argv: string[]) => runPolicyCommand(argv, { openControl, liveControl: () => live });
+  return { storage, openControl, live, run };
 }
 
 describe("runPolicyCommand (in-memory store)", () => {
@@ -61,6 +63,30 @@ describe("runPolicyCommand (in-memory store)", () => {
       }),
     ).rejects.toThrow(/blocked by policy/);
     expect(signerCalls).toBe(0);
+  });
+
+  it("a gateway write reaches the live signer with no reopen, and says it was applied", () => {
+    const { run, live, storage } = memory();
+    const res = run(["set", "blockedPayees", payee]);
+    expect(res.isError).toBeFalsy();
+    expect(firstLine(res)).toBe(`blockedPayees: ${JSON.stringify([payee.toLowerCase()])}`);
+    expect(res.text).toContain("Applied to the running proxy");
+    expect(res.text).not.toMatch(/restart/i);
+    // The very instance the proxy signs with refuses now — nothing was re-read from disk.
+    expect(live.check(1, { payTo: payee, network: CAIP2_BASE }).allowed).toBe(false);
+    expect(storage.load()?.limits.blockedPayees).toEqual([payee.toLowerCase()]);
+  });
+
+  it("a CLI write, with no live proxy in this process, leads with the restart requirement", () => {
+    const { openControl } = memory();
+    const res = runPolicyCommand(["set", "blockedPayees", payee], { openControl });
+    expect(res.isError).toBeFalsy();
+    expect(firstLine(res)).toMatch(/^NOT applied to a running proxy/);
+    expect(line(res, 1)).toBe(`blockedPayees: ${JSON.stringify([payee.toLowerCase()])}`);
+    // An unset-guard write still says what it permits, on the line after the restart requirement.
+    const cleared = runPolicyCommand(["clear", "blockedPayees"], { openControl });
+    expect(firstLine(cleared)).toMatch(/^NOT applied/);
+    expect(line(cleared, 1)).toBe("blockedPayees is now unset — no payee is blocked.");
   });
 
   it("lowercases EVM entries and dedupes on add", () => {
