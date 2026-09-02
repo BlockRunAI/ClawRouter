@@ -144,7 +144,7 @@ There is no monthly invoice. There is no 3am email. There is a wallet balance, a
 **`maxCostPerRun`** — a per-session cost ceiling that stops or downgrades requests once a session exceeds a configured threshold (e.g., `$0.50`). This closes the remaining gap ([#3181](https://github.com/openclaw/openclaw/issues/3181)) where a wallet with sufficient funds can still accumulate within a single run. Two modes: `graceful` (downgrade to cheaper models) and `strict` (hard 429 once the cap is hit).
 
 ```
-<!-- br:models.chatVisible -->66<!-- /br:models.chatVisible --> models. One wallet. Pay per call.
+<!-- br:models.chatVisible@live -->76<!-- /br:models.chatVisible@live --> models. One wallet. Pay per call.
 ```
 
 ---
