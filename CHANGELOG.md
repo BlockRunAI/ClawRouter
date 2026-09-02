@@ -11,7 +11,7 @@ All notable changes to ClawRouter.
 `SpendControl.getSpendingInWindow()` decided whether in-flight reservations counted toward the hourly/daily spend by reading the clock a **second** time and comparing it against a window bound the caller had already built from a **first** read:
 
 ```ts
-const now = this.now();                                        // read #1
+const now = this.now(); // read #1
 const hourlySpent = this.getSpendingInWindow(now - HOUR_MS, now);
 // ...inside:
 return recorded + (to >= this.now() ? this.pendingTotal() : 0); // read #2
