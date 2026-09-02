@@ -81,6 +81,7 @@ vi.mock("./constants.js", async (importOriginal) => ({
 import { fundVault } from "./fund.js";
 import { executeTrade, getSessionLedger } from "./orders.js";
 import { redeemPosition } from "./redeem.js";
+import { buildPolymarketTool } from "./tool.js";
 import { withdrawFunds } from "./withdraw.js";
 import {
   BASE_USDC,
@@ -90,7 +91,11 @@ import {
   NEG_RISK_CTF_EXCHANGE_V2,
   PUSD_COLLATERAL,
 } from "./constants.js";
-import { InMemorySpendControlStorage, SpendControl } from "../spend-control.js";
+import {
+  InMemorySpendControlStorage,
+  setSharedSpendControl,
+  SpendControl,
+} from "../spend-control.js";
 
 function inMemoryControl(): SpendControl {
   return new SpendControl({ storage: new InMemorySpendControlStorage() });
@@ -314,5 +319,53 @@ describe("redeemPosition confirms the claim before reporting success", () => {
     expect(h.sendWalletBatch).toHaveBeenCalledTimes(1);
     expect(h.sendTransaction).not.toHaveBeenCalled();
     expect(h.waitForReceipt).not.toHaveBeenCalled();
+  });
+});
+
+describe("every surface shares ONE ledger at runtime", () => {
+  // LLM spend recorded exactly as the proxy's x402 hook settles it.
+  function recordLlmSpend(control: SpendControl, usd: number): void {
+    control.settleReservation(control.reserve(usd), { action: "x402 payment" });
+  }
+
+  // Limit buy 10 @ 0.50 → $5 notional.
+  const limitBuy = { action: "buy" as const, token_id: "123", price: 0.5, size: 10, confirm: true };
+
+  beforeEach(() => {
+    h.negRisk = false;
+  });
+
+  it("LLM spend recorded through the wired instance blocks a Polymarket order placed via tool.execute with no per-call deps", async () => {
+    const control = inMemoryControl();
+    control.setLimit("hourly", 1);
+    recordLlmSpend(control, 2);
+
+    const tool = buildPolymarketTool({ spendControl: control });
+    const r = (await tool.execute("t1", {
+      action: "buy",
+      token_id: "123",
+      price: 0.5,
+      size: 10,
+      confirm: true,
+    })) as { content: { text: string }[] };
+
+    expect(r.content[0].text).toMatch(/Hourly limit exceeded/i);
+    expect(h.clob.createAndPostOrder).not.toHaveBeenCalled();
+    expect(h.clob.createAndPostMarketOrder).not.toHaveBeenCalled();
+  });
+
+  it("with no deps at all, the tool functions resolve the shared instance, not a private one", async () => {
+    const shared = inMemoryControl();
+    shared.setLimit("hourly", 1);
+    recordLlmSpend(shared, 2);
+    setSharedSpendControl(shared);
+
+    // No deps: before the shared instance this constructed a fresh polymarket
+    // ledger that had never seen the LLM spend above, and the order went out.
+    const r = await executeTrade(limitBuy);
+
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/Hourly limit exceeded/i);
+    expect(h.clob.createAndPostOrder).not.toHaveBeenCalled();
   });
 });

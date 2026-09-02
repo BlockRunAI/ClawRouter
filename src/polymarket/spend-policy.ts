@@ -22,6 +22,7 @@
 // and the batch is `confirm`-gated behind an explicit preview.
 import {
   assertSpendPolicyAllows,
+  getSharedSpendControl,
   SpendControl,
   type QuotedRequirements,
 } from "../spend-control.js";
@@ -31,13 +32,9 @@ export interface PolymarketSpendDeps {
   spendControl?: SpendControl;
 }
 
-let defaultControl: SpendControl | undefined;
-
 /** One instance per process so session windows and reservations span tool calls, as in the proxy. */
 function resolveSpendControl(deps?: PolymarketSpendDeps): SpendControl {
-  if (deps?.spendControl) return deps.spendControl;
-  defaultControl ??= new SpendControl();
-  return defaultControl;
+  return deps?.spendControl ?? getSharedSpendControl();
 }
 
 /**

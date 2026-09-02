@@ -13,6 +13,8 @@ import {
   formatDuration,
   registerSpendPolicyHook,
   assertSpendPolicyAllows,
+  getSharedSpendControl,
+  setSharedSpendControl,
   SpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
@@ -839,5 +841,36 @@ describe("formatDuration", () => {
   it("formats hours and minutes", () => {
     expect(formatDuration(3660)).toBe("1h 1m");
     expect(formatDuration(7200)).toBe("2h");
+  });
+});
+
+describe("process-wide shared instance", () => {
+  it("hands every surface the same instance", () => {
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    setSharedSpendControl(control);
+
+    expect(getSharedSpendControl()).toBe(control);
+    expect(getSharedSpendControl()).toBe(getSharedSpendControl());
+  });
+
+  it("a restart sees history from every surface because both recorded on ONE instance", () => {
+    const storage = new InMemorySpendControlStorage();
+    const clock = Date.now();
+    setSharedSpendControl(new SpendControl({ storage, now: () => clock }));
+
+    // The proxy's x402 hook settles with "x402 payment"; signUnderSpendPolicy
+    // with "polymarket order". Both must land on the same instance.
+    const control = getSharedSpendControl();
+    control.settleReservation(control.reserve(2), { action: "x402 payment" });
+    control.settleReservation(control.reserve(25), { action: "polymarket order" });
+    expect(control.getSpending("hourly")).toBeCloseTo(27);
+
+    // Restart: a fresh instance must see BOTH records — the old per-surface
+    // shape last-writer-won the file and dropped the other surface's history.
+    const restarted = new SpendControl({ storage, now: () => clock });
+    expect(restarted.getSpending("hourly")).toBeCloseTo(27);
+    const actions = restarted.getHistory().map((r) => r.action);
+    expect(actions).toContain("x402 payment");
+    expect(actions).toContain("polymarket order");
   });
 });

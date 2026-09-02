@@ -824,6 +824,24 @@ export class SpendControl {
 
 export type SpendPolicyAbort = { abort: true; reason: string };
 
+let sharedControl: SpendControl | undefined;
+
+/**
+ * The process-wide SpendControl instance: ONE ledger for every signing surface
+ * (the proxy's x402 hook, the Polymarket tools, doctor). Per-surface instances
+ * enforced each window once per surface and last-writer-won spending.json
+ * history — aggregate caps only hold against a single shared instance.
+ */
+export function getSharedSpendControl(): SpendControl {
+  sharedControl ??= new SpendControl();
+  return sharedControl;
+}
+
+/** Replace the shared instance. Tests inject in-memory storage here. */
+export function setSharedSpendControl(control: SpendControl): void {
+  sharedControl = control;
+}
+
 /**
  * Thrown from the pre-sign hook when policy or an amount window refuses.
  *
