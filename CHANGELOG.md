@@ -4,6 +4,42 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.265 — September 2, 2026
+
+### Fixed — the plugin silently never loaded on OpenClaw 2026.7.1 and newer
+
+OpenClaw bundles its own plugin under the id `clawrouter` since the 2026.7.1 line. This plugin declared the same id, so OpenClaw resolved the duplicate in favour of the bundled one:
+
+```text
+duplicate plugin id detected; global plugin will be overridden by bundled plugin
+pluginId: clawrouter
+```
+
+BlockRun's plugin never loaded. `clawrouter setup` reported success, `openclaw plugins list` showed only the bundled plugin, and the local proxy on `127.0.0.1:8402` was never started. They are separate products: OpenClaw's uses `clawrouter/*`, `CLAWROUTER_API_KEY` and a hosted endpoint; this one uses `blockrun/*`, a local proxy and a self-custodial wallet.
+
+Confirmed against the published artifact, not the report alone — `openclaw@2026.8.2` vendors `dist/extensions/clawrouter/package.json` (`@openclaw/clawrouter`) declaring `id: "clawrouter"`. Worth recording the trap: `npm view @openclaw/clawrouter` 404s and it is not a dependency of `openclaw`, so a dependency check wrongly says there is no collision. Only unpacking the tarball shows it.
+
+The plugin id is now `blockrun-clawrouter`, display name **BlockRun ClawRouter**. The npm package (`@blockrun/clawrouter`), the CLI command (`clawrouter`) and the install directory are deliberately unchanged — none of them collide, and changing them would strand every existing install.
+
+**Existing installs are migrated on the next gateway start.** A pre-rename config carries the old id in up to three places, and all three are handled:
+
+- `plugins.entries` — moved to the new key, preserving the enabled/disabled choice. Left alone it would have explicitly enabled _OpenClaw's_ router while this plugin lost its entry.
+- `plugins.allow` — the new id is **added**. This list is an exclusive allowlist ("the installed plugin id must be in that list before the plugin can load"), so a user who had allow-listed the old id would otherwise have had this plugin blocked outright. The old id is left in place, since it may now also be permitting OpenClaw's bundled plugin.
+- `plugins.deny` — mirrored, so an explicit decision to keep this plugin off is honoured rather than silently reversed.
+- `plugins.installs` — renamed outright; install provenance is unambiguously ours.
+
+The write goes through the existing gateway-mode guard, so it cannot trip the install-time `baseHash` rollback. Probed against real OpenClaw 2026.5.2: the renamed config loads (exit 0, `blockrun` provider still effective).
+
+Reported by @KillerQueen-Z (#305).
+
+### Fixed — a synced brand script would have made the package uninstallable
+
+`scripts/sync-brand-numbers.mjs`, vendored from blockrun, now shells out to `git ls-files` to honour its own "only git-tracked files are rewritten" contract. That pulls in `node:child_process`, and everything under `scripts/` ships in the npm tarball — which OpenClaw's plugin scanner rejects, the same failure that made v0.12.222 uninstallable.
+
+`scripts/smoke-dist.mjs` caught it and refused the build before publish. The script is now excluded from the tarball via `package.json` `files`, as `smoke-dist.mjs` already was. It is a CI tool; npm consumers never run it (#306).
+
+---
+
 ## v0.12.264 — September 2, 2026
 
 ### Fixed — five signing paths spent the user's capital without consulting the spend policy
