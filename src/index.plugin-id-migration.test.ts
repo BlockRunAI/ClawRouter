@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
  * `blockrun-clawrouter`; installs made before the rename still carry a
  * `plugins.entries.clawrouter` entry that no longer refers to us.
  */
+type PluginEntry = { enabled?: boolean };
+type PluginsConfig = { plugins: { entries: Record<string, PluginEntry> } };
+
 describe("plugin id migration", () => {
   let home: string;
   const logger = { info: () => {}, warn: () => {}, error: () => {} };
@@ -28,41 +31,36 @@ describe("plugin id migration", () => {
     await rm(home, { recursive: true, force: true });
   });
 
-  async function run(config: unknown): Promise<Record<string, never>> {
+  async function run(config: unknown): Promise<PluginsConfig> {
     await writeFile(join(home, ".openclaw", "openclaw.json"), JSON.stringify(config, null, 2));
     const { injectModelsConfig } = await import("./index.js");
     injectModelsConfig(logger as never, { forceWrite: true });
-    return JSON.parse(await readFile(join(home, ".openclaw", "openclaw.json"), "utf8"));
+    const raw = await readFile(join(home, ".openclaw", "openclaw.json"), "utf8");
+    return JSON.parse(raw) as PluginsConfig;
   }
 
   it("moves a pre-rename entry to the new id, preserving the enabled flag", async () => {
-    const out = (await run({ plugins: { entries: { clawrouter: { enabled: true } } } })) as {
-      plugins: { entries: Record<string, { enabled: boolean }> };
-    };
+    const out = await run({ plugins: { entries: { clawrouter: { enabled: true } } } });
     expect(out.plugins.entries["blockrun-clawrouter"]).toEqual({ enabled: true });
     expect(out.plugins.entries.clawrouter).toBeUndefined();
   });
 
   it("preserves a disabled choice rather than silently re-enabling", async () => {
-    const out = (await run({ plugins: { entries: { clawrouter: { enabled: false } } } })) as {
-      plugins: { entries: Record<string, { enabled: boolean }> };
-    };
+    const out = await run({ plugins: { entries: { clawrouter: { enabled: false } } } });
     expect(out.plugins.entries["blockrun-clawrouter"]).toEqual({ enabled: false });
   });
 
   it("never clobbers an existing blockrun-clawrouter entry", async () => {
-    const out = (await run({
+    const out = await run({
       plugins: {
         entries: { clawrouter: { enabled: true }, "blockrun-clawrouter": { enabled: false } },
       },
-    })) as { plugins: { entries: Record<string, { enabled: boolean }> } };
+    });
     expect(out.plugins.entries["blockrun-clawrouter"]).toEqual({ enabled: false });
   });
 
   it("leaves a config with no clawrouter entry alone", async () => {
-    const out = (await run({ plugins: { entries: { other: { enabled: true } } } })) as {
-      plugins: { entries: Record<string, unknown> };
-    };
+    const out = await run({ plugins: { entries: { other: { enabled: true } } } });
     expect(out.plugins.entries["blockrun-clawrouter"]).toBeUndefined();
     expect(out.plugins.entries.other).toEqual({ enabled: true });
   });
