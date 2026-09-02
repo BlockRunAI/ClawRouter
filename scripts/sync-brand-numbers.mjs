@@ -19,6 +19,7 @@
  * and wrap the WHOLE token, so a badge URL, its alt text and the prose number
  * can all regenerate from one key.
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, relative, extname } from "node:path";
 
@@ -113,6 +114,23 @@ const render = (marker, value) => (RENDER[marker] ?? String)(value);
 /** `mcp.tools@badge` looks up `mcp.tools`. Unmodified markers are unaffected. */
 const keyOf = (marker) => marker.split("@")[0];
 
+/**
+ * `@live` opts a marker INTO rewriting inside a fenced block.
+ *
+ * The fence skip exists so a code block demonstrating the marker syntax is not
+ * itself rewritten. But a fence is also how you draw an ASCII diagram, and a
+ * number inside one is live marketing copy, not documentation. Franklin's README
+ * had three model counts inside box-drawing blocks: silently skipped by the
+ * rewriter AND by --check, so they would have gone stale while the same number
+ * updated five lines above, with CI reporting "up to date" throughout. That is
+ * the exact hand-maintained staleness this tool exists to remove.
+ *
+ * `live` occupies the modifier slot, so it cannot be combined with a renderer
+ * modifier like `@badge`. A badge inside a code fence is not a thing worth
+ * supporting; a bare number inside a diagram very much is.
+ */
+const isLive = (marker) => marker.split("@")[1] === "live";
+
 /* ── 3. marker rewriting ─────────────────────────────────────────────────── */
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -131,10 +149,14 @@ function fencedRanges(text) {
       open = null;
     }
   }
+  // An unterminated fence used to be dropped, which silently reclassified the
+  // whole tail of the file as live prose and rewrote every example after it.
+  // A fence with no partner runs to EOF — that is how the renderers read it too.
+  if (open !== null) ranges.push([open, text.length]);
   return ranges;
 }
 
-function syncFile(file, numbers, problems) {
+function syncFile(file, numbers, problems, skipped) {
   const before = readFileSync(file, "utf8");
   const rel = relative(ROOT, file);
   const fenced = fencedRanges(before);
@@ -152,7 +174,10 @@ function syncFile(file, numbers, problems) {
     [CLOSE_ANY, (n) => `<!-- /br:${n} -->`],
   ]) {
     for (const m of before.matchAll(re)) {
-      if (inFence(m.index)) continue;
+      // A fenced marker is documentation and is neither collected nor validated
+      // — unless it is @live, which is explicitly live content that happens to
+      // sit in a diagram, so it must be discovered and key-checked like any other.
+      if (!isLive(m[1]) && inFence(m.index)) continue;
       markers.add(m[1]);
       if (!known.has(keyOf(m[1]))) problems.push(`${rel}: unknown key ${shown(m[1])}`);
     }
@@ -163,12 +188,20 @@ function syncFile(file, numbers, problems) {
     const key = keyOf(marker);
     if (!known.has(key)) continue;
     const value = known.get(key);
+    const live = isLive(marker);
     const pair = new RegExp(
       `(<!--\\s*br:${esc(marker)}\\s*-->)([\\s\\S]*?)(<!--\\s*/br:${esc(marker)}\\s*-->)`,
       "g",
     );
+    // Fence ranges must be recomputed against the string we are about to search.
+    // `replace` reports offsets into ITS OWN input, and `after` has already been
+    // rewritten by every earlier marker in this loop — a badge turns 2 characters
+    // into ~150 — so ranges measured on `before` drift further out of alignment
+    // with each pass and start judging the wrong side of a fence boundary.
+    const fencedNow = fencedRanges(after);
+    const inFenceNow = (i) => fencedNow.some(([a, b]) => i >= a && i < b);
     after = after.replace(pair, (whole, open, inner, close, offset) => {
-      if (inFence(offset)) return whole;
+      if (!live && inFenceNow(offset)) return whole;
       // Nesting means the closing tag of an inner marker would be consumed by
       // the outer one. Refuse rather than produce mangled output.
       if (/<!--\s*\/?br:/.test(inner)) {
@@ -181,17 +214,62 @@ function syncFile(file, numbers, problems) {
 
     // An opening tag with no partner silently swallows the rest of the file on
     // a naive regex, so catch it explicitly.
+    const counted = (m) => live || !inFence(m.index);
     const opens = [...before.matchAll(new RegExp(`<!--\\s*br:${esc(marker)}\\s*-->`, "g"))]
-      .filter((m) => !inFence(m.index)).length;
+      .filter(counted).length;
     const closes = [...before.matchAll(new RegExp(`<!--\\s*/br:${esc(marker)}\\s*-->`, "g"))]
-      .filter((m) => !inFence(m.index)).length;
+      .filter(counted).length;
     if (opens !== closes) problems.push(`${rel}: unbalanced marker br:${marker} (${opens} open, ${closes} close)`);
+  }
+
+  // Skipping a fenced marker is right for a documentation example and wrong for
+  // a number inside a diagram, and only a human can tell those apart. Report the
+  // ones whose value actually disagrees with the artifact — those are numbers
+  // going stale under a green build. An example already showing the right value
+  // stays quiet, so repos that document the syntax get no noise.
+  //
+  // Scanned over `before` rather than recorded during rewriting because a marker
+  // that appears ONLY inside a fence is dropped at discovery and never reaches
+  // the replace loop at all.
+  const ANY_PAIR = /<!--\s*br:([A-Za-z0-9_.@]+)\s*-->([\s\S]*?)<!--\s*\/br:\1\s*-->/g;
+  for (const m of before.matchAll(ANY_PAIR)) {
+    const name = m[1];
+    if (isLive(name) || !inFence(m.index)) continue;
+    const key = keyOf(name);
+    if (!known.has(key) || m[2] === render(name, known.get(key))) continue;
+    skipped.push(`${rel}:${before.slice(0, m.index).split("\n").length} br:${name}`);
   }
 
   return { before, after, changed: before !== after, used };
 }
 
 /* ── 4. walk ─────────────────────────────────────────────────────────────── */
+
+/**
+ * The set of paths git tracks, or null when this is not a git checkout.
+ *
+ * Without this the walker rewrote ANY .md/.txt it could reach, including files
+ * git ignores — a developer's scratch notes, a generated docs/ output — and
+ * --check then reported drift against files that are not in the repo at all. CI
+ * never saw it (a fresh checkout contains only tracked files), so it was purely
+ * a local mystery. Returning null on a non-git tree keeps the tool usable in a
+ * bare directory, which is how it is often run the first time.
+ */
+function trackedFiles() {
+  try {
+    const out = execFileSync("git", ["ls-files", "-z"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const set = new Set(out.split("\0").filter(Boolean).map((rel) => join(ROOT, rel)));
+    return set.size ? set : null;
+  } catch {
+    return null;
+  }
+}
+
+const TRACKED = trackedFiles();
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -210,7 +288,7 @@ function* walk(dir) {
       // would report drift that belongs to another repo's CI.
       if (existsSync(join(p, ".git"))) continue;
       yield* walk(p);
-    } else if (TEXT_EXT.has(extname(name))) yield p;
+    } else if (TEXT_EXT.has(extname(name)) && (TRACKED === null || TRACKED.has(p))) yield p;
   }
 }
 
@@ -225,14 +303,26 @@ const raw = await loadNumbers();
 const numbers = flatten(raw);
 const problems = [];
 const drifted = [];
+const skipped = [];
 const everUsed = new Set();
 
 for (const file of walk(ROOT)) {
-  const { before, after, changed, used } = syncFile(file, numbers, problems);
+  const { before, after, changed, used } = syncFile(file, numbers, problems, skipped);
   used.forEach((k) => everUsed.add(k));
   if (!changed) continue;
   drifted.push({ file: relative(ROOT, file), before, after });
   if (!check) writeFileSync(file, after);
+}
+
+// Non-fatal on purpose: this ships to 37 repos at once, and a hard failure would
+// break every one of them that documents the marker syntax. Visible, not fatal.
+if (skipped.length) {
+  console.error(
+    `brand-numbers: ${skipped.length} marker(s) skipped inside code fences ` +
+      `(add @live to sync one, e.g. <!-- br:models.chatVisible@live -->):`,
+  );
+  for (const s of skipped) console.error(`  ${s}`);
+  console.error("");
 }
 
 if (problems.length) {
