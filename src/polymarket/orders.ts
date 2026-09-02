@@ -1,13 +1,15 @@
 // src/utils/polymarket/orders.ts
 //
-// buy / sell / cancel / open-orders flows. Safety model (deliberately NOT the
-// x402 budget ledger — bets are the user's own pUSD capital on Polygon, a
-// different asset in a different wallet than BlockRun API spend):
+// buy / sell / cancel / open-orders flows. Safety model:
 //   - confirm:true is HARD-REQUIRED to place an order; without it the call
 //     returns a dry-run preview and signs nothing.
 //   - per-order notional capped by POLYMARKET_MAX_BET_USD (default $25).
 //   - optional POLYMARKET_MAX_SESSION_USD cumulative cap, tracked in-memory
 //     with per-agent attribution (agent_id).
+//   - the operator's spend policy (spending.json payee/network/asset lists and
+//     amount windows) is checked against the exchange contract on Polygon
+//     BEFORE the order is signed — see spend-policy.ts. The two notional caps
+//     above remain a separate in-memory ledger.
 import {
   OrderType,
   Side,
@@ -15,8 +17,17 @@ import {
   type OrderBookSummary,
 } from "@polymarket/clob-client-v2";
 import { checkGeoblock, getClobClient, getPolymarketAccount, resetClobClient } from "./client.js";
-import { getMaxBetUsd, getMaxSessionUsd } from "./constants.js";
+import {
+  CTF_EXCHANGE_V2,
+  getMaxBetUsd,
+  getMaxSessionUsd,
+  NEG_RISK_CTF_EXCHANGE_V2,
+  POLYGON_CHAIN_ID,
+  PUSD_COLLATERAL,
+} from "./constants.js";
 import { invalidateL2Creds } from "./creds.js";
+import { SpendPolicyError } from "../spend-control.js";
+import { signUnderSpendPolicy, usdToMicros, type PolymarketSpendDeps } from "./spend-policy.js";
 
 // --- Session bet ledger (in-memory; resets with the process) ---
 const ledger = {
@@ -166,6 +177,9 @@ function isCredsMismatchError(err: { message?: string; status?: number; data?: u
 
 /** Map CLOB errors to actionable guidance. Exported for unit tests. */
 export async function mapClobError(err: unknown): Promise<string> {
+  if (err instanceof SpendPolicyError) {
+    return `Refused by spend policy — nothing was signed. ${err.message} (see ~/.openclaw/blockrun/spending.json)`;
+  }
   const e = err as { message?: string; status?: number; data?: unknown };
   const dataText = e?.data
     ? ` — ${typeof e.data === "string" ? e.data : JSON.stringify(e.data)}`
@@ -275,7 +289,10 @@ export interface ToolResult {
   isError?: boolean;
 }
 
-export async function executeTrade(input: TradeInput): Promise<ToolResult> {
+export async function executeTrade(
+  input: TradeInput,
+  deps?: PolymarketSpendDeps,
+): Promise<ToolResult> {
   const side = input.action === "buy" ? Side.BUY : Side.SELL;
   const isLimit = input.price !== undefined;
 
@@ -295,14 +312,31 @@ export async function executeTrade(input: TradeInput): Promise<ToolResult> {
   // totalUsd instead of raising it — silently defeating POLYMARKET_MAX_SESSION_USD
   // for every order placed afterward. Reject before any network call, same as
   // fund.ts's amount_usd guard.
+  //
+  // Number.isFinite, not just `<= 0`: nothing validates this field at runtime.
+  // tool.ts hands us `params.amount_usd as number | undefined`, a compile-time
+  // cast over `Record<string, unknown>`, so NaN and strings arrive intact.
+  // `NaN <= 0` and `"abc" <= 0` are both false, and a NaN notional poisons
+  // ledger.totalUsd permanently (`totalUsd + NaN > cap` is false forever).
   if (
     !isLimit &&
     input.action === "buy" &&
     input.amount_usd !== undefined &&
-    input.amount_usd <= 0
+    !(Number.isFinite(input.amount_usd) && input.amount_usd > 0)
   ) {
     return {
       text: `amount_usd must be a positive dollar amount to spend, got ${input.amount_usd}.`,
+      isError: true,
+    };
+  }
+  // Same class on the limit path, rejected before any network call. A negative
+  // or NaN size makes notional (price * size) negative or NaN, which walks
+  // through both the per-order and session caps. The later `minSize` check
+  // cannot catch it: `book.min_order_size` is often absent, so
+  // `parseFloat(undefined || "0")` is 0 and `minSize > 0` short-circuits.
+  if (isLimit && input.size !== undefined && !(Number.isFinite(input.size) && input.size > 0)) {
+    return {
+      text: `size must be a positive number of shares, got ${input.size}.`,
       isError: true,
     };
   }
@@ -444,39 +478,16 @@ export async function executeTrade(input: TradeInput): Promise<ToolResult> {
       // Reserve now (before the await) so a concurrent order sees this spend;
       // roll back if the submit throws so a failed order doesn't consume budget.
       reserveBet(notional, input.agent_id);
-      let response: unknown;
-      try {
-        response = isLimit
-          ? await clob.createAndPostOrder(
-              {
-                tokenID: token.tokenId,
-                price: price as number,
-                size: size as number,
-                side,
-                ...(orderKind === "GTD" && input.expires_at
-                  ? { expiration: input.expires_at }
-                  : {}),
-              },
-              options,
-              orderKind === "GTD" ? OrderType.GTD : OrderType.GTC,
-              input.post_only ?? false,
-            )
-          : await clob.createAndPostMarketOrder(
-              {
-                tokenID: token.tokenId,
-                amount: input.action === "buy" ? (input.amount_usd as number) : (size as number),
-                side,
-                orderType: orderKind === "FAK" ? OrderType.FAK : OrderType.FOK,
-              },
-              options,
-              orderKind === "FAK" ? OrderType.FAK : OrderType.FOK,
-            );
-      } catch (submitErr) {
-        releaseBet(notional, input.agent_id);
-        throw submitErr;
-      }
-
-      const r = response as {
+      // Counterparty for policy: the exchange the SDK signs the order for
+      // (negRisk markets use the NegRisk exchange). Notional is quoted and
+      // settles in pUSD on both sides, so the collateral is the asset checked.
+      const policyQuote = {
+        payTo: negRisk ? NEG_RISK_CTF_EXCHANGE_V2 : CTF_EXCHANGE_V2,
+        network: `eip155:${POLYGON_CHAIN_ID}`,
+        asset: PUSD_COLLATERAL,
+        amount: usdToMicros(notional),
+      };
+      type ClobOrderResponse = {
         success?: boolean;
         errorMsg?: string;
         orderID?: string;
@@ -486,15 +497,49 @@ export async function executeTrade(input: TradeInput): Promise<ToolResult> {
         takingAmount?: string;
         makingAmount?: string;
       };
-      // The order is placed unless the CLOB explicitly says success:false (or
-      // returns an error with no orderID). A non-empty errorMsg WITH success and
-      // an orderID is informational — e.g. status "delayed", "order match delayed
-      // due to market conditions" — the order IS live, so don't roll it back or a
-      // retrying agent double-submits.
-      const placed = r?.success !== false && (r?.orderID || r?.status === "matched");
-      if (!placed) {
+      let r: ClobOrderResponse;
+      try {
+        r = await signUnderSpendPolicy(deps, policyQuote, "polymarket order", async () => {
+          const res = (await (isLimit
+            ? clob.createAndPostOrder(
+                {
+                  tokenID: token.tokenId,
+                  price: price as number,
+                  size: size as number,
+                  side,
+                  ...(orderKind === "GTD" && input.expires_at
+                    ? { expiration: input.expires_at }
+                    : {}),
+                },
+                options,
+                orderKind === "GTD" ? OrderType.GTD : OrderType.GTC,
+                input.post_only ?? false,
+              )
+            : clob.createAndPostMarketOrder(
+                {
+                  tokenID: token.tokenId,
+                  amount: input.action === "buy" ? (input.amount_usd as number) : (size as number),
+                  side,
+                  orderType: orderKind === "FAK" ? OrderType.FAK : OrderType.FOK,
+                },
+                options,
+                orderKind === "FAK" ? OrderType.FAK : OrderType.FOK,
+              ))) as ClobOrderResponse;
+          // The order is placed unless the CLOB explicitly says success:false (or
+          // returns an error with no orderID). A non-empty errorMsg WITH success and
+          // an orderID is informational — e.g. status "delayed", "order match delayed
+          // due to market conditions" — the order IS live, so don't roll it back or a
+          // retrying agent double-submits.
+          const placed = res?.success !== false && (res?.orderID || res?.status === "matched");
+          // Thrown from inside the policy callback on purpose: a resolved-but-
+          // rejected CLOB response must release the spend-policy reservation
+          // too, not only the session bet ledger below.
+          if (!placed) throw new Error(res?.errorMsg || "order rejected");
+          return res;
+        });
+      } catch (submitErr) {
         releaseBet(notional, input.agent_id);
-        throw new Error(r?.errorMsg || "order rejected");
+        throw submitErr;
       }
       commitBet();
 

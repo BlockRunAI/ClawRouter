@@ -31,6 +31,7 @@ import { mapClobError } from "./orders.js";
 import { getFundsAddress } from "./positions.js";
 import { sendWalletBatch } from "./relayer.js";
 import { getPublicClient } from "./setup.js";
+import { signUnderSpendPolicy, type PolymarketSpendDeps } from "./spend-policy.js";
 
 async function rawPusdBalance(owner: Hex): Promise<bigint> {
   return getPublicClient().readContract({
@@ -47,12 +48,23 @@ interface WithdrawInput {
   confirm?: boolean;
 }
 
-export async function withdrawFunds(input: WithdrawInput): Promise<ToolResult> {
+export async function withdrawFunds(
+  input: WithdrawInput,
+  deps?: PolymarketSpendDeps,
+): Promise<ToolResult> {
   // A non-positive amount_usd would otherwise pass the balance check below
   // (amountRaw > balanceRaw is false for zero or negative amounts) and reach
   // the bridge/transfer call. Reject before any network call, same as
   // fund.ts's amount_usd guard.
-  if (input.amount_usd !== undefined && input.amount_usd <= 0) {
+  //
+  // Number.isFinite, not just `<= 0`: nothing validates this field at runtime.
+  // tool.ts hands us `params.amount_usd as number | undefined`, a compile-time
+  // cast over `Record<string, unknown>`, so NaN and strings arrive intact and
+  // both `NaN <= 0` and `"abc" <= 0` are false.
+  if (
+    input.amount_usd !== undefined &&
+    !(Number.isFinite(input.amount_usd) && input.amount_usd > 0)
+  ) {
     return {
       text: `amount_usd must be a positive dollar amount, got ${input.amount_usd}. Omit it to withdraw the full balance.`,
       isError: true,
@@ -134,34 +146,51 @@ export async function withdrawFunds(input: WithdrawInput): Promise<ToolResult> {
     }
 
     // 2. Transfer pUSD from the deposit wallet to the bridge address.
+    // Spend policy sees the DESTINATION leg — recipient, Base, USDC — not the
+    // signed Polygon transfer: the bridge address is one-time and cannot be
+    // allowlisted, while to_address is agent-chosen and is what an operator's
+    // payee list must govern. Amount is the exact pUSD sent (6 dp = micros).
     const data = encodeFunctionData({
       abi: ERC20_ABI,
       functionName: "transfer",
       args: [bridgeEvm, amountRaw],
     });
-    let txHash: string | undefined;
-    if (getSigType() === 3) {
-      const res = await sendWalletBatch(
-        [{ target: PUSD_COLLATERAL, value: "0", data }],
-        owner,
-        "Withdraw",
-      );
-      txHash = res.transactionHash;
-    } else {
-      const account = getPolymarketAccount();
-      const wallet = createWalletClient({
-        account,
-        chain: polygon,
-        transport: http(POLYGON_RPC_URLS[0]),
-      });
-      txHash = await wallet.sendTransaction({
-        to: PUSD_COLLATERAL as Hex,
-        data,
-        chain: polygon,
-        account,
-      });
-      await getPublicClient().waitForTransactionReceipt({ hash: txHash as Hex });
-    }
+    const eoa = getSigType() !== 3;
+    const txHash = await signUnderSpendPolicy(
+      deps,
+      {
+        payTo: recipient,
+        network: `eip155:${BASE_CHAIN_ID}`,
+        asset: BASE_USDC,
+        amount: amountRaw.toString(),
+      },
+      "polymarket withdraw",
+      async () => {
+        if (!eoa) {
+          const res = await sendWalletBatch(
+            [{ target: PUSD_COLLATERAL, value: "0", data }],
+            owner,
+            "Withdraw",
+          );
+          return res.transactionHash;
+        }
+        const account = getPolymarketAccount();
+        const wallet = createWalletClient({
+          account,
+          chain: polygon,
+          transport: http(POLYGON_RPC_URLS[0]),
+        });
+        return wallet.sendTransaction({
+          to: PUSD_COLLATERAL as Hex,
+          data,
+          chain: polygon,
+          account,
+        });
+      },
+    );
+    // Signed = spend; the receipt wait sits outside so a slow confirmation
+    // cannot release a reservation for a transfer that was already broadcast.
+    if (eoa) await getPublicClient().waitForTransactionReceipt({ hash: txHash as Hex });
 
     return {
       text: [

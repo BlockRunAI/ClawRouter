@@ -25,6 +25,7 @@ import {
   getSigType,
   NEG_RISK_ADAPTER,
   NEG_RISK_ADAPTER_ABI,
+  POLYGON_CHAIN_ID,
   POLYGON_RPC_URLS,
   PUSD_COLLATERAL,
   PUSD_DECIMALS,
@@ -34,6 +35,7 @@ import { mapClobError } from "./orders.js";
 import { getFundsAddress } from "./positions.js";
 import { sendWalletBatch } from "./relayer.js";
 import { getPublicClient, getPusdBalance } from "./setup.js";
+import { signUnderSpendPolicy, type PolymarketSpendDeps } from "./spend-policy.js";
 
 interface ClobMarketToken {
   token_id?: string;
@@ -41,10 +43,10 @@ interface ClobMarketToken {
   winner?: boolean;
 }
 
-export async function redeemPosition(input: {
-  condition_id?: string;
-  confirm?: boolean;
-}): Promise<ToolResult> {
+export async function redeemPosition(
+  input: { condition_id?: string; confirm?: boolean },
+  deps?: PolymarketSpendDeps,
+): Promise<ToolResult> {
   if (!input.condition_id) {
     return {
       text: `Pass condition_id:"0x…" (see action:"positions" for redeemable markets).`,
@@ -141,20 +143,39 @@ export async function redeemPosition(input: {
         });
     const target = (negRisk ? NEG_RISK_ADAPTER : CONDITIONAL_TOKENS) as Hex;
 
-    let txHash: string | undefined;
-    if (getSigType() === 3) {
-      const res = await sendWalletBatch([{ target, value: "0", data }], owner, "Redeem");
-      txHash = res.transactionHash;
-    } else {
-      const account = getPolymarketAccount();
-      const wallet = createWalletClient({
-        account,
-        chain: polygon,
-        transport: http(POLYGON_RPC_URLS[0]),
-      });
-      txHash = await wallet.sendTransaction({ to: target, data, chain: polygon, account });
-      await pc.waitForTransactionReceipt({ hash: txHash as Hex });
-    }
+    // Spend policy sees the protocol contract being signed (ConditionalTokens
+    // or NegRiskAdapter on Polygon) with amount 0: a redeem moves NO capital
+    // out — it burns this wallet's own outcome tokens and credits collateral
+    // back to the same wallet — so there is no spend to reserve. The check is
+    // still required: an operator's payee/network lists are a total statement
+    // about what may be signed, and this keeps every signing path under them.
+    const eoa = getSigType() !== 3;
+    const txHash = await signUnderSpendPolicy(
+      deps,
+      {
+        payTo: target,
+        network: `eip155:${POLYGON_CHAIN_ID}`,
+        asset: PUSD_COLLATERAL,
+        amount: "0",
+      },
+      "polymarket redeem",
+      async () => {
+        if (!eoa) {
+          const res = await sendWalletBatch([{ target, value: "0", data }], owner, "Redeem");
+          return res.transactionHash;
+        }
+        const account = getPolymarketAccount();
+        const wallet = createWalletClient({
+          account,
+          chain: polygon,
+          transport: http(POLYGON_RPC_URLS[0]),
+        });
+        return wallet.sendTransaction({ to: target, data, chain: polygon, account });
+      },
+    );
+    // The relayer path confirms inside sendWalletBatch; the direct EOA path must
+    // wait here, or the balance read and success report can precede a revert.
+    if (eoa) await pc.waitForTransactionReceipt({ hash: txHash as Hex });
 
     const balanceAfter = await getPusdBalance(owner).catch(() => null);
     return {

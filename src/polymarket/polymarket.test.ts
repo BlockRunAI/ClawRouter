@@ -130,3 +130,40 @@ describe("trade gating (cross-field validation, no network)", () => {
     expect(r.text).toMatch(/amount_usd must be a positive dollar amount/i);
   });
 });
+
+describe("amount_usd / size hardening (NaN and string inputs)", () => {
+  // tool.ts casts params over Record<string, unknown>, so these reach us intact.
+  it("rejects a NaN amount_usd on a market buy", async () => {
+    const res = await executeTrade({
+      action: "buy",
+      token_id: "1",
+      amount_usd: Number.NaN,
+      confirm: true,
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/positive dollar amount/i);
+  });
+
+  it("rejects a string amount_usd on a market buy", async () => {
+    const res = await executeTrade({
+      action: "buy",
+      token_id: "1",
+      amount_usd: "abc" as unknown as number,
+      confirm: true,
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/positive dollar amount/i);
+  });
+
+  it("rejects a negative size on a limit order", async () => {
+    const res = await executeTrade({
+      action: "buy",
+      token_id: "1",
+      price: 0.5,
+      size: -100,
+      confirm: true,
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/positive number of shares/i);
+  });
+});
