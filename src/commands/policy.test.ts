@@ -18,6 +18,7 @@ import {
 
 const payee = "0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa";
 const other = `0x${"b".repeat(40)}`;
+const firstLine = (res: { text?: string }) => (res.text ?? "").split("\n")[0];
 
 /** A store shared across command invocations, the way spending.json is on disk. */
 function memory() {
@@ -69,13 +70,49 @@ describe("runPolicyCommand (in-memory store)", () => {
     expect(openControl().getLimits().blockedPayees).toEqual([payee.toLowerCase(), other]);
   });
 
-  it("remove that empties a list clears it rather than calling setPolicy([])", () => {
+  it("refuses to remove the last allow-list entry, because that would turn the guard off", () => {
     const { run, openControl } = memory();
     run(["set", "allowedNetworks", CAIP2_BASE, CAIP2_SOLANA_MAINNET]);
     expect(run(["remove", "allowedNetworks", CAIP2_BASE]).isError).toBeFalsy();
     expect(openControl().getLimits().allowedNetworks).toEqual([CAIP2_SOLANA_MAINNET]);
-    expect(run(["remove", "allowedNetworks", CAIP2_SOLANA_MAINNET]).isError).toBeFalsy();
-    expect(openControl().getLimits().allowedNetworks).toBeUndefined();
+
+    const res = run(["remove", "allowedNetworks", CAIP2_SOLANA_MAINNET]);
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/every network is permitted/);
+    expect(res.text).toMatch(/policy clear allowedNetworks/);
+    expect(openControl().getLimits().allowedNetworks).toEqual([CAIP2_SOLANA_MAINNET]);
+    // The other entry-list behaves the same; check() would otherwise allow every payee.
+    expect(openControl().check(1, { payTo: other, network: CAIP2_BASE }).allowed).toBe(false);
+  });
+
+  it("remove that empties blockedPayees clears it and says so in the first line", () => {
+    const { run, openControl } = memory();
+    run(["set", "blockedPayees", payee]);
+    const res = run(["remove", "blockedPayees", payee]);
+    expect(res.isError).toBeFalsy();
+    expect(firstLine(res)).toBe("blockedPayees is now unset — no payee is blocked.");
+    expect(openControl().getLimits().blockedPayees).toBeUndefined();
+  });
+
+  it("clearing an allow-list or a cap leads with what is now permitted", () => {
+    const { run } = memory();
+    run(["set", "allowedPayees", payee]);
+    expect(firstLine(run(["clear", "allowedPayees"]))).toBe(
+      "allowedPayees is now unset — every payee is permitted.",
+    );
+    run(["limit", "daily", "5"]);
+    expect(firstLine(run(["limit", "daily", "clear"]))).toBe(
+      "daily is now unset — spend in the daily window is uncapped.",
+    );
+  });
+
+  it("show renders unset keys as unset, not as a list that was never configured", () => {
+    const { run } = memory();
+    const text = run([]).text;
+    expect(text).toContain("allowedPayees: (unset — every payee is permitted)");
+    expect(text).toContain("blockedPayees: (unset — no payee is blocked)");
+    expect(text).toContain("daily: (unset — spend in the daily window is uncapped)");
+    expect(text).not.toContain("(none)");
   });
 
   it("remove of an absent entry is refused and the list is untouched", () => {

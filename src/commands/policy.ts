@@ -32,6 +32,28 @@ const USD = /^\d+(\.\d+)?$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const LIST_ACTIONS = ["set", "add", "remove", "clear"] as const;
 type ListAction = (typeof LIST_ACTIONS)[number];
+const ALLOW_LISTS: readonly PolicyList[] = ["allowedPayees", "allowedNetworks", "allowedAssets"];
+
+/**
+ * What an unset key means for the guard. `check()` treats an absent or empty
+ * allow-list as "no policy", so unsetting one is the loosest possible state —
+ * every write that gets there has to say so in its first line, and the show
+ * output must not render it like a list that was never configured.
+ */
+function unsetMeaning(key: PolicyList | SpendWindow): string {
+  switch (key) {
+    case "allowedPayees":
+      return "every payee is permitted";
+    case "allowedNetworks":
+      return "every network is permitted";
+    case "allowedAssets":
+      return "every asset is permitted";
+    case "blockedPayees":
+      return "no payee is blocked";
+    default:
+      return `spend in the ${key} window is uncapped`;
+  }
+}
 
 const USAGE = [
   "Usage:",
@@ -145,7 +167,15 @@ function nextListValue(
       const missing = wanted.filter((v) => !have.includes(v));
       if (missing.length > 0) return { reject: `not in ${plan.list}: ${missing.join(", ")}` };
       const next = have.filter((v) => !wanted.includes(v));
-      // An emptied list routes to clearPolicy(): setPolicy([]) throws by design.
+      if (next.length === 0 && ALLOW_LISTS.includes(plan.list)) {
+        // check() gates on presence AND length, so an emptied allow-list is
+        // not "allow nothing" — it is "allow everything". A remove must never
+        // flip the guard off as a side effect; unsetting is an explicit clear.
+        return {
+          reject: `removing the last ${plan.list} entry would unset the list, and then ${unsetMeaning(plan.list)}. Use "policy clear ${plan.list}" if that is what you want`,
+        };
+      }
+      // An emptied blockedPayees routes to clearPolicy(): setPolicy([]) throws by design.
       return { next: next.length > 0 ? next : undefined };
     }
   }
@@ -155,12 +185,12 @@ function formatPolicy(limits: SpendLimits): string {
   const lines = ["Spend limits (USD):"];
   for (const w of SPEND_WINDOWS) {
     const v = limits[w];
-    lines.push(`  ${w}: ${v === undefined ? "(none)" : `$${v}`}`);
+    lines.push(`  ${w}: ${v === undefined ? `(unset — ${unsetMeaning(w)})` : `$${v}`}`);
   }
   lines.push("Policy lists:");
   for (const l of POLICY_LISTS) {
     const v = limits[l];
-    lines.push(`  ${l}: ${v && v.length > 0 ? v.join(", ") : "(none)"}`);
+    lines.push(`  ${l}: ${v && v.length > 0 ? v.join(", ") : `(unset — ${unsetMeaning(l)})`}`);
   }
   return lines.join("\n");
 }
@@ -207,9 +237,11 @@ export function runPolicyCommand(
       `Write did not land: ${key} on disk is ${JSON.stringify(landed) ?? "(none)"}, expected ${JSON.stringify(expected) ?? "(none)"}`,
     );
   }
-  return {
-    text: `${key}: ${expected === undefined ? "(none)" : JSON.stringify(expected)}\n${RESTART_NOTE}`,
-  };
+  const headline =
+    expected === undefined
+      ? `${key} is now unset — ${unsetMeaning(key)}.`
+      : `${key}: ${JSON.stringify(expected)}`;
+  return { text: `${headline}\n${RESTART_NOTE}` };
 }
 
 export function createPolicyCommand(
