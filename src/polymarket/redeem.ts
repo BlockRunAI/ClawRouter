@@ -173,7 +173,9 @@ export async function redeemPosition(
         return wallet.sendTransaction({ to: target, data, chain: polygon, account });
       },
     );
-    if (!eoa) await pc.waitForTransactionReceipt({ hash: txHash as Hex });
+    // The relayer path confirms inside sendWalletBatch; the direct EOA path must
+    // wait here, or the balance read and success report can precede a revert.
+    if (eoa) await pc.waitForTransactionReceipt({ hash: txHash as Hex });
 
     const balanceAfter = await getPusdBalance(owner).catch(() => null);
     return {

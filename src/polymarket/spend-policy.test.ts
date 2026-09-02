@@ -22,6 +22,8 @@ const h = vi.hoisted(() => ({
     data: { address: { evm: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } },
   })),
   negRisk: false,
+  sigType: 0,
+  waitForReceipt: vi.fn(async () => ({})),
   clob: {
     getOrderBook: vi.fn(async () => ({
       tick_size: "0.01",
@@ -62,7 +64,7 @@ vi.mock("./positions.js", () => ({ getFundsAddress: () => h.VAULT }));
 vi.mock("./setup.js", () => ({
   getPublicClient: () => ({
     readContract: async () => 5_000_000n, // $5 pUSD in the deposit wallet
-    waitForTransactionReceipt: async () => ({}),
+    waitForTransactionReceipt: h.waitForReceipt,
   }),
   getPusdBalance: async () => 5,
 }));
@@ -73,7 +75,7 @@ vi.mock("viem", async (importOriginal) => ({
 }));
 vi.mock("./constants.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./constants.js")>()),
-  getSigType: () => 0,
+  getSigType: () => h.sigType,
 }));
 
 import { fundVault } from "./fund.js";
@@ -96,6 +98,7 @@ function inMemoryControl(): SpendControl {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.sigType = 0;
 });
 
 describe("fundVault consults spend policy before signing the deposit", () => {
@@ -162,6 +165,28 @@ describe("executeTrade consults spend policy before signing the order", () => {
       network: "eip155:137",
       asset: PUSD_COLLATERAL,
     });
+  });
+
+  it("releases the policy reservation when the CLOB resolves but rejects the order", async () => {
+    // A resolved { success:false } is not a throw. Without the placed check
+    // inside the policy callback, the reservation settles as real spend and a
+    // rejected order eats the operator's window.
+    const control = inMemoryControl();
+    control.setLimit("session", 5); // exactly one $5 order's worth
+    const counterparty = { payTo: CTF_EXCHANGE_V2, network: "eip155:137", asset: PUSD_COLLATERAL };
+    h.clob.createAndPostOrder.mockResolvedValueOnce({
+      success: false,
+      errorMsg: "rejected by CLOB",
+    } as never);
+    const before = getSessionLedger().totalUsd;
+
+    const r = await executeTrade(limitBuy, { spendControl: control });
+
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/rejected by CLOB/);
+    expect(getSessionLedger().totalUsd).toBe(before);
+    // The window is intact: the same $5 is still allowed afterwards.
+    expect(control.check(5, counterparty).allowed).toBe(true);
   });
 
   it("routes negRisk markets to the NegRisk exchange, so an allowlist for the plain one refuses", async () => {
@@ -262,5 +287,32 @@ describe("redeemPosition consults spend policy before signing the claim", () => 
     expect(h.sendTransaction).not.toHaveBeenCalled();
     expect(h.sendWalletBatch).not.toHaveBeenCalled();
     expect(check.mock.calls[0]?.[1]?.payTo).toBe(NEG_RISK_ADAPTER);
+  });
+});
+
+describe("redeemPosition confirms the claim before reporting success", () => {
+  const redeem = { condition_id: `0x${"ab".repeat(32)}`, confirm: true };
+
+  beforeEach(() => {
+    h.negRisk = false;
+  });
+
+  it("waits for the receipt on the direct EOA path", async () => {
+    const r = await redeemPosition(redeem, { spendControl: inMemoryControl() });
+
+    expect(r.isError).toBeFalsy();
+    expect(h.sendTransaction).toHaveBeenCalledTimes(1);
+    expect(h.waitForReceipt).toHaveBeenCalledWith({ hash: "0xpolygon-tx" });
+  });
+
+  it("does not double-wait on the relayer path, which confirms inside sendWalletBatch", async () => {
+    h.sigType = 3;
+
+    const r = await redeemPosition(redeem, { spendControl: inMemoryControl() });
+
+    expect(r.isError).toBeFalsy();
+    expect(h.sendWalletBatch).toHaveBeenCalledTimes(1);
+    expect(h.sendTransaction).not.toHaveBeenCalled();
+    expect(h.waitForReceipt).not.toHaveBeenCalled();
   });
 });

@@ -453,10 +453,20 @@ export async function executeTrade(
         asset: PUSD_COLLATERAL,
         amount: usdToMicros(notional),
       };
-      let response: unknown;
+      type ClobOrderResponse = {
+        success?: boolean;
+        errorMsg?: string;
+        orderID?: string;
+        status?: string;
+        transactionsHashes?: string[];
+        tradeIDs?: string[];
+        takingAmount?: string;
+        makingAmount?: string;
+      };
+      let r: ClobOrderResponse;
       try {
-        response = await signUnderSpendPolicy(deps, policyQuote, "polymarket order", () =>
-          isLimit
+        r = await signUnderSpendPolicy(deps, policyQuote, "polymarket order", async () => {
+          const res = (await (isLimit
             ? clob.createAndPostOrder(
                 {
                   tokenID: token.tokenId,
@@ -480,32 +490,22 @@ export async function executeTrade(
                 },
                 options,
                 orderKind === "FAK" ? OrderType.FAK : OrderType.FOK,
-              ),
-        );
+              ))) as ClobOrderResponse;
+          // The order is placed unless the CLOB explicitly says success:false (or
+          // returns an error with no orderID). A non-empty errorMsg WITH success and
+          // an orderID is informational — e.g. status "delayed", "order match delayed
+          // due to market conditions" — the order IS live, so don't roll it back or a
+          // retrying agent double-submits.
+          const placed = res?.success !== false && (res?.orderID || res?.status === "matched");
+          // Thrown from inside the policy callback on purpose: a resolved-but-
+          // rejected CLOB response must release the spend-policy reservation
+          // too, not only the session bet ledger below.
+          if (!placed) throw new Error(res?.errorMsg || "order rejected");
+          return res;
+        });
       } catch (submitErr) {
         releaseBet(notional, input.agent_id);
         throw submitErr;
-      }
-
-      const r = response as {
-        success?: boolean;
-        errorMsg?: string;
-        orderID?: string;
-        status?: string;
-        transactionsHashes?: string[];
-        tradeIDs?: string[];
-        takingAmount?: string;
-        makingAmount?: string;
-      };
-      // The order is placed unless the CLOB explicitly says success:false (or
-      // returns an error with no orderID). A non-empty errorMsg WITH success and
-      // an orderID is informational — e.g. status "delayed", "order match delayed
-      // due to market conditions" — the order IS live, so don't roll it back or a
-      // retrying agent double-submits.
-      const placed = r?.success !== false && (r?.orderID || r?.status === "matched");
-      if (!placed) {
-        releaseBet(notional, input.agent_id);
-        throw new Error(r?.errorMsg || "order rejected");
       }
       commitBet();
 
