@@ -900,6 +900,18 @@ describe("reloadLimits (in-process proxy restart)", () => {
     expect(live.check(4).allowed).toBe(false); // 2 recorded + 4 > 5: the window survived
   });
 
+  it("a write after reloadLimits uses the reloaded state as its compare-and-swap baseline", () => {
+    const storage = new InMemorySpendControlStorage();
+    const live = new SpendControl({ storage });
+    new SpendControl({ storage }).setLimit("hourly", 5); // lands behind live's back
+    live.reloadLimits();
+
+    // Without refreshing the baseline this would be refused as a conflict:
+    // live's last-read limits would still be {} while disk holds {hourly:5}.
+    expect(() => live.setLimit("daily", 2)).not.toThrow();
+    expect(storage.load()?.limits).toEqual({ hourly: 5, daily: 2 });
+  });
+
   it("fails closed on a malformed file and recovers once it is repaired", () => {
     let broken = false;
     class FlakyStorage extends InMemorySpendControlStorage {
