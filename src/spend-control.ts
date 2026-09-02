@@ -458,6 +458,29 @@ export class SpendControl {
     return this.policyFileBroken;
   }
 
+  /**
+   * Re-read limits from storage, keeping this instance's history and open
+   * reservations. Used on an in-process proxy restart so a hand-edit to
+   * spending.json made while the process was running still applies, without
+   * resetting the rolling windows. Fails closed exactly like the constructor:
+   * a malformed file refuses every payment until repaired, and a repaired
+   * file clears that refusal.
+   */
+  reloadLimits(): void {
+    let data: { limits: SpendLimits; history: SpendRecord[] } | null;
+    try {
+      data = this.storage.load();
+    } catch (err) {
+      if (!(err instanceof MalformedSpendPolicyError)) throw err;
+      this.policyFileBroken = err.message;
+      console.error(`[ClawRouter] ${err.message}`);
+      return;
+    }
+    this.policyFileBroken = undefined;
+    this.limits = data ? cloneLimits(data.limits) : {};
+    this.limitsDirty = false;
+  }
+
   check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult {
     if (this.policyFileBroken !== undefined) {
       return {

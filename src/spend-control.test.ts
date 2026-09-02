@@ -14,6 +14,7 @@ import {
   registerSpendPolicyHook,
   assertSpendPolicyAllows,
   getSharedSpendControl,
+  MalformedSpendPolicyError,
   setSharedSpendControl,
   SpendPolicyError,
   CAIP2_BASE,
@@ -872,5 +873,54 @@ describe("process-wide shared instance", () => {
     const actions = restarted.getHistory().map((r) => r.action);
     expect(actions).toContain("x402 payment");
     expect(actions).toContain("polymarket order");
+  });
+});
+
+// The singleton is process state; leave a fresh in-memory one behind so no
+// test in this file can see another's instance.
+afterEach(() => {
+  setSharedSpendControl(new SpendControl({ storage: new InMemorySpendControlStorage() }));
+});
+
+describe("reloadLimits (in-process proxy restart)", () => {
+  it("adopts an on-disk edit and keeps this instance's history and windows", () => {
+    const storage = new InMemorySpendControlStorage();
+    const clock = Date.now();
+    const live = new SpendControl({ storage, now: () => clock });
+    live.record(2, { action: "x402 payment" });
+
+    // A CLI in another process (or a hand-edit) lands a new cap on disk.
+    new SpendControl({ storage, now: () => clock }).setLimit("hourly", 5);
+    expect(live.getLimits().hourly).toBeUndefined();
+
+    live.reloadLimits();
+
+    expect(live.getLimits().hourly).toBe(5);
+    expect(live.getSpending("hourly")).toBeCloseTo(2);
+    expect(live.check(4).allowed).toBe(false); // 2 recorded + 4 > 5: the window survived
+  });
+
+  it("fails closed on a malformed file and recovers once it is repaired", () => {
+    let broken = false;
+    class FlakyStorage extends InMemorySpendControlStorage {
+      override load() {
+        if (broken) throw new MalformedSpendPolicyError("blockedPayees");
+        return super.load();
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const live = new SpendControl({ storage: new FlakyStorage() });
+    expect(live.check(0.01).allowed).toBe(true);
+
+    broken = true;
+    live.reloadLimits();
+    expect(live.check(0.01).allowed).toBe(false);
+    expect(live.getPolicyFileError()).toMatch(/blockedPayees/);
+
+    broken = false;
+    live.reloadLimits();
+    expect(live.check(0.01).allowed).toBe(true);
+    expect(live.getPolicyFileError()).toBeUndefined();
+    errors.mockRestore();
   });
 });
