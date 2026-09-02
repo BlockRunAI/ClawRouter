@@ -498,9 +498,7 @@ function rpcHexNumber(value: unknown, divisor: number): number | undefined {
 }
 
 function evmAddressFromPrivateKey(key: string): string {
-  const publicKey = secp256k1
-    .getPublicKey(Buffer.from(key.slice(2), "hex"), false)
-    .subarray(1);
+  const publicKey = secp256k1.getPublicKey(Buffer.from(key.slice(2), "hex"), false).subarray(1);
   return `0x${Buffer.from(keccak_256(publicKey)).subarray(-20).toString("hex")}`;
 }
 
