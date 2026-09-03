@@ -147,7 +147,12 @@ function installPlugin(openclawMjs: string, home: string, tarballPath: string): 
   );
 }
 
-async function startGateway(openclawMjs: string, home: string, gatewayPort: number, logName: string) {
+async function startGateway(
+  openclawMjs: string,
+  home: string,
+  gatewayPort: number,
+  logName: string,
+) {
   const logFd = openSync(join(sandbox!, logName), "a");
   const child = spawn(
     process.execPath,
@@ -179,7 +184,11 @@ async function waitHealthy(proxyPort: number, timeoutMs: number): Promise<object
   return null;
 }
 
-async function stopGateway(child: { pid?: number; exitCode: number | null; signalCode: string | null }) {
+async function stopGateway(child: {
+  pid?: number;
+  exitCode: number | null;
+  signalCode: string | null;
+}) {
   if (child.exitCode === null && child.signalCode === null) {
     try {
       process.kill(-child.pid!, "SIGTERM");
@@ -255,7 +264,8 @@ async function main(): Promise<number> {
   const tarballPath = join(sandbox, tgz);
 
   const openclawMjs =
-    process.env.OPENCLAW_E2E_OPENCLAW ?? join(sandbox, "cli", "node_modules", "openclaw", "openclaw.mjs");
+    process.env.OPENCLAW_E2E_OPENCLAW ??
+    join(sandbox, "cli", "node_modules", "openclaw", "openclaw.mjs");
   if (!process.env.OPENCLAW_E2E_OPENCLAW) {
     run(
       "npm",
@@ -348,10 +358,7 @@ async function main(): Promise<number> {
 
   const gwB1 = await startGateway(openclawMjs, homeB, gwPortB, "gateway-b1.log");
   const healthB1 = await waitHealthy(PROXY_PORT, HEALTH_TIMEOUT_MS);
-  check(
-    "boot 1 loads the plugin (installer default) and the proxy activates",
-    !!healthB1,
-  );
+  check("boot 1 loads the plugin (installer default) and the proxy activates", !!healthB1);
   await stopGateway(gwB1);
 
   const entriesB = readConfig(homeB).plugins?.entries ?? {};
