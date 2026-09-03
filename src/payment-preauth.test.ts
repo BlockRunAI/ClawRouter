@@ -84,7 +84,10 @@ function fakeGateway() {
         ctl.rejectNextPaid = false;
         return challenge402(); // underpayment rejected
       }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "payment-response": "settled" },
+      });
     }
     return challenge402();
   });
@@ -97,6 +100,57 @@ function body(maxTokens = 10) {
 }
 
 describe("payment pre-auth — per-request pricing safety", () => {
+  it("notifies once after the normal 402 then accepted paid retry", async () => {
+    const gw = fakeGateway();
+    const onPayment = vi.fn();
+    const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {
+      estimateAmount: () => "1000",
+      onPayment,
+    });
+
+    await pay(URL, { method: "POST", body: body() });
+
+    expect(onPayment).toHaveBeenCalledOnce();
+    expect(onPayment).toHaveBeenCalledWith({
+      model: "test/model",
+      amount: "1000",
+      network: "eip155:8453",
+    });
+  });
+
+  it("notifies once for an accepted cached pre-auth and never for a rejected one", async () => {
+    const gw = fakeGateway();
+    const onPayment = vi.fn();
+    const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {
+      estimateAmount: () => "1000",
+      onPayment,
+    });
+
+    await pay(URL, { method: "POST", body: body() });
+    onPayment.mockClear();
+    await pay(URL, { method: "POST", body: body() });
+    expect(onPayment).toHaveBeenCalledOnce();
+
+    onPayment.mockClear();
+    gw.ctl.rejectNextPaid = true;
+    await pay(URL, { method: "POST", body: body() });
+    expect(onPayment).toHaveBeenCalledOnce();
+  });
+
+  it("does not let an observer failure turn a settled response into a retry", async () => {
+    const gw = fakeGateway();
+    const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {
+      estimateAmount: () => "1000",
+      onPayment: () => {
+        throw new Error("observer failed");
+      },
+    });
+
+    const res = await pay(URL, { method: "POST", body: body() });
+    expect(res.status).toBe(200);
+    expect(gw.calls.map((call) => call.paid)).toEqual([false, true]);
+  });
+
   it("reuses pre-auth when the estimate proves the cache still covers it (no extra 402)", async () => {
     const est = vi.fn(() => "1000"); // every request estimated equal
     const gw = fakeGateway();
