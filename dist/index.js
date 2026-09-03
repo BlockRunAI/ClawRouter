@@ -35091,6 +35091,7 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
     const cached = !options?.skipPreAuth ? cache2.get(cacheKey2) : void 0;
     const preAuthCovers = cached !== void 0 && Date.now() - cached.cachedAt < ttlMs && cached.coverMicros !== void 0 && needMicros !== void 0 && needMicros <= cached.coverMicros;
     if (preAuthCovers) {
+      let paymentInFlight = false;
       try {
         const payload2 = await client.createPaymentPayload(cached.paymentRequired);
         const headers = httpClient.encodePaymentSignatureHeader(payload2);
@@ -35098,14 +35099,19 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
         for (const [key2, value] of Object.entries(headers)) {
           preAuthRequest.headers.set(key2, value);
         }
+        paymentInFlight = true;
         const response2 = await baseFetch(preAuthRequest);
         if (response2.status !== 402) {
           return response2;
         }
+        paymentInFlight = false;
         cache2.delete(cacheKey2);
       } catch (err) {
         cache2.delete(cacheKey2);
         if (err instanceof SpendPolicyError) {
+          throw err;
+        }
+        if (paymentInFlight) {
           throw err;
         }
       }

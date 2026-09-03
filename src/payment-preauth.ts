@@ -113,6 +113,15 @@ export function createPayFetchWithPreAuth(
       needMicros !== undefined &&
       needMicros <= cached.coverMicros;
     if (preAuthCovers) {
+      // Whether a request carrying a SIGNED payment has left this process. Once
+      // it has, a failure is ambiguous: "never arrived" and "arrived, settled,
+      // response lost" look identical from here, and the fall-through path
+      // below signs a second, distinct payment. That second authorization has a
+      // fresh nonce, so replay protection passes it, and it happens inside one
+      // payFetch call, so the proxy's response dedup never sees it — one user
+      // request, two USDC charges (#317). Resolve the ambiguity the safe way:
+      // fail the request rather than risk paying twice.
+      let paymentInFlight = false;
       try {
         const payload = await client.createPaymentPayload(cached.paymentRequired);
         const headers = httpClient.encodePaymentSignatureHeader(payload);
@@ -120,13 +129,17 @@ export function createPayFetchWithPreAuth(
         for (const [key, value] of Object.entries(headers)) {
           preAuthRequest.headers.set(key, value);
         }
+        paymentInFlight = true;
         const response = await baseFetch(preAuthRequest);
         if (response.status !== 402) {
           return response; // Pre-auth worked — saved ~200ms
         }
         // Rejected despite our estimate (server priced it higher than we did).
-        // The rejection 402 is NOT a reusable challenge, so drop it and fall
-        // through to a clean, un-paid request that yields a fresh challenge.
+        // A 402 is an ANSWER: the gateway declined the payment, so nothing was
+        // settled and re-signing is safe. The rejection 402 is NOT a reusable
+        // challenge, so drop it and fall through to a clean, un-paid request
+        // that yields a fresh challenge.
+        paymentInFlight = false;
         cache.delete(cacheKey);
       } catch (err) {
         cache.delete(cacheKey);
@@ -136,7 +149,14 @@ export function createPayFetchWithPreAuth(
         if (err instanceof SpendPolicyError) {
           throw err;
         }
-        // Pre-auth signing failed — invalidate and fall through.
+        // The send failed with a payment attached — see above. Surface the
+        // transport error instead of quietly authorizing a second one. An
+        // abort lands here too and must stay an abort, not a silent retry.
+        if (paymentInFlight) {
+          throw err;
+        }
+        // Pre-auth signing failed before anything was sent — unambiguous, so
+        // invalidate and fall through to the normal 402 flow.
       }
     }
 

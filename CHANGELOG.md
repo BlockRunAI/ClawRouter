@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.267 — September 2, 2026
+
+### Fixed — a lost response on the pre-auth path could sign a second payment
+
+`payment-preauth.ts` reuses a cached authorization to skip the 402 round trip. The `try` around that fast path wrapped not only the signing but the send that already carried the signed payment, and its `catch` fell through to the normal flow — which requests a fresh challenge and signs a **new** authorization.
+
+So when the pre-auth send failed _after_ the gateway had received and settled the payment — a connection reset, a socket hang-up, a TLS error, an upstream that closes after settling — the client could not tell that from "the request never arrived". It took the second reading and paid again. One user request, two USDC charges.
+
+Nothing else caught it. The proxy's 30-second response dedup keys on the request body and catches a client retrying a whole request, but this double payment happens inside a single `payFetch` call, so no second proxy request ever exists. Replay protection cannot help either: the second charge is a genuinely fresh authorization with an unused nonce, so every guard correctly passes it.
+
+The ambiguity is now resolved the safe way. Once a request carrying a signed payment has left the process, a failure surfaces to the caller instead of silently authorizing another one. A 402 still falls through, because a 402 is an answer — the gateway declined the payment, so nothing settled and re-signing is safe — and a signing failure before anything is sent still falls through too, since no payment can have been made. The cost is that a transient network error on the pre-auth send now fails the request rather than retrying it invisibly, which is the right trade when the alternative is charging twice.
+
+The existing tests could not have caught this: the harness only ever made a paid request _return_ a 402, never _reject_, so the branch was exercised for signing failures only — exactly what its comment described. Both cases are covered now.
+
+Reported by @aurumflux20, with the analysis of why the dedup, abort and replay guards each miss it (#317).
+
+---
+
 ## v0.12.266 — September 2, 2026
 
 ### Added — ClawRouter Desktop, a macOS control plane for local coding agents
