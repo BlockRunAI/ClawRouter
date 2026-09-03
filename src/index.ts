@@ -2614,6 +2614,7 @@ export {
   registerSpendPolicyHook,
   SpendPolicyError,
   MalformedSpendPolicyError,
+  UnreadableSpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
   PAYABLE_NETWORKS,

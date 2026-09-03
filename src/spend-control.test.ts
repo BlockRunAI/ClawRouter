@@ -15,6 +15,7 @@ import {
   assertSpendPolicyAllows,
   getSharedSpendControl,
   MalformedSpendPolicyError,
+  UnreadableSpendPolicyError,
   setSharedSpendControl,
   SpendPolicyError,
   CAIP2_BASE,
@@ -910,6 +911,28 @@ describe("reloadLimits (in-process proxy restart)", () => {
     // live's last-read limits would still be {} while disk holds {hourly:5}.
     expect(() => live.setLimit("daily", 2)).not.toThrow();
     expect(storage.load()?.limits).toEqual({ hourly: 5, daily: 2 });
+  });
+
+  it("keeps enforcing limits when an unreadable file makes load() return null", () => {
+    let torn = false;
+    class TornStorage extends InMemorySpendControlStorage {
+      override load() {
+        // What FileSpendControlStorage does for a JSON-parse or read error.
+        if (torn) throw new UnreadableSpendPolicyError(new Error("Unexpected end of JSON input"));
+        return super.load();
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const live = new SpendControl({ storage: new TornStorage() });
+    live.setLimit("daily", 1);
+    expect(live.check(5).allowed).toBe(false);
+
+    torn = true;
+    live.reloadLimits();
+    // A torn file must not widen what the agent may pay. Before this fix the
+    // reload reset limits to {} and the over-cap payment was allowed.
+    expect(live.check(5).allowed).toBe(false);
+    errors.mockRestore();
   });
 
   it("fails closed on a malformed file and recovers once it is repaired", () => {
