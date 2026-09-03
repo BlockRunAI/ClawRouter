@@ -40559,7 +40559,7 @@ var init_errors5 = __esm({
 });
 
 // src/balance.ts
-var USDC_BASE, CACHE_TTL_MS, BALANCE_THRESHOLDS, BalanceMonitor;
+var USDC_BASE, CACHE_TTL_MS, BALANCE_THRESHOLDS, BalanceMonitor, ApiKeyBalanceMonitor;
 var init_balance = __esm({
   "src/balance.ts"() {
     "use strict";
@@ -40686,6 +40686,38 @@ var init_balance = __esm({
           isEmpty: balance < BALANCE_THRESHOLDS.ZERO_THRESHOLD,
           walletAddress: this.walletAddress
         };
+      }
+    };
+    ApiKeyBalanceMonitor = class _ApiKeyBalanceMonitor {
+      /** Large enough that every `balance >= estimatedCost` comparison passes. */
+      static UNMETERED = BigInt(Number.MAX_SAFE_INTEGER);
+      async checkBalance() {
+        return {
+          balance: _ApiKeyBalanceMonitor.UNMETERED,
+          // Never a dollar figure: no caller may print this as if it were one.
+          balanceUSD: "account credit",
+          isLow: false,
+          isEmpty: false,
+          walletAddress: ""
+        };
+      }
+      async checkSufficient() {
+        return { sufficient: true, info: await this.checkBalance() };
+      }
+      /** No local cache to adjust — the server keeps the books. */
+      deductEstimated() {
+      }
+      invalidate() {
+      }
+      async refresh() {
+        return this.checkBalance();
+      }
+      formatUSDC(amountMicros) {
+        return `$${(Number(amountMicros) / 1e6).toFixed(2)}`;
+      }
+      /** No wallet in this mode; callers render the account instead. */
+      getWalletAddress() {
+        return "";
       }
     };
   }
@@ -59787,6 +59819,99 @@ var init_auth = __esm({
   }
 });
 
+// src/api-key.ts
+import { writeFile as writeFile2, mkdir as mkdir3, rm } from "fs/promises";
+import { join as join8 } from "path";
+import { homedir as homedir5 } from "os";
+function isValidApiKey(value) {
+  if (typeof value !== "string") return false;
+  return /^brk_[A-Za-z0-9_-]{8,}$/.test(value.trim());
+}
+function maskApiKey(key2) {
+  const trimmed = key2.trim();
+  if (trimmed.length <= 18) return `${trimmed.slice(0, 8)}\u2026`;
+  return `${trimmed.slice(0, 14)}\u2026${trimmed.slice(-4)}`;
+}
+async function readOptional2(path5) {
+  try {
+    return (await readTextFile(path5)).trim() || void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function resolveApiKey() {
+  const envKey = process["env"].BLOCKRUN_API_KEY?.trim();
+  if (envKey) {
+    if (isValidApiKey(envKey)) return { key: envKey, source: "env" };
+    console.warn(
+      `[ClawRouter] \u26A0 BLOCKRUN_API_KEY is set but does not look like a BlockRun key (expected brk_\u2026) \u2014 ignoring.`
+    );
+  }
+  for (const [path5, source] of [
+    [CORE_API_KEY_FILE, "core"],
+    [API_KEY_FILE, "saved"]
+  ]) {
+    const stored = await readOptional2(path5);
+    if (stored === void 0) continue;
+    if (isValidApiKey(stored)) return { key: stored, source };
+    console.warn(
+      `[ClawRouter] \u26A0 ${path5} does not contain a BlockRun key (expected brk_\u2026) \u2014 ignoring.`
+    );
+  }
+  return void 0;
+}
+function createApiKeyFetch(apiKey, baseFetch = fetch) {
+  return async (input, init2) => {
+    const headers = new Headers(init2?.headers);
+    headers.set("authorization", `Bearer ${apiKey}`);
+    headers.delete("x-payment");
+    headers.delete("x-api-key");
+    const response = await baseFetch(input, { ...init2, headers });
+    return response.ok ? response : explainApiKeyFailure(response);
+  };
+}
+async function explainApiKeyFailure(response) {
+  const hint = HINTS[response.status];
+  if (!hint) return response;
+  if (!(response.headers.get("content-type") ?? "").includes("json")) return response;
+  let parsed;
+  try {
+    parsed = await response.clone().json();
+  } catch {
+    return response;
+  }
+  if (!parsed?.error || typeof parsed.error.message !== "string") return response;
+  if (response.status === 404 && !/unsupported endpoint/i.test(parsed.error.message)) {
+    return response;
+  }
+  parsed.error.message = `${parsed.error.message} ${hint}`;
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(JSON.stringify(parsed), {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+var API_KEY_FILE, CORE_API_KEY_FILE, PORTAL_URL, PORTAL_KEYS_URL, PORTAL_CREDITS_URL, BLOCKRUN_API_KEY_API, HINTS;
+var init_api_key = __esm({
+  "src/api-key.ts"() {
+    "use strict";
+    init_fs_read();
+    API_KEY_FILE = join8(homedir5(), ".openclaw", "blockrun", "api-key");
+    CORE_API_KEY_FILE = join8(homedir5(), ".blockrun", ".api-key");
+    PORTAL_URL = "https://user.blockrun.ai";
+    PORTAL_KEYS_URL = `${PORTAL_URL}/dashboard/keys`;
+    PORTAL_CREDITS_URL = `${PORTAL_URL}/dashboard/credits`;
+    BLOCKRUN_API_KEY_API = process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "") || "https://api.blockrun.ai";
+    HINTS = {
+      401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
+      402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
+      404: `api.blockrun.ai does not serve this endpoint yet \u2014 it currently carries chat and text completions. For media and partner APIs, run ClawRouter in wallet mode (unset BLOCKRUN_API_KEY and run "clawrouter logout").`
+    };
+  }
+});
+
 // src/compression/types.ts
 var DEFAULT_COMPRESSION_CONFIG;
 var init_types2 = __esm({
@@ -60876,8 +61001,8 @@ var init_updater = __esm({
 
 // src/exclude-models.ts
 import { readFileSync, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, statSync } from "fs";
-import { join as join8, dirname as dirname2 } from "path";
-import { homedir as homedir5 } from "os";
+import { join as join9, dirname as dirname2 } from "path";
+import { homedir as homedir6 } from "os";
 function loadExcludeList(filePath = DEFAULT_FILE_PATH) {
   try {
     const mtimeMs = statSync(filePath).mtimeMs;
@@ -60926,7 +61051,7 @@ var init_exclude_models = __esm({
   "src/exclude-models.ts"() {
     "use strict";
     init_models();
-    DEFAULT_FILE_PATH = join8(homedir5(), ".openclaw", "blockrun", "exclude-models.json");
+    DEFAULT_FILE_PATH = join9(homedir6(), ".openclaw", "blockrun", "exclude-models.json");
     loadCache = /* @__PURE__ */ new Map();
   }
 });
@@ -75935,7 +76060,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir5 } = __require("fs/promises");
+    var { writeFile: writeFile4, readFile: readFile3, mkdir: mkdir6 } = __require("fs/promises");
     var { dirname: dirname4, resolve } = __require("path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("timers");
     var { InvalidArgumentError, UndiciError } = require_errors();
@@ -76182,12 +76307,12 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         const resolvedPath = resolve(path5);
-        await mkdir5(dirname4(resolvedPath), { recursive: true });
+        await mkdir6(dirname4(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash5, snapshot]) => ({
           hash: hash5,
           snapshot
         }));
-        await writeFile3(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
+        await writeFile4(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
       }
       /**
        * Clears all recorded snapshots
@@ -88516,9 +88641,9 @@ var init_textual_tool_calls = __esm({
 });
 
 // src/response-store.ts
-import { appendFile as appendFile2, mkdir as mkdir3, readFile, readdir as readdir2 } from "fs/promises";
-import { homedir as homedir6 } from "os";
-import { join as join9 } from "path";
+import { appendFile as appendFile2, mkdir as mkdir4, readFile, readdir as readdir2 } from "fs/promises";
+import { homedir as homedir7 } from "os";
+import { join as join10 } from "path";
 import { randomBytes as randomBytes7 } from "crypto";
 function isEnabled() {
   const v = process.env.BLOCKRUN_RESPONSE_STORE;
@@ -88526,12 +88651,12 @@ function isEnabled() {
 }
 async function ensureDir2() {
   if (dirReady2) return;
-  await mkdir3(STORE_DIR, { recursive: true });
+  await mkdir4(STORE_DIR, { recursive: true });
   dirReady2 = true;
 }
 function dailyFile(date = /* @__PURE__ */ new Date()) {
   const iso = date.toISOString().slice(0, 10);
-  return join9(STORE_DIR, `responses-${iso}.jsonl`);
+  return join10(STORE_DIR, `responses-${iso}.jsonl`);
 }
 function genId() {
   return `resp_${Date.now()}_${randomBytes7(3).toString("hex")}`;
@@ -88581,7 +88706,7 @@ async function listRecent(limit = 20, daysBack = 7) {
       d.setUTCDate(d.getUTCDate() - i);
       const iso = d.toISOString().slice(0, 10);
       const name = `responses-${iso}.jsonl`;
-      if (files.includes(name)) candidateFiles.push(join9(STORE_DIR, name));
+      if (files.includes(name)) candidateFiles.push(join10(STORE_DIR, name));
     }
     const all3 = [];
     for (const f of candidateFiles) {
@@ -88610,7 +88735,7 @@ var STORE_DIR, dirReady2;
 var init_response_store = __esm({
   "src/response-store.ts"() {
     "use strict";
-    STORE_DIR = join9(homedir6(), ".openclaw", "blockrun", "responses");
+    STORE_DIR = join10(homedir7(), ".openclaw", "blockrun", "responses");
     dirReady2 = false;
   }
 });
@@ -90261,15 +90386,18 @@ import { AsyncLocalStorage } from "async_hooks";
 import { createHmac } from "crypto";
 import { createServer } from "http";
 import { finished } from "stream";
-import { homedir as homedir7 } from "os";
-import { join as join10 } from "path";
-import { mkdir as mkdir4, writeFile as writeFile2, readFile as readFile2, stat as fsStat } from "fs/promises";
+import { homedir as homedir8 } from "os";
+import { join as join11 } from "path";
+import { mkdir as mkdir5, writeFile as writeFile3, readFile as readFile2, stat as fsStat } from "fs/promises";
 import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
-async function loadGatewayCatalog(apiBase) {
+async function loadGatewayCatalog(apiBase, apiKey) {
   try {
     const controller = new AbortController();
     const timer2 = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
-    const res = await fetch(`${apiBase}/v1/models`, { signal: controller.signal });
+    const res = await fetch(`${apiBase}/v1/models`, {
+      signal: controller.signal,
+      ...apiKey ? { headers: { authorization: `Bearer ${apiKey}` } } : {}
+    });
     clearTimeout(timer2);
     if (!res.ok) return;
     const body = await res.json();
@@ -90568,8 +90696,9 @@ async function checkExistingProxy(port) {
     clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
-      if (data.status === "ok" && data.wallet) {
-        return { wallet: data.wallet, paymentChain: data.paymentChain };
+      const authMode = data.authMode === "api-key" ? "api-key" : "wallet";
+      if (data.status === "ok" && (data.wallet || authMode === "api-key")) {
+        return { wallet: data.wallet ?? "", paymentChain: data.paymentChain, authMode };
       }
     }
     return void 0;
@@ -91077,7 +91206,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   });
 }
 function readImageFileAsDataUri(filePath) {
-  const resolved = filePath.startsWith("~/") ? join10(homedir7(), filePath.slice(2)) : filePath;
+  const resolved = filePath.startsWith("~/") ? join11(homedir8(), filePath.slice(2)) : filePath;
   if (!existsSync2(resolved)) {
     throw new Error(`Image file not found: ${resolved}`);
   }
@@ -91120,16 +91249,48 @@ async function uploadDataUriToHost(dataUri) {
     clearTimeout(uploadTimeout);
   }
 }
+function warnIfSpendLimitsUnenforced(spendControl) {
+  let configured;
+  try {
+    const limits = (spendControl ?? new SpendControl()).getStatus().limits;
+    configured = ["perRequest", "hourly", "daily", "session"].filter((window2) => typeof limits[window2] === "number").map((window2) => `${window2}=$${limits[window2].toFixed(2)}`);
+  } catch {
+    return;
+  }
+  if (configured.length === 0) return;
+  console.warn(
+    `[ClawRouter] \u26A0 Spend limits (${configured.join(", ")}) are NOT enforced in API-key mode \u2014 they gate x402 signing, and nothing is signed here.`
+  );
+  console.warn(
+    `[ClawRouter]   Your BlockRun account balance is the cap instead. Use maxCostPerRun for a per-session limit that still applies.`
+  );
+}
 async function startProxy(options) {
   const upstreamProxy = await applyUpstreamProxy(options.upstreamProxy);
   if (upstreamProxy) {
     console.log(`[ClawRouter] Upstream proxy: ${upstreamProxy}`);
   }
-  const walletKey = typeof options.wallet === "string" ? options.wallet : options.wallet.key;
-  const solanaPrivateKeyBytes = typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
+  const apiKey = options.apiKey?.trim() || void 0;
+  if (apiKey && !isValidApiKey(apiKey)) {
+    throw new Error(
+      `BlockRun API key is malformed (expected it to start with "brk_"). Mint one at https://user.blockrun.ai/dashboard/keys`
+    );
+  }
+  const authMode = apiKey ? "api-key" : "wallet";
+  if (!apiKey && !options.wallet) {
+    throw new Error(
+      `startProxy needs a credential: pass either a wallet (x402) or an apiKey (brk_\u2026, from https://user.blockrun.ai/dashboard/keys).`
+    );
+  }
+  const walletKey = options.wallet === void 0 ? void 0 : typeof options.wallet === "string" ? options.wallet : options.wallet.key;
+  const solanaPrivateKeyBytes = options.wallet === void 0 || typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
   const paymentChain = options.paymentChain ?? await resolvePaymentChain();
-  const apiBase = options.apiBase ?? (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
-  if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
+  const apiBase = options.apiBase ?? (authMode === "api-key" ? BLOCKRUN_API_KEY_API : paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  if (authMode === "api-key") {
+    console.log(`[ClawRouter] Auth: BlockRun API key ${maskApiKey(apiKey)} (${apiBase})`);
+    console.log(`[ClawRouter] Billing: account credit \u2014 top up at ${PORTAL_CREDITS_URL}`);
+    warnIfSpendLimitsUnenforced(options.spendControl);
+  } else if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
     console.warn(
       `[ClawRouter] \u26A0 Payment chain is Solana but no mnemonic found \u2014 falling back to Base (EVM).`
     );
@@ -91140,12 +91301,31 @@ async function startProxy(options) {
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
   }
-  void loadGatewayCatalog(apiBase);
+  void loadGatewayCatalog(apiBase, apiKey);
   const listenPort = options.port ?? getProxyPort();
   const existingProxy = options.allowExistingProxy === false ? void 0 : await checkExistingProxy(listenPort);
   if (existingProxy) {
-    const account2 = privateKeyToAccount(walletKey);
     const baseUrl2 = `http://127.0.0.1:${listenPort}`;
+    if (existingProxy.authMode !== authMode) {
+      throw new Error(
+        `Existing proxy on port ${listenPort} is authenticating with ${existingProxy.authMode === "api-key" ? "a BlockRun API key" : "a wallet"} but ${authMode === "api-key" ? "an API key" : "a wallet"} was requested. Stop the existing proxy first or use a different port.`
+      );
+    }
+    if (authMode === "api-key") {
+      options.onReady?.(listenPort);
+      return {
+        port: listenPort,
+        baseUrl: baseUrl2,
+        walletAddress: "",
+        authMode,
+        apiKeyLabel: maskApiKey(apiKey),
+        balanceMonitor: new ApiKeyBalanceMonitor(),
+        // No-op: we didn't start this proxy, so we shouldn't close it
+        close: async () => {
+        }
+      };
+    }
+    const account2 = privateKeyToAccount(walletKey);
     if (existingProxy.wallet !== account2.address) {
       console.warn(
         `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`
@@ -91184,20 +91364,23 @@ async function startProxy(options) {
       baseUrl: baseUrl2,
       walletAddress: existingProxy.wallet,
       solanaAddress: reuseSolanaAddress,
+      authMode,
       balanceMonitor: balanceMonitor2,
       close: async () => {
       }
     };
   }
-  const account = privateKeyToAccount(walletKey);
-  const evmPublicClient = createPublicClient({ chain: base, transport: http() });
-  const evmSigner = toClientEvmSigner(account, evmPublicClient);
-  const x402 = new x402Client();
-  const spendControl = options.spendControl ?? new SpendControl();
-  registerSpendPolicyHook(x402, spendControl);
-  registerExactEvmScheme(x402, { signer: evmSigner });
+  const account = walletKey ? privateKeyToAccount(walletKey) : void 0;
+  const x402 = authMode === "wallet" ? new x402Client() : void 0;
+  if (x402 && account) {
+    const evmPublicClient = createPublicClient({ chain: base, transport: http() });
+    const evmSigner = toClientEvmSigner(account, evmPublicClient);
+    const spendControl = options.spendControl ?? new SpendControl();
+    registerSpendPolicyHook(x402, spendControl);
+    registerExactEvmScheme(x402, { signer: evmSigner });
+  }
   let solanaAddress;
-  if (solanaPrivateKeyBytes) {
+  if (x402 && solanaPrivateKeyBytes) {
     const { registerExactSvmScheme: registerExactSvmScheme2 } = await Promise.resolve().then(() => (init_client3(), client_exports));
     const { createKeyPairSignerFromPrivateKeyBytes: createKeyPairSignerFromPrivateKeyBytes2 } = await Promise.resolve().then(() => (init_index_node37(), index_node_exports));
     const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes2(solanaPrivateKeyBytes);
@@ -91205,12 +91388,12 @@ async function startProxy(options) {
     registerExactSvmScheme2(x402, { signer: solanaSigner });
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
   }
-  x402.onAfterPaymentCreation(async (context) => {
+  x402?.onAfterPaymentCreation(async (context) => {
     if (!context.selectedRequirements.network.startsWith("eip155")) return;
     const payload = context.paymentPayload;
     payload.extensions = withBuilderCodeServiceCode(payload.extensions);
   });
-  x402.onAfterPaymentCreation(async (context) => {
+  x402?.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
     const chain3 = network.startsWith("eip155") ? "Base (EVM)" : network.startsWith("solana") ? "Solana" : network;
     const amountMicros = parseInt(context.selectedRequirements.amount || "0", 10);
@@ -91219,7 +91402,7 @@ async function startProxy(options) {
     if (store) store.amountUsd = amountUsd;
     console.log(`[ClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsd.toFixed(6)}`);
   });
-  const payFetch = createPayFetchWithPreAuth(fetch, x402, void 0, {
+  const payFetch = authMode === "api-key" ? createApiKeyFetch(apiKey) : createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana",
     // Per-request cost estimate so pre-auth is only reused when the cached
     // payment still covers the (possibly larger) request — BlockRun prices per
@@ -91229,6 +91412,8 @@ async function startProxy(options) {
   let balanceMonitor;
   if (options._balanceMonitorOverride) {
     balanceMonitor = options._balanceMonitorOverride;
+  } else if (authMode === "api-key") {
+    balanceMonitor = new ApiKeyBalanceMonitor();
   } else if (paymentChain === "solana" && solanaAddress) {
     const { SolanaBalanceMonitor: SolanaBalanceMonitor2 } = await Promise.resolve().then(() => (init_solana_balance(), solana_balance_exports));
     balanceMonitor = new SolanaBalanceMonitor2(solanaAddress);
@@ -91270,11 +91455,17 @@ async function startProxy(options) {
         const full = url2.searchParams.get("full") === "true";
         const response = {
           status: "ok",
-          wallet: account.address,
-          paymentChain
+          authMode
         };
-        if (solanaAddress) {
-          response.solana = solanaAddress;
+        if (authMode === "api-key") {
+          response.apiKey = maskApiKey(apiKey);
+          response.gateway = apiBase;
+        } else {
+          response.wallet = account.address;
+          response.paymentChain = paymentChain;
+          if (solanaAddress) {
+            response.solana = solanaAddress;
+          }
         }
         if (upstreamProxy) {
           response.upstreamProxy = upstreamProxy;
@@ -91290,9 +91481,15 @@ async function startProxy(options) {
                 ).unref()
               )
             ]);
-            response.balance = balanceInfo.balanceUSD;
-            response.isLow = balanceInfo.isLow;
-            response.isEmpty = balanceInfo.isEmpty;
+            if (authMode === "api-key") {
+              response.balance = null;
+              response.billing = "BlockRun account credit";
+              response.topUpUrl = PORTAL_CREDITS_URL;
+            } else {
+              response.balance = balanceInfo.balanceUSD;
+              response.isLow = balanceInfo.isLow;
+              response.isEmpty = balanceInfo.isEmpty;
+            }
           } catch {
             response.balanceError = "Could not fetch balance";
           }
@@ -91472,7 +91669,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join10(IMAGE_DIR, filename);
+        const filePath = join11(IMAGE_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -91503,7 +91700,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join10(AUDIO_DIR, filename);
+        const filePath = join11(AUDIO_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -91533,7 +91730,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join10(VIDEO_DIR, filename);
+        const filePath = join11(VIDEO_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -91666,7 +91863,7 @@ async function startProxy(options) {
             }
           }
           if (result.data?.length) {
-            await mkdir4(IMAGE_DIR, { recursive: true });
+            await mkdir5(IMAGE_DIR, { recursive: true });
             const port2 = server.address()?.port ?? 8402;
             for (const img of result.data) {
               const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
@@ -91674,7 +91871,7 @@ async function startProxy(options) {
                 const [, mimeType, b64] = dataUriMatch;
                 const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
                 const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                await writeFile2(join10(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                await writeFile3(join11(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
                 img.url = `http://localhost:${port2}/images/${filename}`;
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
@@ -91685,7 +91882,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await imgResp.arrayBuffer());
-                    await writeFile2(join10(IMAGE_DIR, filename), buf);
+                    await writeFile3(join11(IMAGE_DIR, filename), buf);
                     img.url = `http://localhost:${port2}/images/${filename}`;
                     console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
                   }
@@ -91789,7 +91986,7 @@ async function startProxy(options) {
             return;
           }
           if (result.data?.length) {
-            await mkdir4(IMAGE_DIR, { recursive: true });
+            await mkdir5(IMAGE_DIR, { recursive: true });
             const port2 = server.address()?.port ?? 8402;
             for (const img of result.data) {
               const dataUriMatch = img.url?.match(/^data:(image\/\w+);base64,(.+)$/);
@@ -91797,7 +91994,7 @@ async function startProxy(options) {
                 const [, mimeType, b64] = dataUriMatch;
                 const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
                 const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                await writeFile2(join10(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                await writeFile3(join11(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
                 img.url = `http://localhost:${port2}/images/${filename}`;
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
@@ -91808,7 +92005,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await imgResp.arrayBuffer());
-                    await writeFile2(join10(IMAGE_DIR, filename), buf);
+                    await writeFile3(join11(IMAGE_DIR, filename), buf);
                     img.url = `http://localhost:${port2}/images/${filename}`;
                     console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
                   }
@@ -91883,7 +92080,7 @@ async function startProxy(options) {
             return;
           }
           if (result.data?.length) {
-            await mkdir4(AUDIO_DIR, { recursive: true });
+            await mkdir5(AUDIO_DIR, { recursive: true });
             const port2 = server.address()?.port ?? 8402;
             for (const track of result.data) {
               if (track.url?.startsWith("https://") || track.url?.startsWith("http://")) {
@@ -91894,7 +92091,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await audioResp.arrayBuffer());
-                    await writeFile2(join10(AUDIO_DIR, filename), buf);
+                    await writeFile3(join11(AUDIO_DIR, filename), buf);
                     track.url = `http://localhost:${port2}/audio/${filename}`;
                     console.log(`[ClawRouter] Audio saved \u2192 ${track.url}`);
                   }
@@ -92043,7 +92240,7 @@ async function startProxy(options) {
             }
           }
           if (finalResult.data?.length) {
-            await mkdir4(VIDEO_DIR, { recursive: true });
+            await mkdir5(VIDEO_DIR, { recursive: true });
             const port2 = server.address()?.port ?? 8402;
             for (const clip of finalResult.data) {
               if (clip.url?.startsWith("https://") || clip.url?.startsWith("http://")) {
@@ -92054,7 +92251,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("webm") ? "webm" : contentType.includes("quicktime") ? "mov" : "mp4";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await videoResp.arrayBuffer());
-                    await writeFile2(join10(VIDEO_DIR, filename), buf);
+                    await writeFile3(join11(VIDEO_DIR, filename), buf);
                     clip.url = `http://localhost:${port2}/videos/${filename}`;
                     console.log(`[ClawRouter] Video saved \u2192 ${clip.url}`);
                   }
@@ -92237,6 +92434,8 @@ async function startProxy(options) {
           port: listenPort,
           baseUrl: baseUrl2,
           walletAddress: error.wallet,
+          authMode,
+          ...apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {},
           balanceMonitor,
           close: async () => {
           }
@@ -92287,8 +92486,10 @@ async function startProxy(options) {
   return {
     port,
     baseUrl,
-    walletAddress: account.address,
+    walletAddress: account?.address ?? "",
     solanaAddress,
+    authMode,
+    ...apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {},
     balanceMonitor,
     close: () => new Promise((res, rej) => {
       const timeout = setTimeout(() => {
@@ -94611,6 +94812,7 @@ var init_proxy = __esm({
     init_response_cache();
     init_balance();
     init_auth();
+    init_api_key();
     init_spend_control();
     init_compression();
     init_version4();
@@ -94627,10 +94829,10 @@ var init_proxy = __esm({
     paymentStore = new AsyncLocalStorage();
     BLOCKRUN_API = "https://blockrun.ai/api";
     BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
-    DESKTOP_SERVICE_TOKEN_FILE = process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ?? join10(homedir7(), ".clawrouter-desktop", "service-token");
-    IMAGE_DIR = join10(homedir7(), ".openclaw", "blockrun", "images");
-    AUDIO_DIR = join10(homedir7(), ".openclaw", "blockrun", "audio");
-    VIDEO_DIR = join10(homedir7(), ".openclaw", "blockrun", "videos");
+    DESKTOP_SERVICE_TOKEN_FILE = process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ?? join11(homedir8(), ".clawrouter-desktop", "service-token");
+    IMAGE_DIR = join11(homedir8(), ".openclaw", "blockrun", "images");
+    AUDIO_DIR = join11(homedir8(), ".openclaw", "blockrun", "audio");
+    VIDEO_DIR = join11(homedir8(), ".openclaw", "blockrun", "videos");
     AUTO_MODEL = "blockrun/auto";
     ROUTING_PROFILES = /* @__PURE__ */ new Set([
       "blockrun/eco",
@@ -116822,8 +117024,8 @@ var init_constants3 = __esm({
 
 // src/polymarket/wallet-adapter.ts
 import fs2 from "fs";
-import { homedir as homedir8 } from "os";
-import { join as join11 } from "path";
+import { homedir as homedir9 } from "os";
+import { join as join12 } from "path";
 function getOrCreateWalletKey() {
   const envKey = process.env.BLOCKRUN_WALLET_KEY?.trim();
   if (envKey && /^0x[0-9a-fA-F]{64}$/.test(envKey)) return envKey;
@@ -116871,7 +117073,7 @@ var init_wallet_adapter = __esm({
     init_esm();
     init_chains();
     init_constants3();
-    WALLET_FILE2 = join11(homedir8(), ".openclaw", "blockrun", "wallet.key");
+    WALLET_FILE2 = join12(homedir9(), ".openclaw", "blockrun", "wallet.key");
     BASE_RPC_URLS = [
       "https://mainnet.base.org",
       "https://base.llamarpc.com",
@@ -227387,9 +227589,9 @@ import {
   unlinkSync
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
-import { homedir as homedir13 } from "os";
+import { homedir as homedir14 } from "os";
 import { randomUUID } from "crypto";
-import { join as join16 } from "path";
+import { join as join17 } from "path";
 async function waitForProxyHealth(port, timeoutMs = 3e3) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -227431,8 +227633,8 @@ function isBlockrunWebSearchDisabled(config) {
   return cfg.tools?.web?.search?.enabled === false;
 }
 function injectModelsConfig(logger48, options = {}) {
-  const configDir = join16(homedir13(), ".openclaw");
-  const configPath = join16(configDir, "openclaw.json");
+  const configDir = join17(homedir14(), ".openclaw");
+  const configPath = join17(configDir, "openclaw.json");
   let config = {};
   let needsWrite = false;
   if (!existsSync3(configDir)) {
@@ -227653,7 +227855,7 @@ function injectModelsConfig(logger48, options = {}) {
 }
 function syncAgentModelCache(logger48, options = {}) {
   if (!isGatewayMode() && !options.forceWrite) return;
-  const agentsDir = join16(homedir13(), ".openclaw", "agents");
+  const agentsDir = join17(homedir14(), ".openclaw", "agents");
   if (!existsSync3(agentsDir)) return;
   let agentDirs;
   try {
@@ -227663,7 +227865,7 @@ function syncAgentModelCache(logger48, options = {}) {
   }
   const expectedIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
   for (const agent of agentDirs) {
-    const cachePath = join16(agentsDir, agent, "agent", "models.json");
+    const cachePath = join17(agentsDir, agent, "agent", "models.json");
     if (!existsSync3(cachePath)) continue;
     try {
       const raw = readTextFileSync(cachePath).trim();
@@ -227692,7 +227894,7 @@ function syncAgentModelCache(logger48, options = {}) {
   }
 }
 function injectAuthProfile(logger48) {
-  const agentsDir = join16(homedir13(), ".openclaw", "agents");
+  const agentsDir = join17(homedir14(), ".openclaw", "agents");
   if (!existsSync3(agentsDir)) {
     try {
       mkdirSync3(agentsDir, { recursive: true });
@@ -227709,9 +227911,9 @@ function injectAuthProfile(logger48) {
       agents = ["main", ...agents];
     }
     for (const agentId of agents) {
-      const authDir = join16(agentsDir, agentId, "agent");
-      const authPath = join16(authDir, "auth-profiles.json");
-      const sqlitePath = join16(authDir, "openclaw-agent.sqlite");
+      const authDir = join17(agentsDir, agentId, "agent");
+      const authPath = join17(authDir, "auth-profiles.json");
+      const sqlitePath = join17(authDir, "openclaw-agent.sqlite");
       if (existsSync3(sqlitePath)) {
         removeInjectedAuthPlaceholder(authPath, logger48, agentId);
         continue;
@@ -227858,9 +228060,21 @@ async function startProxyInBackground(api, startupGeneration) {
   if (startupGeneration !== void 0 && isProxyStartupCurrent(startupGeneration, proc)) {
     proc.__clawrouterStartupPhase = "starting";
   }
+  const pluginApiKey = api.pluginConfig?.apiKey;
+  const resolvedApiKey = typeof pluginApiKey === "string" && isValidApiKey(pluginApiKey) ? { key: pluginApiKey.trim(), source: "config" } : await resolveApiKey();
+  if (typeof pluginApiKey === "string" && !isValidApiKey(pluginApiKey)) {
+    api.logger.warn(
+      `pluginConfig.apiKey is set but invalid (expected brk_...) \u2014 ignoring it and looking elsewhere`
+    );
+  }
+  const apiKey = resolvedApiKey?.key;
   const configKey = api.pluginConfig?.walletKey;
   let wallet;
-  if (typeof configKey === "string" && /^0x[0-9a-fA-F]{64}$/.test(configKey)) {
+  if (apiKey) {
+    api.logger.info(
+      `Using BlockRun API key ${maskApiKey(apiKey)} (from ${resolvedApiKey.source}) \u2014 billing account credit, no wallet`
+    );
+  } else if (typeof configKey === "string" && /^0x[0-9a-fA-F]{64}$/.test(configKey)) {
     const account = privateKeyToAccount(configKey);
     wallet = { key: configKey, address: account.address, source: "config" };
   } else {
@@ -227871,7 +228085,8 @@ async function startProxyInBackground(api, startupGeneration) {
     }
     wallet = await resolveOrGenerateWalletKey();
   }
-  if (wallet.source === "generated") {
+  if (!wallet) {
+  } else if (wallet.source === "generated") {
     api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
     api.logger.warn(`  NEW WALLET GENERATED \u2014 BACK UP YOUR KEY NOW!`);
     api.logger.warn(`  Address : ${wallet.address}`);
@@ -227896,13 +228111,13 @@ async function startProxyInBackground(api, startupGeneration) {
     );
   }
   const proxy = await startProxy({
-    wallet,
+    ...apiKey ? { apiKey } : { wallet },
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
     spendControl: liveSpendControl = new SpendControl(),
     onReady: (port) => {
-      api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
+      api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);
     },
     onError: (error) => {
       api.logger.error(`BlockRun proxy error: ${error.message}`);
@@ -227948,6 +228163,10 @@ async function startProxyInBackground(api, startupGeneration) {
   }
   api.logger.info(`ClawRouter ready \u2014 smart routing enabled`);
   api.logger.info(`Pricing: Simple ~$0.001 | Code ~$0.01 | Complex ~$0.05 | Free: $0`);
+  if (apiKey) {
+    api.logger.info(`Billing: BlockRun account credit \u2014 top up at ${PORTAL_CREDITS_URL}`);
+    return true;
+  }
   const currentChain = await resolvePaymentChain();
   const displayAddress = currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet.address;
   const network = currentChain === "solana" ? "Solana" : "Base";
@@ -228191,7 +228410,7 @@ function buildImageGenerationProvider() {
         (result.data ?? []).map(async (img) => {
           const filename = img.url?.split("/images/").pop();
           if (!filename) throw new Error(`Unexpected image URL format: ${img.url}`);
-          const filePath = join16(IMAGE_DIR2, filename);
+          const filePath = join17(IMAGE_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
           const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
@@ -228243,7 +228462,7 @@ function buildMusicGenerationProvider() {
         (result.data ?? []).map(async (track) => {
           const filename = track.url?.split("/audio/").pop();
           if (!filename) throw new Error(`Unexpected audio URL format: ${track.url}`);
-          const filePath = join16(AUDIO_DIR2, filename);
+          const filePath = join17(AUDIO_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "mp3";
           const mimeType = ext === "wav" ? "audio/wav" : "audio/mpeg";
@@ -228319,7 +228538,7 @@ function buildVideoGenerationProvider() {
         (result.data ?? []).map(async (clip) => {
           const filename = clip.url?.split("/videos/").pop();
           if (!filename) throw new Error(`Unexpected video URL format: ${clip.url}`);
-          const filePath = join16(VIDEO_DIR2, filename);
+          const filePath = join17(VIDEO_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
           const mimeType = ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
@@ -228372,6 +228591,22 @@ function createWalletCommand(api) {
     requireAuth: true,
     handler: async (ctx) => {
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
+      const activeApiKey = (await resolveApiKey())?.key;
+      if (activeApiKey) {
+        return {
+          text: [
+            "**BlockRun account** (API key)",
+            "",
+            `**Key:** \`${maskApiKey(activeApiKey)}\``,
+            "**Billing:** account credit \u2014 no wallet, no payment chain, no gas.",
+            "",
+            `**Add credit:** ${PORTAL_CREDITS_URL}`,
+            `**Usage & keys:** ${PORTAL_KEYS_URL}`,
+            "",
+            "To pay with a USDC wallet over x402 instead, run `clawrouter logout` and restart."
+          ].join("\n")
+        };
+      }
       let wallet;
       try {
         wallet = subcommand === "status" || subcommand === "export" ? await resolveExistingWalletKey() : await resolveOrGenerateWalletKey();
@@ -228628,6 +228863,7 @@ var init_index = __esm({
   "src/index.ts"() {
     init_provider();
     init_proxy();
+    init_api_key();
     init_web_search_provider();
     init_auth();
     init_balance();
@@ -228667,9 +228903,9 @@ var init_index = __esm({
     activeProxyHandle = null;
     liveSpendControl = null;
     pendingConfiguredStartupApi = null;
-    IMAGE_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "images");
-    AUDIO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "audio");
-    VIDEO_DIR2 = join16(homedir13(), ".openclaw", "blockrun", "videos");
+    IMAGE_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "images");
+    AUDIO_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "audio");
+    VIDEO_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "videos");
     plugin = {
       // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
       // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
@@ -229086,7 +229322,7 @@ ${errText}`
         }
         resetProxyStartupState();
         try {
-          const configPath = join16(homedir13(), ".openclaw", "openclaw.json");
+          const configPath = join17(homedir14(), ".openclaw", "openclaw.json");
           if (existsSync3(configPath)) {
             const config = JSON.parse(readTextFileSync(configPath));
             if (config.models?.providers?.blockrun) {
@@ -229128,11 +229364,11 @@ ${errText}`
           api.logger.warn(`Config cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         try {
-          const agentsDir = join16(homedir13(), ".openclaw", "agents");
+          const agentsDir = join17(homedir14(), ".openclaw", "agents");
           if (existsSync3(agentsDir)) {
             for (const entry of readdirSync(agentsDir, { withFileTypes: true })) {
               if (!entry.isDirectory()) continue;
-              const authPath = join16(agentsDir, entry.name, "agent", "auth-profiles.json");
+              const authPath = join17(agentsDir, entry.name, "agent", "auth-profiles.json");
               if (!existsSync3(authPath)) continue;
               try {
                 const store = JSON.parse(readTextFileSync(authPath));

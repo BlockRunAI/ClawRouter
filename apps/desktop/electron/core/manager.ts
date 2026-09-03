@@ -364,6 +364,24 @@ export class ClawRouterManager {
       fetchJson<Record<string, unknown>>(`${root}/stats?days=7`, this.context.fetch),
       fetchJson<{ data?: Array<Record<string, unknown>> }>(`${root}/v1/models`, this.context.fetch),
     ]);
+    // A proxy running on an API key has no wallet, no chain and no local
+    // balance. Report that rather than falling back to the machine's saved
+    // wallet — Desktop would otherwise show an address and a USDC balance that
+    // fund nothing, and prompt for chain switches that change nothing.
+    if (health.value && health.value.authMode === "api-key") {
+      return {
+        proxy: {
+          reachable: true,
+          status: String(health.value.status ?? "ok"),
+          authMode: "api-key",
+          apiKey: stringOrUndefined(health.value.apiKey),
+          gateway: stringOrUndefined(health.value.gateway),
+        },
+        stats: stats.value,
+        models: (catalog.value?.data ?? []).map(toModelInfo),
+      };
+    }
+
     const activeWallet = stringOrUndefined(health.value?.wallet);
     const preferredWallet = localWallets.base;
     // The proxy health response is authoritative while it is running. The saved
@@ -388,22 +406,7 @@ export class ClawRouterManager {
         (solana === localWallets.solana ? localBalances.solana : undefined) ??
         (paymentChain === "solana" ? reportedBalance : undefined),
     };
-    const models: ModelInfo[] = (catalog.value?.data ?? []).map((model) => {
-      const id = String(model.id ?? "");
-      return {
-        id,
-        name: stringOrUndefined(model.name),
-        ownedBy: stringOrUndefined(model.owned_by),
-        contextWindow: numberOrUndefined(model.context_window),
-        maxOutput: numberOrUndefined(model.max_output),
-        inputPrice: numberOrUndefined(model.input_price),
-        outputPrice: numberOrUndefined(model.output_price),
-        reasoning: booleanOrUndefined(model.reasoning),
-        vision: booleanOrUndefined(model.vision),
-        agentic: booleanOrUndefined(model.agentic),
-        toolCalling: booleanOrUndefined(model.tool_calling),
-      };
-    });
+    const models: ModelInfo[] = (catalog.value?.data ?? []).map(toModelInfo);
     const walletRestartChains: PaymentChain[] = [];
     if (preferredWallet && activeWallet && !sameAddress(activeWallet, preferredWallet)) {
       walletRestartChains.push("base");
@@ -647,6 +650,23 @@ function currencyNumberOrUndefined(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
   const parsed = Number(value.replace(/[^0-9.-]/g, ""));
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/** One `/v1/models` row → the shape the renderer reads. */
+function toModelInfo(model: Record<string, unknown>): ModelInfo {
+  return {
+    id: String(model.id ?? ""),
+    name: stringOrUndefined(model.name),
+    ownedBy: stringOrUndefined(model.owned_by),
+    contextWindow: numberOrUndefined(model.context_window),
+    maxOutput: numberOrUndefined(model.max_output),
+    inputPrice: numberOrUndefined(model.input_price),
+    outputPrice: numberOrUndefined(model.output_price),
+    reasoning: booleanOrUndefined(model.reasoning),
+    vision: booleanOrUndefined(model.vision),
+    agentic: booleanOrUndefined(model.agentic),
+    toolCalling: booleanOrUndefined(model.tool_calling),
+  };
 }
 
 function paymentChainOrUndefined(value: unknown): PaymentChain | undefined {

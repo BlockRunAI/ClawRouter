@@ -33,6 +33,13 @@ import type {
 } from "./types.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
 import { startProxy, getProxyPort } from "./proxy.js";
+import {
+  isValidApiKey,
+  maskApiKey,
+  resolveApiKey,
+  PORTAL_CREDITS_URL,
+  PORTAL_KEYS_URL,
+} from "./api-key.js";
 import { BLOCKRUN_EXA_PROVIDER_ID, blockrunExaWebSearchProvider } from "./web-search-provider.js";
 import {
   resolveOrGenerateWalletKey,
@@ -876,13 +883,33 @@ async function startProxyInBackground(
     proc.__clawrouterStartupPhase = "starting";
   }
 
+  // An API key, if the user has one, is resolved before any wallet is touched.
+  // resolveOrGenerateWalletKey() below *generates* a wallet as a side effect,
+  // and a customer paying by card must not end up with a private key they never
+  // asked for and a "back this up" warning they cannot act on.
+  const pluginApiKey = api.pluginConfig?.apiKey as string | undefined;
+  const resolvedApiKey =
+    typeof pluginApiKey === "string" && isValidApiKey(pluginApiKey)
+      ? { key: pluginApiKey.trim(), source: "config" as const }
+      : await resolveApiKey();
+  if (typeof pluginApiKey === "string" && !isValidApiKey(pluginApiKey)) {
+    api.logger.warn(
+      `pluginConfig.apiKey is set but invalid (expected brk_...) — ignoring it and looking elsewhere`,
+    );
+  }
+  const apiKey = resolvedApiKey?.key;
+
   // Resolve wallet key: plugin config → explicit env → BlockRun Core → legacy migration → generate.
   // pluginConfig.walletKey is declared in openclaw.plugin.json configSchema but
   // was previously never read here — that was a bug.
   const configKey = api.pluginConfig?.walletKey as string | undefined;
-  let wallet: WalletResolution;
+  let wallet: WalletResolution | undefined;
 
-  if (typeof configKey === "string" && /^0x[0-9a-fA-F]{64}$/.test(configKey)) {
+  if (apiKey) {
+    api.logger.info(
+      `Using BlockRun API key ${maskApiKey(apiKey)} (from ${resolvedApiKey!.source}) — billing account credit, no wallet`,
+    );
+  } else if (typeof configKey === "string" && /^0x[0-9a-fA-F]{64}$/.test(configKey)) {
     const account = privateKeyToAccount(configKey as `0x${string}`);
     wallet = { key: configKey, address: account.address, source: "config" };
   } else {
@@ -895,7 +922,9 @@ async function startProxyInBackground(
   }
 
   // Log wallet source
-  if (wallet.source === "generated") {
+  if (!wallet) {
+    // API-key mode — nothing to report, the line above already said so.
+  } else if (wallet.source === "generated") {
     api.logger.warn(`════════════════════════════════════════════════`);
     api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
     api.logger.warn(`  Address : ${wallet.address}`);
@@ -930,13 +959,13 @@ async function startProxyInBackground(
   }
 
   const proxy = await startProxy({
-    wallet,
+    ...(apiKey ? { apiKey } : { wallet: wallet! }),
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
     spendControl: (liveSpendControl = new SpendControl()),
     onReady: (port) => {
-      api.logger.info(`BlockRun x402 proxy listening on port ${port}`);
+      api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);
     },
     onError: (error) => {
       api.logger.error(`BlockRun proxy error: ${error.message}`);
@@ -991,11 +1020,18 @@ async function startProxyInBackground(
   api.logger.info(`ClawRouter ready — smart routing enabled`);
   api.logger.info(`Pricing: Simple ~$0.001 | Code ~$0.01 | Complex ~$0.05 | Free: $0`);
 
+  // API-key mode has no wallet balance to check and no address to fund: the
+  // gateway holds the books and refuses with a 402 that names the top-up page.
+  if (apiKey) {
+    api.logger.info(`Billing: BlockRun account credit — top up at ${PORTAL_CREDITS_URL}`);
+    return true;
+  }
+
   // Non-blocking balance check AFTER proxy is ready (won't hang startup)
   // Uses the proxy's chain-aware balance monitor and matching active-chain address.
   const currentChain = await resolvePaymentChain();
   const displayAddress =
-    currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet.address;
+    currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet!.address;
   const network = currentChain === "solana" ? "Solana" : "Base";
   proxy.balanceMonitor
     .checkBalance()
@@ -1536,6 +1572,26 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
     requireAuth: true,
     handler: async (ctx: PluginCommandContext) => {
       const subcommand = ctx.args?.trim().toLowerCase() || "status";
+
+      // API-key mode has no wallet, no chain and no key to export. Answer with
+      // the account instead of resolving (and, for the chain subcommands,
+      // silently GENERATING) wallet material this user will never spend from.
+      const activeApiKey = (await resolveApiKey())?.key;
+      if (activeApiKey) {
+        return {
+          text: [
+            "**BlockRun account** (API key)",
+            "",
+            `**Key:** \`${maskApiKey(activeApiKey)}\``,
+            "**Billing:** account credit — no wallet, no payment chain, no gas.",
+            "",
+            `**Add credit:** ${PORTAL_CREDITS_URL}`,
+            `**Usage & keys:** ${PORTAL_KEYS_URL}`,
+            "",
+            "To pay with a USDC wallet over x402 instead, run `clawrouter logout` and restart.",
+          ].join("\n"),
+        };
+      }
 
       let wallet: WalletResolution | undefined;
       try {

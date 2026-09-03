@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * Drain the microtask queue.
+ *
+ * These tests used to flush with a fixed pair of `await Promise.resolve()`,
+ * which pins the exact number of awaits inside startProxyInBackground — adding
+ * one (resolving the BlockRun API key before any wallet is touched, v0.12.268)
+ * broke four of them without changing any behaviour they test. Draining until
+ * quiet keeps the assertions about ordering instead of about await counts.
+ * Fake timers are unaffected: this advances no clock.
+ */
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+};
+
 vi.mock("node:fs", () => ({
   writeFileSync: vi.fn(),
   existsSync: vi.fn(() => false),
@@ -97,6 +111,13 @@ describe("plugin lifecycle", () => {
       getProxyPort: () => 8402,
       startProxy,
     }));
+    vi.doMock("./api-key.js", () => ({
+      resolveApiKey: vi.fn(async () => undefined),
+      isValidApiKey: (v: unknown) => typeof v === "string" && v.startsWith("brk_"),
+      maskApiKey: (v: string) => v,
+      PORTAL_CREDITS_URL: "https://user.blockrun.ai/dashboard/credits",
+      PORTAL_KEYS_URL: "https://user.blockrun.ai/dashboard/keys",
+    }));
     vi.doMock("./auth.js", () => ({
       resolveOrGenerateWalletKey: vi.fn(async () => ({
         key: "0x1234567890123456789012345678901234567890123456789012345678901234",
@@ -186,16 +207,14 @@ describe("plugin lifecycle", () => {
 
       plugin.register?.(emptyApi);
       await vi.advanceTimersByTimeAsync(300);
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(startProxy).toHaveBeenCalledTimes(1);
       expect(startProxy.mock.calls[0]?.[0]?.routingConfig).toBeUndefined();
 
       plugin.register?.(configuredApi);
       await vi.runAllTimersAsync();
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(firstClose).toHaveBeenCalledTimes(1);
       expect(startProxy).toHaveBeenCalledTimes(2);
@@ -230,6 +249,13 @@ describe("plugin lifecycle", () => {
       getProxyPort: () => 8402,
       startProxy,
     }));
+    vi.doMock("./api-key.js", () => ({
+      resolveApiKey: vi.fn(async () => undefined),
+      isValidApiKey: (v: unknown) => typeof v === "string" && v.startsWith("brk_"),
+      maskApiKey: (v: string) => v,
+      PORTAL_CREDITS_URL: "https://user.blockrun.ai/dashboard/credits",
+      PORTAL_KEYS_URL: "https://user.blockrun.ai/dashboard/keys",
+    }));
     vi.doMock("./auth.js", () => ({
       resolveOrGenerateWalletKey: vi.fn(async () => ({
         key: "0x1234567890123456789012345678901234567890123456789012345678901234",
@@ -319,8 +345,7 @@ describe("plugin lifecycle", () => {
 
       plugin.register?.(emptyApi);
       await vi.advanceTimersByTimeAsync(300);
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(startProxy).toHaveBeenCalledTimes(1);
 
@@ -329,8 +354,7 @@ describe("plugin lifecycle", () => {
 
       rejectFirstStart(new Error("provisional startup failed"));
       await vi.runAllTimersAsync();
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(startProxy).toHaveBeenCalledTimes(2);
       expect(startProxy.mock.calls[1]?.[0]?.routingConfig).toEqual(configuredRouting);
@@ -368,6 +392,13 @@ describe("plugin lifecycle", () => {
     vi.doMock("./proxy.js", () => ({
       getProxyPort: () => 8402,
       startProxy,
+    }));
+    vi.doMock("./api-key.js", () => ({
+      resolveApiKey: vi.fn(async () => undefined),
+      isValidApiKey: (v: unknown) => typeof v === "string" && v.startsWith("brk_"),
+      maskApiKey: (v: string) => v,
+      PORTAL_CREDITS_URL: "https://user.blockrun.ai/dashboard/credits",
+      PORTAL_KEYS_URL: "https://user.blockrun.ai/dashboard/keys",
     }));
     vi.doMock("./auth.js", () => ({
       resolveOrGenerateWalletKey: vi.fn(async () => ({
@@ -466,8 +497,7 @@ describe("plugin lifecycle", () => {
 
       plugin.register?.(emptyApi);
       await vi.advanceTimersByTimeAsync(300);
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(startProxy).toHaveBeenCalledTimes(1);
 
@@ -476,8 +506,7 @@ describe("plugin lifecycle", () => {
 
       plugin.register?.(configuredApiB);
       await vi.runAllTimersAsync();
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(startProxy).toHaveBeenCalledTimes(2);
       expect(startProxy.mock.calls[1]?.[0]?.routingConfig).toEqual(configuredRoutingB);
@@ -488,8 +517,7 @@ describe("plugin lifecycle", () => {
           checkBalance: vi.fn(async () => ({ isEmpty: true, isLow: false, balanceUSD: "0.00" })),
         },
       });
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(firstClose).toHaveBeenCalledTimes(1);
       expect(startProxy).toHaveBeenCalledTimes(2);
@@ -503,6 +531,13 @@ describe("plugin lifecycle", () => {
     vi.doMock("./proxy.js", () => ({
       getProxyPort: () => 8402,
       startProxy: vi.fn(),
+    }));
+    vi.doMock("./api-key.js", () => ({
+      resolveApiKey: vi.fn(async () => undefined),
+      isValidApiKey: (v: unknown) => typeof v === "string" && v.startsWith("brk_"),
+      maskApiKey: (v: string) => v,
+      PORTAL_CREDITS_URL: "https://user.blockrun.ai/dashboard/credits",
+      PORTAL_KEYS_URL: "https://user.blockrun.ai/dashboard/keys",
     }));
     vi.doMock("./auth.js", () => ({
       resolveOrGenerateWalletKey: vi.fn(async () => ({
@@ -610,6 +645,13 @@ describe("plugin lifecycle", () => {
           }),
       ),
     }));
+    vi.doMock("./api-key.js", () => ({
+      resolveApiKey: vi.fn(async () => undefined),
+      isValidApiKey: (v: unknown) => typeof v === "string" && v.startsWith("brk_"),
+      maskApiKey: (v: string) => v,
+      PORTAL_CREDITS_URL: "https://user.blockrun.ai/dashboard/credits",
+      PORTAL_KEYS_URL: "https://user.blockrun.ai/dashboard/keys",
+    }));
     vi.doMock("./auth.js", () => ({
       resolveOrGenerateWalletKey: vi.fn(async () => ({
         key: "0x1234567890123456789012345678901234567890123456789012345678901234",
@@ -699,8 +741,7 @@ describe("plugin lifecycle", () => {
         },
       });
 
-      await Promise.resolve();
-      await Promise.resolve();
+      await flush();
 
       expect(close).toHaveBeenCalledTimes(1);
     } finally {

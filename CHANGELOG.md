@@ -4,6 +4,37 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.268 — September 3, 2026
+
+### Added — API keys, so a person can pay with a card instead of a wallet
+
+BlockRun now runs a customer portal at **user.blockrun.ai** and an OpenAI-compatible gateway at **api.blockrun.ai**: sign in, top up with a credit card, mint a `brk_live_…` key. ClawRouter speaks that rail now, alongside x402.
+
+Wallets remain the default and the reason ClawRouter exists — an agent that can sign a transaction can pay for itself with no account anywhere. But that is a bad answer for a person who just wants to use the router, and "get USDC onto Base or Solana first" was the whole onboarding for them. Both rails now work, and they are one command apart:
+
+```bash
+clawrouter login brk_live_...   # bill account credit via api.blockrun.ai
+clawrouter logout               # back to signing x402 payments from the wallet
+```
+
+Or `BLOCKRUN_API_KEY=brk_live_…` for CI and containers, or the plugin's new `apiKey` config field. Resolution order is env → `~/.blockrun/.api-key` (shared with other BlockRun products) → `~/.openclaw/blockrun/api-key`.
+
+**A key wins over a wallet whenever both are present.** A machine holding a legacy wallet and a key the user just added means "bill my account", not "keep spending my USDC" — and nothing is deleted, so `clawrouter logout` reverses it.
+
+What changes inside the proxy is narrower than it sounds. In API-key mode `startProxy` builds no x402 client, registers no EVM or Solana signer and installs no pre-sign spend hook — there is nothing to sign — and the upstream fetch attaches a bearer token instead of settling a 402. Everything downstream of that is untouched: the same model ids, the same 15-dimension classifier, the same fallback chains, `/exclude`, `maxCostPerRun`, the response cache and the OpenAI-compatible surface.
+
+Three things were deliberate rather than obvious:
+
+- **The bearer token REPLACES the client's `authorization` header, it does not default to it.** The proxy forwards request headers verbatim, and OpenClaw and the OpenAI SDK both send a placeholder key. Setting rather than defaulting is the difference between working and 401-ing every call.
+- **No wallet is generated in API-key mode, by any path.** `resolveOrGenerateWalletKey()` mints a private key as a side effect, so both the CLI and the plugin resolve the API key _before_ touching it — and `clawrouter doctor` does too. A customer paying by card must never find a key they did not ask for and a "back this up now" banner they cannot act on.
+- **There is no local balance gate, on purpose.** api.blockrun.ai publishes no key-readable balance and the account's books live server-side, so ClawRouter does not guess: it makes the call, and a `402 insufficient_quota` naming the top-up page is the answer when credit runs out. Guessing zero would have silently downgraded a paying customer to the free tier, which is what the wallet-mode fallback does when a wallet is empty.
+
+`/health` reports `authMode` with the key masked and no payment chain, and two ClawRouters on one port now refuse to reuse each other across auth modes — the same rule that already applied across chains, for the same reason: they bill different accounts.
+
+api.blockrun.ai currently carries `/v1/chat/completions`, `/v1/messages`, `GET /v1/models` and `GET /v1/images/models`. Media and partner endpoints stay wallet-only for now; ClawRouter passes every path through and rewrites the gateway's `Unsupported endpoint` 404 into an explanation, so they light up on this rail the day BlockRun publishes them, with no ClawRouter release needed. 401 and 402 get the same treatment — the portal URL that fixes them, appended to the gateway's own message, with the status and error `code` an SDK branches on left untouched.
+
+---
+
 ## v0.12.267 — September 2, 2026
 
 ### Fixed — a lost response on the pre-auth path could sign a second payment

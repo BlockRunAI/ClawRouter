@@ -7,7 +7,8 @@
 <p>Agents can't sign up for accounts. Agents can't enter credit cards.<br>
 Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
-<em><!-- br:models.free -->7<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em></p>
+<em><!-- br:models.free -->7<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em><br><br>
+<em>Not an agent? Sign up at <a href="https://user.blockrun.ai">user.blockrun.ai</a>, top up with a card, and use the same router with an API key.</em></p>
 
 <br>
 
@@ -55,6 +56,14 @@ ClawRouter is built for the agent-first world:
 
 This is the stack that lets agents operate autonomously: **x402 + USDC + local routing**.
 
+**And if you are a human, not an agent:** wallets are the default, not the only
+option. Sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, add credit
+with a credit card, mint an API key, and run `clawrouter login brk_live_…`. Same
+router, same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same local routing — calls go to
+`api.blockrun.ai` on a bearer token and bill your account instead of a wallet.
+No crypto, no gas, no seed phrase to look after. See
+[Paying with a credit card](#paying-with-a-credit-card-api-key).
+
 ---
 
 ## How it compares
@@ -64,8 +73,8 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 | **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->76<!-- /br:models.chatVisible -->**    |
 | **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->7<!-- /br:models.free --> models, no signup** |
 | **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
-| **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature**                                                   |
-| **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request**                                                   |
+| **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature _or_ API key**                                      |
+| **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request _or_ card credit**                                  |
 | **Runs locally** | No                | Yes              | No                | No                | **Yes**                                                                |
 | **Open source**  | No                | Yes              | No                | Partial           | **Yes**                                                                |
 | **Agent-ready**  | No                | No               | No                | No                | **Yes**                                                                |
@@ -79,6 +88,19 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 ## Quick Start
 
 > **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+
+**Two ways to pay for the paid ones — pick one, the rest of ClawRouter is identical:**
+
+|                   | Wallet (default)                                  | API key                                                                                                    |
+| ----------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Who it is for** | Autonomous agents, and anyone happy holding USDC  | People who would rather pay with a card                                                                    |
+| **Setup**         | Nothing — a wallet is generated on first run      | Sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, mint a key, `clawrouter login brk_live_…` |
+| **Auth**          | An x402 signature per request                     | `Authorization: Bearer brk_live_…`                                                                         |
+| **Gateway**       | `blockrun.ai` (Base) / `sol.blockrun.ai` (Solana) | `api.blockrun.ai`                                                                                          |
+| **Billing**       | USDC leaves your wallet per call, non-custodial   | Card-funded account credit, drawn down at exact usage                                                      |
+
+ClawRouter prefers the API key whenever one is configured, so `clawrouter login`
+is all it takes to switch and `clawrouter logout` is all it takes to switch back.
 
 ### Desktop control plane (macOS)
 
@@ -522,6 +544,9 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Payment
 
+Two rails. This section covers the wallet one; the card/API-key one is
+[below](#paying-with-a-credit-card-api-key).
+
 No account. No API key. **Payment IS authentication** via [x402](https://x402.org).
 
 ```
@@ -551,7 +576,93 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 - **Base (EVM):** Send USDC on Base to your EVM address
 - **Solana:** Send USDC on Solana to your Solana address
 - **Coinbase/CEX:** Withdraw USDC to either network
-- **Credit card:** Reach out to [@bc1max on Telegram](https://t.me/bc1max)
+- **Credit card:** don't fund a wallet at all — use an API key instead (below)
+
+---
+
+## Paying with a credit card (API key)
+
+Wallets are what let an _agent_ pay for itself. If you are a person and would
+rather pay the way you pay for everything else, BlockRun issues API keys backed
+by card-funded credit — and ClawRouter speaks that too.
+
+**1. Sign up and get a key**
+
+Go to **[user.blockrun.ai](https://user.blockrun.ai)**:
+
+1. Sign in.
+2. **Credits** → top up with a credit card. The processing fee is charged at
+   purchase, not on inference: you pay it once on the top-up and every model
+   then bills at the published list price, with **no per-call minimum and no
+   per-call fee**.
+3. **API Keys** → create a key. It is shown once and looks like
+   `brk_live_…` — copy it before you leave the page.
+
+**2. Tell ClawRouter about it**
+
+```bash
+clawrouter login brk_live_...     # stores it in ~/.blockrun/.api-key (chmod 600)
+clawrouter login                  # or run bare and paste at the prompt
+```
+
+Or, for CI and containers where you would rather not write a file:
+
+```bash
+export BLOCKRUN_API_KEY=brk_live_...
+```
+
+Either way, restart the proxy. That is the whole change — routing, model names,
+the free tier, `/model auto`, exclusions and the OpenAI-compatible surface all
+behave exactly as before:
+
+```bash
+npx @blockrun/clawrouter
+# [ClawRouter] Using BlockRun API key brk_live_Ab3xQ9…f8c1 (from ~/.blockrun/.api-key)
+# [ClawRouter] Billing: account credit — top up at https://user.blockrun.ai/dashboard/credits
+```
+
+**3. Check it, and switch back whenever**
+
+```bash
+clawrouter status     # names the mode, the gateway, and the masked key
+clawrouter doctor     # verifies the key against the gateway (401 = revoked or mistyped)
+clawrouter logout     # delete the key and go back to paying from the wallet
+```
+
+**Using it directly, without ClawRouter.** The same key works against
+`api.blockrun.ai` from any OpenAI or Anthropic SDK — `Authorization: Bearer` for
+OpenAI clients, `x-api-key` for Anthropic ones:
+
+```bash
+curl https://api.blockrun.ai/v1/chat/completions \
+  -H "Authorization: Bearer brk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"model": "anthropic/claude-sonnet-5", "messages": [{"role": "user", "content": "hello"}]}'
+```
+
+Running it through ClawRouter is what adds the smart routing, the fallback
+chains, the response cache and the local spend controls.
+
+**What to know**
+
+- **The key wins.** If a wallet and a key are both present, ClawRouter uses the
+  key. A machine with both means "bill my account", not "keep spending my USDC".
+  `clawrouter logout` (and unsetting `BLOCKRUN_API_KEY`) reverses it.
+- **No wallet is created.** In API-key mode ClawRouter never generates, reads or
+  signs with a private key — `clawrouter doctor` will not mint one either.
+- **Balance lives server-side.** There is no local balance to check: a call that
+  outruns your credit comes back as HTTP `402 insufficient_quota`, naming the
+  top-up page. Free models stay free and need no credit at all.
+- **Chat today, media next.** `api.blockrun.ai` currently serves the chat and
+  text-completion endpoints (`/v1/chat/completions`, `/v1/messages`, `/v1/models`).
+  Image, video, audio and the partner APIs are still wallet-only; ClawRouter says
+  so explicitly instead of returning a bare 404, and they light up on the API-key
+  path as BlockRun publishes them — no ClawRouter release needed.
+- **`maxCostPerRun` and `/exclude` still apply**, along with the router's own
+  budget filter — they live in the router, not the signer. **`clawrouter policy`
+  limits do not**: they are enforced in the x402 pre-sign hook, and nothing is
+  signed here. Your account balance is the cap instead, and ClawRouter warns at
+  startup if you have one of those limits configured.
 
 ---
 
@@ -576,13 +687,14 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 
 For basic usage, no configuration needed. For advanced options:
 
-| Variable                    | Default                               | Description                                                      |
-| --------------------------- | ------------------------------------- | ---------------------------------------------------------------- |
-| `BLOCKRUN_WALLET_KEY`       | auto-generated                        | Your wallet private key                                          |
-| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Local proxy port                                                 |
-| `CLAWROUTER_DISABLED`       | `false`                               | Disable smart routing                                            |
-| `CLAWROUTER_DEBUG_HEADERS`  | `on`                                  | Set to `off` to suppress `x-clawrouter-*` debug response headers |
-| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint                                              |
+| Variable                    | Default                               | Description                                                                                                                 |
+| --------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `BLOCKRUN_API_KEY`          | unset                                 | BlockRun API key (`brk_live_…`). Set it and ClawRouter pays from account credit via `api.blockrun.ai` instead of the wallet |
+| `BLOCKRUN_WALLET_KEY`       | auto-generated                        | Your wallet private key                                                                                                     |
+| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Local proxy port                                                                                                            |
+| `CLAWROUTER_DISABLED`       | `false`                               | Disable smart routing                                                                                                       |
+| `CLAWROUTER_DEBUG_HEADERS`  | `on`                                  | Set to `off` to suppress `x-clawrouter-*` debug response headers                                                            |
+| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint                                                                                                         |
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 
@@ -761,7 +873,7 @@ On the `auto` profile ClawRouter costs <!-- br:savings.autoVsBaselinePct -->84<!
 
 ### How does ClawRouter compare to OpenRouter?
 
-ClawRouter is open source and runs locally. It uses wallet-based authentication (no API keys) and USDC per-request payments (no credit cards or subscriptions). OpenRouter requires an account, API key, and credit card. ClawRouter also features smart routing — it automatically picks the best model for each request, while OpenRouter requires manual model selection.
+ClawRouter is open source and runs locally. It supports wallet-based authentication with USDC per-request payments — which OpenRouter cannot do, and which is what lets an agent pay for itself with no account at all — _and_ the ordinary path of an API key funded by credit card at [user.blockrun.ai](https://user.blockrun.ai). OpenRouter only offers the second. ClawRouter also features smart routing — it automatically picks the best model for each request, while OpenRouter requires manual model selection.
 
 ### How does ClawRouter compare to LiteLLM?
 
@@ -770,6 +882,15 @@ Both are open source and run locally. But ClawRouter adds smart routing (automat
 ### What agents does ClawRouter work with?
 
 ClawRouter works with any tool that makes OpenAI-compatible API calls — point it at `http://localhost:8402`. This includes continue.dev, Cursor, VS Code extensions, ElizaOS, and custom agents. It also integrates as a plugin with [OpenClaw](https://openclaw.ai) (an AI coding agent), which enables additional features like slash commands and usage reports.
+
+### Do I need a crypto wallet to use ClawRouter?
+
+No. A wallet is the default because it is what lets an _agent_ pay for itself,
+but you can sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, top up
+with a credit card, mint an API key and run `clawrouter login brk_live_…`. Calls
+then go to `api.blockrun.ai` on a bearer token and bill your account credit — no
+crypto, no gas, no seed phrase. And the <!-- br:models.free -->7<!-- /br:models.free --> free models need neither: no
+wallet, no key, no signup. See [Paying with a credit card](#paying-with-a-credit-card-api-key).
 
 ### Is ClawRouter free?
 

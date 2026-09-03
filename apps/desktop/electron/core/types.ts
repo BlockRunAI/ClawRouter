@@ -50,6 +50,16 @@ export type DashboardData = {
   proxy: {
     reachable: boolean;
     status?: string;
+    /**
+     * How the running proxy pays BlockRun. "api-key" means there is no wallet
+     * behind it at all, so every wallet/chain/balance field below is absent —
+     * showing a local wallet as the funding source would be a lie.
+     */
+    authMode?: "wallet" | "api-key";
+    /** Masked BlockRun API key, when authMode is "api-key". */
+    apiKey?: string;
+    /** The gateway the key authenticates against. */
+    gateway?: string;
     wallet?: string;
     activeWallet?: string;
     solana?: string;

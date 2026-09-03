@@ -74,12 +74,19 @@ import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats, clearStats, resolveStatsDays } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
 import { ResponseCache, type ResponseCacheConfig } from "./response-cache.js";
-import { BalanceMonitor } from "./balance.js";
+import { BalanceMonitor, ApiKeyBalanceMonitor } from "./balance.js";
 import type { SolanaBalanceMonitor } from "./solana-balance.js";
 
-/** Union type for chain-agnostic balance monitoring */
-type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
+/** Union type for chain- and auth-agnostic balance monitoring */
+type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor | ApiKeyBalanceMonitor;
 import { resolvePaymentChain } from "./auth.js";
+import {
+  BLOCKRUN_API_KEY_API,
+  PORTAL_CREDITS_URL,
+  createApiKeyFetch,
+  isValidApiKey,
+  maskApiKey,
+} from "./api-key.js";
 import { registerSpendPolicyHook, SpendControl, SpendPolicyError } from "./spend-control.js";
 import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
 // Error classes available for programmatic use but not used in proxy
@@ -219,11 +226,16 @@ let gatewayModelIds: Set<string> | undefined;
  * `gatewayModelIds` unset and every rung eligible, which is the pre-existing
  * behaviour: a catalog we could not read must never disable the free tier.
  */
-async function loadGatewayCatalog(apiBase: string): Promise<void> {
+async function loadGatewayCatalog(apiBase: string, apiKey?: string): Promise<void> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
-    const res = await fetch(`${apiBase}/v1/models`, { signal: controller.signal });
+    // api.blockrun.ai authenticates its catalog too; an unauthenticated read
+    // there is a 401, which would leave every free rung eligible forever.
+    const res = await fetch(`${apiBase}/v1/models`, {
+      signal: controller.signal,
+      ...(apiKey ? { headers: { authorization: `Bearer ${apiKey}` } } : {}),
+    });
     clearTimeout(timer);
     if (!res.ok) return;
     const body = (await res.json()) as { data?: Array<{ id?: string }> };
@@ -772,7 +784,7 @@ export function getProxyPort(): number {
  */
 async function checkExistingProxy(
   port: number,
-): Promise<{ wallet: string; paymentChain?: string } | undefined> {
+): Promise<{ wallet: string; paymentChain?: string; authMode: AuthMode } | undefined> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
@@ -787,9 +799,14 @@ async function checkExistingProxy(
         status?: string;
         wallet?: string;
         paymentChain?: string;
+        authMode?: string;
       };
-      if (data.status === "ok" && data.wallet) {
-        return { wallet: data.wallet, paymentChain: data.paymentChain };
+      // An API-key proxy has no wallet to report, so `wallet` alone can no
+      // longer be the liveness signal. Anything that does not name its mode is
+      // a pre-v0.12.268 instance, which could only have been a wallet proxy.
+      const authMode: AuthMode = data.authMode === "api-key" ? "api-key" : "wallet";
+      if (data.status === "ok" && (data.wallet || authMode === "api-key")) {
+        return { wallet: data.wallet ?? "", paymentChain: data.paymentChain, authMode };
       }
     }
     return undefined;
@@ -1426,8 +1443,27 @@ export type WalletConfig = string | { key: string; solanaPrivateKeyBytes?: Uint8
 
 export type PaymentChain = "base" | "solana";
 
+/**
+ * How this proxy pays BlockRun.
+ * - "wallet"  — x402 micropayments signed per call from a local USDC wallet.
+ * - "api-key" — a `brk_…` bearer token drawing on account credit topped up by
+ *               card at https://user.blockrun.ai. No wallet, no chain, no gas.
+ */
+export type AuthMode = "wallet" | "api-key";
+
 export type ProxyOptions = {
-  wallet: WalletConfig;
+  /**
+   * Wallet material for x402 mode. Optional only when `apiKey` is set — one of
+   * the two must be present or the proxy has no way to pay for anything.
+   */
+  wallet?: WalletConfig;
+  /**
+   * BlockRun API key (`brk_…`). When present it wins over `wallet`: the proxy
+   * talks to api.blockrun.ai with a bearer token and signs no payments at all.
+   * Also readable from BLOCKRUN_API_KEY / ~/.blockrun/.api-key via
+   * resolveApiKey(); callers resolve it and pass it in.
+   */
+  apiKey?: string;
   apiBase?: string;
   /**
    * Payment chain: "base" or "solana". New installs persist "solana" at wallet
@@ -1526,8 +1562,13 @@ export type ProxyOptions = {
 export type ProxyHandle = {
   port: number;
   baseUrl: string;
+  /** The x402 signer's address, or "" in API-key mode (there is no wallet). */
   walletAddress: string;
   solanaAddress?: string;
+  /** Which credential this proxy is paying with. */
+  authMode: AuthMode;
+  /** Masked API key, for status display. Only set in API-key mode. */
+  apiKeyLabel?: string;
   balanceMonitor: AnyBalanceMonitor;
   close: () => Promise<void>;
 };
@@ -2246,6 +2287,35 @@ async function uploadDataUriToHost(dataUri: string): Promise<string> {
  *
  * Returns a handle with the assigned port, base URL, and a close function.
  */
+/**
+ * Tell the operator that their `clawrouter policy` spend limits are inert.
+ *
+ * The limits (and the payee/network/asset lists) live in a hook that runs just
+ * before a payment is signed. API-key mode signs nothing, so none of them can
+ * fire. Reading the configured limits and staying silent when there are none
+ * keeps the common path quiet while making the gap loud for the operator who
+ * actually set one — the person for whom a silently-disabled cap is a problem.
+ */
+function warnIfSpendLimitsUnenforced(spendControl: SpendControl | undefined): void {
+  let configured: string[];
+  try {
+    const limits = (spendControl ?? new SpendControl()).getStatus().limits;
+    configured = (["perRequest", "hourly", "daily", "session"] as const)
+      .filter((window) => typeof limits[window] === "number")
+      .map((window) => `${window}=$${limits[window]!.toFixed(2)}`);
+  } catch {
+    return; // an unreadable policy file is its own problem, reported elsewhere
+  }
+  if (configured.length === 0) return;
+
+  console.warn(
+    `[ClawRouter] ⚠ Spend limits (${configured.join(", ")}) are NOT enforced in API-key mode — they gate x402 signing, and nothing is signed here.`,
+  );
+  console.warn(
+    `[ClawRouter]   Your BlockRun account balance is the cap instead. Use maxCostPerRun for a per-session limit that still applies.`,
+  );
+}
+
 export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Apply upstream proxy (SOCKS5/HTTP) before any outgoing requests
   const upstreamProxy = await applyUpstreamProxy(options.upstreamProxy);
@@ -2253,18 +2323,55 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[ClawRouter] Upstream proxy: ${upstreamProxy}`);
   }
 
+  // An API key takes precedence over a wallet: it is the explicit, newer
+  // credential, and a machine that has both (a legacy wallet plus a key the
+  // user just added) means "bill my account", not "keep spending my USDC".
+  const apiKey = options.apiKey?.trim() || undefined;
+  if (apiKey && !isValidApiKey(apiKey)) {
+    throw new Error(
+      `BlockRun API key is malformed (expected it to start with "brk_"). Mint one at https://user.blockrun.ai/dashboard/keys`,
+    );
+  }
+  const authMode: AuthMode = apiKey ? "api-key" : "wallet";
+  if (!apiKey && !options.wallet) {
+    throw new Error(
+      `startProxy needs a credential: pass either a wallet (x402) or an apiKey (brk_…, from https://user.blockrun.ai/dashboard/keys).`,
+    );
+  }
+
   // Normalize wallet config: string = EVM-only, object = full resolution
-  const walletKey = typeof options.wallet === "string" ? options.wallet : options.wallet.key;
+  const walletKey =
+    options.wallet === undefined
+      ? undefined
+      : typeof options.wallet === "string"
+        ? options.wallet
+        : options.wallet.key;
   const solanaPrivateKeyBytes =
-    typeof options.wallet === "string" ? undefined : options.wallet.solanaPrivateKeyBytes;
+    options.wallet === undefined || typeof options.wallet === "string"
+      ? undefined
+      : options.wallet.solanaPrivateKeyBytes;
 
   // Payment chain: options > env var > persisted file > default "base".
   // No dynamic switching — user selects chain via /wallet solana or /wallet base.
+  // Meaningless in API-key mode (there is no chain to sign on), and reported as
+  // undefined there so /health never advertises a rail this proxy cannot use.
   const paymentChain = options.paymentChain ?? (await resolvePaymentChain());
   const apiBase =
     options.apiBase ??
-    (paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
-  if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
+    (authMode === "api-key"
+      ? BLOCKRUN_API_KEY_API
+      : paymentChain === "solana" && solanaPrivateKeyBytes
+        ? BLOCKRUN_SOLANA_API
+        : BLOCKRUN_API);
+  if (authMode === "api-key") {
+    console.log(`[ClawRouter] Auth: BlockRun API key ${maskApiKey(apiKey!)} (${apiBase})`);
+    console.log(`[ClawRouter] Billing: account credit — top up at ${PORTAL_CREDITS_URL}`);
+    // `clawrouter policy` limits are enforced in the x402 pre-sign hook, which
+    // does not exist here — there is no signature to refuse. Say so at startup
+    // rather than letting an operator believe a cap they configured is live.
+    // `maxCostPerRun` is unaffected: it is enforced by the router, not the signer.
+    warnIfSpendLimitsUnenforced(options.spendControl);
+  } else if (paymentChain === "solana" && !solanaPrivateKeyBytes) {
     console.warn(
       `[ClawRouter] ⚠ Payment chain is Solana but no mnemonic found — falling back to Base (EVM).`,
     );
@@ -2280,7 +2387,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // rungs it does not carry (the two gateways do not share a free tier). Kicked
   // off without awaiting: startup must not block on it, and until it resolves
   // every rung stays eligible, which is the old behaviour.
-  void loadGatewayCatalog(apiBase);
+  void loadGatewayCatalog(apiBase, apiKey);
 
   // Determine port: options.port > env var > default
   const listenPort = options.port ?? getProxyPort();
@@ -2290,8 +2397,34 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     options.allowExistingProxy === false ? undefined : await checkExistingProxy(listenPort);
   if (existingProxy) {
     // Proxy already running — reuse it instead of failing with EADDRINUSE
-    const account = privateKeyToAccount(walletKey as `0x${string}`);
     const baseUrl = `http://127.0.0.1:${listenPort}`;
+
+    // Never reuse across credentials. The two modes bill different accounts
+    // from different hosts, so silently attaching to the other one would spend
+    // money the caller did not mean to spend — the same reason a chain
+    // mismatch is fatal below.
+    if (existingProxy.authMode !== authMode) {
+      throw new Error(
+        `Existing proxy on port ${listenPort} is authenticating with ${existingProxy.authMode === "api-key" ? "a BlockRun API key" : "a wallet"} but ${authMode === "api-key" ? "an API key" : "a wallet"} was requested. ` +
+          `Stop the existing proxy first or use a different port.`,
+      );
+    }
+
+    if (authMode === "api-key") {
+      options.onReady?.(listenPort);
+      return {
+        port: listenPort,
+        baseUrl,
+        walletAddress: "",
+        authMode,
+        apiKeyLabel: maskApiKey(apiKey!),
+        balanceMonitor: new ApiKeyBalanceMonitor(),
+        // No-op: we didn't start this proxy, so we shouldn't close it
+        close: async () => {},
+      };
+    }
+
+    const account = privateKeyToAccount(walletKey as `0x${string}`);
 
     // Verify the existing proxy is using the same wallet (or warn if different)
     if (existingProxy.wallet !== account.address) {
@@ -2343,6 +2476,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       baseUrl,
       walletAddress: existingProxy.wallet,
       solanaAddress: reuseSolanaAddress,
+      authMode,
       balanceMonitor,
       close: async () => {
         // No-op: we didn't start this proxy, so we shouldn't close it
@@ -2350,21 +2484,26 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     };
   }
 
-  // Create x402 payment client with EVM scheme (always available)
-  const account = privateKeyToAccount(walletKey as `0x${string}`);
-  const evmPublicClient = createPublicClient({ chain: base, transport: http() });
-  const evmSigner = toClientEvmSigner(account, evmPublicClient);
-  const x402 = new x402Client();
-  const spendControl = options.spendControl ?? new SpendControl();
-  registerSpendPolicyHook(x402, spendControl);
-  registerExactEvmScheme(x402, { signer: evmSigner });
+  // In API-key mode there is nothing to sign: no EVM account, no x402 client,
+  // no spend policy hook (the policy it enforces is "which counterparty may I
+  // pay", and we pay no one — the gateway bills the account server-side).
+  // `account` stays undefined and every wallet-shaped field reads off it.
+  const account = walletKey ? privateKeyToAccount(walletKey as `0x${string}`) : undefined;
+  const x402 = authMode === "wallet" ? new x402Client() : undefined;
+  if (x402 && account) {
+    const evmPublicClient = createPublicClient({ chain: base, transport: http() });
+    const evmSigner = toClientEvmSigner(account, evmPublicClient);
+    const spendControl = options.spendControl ?? new SpendControl();
+    registerSpendPolicyHook(x402, spendControl);
+    registerExactEvmScheme(x402, { signer: evmSigner });
+  }
 
   // Register Solana scheme if key is available
   // Uses registerExactSvmScheme helper which registers:
   //   - solana:* wildcard (catches any CAIP-2 Solana network)
   //   - V1 compat names: "solana", "solana-devnet", "solana-testnet"
   let solanaAddress: string | undefined;
-  if (solanaPrivateKeyBytes) {
+  if (x402 && solanaPrivateKeyBytes) {
     const { registerExactSvmScheme } = await import("@x402/svm/exact/client");
     const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
     const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes(solanaPrivateKeyBytes);
@@ -2383,7 +2522,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Gated to EVM (`eip155:*`): builder-code / ERC-8021 is Ethereum-only, so
   // stamping it onto Solana (`solana:*`) payloads would attach a field the SVM
   // facilitator never expects — a no-op at best, a settlement risk at worst.
-  x402.onAfterPaymentCreation(async (context) => {
+  x402?.onAfterPaymentCreation(async (context) => {
     if (!context.selectedRequirements.network.startsWith("eip155")) return;
     const payload = context.paymentPayload as {
       extensions?: Record<string, unknown>;
@@ -2392,7 +2531,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   });
 
   // Log which chain is used for each payment and capture actual payment amount
-  x402.onAfterPaymentCreation(async (context) => {
+  x402?.onAfterPaymentCreation(async (context) => {
     const network = context.selectedRequirements.network;
     const chain = network.startsWith("eip155")
       ? "Base (EVM)"
@@ -2408,23 +2547,32 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[ClawRouter] Payment signed on ${chain} (${network}) — $${amountUsd.toFixed(6)}`);
   });
 
-  const payFetch = createPayFetchWithPreAuth(fetch, x402, undefined, {
-    skipPreAuth: paymentChain === "solana",
-    // Per-request cost estimate so pre-auth is only reused when the cached
-    // payment still covers the (possibly larger) request — BlockRun prices per
-    // token, so one model can cost different amounts across requests.
-    estimateAmount,
-  });
+  // The upstream fetch. Same signature on both rails, which is what lets every
+  // handler below stay unaware of how the call is being paid for: one settles a
+  // 402 by signing USDC, the other never sees a 402 because the bearer token
+  // was already good for the request (or was not, and the gateway says so).
+  const payFetch =
+    authMode === "api-key"
+      ? createApiKeyFetch(apiKey!)
+      : createPayFetchWithPreAuth(fetch, x402!, undefined, {
+          skipPreAuth: paymentChain === "solana",
+          // Per-request cost estimate so pre-auth is only reused when the cached
+          // payment still covers the (possibly larger) request — BlockRun prices per
+          // token, so one model can cost different amounts across requests.
+          estimateAmount,
+        });
 
   // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
   let balanceMonitor: AnyBalanceMonitor;
   if (options._balanceMonitorOverride) {
     balanceMonitor = options._balanceMonitorOverride;
+  } else if (authMode === "api-key") {
+    balanceMonitor = new ApiKeyBalanceMonitor();
   } else if (paymentChain === "solana" && solanaAddress) {
     const { SolanaBalanceMonitor } = await import("./solana-balance.js");
     balanceMonitor = new SolanaBalanceMonitor(solanaAddress);
   } else {
-    balanceMonitor = new BalanceMonitor(account.address);
+    balanceMonitor = new BalanceMonitor(account!.address);
   }
 
   // Build router options (100% local — no external API calls for routing)
@@ -2488,11 +2636,19 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
         const response: Record<string, unknown> = {
           status: "ok",
-          wallet: account.address,
-          paymentChain,
+          authMode,
         };
-        if (solanaAddress) {
-          response.solana = solanaAddress;
+        if (authMode === "api-key") {
+          // No wallet, no chain, and deliberately no full key: /health is
+          // unauthenticated on localhost and a bearer token is not a status field.
+          response.apiKey = maskApiKey(apiKey!);
+          response.gateway = apiBase;
+        } else {
+          response.wallet = account!.address;
+          response.paymentChain = paymentChain;
+          if (solanaAddress) {
+            response.solana = solanaAddress;
+          }
         }
         if (upstreamProxy) {
           response.upstreamProxy = upstreamProxy;
@@ -2511,9 +2667,17 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 ).unref(),
               ),
             ]);
-            response.balance = balanceInfo.balanceUSD;
-            response.isLow = balanceInfo.isLow;
-            response.isEmpty = balanceInfo.isEmpty;
+            if (authMode === "api-key") {
+              // The gateway keeps this account's books and publishes no
+              // key-readable balance, so reporting one would be a fabrication.
+              response.balance = null;
+              response.billing = "BlockRun account credit";
+              response.topUpUrl = PORTAL_CREDITS_URL;
+            } else {
+              response.balance = balanceInfo.balanceUSD;
+              response.isLow = balanceInfo.isLow;
+              response.isEmpty = balanceInfo.isEmpty;
+            }
           } catch {
             response.balanceError = "Could not fetch balance";
           }
@@ -3651,6 +3815,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           port: listenPort,
           baseUrl,
           walletAddress: error.wallet,
+          authMode,
+          ...(apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {}),
           balanceMonitor,
           close: async () => {
             // No-op: we didn't start this proxy, so we shouldn't close it
@@ -3729,8 +3895,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   return {
     port,
     baseUrl,
-    walletAddress: account.address,
+    walletAddress: account?.address ?? "",
     solanaAddress,
+    authMode,
+    ...(apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {}),
     balanceMonitor,
     close: () =>
       new Promise<void>((res, rej) => {

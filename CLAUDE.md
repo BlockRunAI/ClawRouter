@@ -1,6 +1,9 @@
 # ClawRouter
 
-Smart LLM router for autonomous agents. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models. Wallet-based auth. USDC micropayments via x402.
+Smart LLM router for autonomous agents. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models. Two ways to pay:
+
+- **Wallet (default)** — x402 USDC micropayments signed per call, against `blockrun.ai/api` (Base) or `sol.blockrun.ai/api` (Solana). New installs default to Solana.
+- **API key** — `brk_live_…` from [user.blockrun.ai](https://user.blockrun.ai), billed against card-funded account credit, against `api.blockrun.ai`. `src/api-key.ts` resolves it (env → `~/.blockrun/.api-key` → `~/.openclaw/blockrun/api-key`); a key present anywhere wins over a wallet, and no wallet is generated or read in that mode.
 
 ## Commands
 
@@ -27,6 +30,7 @@ src/
 ├── index.ts             # Library entry point
 ├── cli.ts               # CLI entry point
 ├── auth.ts              # Wallet-based authentication
+├── api-key.ts           # BlockRun API-key auth (api.blockrun.ai)
 ├── balance.ts           # USDC balance management
 ├── models.ts            # Model registry and scoring
 ├── config.ts            # Configuration

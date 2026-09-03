@@ -200,3 +200,59 @@ export class BalanceMonitor {
     };
   }
 }
+
+/**
+ * The balance monitor for API-key mode.
+ *
+ * There is no wallet to read. Credit lives in the customer's BlockRun account
+ * and the gateway is its own authority on it: a call that outruns the balance
+ * comes back as HTTP 402 `insufficient_quota`, with a message pointing at the
+ * top-up page. api.blockrun.ai publishes no key-authenticated balance endpoint,
+ * so ClawRouter cannot poll one, and inventing a number here would be worse
+ * than having none — the free-model fallback downgrades a request the moment
+ * the monitor reports empty, and a guessed zero would silently move a paying
+ * customer onto the free tier.
+ *
+ * So this reports "always sufficient" and lets the server refuse. That is not
+ * a bypass of the spend gate: the gate it satisfies is the local *wallet*
+ * check, which exists because an x402 payment that fails after the stream
+ * opens is unrecoverable. An API-key call is refused before a single token is
+ * generated, which is the stronger guarantee, and it is enforced server-side
+ * where the actual balance is.
+ */
+export class ApiKeyBalanceMonitor {
+  /** Large enough that every `balance >= estimatedCost` comparison passes. */
+  private static readonly UNMETERED = BigInt(Number.MAX_SAFE_INTEGER);
+
+  async checkBalance(): Promise<BalanceInfo> {
+    return {
+      balance: ApiKeyBalanceMonitor.UNMETERED,
+      // Never a dollar figure: no caller may print this as if it were one.
+      balanceUSD: "account credit",
+      isLow: false,
+      isEmpty: false,
+      walletAddress: "",
+    };
+  }
+
+  async checkSufficient(): Promise<SufficiencyResult> {
+    return { sufficient: true, info: await this.checkBalance() };
+  }
+
+  /** No local cache to adjust — the server keeps the books. */
+  deductEstimated(): void {}
+  invalidate(): void {}
+
+  async refresh(): Promise<BalanceInfo> {
+    return this.checkBalance();
+  }
+
+  formatUSDC(amountMicros: bigint): string {
+    return `$${(Number(amountMicros) / 1_000_000).toFixed(2)}`;
+  }
+
+  /** No wallet in this mode; callers render the account instead. */
+  getWalletAddress(): string {
+    return "";
+  }
+}

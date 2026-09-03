@@ -854,6 +854,42 @@ function WalletSummary({
   onOpen(): void;
   onFund(): void;
 }) {
+  // A proxy authenticating with a BlockRun API key has no wallet behind it.
+  // Show the account instead of a chain switcher, an address and a USDC
+  // balance that fund nothing — every control in this card would be inert.
+  if (proxy?.authMode === "api-key") {
+    return (
+      <div className="sidebar-wallet">
+        <span className="wallet-heading">
+          <i>
+            <Icon name="wallet" />
+          </i>
+          <b>Account</b>
+          <em>Live</em>
+        </span>
+        <strong>Account credit</strong>
+        <button
+          className="wallet-address"
+          onClick={() => void window.open?.("https://user.blockrun.ai/dashboard", "_blank")}
+        >
+          {proxy.apiKey ?? "API key"}
+          <Icon name="external" />
+        </button>
+        <button
+          className="wallet-fund-button"
+          onClick={() => void window.open?.("https://user.blockrun.ai/dashboard/credits", "_blank")}
+        >
+          <span>＋</span>
+          Add credit
+        </button>
+        <small className="wallet-restart">
+          Paying with a BlockRun API key — no wallet, no payment chain. Run{" "}
+          <code>clawrouter logout</code> to go back to USDC.
+        </small>
+      </div>
+    );
+  }
+
   const selected = proxy?.configuredChain ?? (proxy?.paymentChain === "solana" ? "solana" : "base");
   const address =
     selected === "solana"

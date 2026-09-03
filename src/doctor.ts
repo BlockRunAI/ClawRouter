@@ -21,6 +21,13 @@ import {
   MNEMONIC_FILE,
 } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
+import {
+  resolveApiKey,
+  maskApiKey,
+  BLOCKRUN_API_KEY_API,
+  PORTAL_CREDITS_URL,
+  PORTAL_KEYS_URL,
+} from "./api-key.js";
 import { getSolanaAddress } from "./wallet.js";
 import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
@@ -48,6 +55,16 @@ interface WalletInfo {
   paymentChain: "base" | "solana";
 }
 
+/** Set only when this install pays with a `brk_…` key instead of a wallet. */
+interface ApiKeyInfo {
+  configured: boolean;
+  masked: string | null;
+  source: "env" | "core" | "saved" | "config" | null;
+  gateway: string;
+  /** Did api.blockrun.ai accept the key? null = not checked (no key). */
+  accepted: boolean | null;
+}
+
 interface NetworkInfo {
   blockrunApi: { reachable: boolean; latencyMs: number | null };
   localProxy: { running: boolean; port: number };
@@ -64,6 +81,7 @@ interface DiagnosticResult {
   latestVersion: string | null;
   timestamp: string;
   system: SystemInfo;
+  apiKey: ApiKeyInfo;
   wallet: WalletInfo;
   network: NetworkInfo;
   logs: LogInfo;
@@ -113,8 +131,69 @@ function collectSystemInfo(): SystemInfo {
   };
 }
 
+/**
+ * Collect API-key state, and prove the key actually works.
+ *
+ * The live check matters more than the file check: the failure this command
+ * exists to diagnose is "everything looks configured and every call 401s",
+ * which a revoked or mistyped key produces and no amount of local inspection
+ * detects. GET /v1/models is the cheapest authenticated call on the gateway —
+ * it bills nothing and answers 401 for a bad key.
+ */
+async function collectApiKeyInfo(): Promise<ApiKeyInfo> {
+  const resolved = await resolveApiKey();
+  if (!resolved) {
+    return {
+      configured: false,
+      masked: null,
+      source: null,
+      gateway: BLOCKRUN_API_KEY_API,
+      accepted: null,
+    };
+  }
+
+  let accepted: boolean | null = null;
+  try {
+    const response = await fetch(`${BLOCKRUN_API_KEY_API}/v1/models`, {
+      headers: { authorization: `Bearer ${resolved.key}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    // 401 is the only answer that means "this key is bad". A 5xx or a network
+    // failure says nothing about the key, so it stays unknown rather than
+    // reporting a working key as broken.
+    if (response.status === 401) accepted = false;
+    else if (response.ok) accepted = true;
+  } catch {
+    // accepted stays null — unreachable is a network issue, reported below.
+  }
+
+  return {
+    configured: true,
+    masked: maskApiKey(resolved.key),
+    source: resolved.source,
+    gateway: BLOCKRUN_API_KEY_API,
+    accepted,
+  };
+}
+
 // Collect wallet info
-async function collectWalletInfo(): Promise<WalletInfo> {
+async function collectWalletInfo(apiKeyConfigured: boolean): Promise<WalletInfo> {
+  const empty: WalletInfo = {
+    exists: false,
+    valid: false,
+    address: null,
+    solanaAddress: null,
+    balance: null,
+    isLow: false,
+    isEmpty: true,
+    source: null,
+    paymentChain: "base",
+  };
+  // With a key configured there is nothing to diagnose here, and
+  // resolveOrGenerateWalletKey() would CREATE a wallet as a side effect —
+  // running `doctor` must never mint a private key the user did not ask for.
+  if (apiKeyConfigured) return { ...empty, isEmpty: false };
+
   try {
     const { key, address, source, solanaPrivateKeyBytes } = await resolveOrGenerateWalletKey();
 
@@ -252,6 +331,17 @@ async function collectLogInfo(): Promise<LogInfo> {
 function identifyIssues(result: DiagnosticResult): string[] {
   const issues: string[] = [];
 
+  if (result.apiKey.configured) {
+    if (result.apiKey.accepted === false) {
+      issues.push(
+        `BlockRun rejected the API key (${result.apiKey.masked}) — it may be revoked or mistyped. Mint a new one at ${PORTAL_KEYS_URL}`,
+      );
+    }
+    // A wallet is neither expected nor used in this mode; every wallet check
+    // below would report a false problem, so they are skipped entirely.
+    return finishIssues(result, issues);
+  }
+
   if (!result.wallet.exists) {
     issues.push("No wallet found");
   }
@@ -264,6 +354,11 @@ function identifyIssues(result: DiagnosticResult): string[] {
   } else if (result.wallet.isLow) {
     issues.push("Wallet balance is low (< $1.00)");
   }
+  return finishIssues(result, issues);
+}
+
+/** The checks that apply whichever credential is in use. */
+function finishIssues(result: DiagnosticResult, issues: string[]): string[] {
   if (!result.network.blockrunApi.reachable) {
     issues.push("Cannot reach BlockRun API - check internet connection");
   }
@@ -305,6 +400,24 @@ function printDiagnostics(result: DiagnosticResult): void {
     `  ${green(`Memory: ${result.system.memoryFree} free / ${result.system.memoryTotal}`)}`,
   );
 
+  // Credential — an API key replaces the wallet entirely, so print one or the other.
+  if (result.apiKey.configured) {
+    console.log("\nBlockRun account (API key)");
+    console.log(`  ${green(`Key: ${result.apiKey.masked} (from ${result.apiKey.source})`)}`);
+    console.log(`  ${green(`Gateway: ${result.apiKey.gateway}`)}`);
+    if (result.apiKey.accepted === true) {
+      console.log(`  ${green("Key accepted by BlockRun")}`);
+    } else if (result.apiKey.accepted === false) {
+      console.log(`  ${red("Key REJECTED by BlockRun (401) — revoked or mistyped")}`);
+      console.log(`  ${yellow(`Mint a new key: ${PORTAL_KEYS_URL}`)}`);
+    } else {
+      console.log(`  ${yellow("Could not verify the key (gateway unreachable)")}`);
+    }
+    console.log(`  ${green(`Credit: billed server-side — top up at ${PORTAL_CREDITS_URL}`)}`);
+    printRestOfDiagnostics(result);
+    return;
+  }
+
   // Wallet
   console.log("\nWallet");
   if (result.wallet.exists && result.wallet.valid) {
@@ -334,6 +447,11 @@ function printDiagnostics(result: DiagnosticResult): void {
     console.log(`  ${red("No wallet found")}`);
   }
 
+  printRestOfDiagnostics(result);
+}
+
+/** Network, logs and the issue summary — identical in both auth modes. */
+function printRestOfDiagnostics(result: DiagnosticResult): void {
   // Network
   console.log("\nNetwork");
   if (result.network.blockrunApi.reachable) {
@@ -410,6 +528,15 @@ async function analyzeWithAI(
   userQuestion?: string,
   model: DoctorModel = "sonnet",
 ): Promise<void> {
+  // API-key mode: no wallet, no x402, no local balance gate — one authenticated
+  // POST to api.blockrun.ai, and the gateway refuses with a 402 if the account
+  // is out of credit. Handled before the wallet checks below, all of which
+  // would report an empty wallet this user does not have and does not need.
+  if (diagnostics.apiKey.configured) {
+    await analyzeWithApiKey(diagnostics, userQuestion, model);
+    return;
+  }
+
   // Check if wallet has funds
   if (diagnostics.wallet.isEmpty) {
     console.log("\n💳 Wallet is empty - cannot call AI for analysis.");
@@ -464,24 +591,7 @@ async function analyzeWithAI(
       body: JSON.stringify({
         model: modelConfig.id,
         stream: false,
-        messages: [
-          {
-            role: "system",
-            content: `You are a technical support expert for BlockRun and ClawRouter.
-Analyze the diagnostics and:
-1. Identify the root cause of any issues
-2. Provide specific, actionable fix commands (bash)
-3. Explain why the issue occurred briefly
-4. Be concise but thorough
-5. Format commands in code blocks`,
-          },
-          {
-            role: "user",
-            content: userQuestion
-              ? `Here are my system diagnostics:\n\n${JSON.stringify(diagnostics, null, 2)}\n\nUser's question: ${userQuestion}`
-              : `Here are my system diagnostics:\n\n${JSON.stringify(diagnostics, null, 2)}\n\nPlease analyze and help me fix any issues.`,
-          },
-        ],
+        messages: doctorMessages(diagnostics, userQuestion),
         max_tokens: 1000,
       }),
     });
@@ -508,6 +618,93 @@ Analyze the diagnostics and:
   }
 }
 
+/**
+ * The API-key twin of analyzeWithAI's x402 path.
+ *
+ * Shares the prompt with the wallet path and nothing else — there is no client
+ * to build, no scheme to register and no chain to pick, so threading a flag
+ * through the payment machinery above would add branches to code whose only
+ * job is signing.
+ */
+async function analyzeWithApiKey(
+  diagnostics: DiagnosticResult,
+  userQuestion: string | undefined,
+  model: DoctorModel,
+): Promise<void> {
+  const resolved = await resolveApiKey();
+  if (!resolved) return; // collectApiKeyInfo saw one; a race here is not worth guessing at
+
+  const modelConfig = DOCTOR_MODELS[model];
+  console.log(`\n📤 Sending to ${modelConfig.name} (${modelConfig.cost})...\n`);
+
+  try {
+    const response = await fetch(`${BLOCKRUN_API_KEY_API}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        authorization: `Bearer ${resolved.key}`,
+      },
+      body: JSON.stringify({
+        model: modelConfig.id,
+        stream: false,
+        messages: doctorMessages(diagnostics, userQuestion),
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.log(`Error: ${response.status} - ${text}`);
+      if (response.status === 402) {
+        console.log(`\nYour BlockRun credit is exhausted. Top up: ${PORTAL_CREDITS_URL}\n`);
+      } else if (response.status === 401) {
+        console.log(`\nBlockRun rejected the key. Mint a new one: ${PORTAL_KEYS_URL}\n`);
+      }
+      return;
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (content) {
+      console.log("🤖 AI Analysis:\n");
+      console.log(content);
+      console.log();
+    } else {
+      console.log("Error: No response from AI");
+    }
+  } catch (err) {
+    console.log(`\nError calling AI: ${err instanceof Error ? err.message : String(err)}`);
+    console.log(`Try again, or check your credit at ${PORTAL_CREDITS_URL}\n`);
+  }
+}
+
+/** The doctor prompt, shared by both auth modes so they cannot drift apart. */
+function doctorMessages(
+  diagnostics: DiagnosticResult,
+  userQuestion: string | undefined,
+): Array<{ role: string; content: string }> {
+  return [
+    {
+      role: "system",
+      content: `You are a technical support expert for BlockRun and ClawRouter.
+Analyze the diagnostics and:
+1. Identify the root cause of any issues
+2. Provide specific, actionable fix commands (bash)
+3. Explain why the issue occurred briefly
+4. Be concise but thorough
+5. Format commands in code blocks`,
+    },
+    {
+      role: "user",
+      content: userQuestion
+        ? `Here are my system diagnostics:\n\n${JSON.stringify(diagnostics, null, 2)}\n\nUser's question: ${userQuestion}`
+        : `Here are my system diagnostics:\n\n${JSON.stringify(diagnostics, null, 2)}\n\nPlease analyze and help me fix any issues.`,
+    },
+  ];
+}
+
 // Main entry point
 export async function runDoctor(
   userQuestion?: string,
@@ -516,9 +713,11 @@ export async function runDoctor(
   console.log(`\n🩺 BlockRun Doctor v${VERSION}\n`);
 
   // Collect all diagnostics
+  // The key is resolved first: it decides whether a wallet is even relevant.
+  const apiKey = await collectApiKeyInfo();
   const [system, wallet, network, logs, latestVersion] = await Promise.all([
     collectSystemInfo(),
-    collectWalletInfo(),
+    collectWalletInfo(apiKey.configured),
     collectNetworkInfo(),
     collectLogInfo(),
     fetchLatestVersion(),
@@ -529,6 +728,7 @@ export async function runDoctor(
     latestVersion,
     timestamp: new Date().toISOString(),
     system,
+    apiKey,
     wallet,
     network,
     logs,

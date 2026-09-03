@@ -543,6 +543,38 @@ declare class BalanceMonitor {
     /** Build BalanceInfo from raw balance */
     private buildInfo;
 }
+/**
+ * The balance monitor for API-key mode.
+ *
+ * There is no wallet to read. Credit lives in the customer's BlockRun account
+ * and the gateway is its own authority on it: a call that outruns the balance
+ * comes back as HTTP 402 `insufficient_quota`, with a message pointing at the
+ * top-up page. api.blockrun.ai publishes no key-authenticated balance endpoint,
+ * so ClawRouter cannot poll one, and inventing a number here would be worse
+ * than having none — the free-model fallback downgrades a request the moment
+ * the monitor reports empty, and a guessed zero would silently move a paying
+ * customer onto the free tier.
+ *
+ * So this reports "always sufficient" and lets the server refuse. That is not
+ * a bypass of the spend gate: the gate it satisfies is the local *wallet*
+ * check, which exists because an x402 payment that fails after the stream
+ * opens is unrecoverable. An API-key call is refused before a single token is
+ * generated, which is the stronger guarantee, and it is enforced server-side
+ * where the actual balance is.
+ */
+declare class ApiKeyBalanceMonitor {
+    /** Large enough that every `balance >= estimatedCost` comparison passes. */
+    private static readonly UNMETERED;
+    checkBalance(): Promise<BalanceInfo>;
+    checkSufficient(): Promise<SufficiencyResult>;
+    /** No local cache to adjust — the server keeps the books. */
+    deductEstimated(): void;
+    invalidate(): void;
+    refresh(): Promise<BalanceInfo>;
+    formatUSDC(amountMicros: bigint): string;
+    /** No wallet in this mode; callers render the account instead. */
+    getWalletAddress(): string;
+}
 
 /**
  * Solana USDC Balance Monitor
@@ -999,8 +1031,8 @@ declare function hashRequestContent(lastUserContent: string, toolCallNames?: str
  *   - Usage logging: log every request as JSON line to ~/.openclaw/blockrun/logs/
  */
 
-/** Union type for chain-agnostic balance monitoring */
-type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor;
+/** Union type for chain- and auth-agnostic balance monitoring */
+type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor | ApiKeyBalanceMonitor;
 
 /**
  * Get the proxy port from pre-loaded configuration.
@@ -1029,8 +1061,26 @@ type WalletConfig = string | {
     solanaPrivateKeyBytes?: Uint8Array;
 };
 type PaymentChain = "base" | "solana";
+/**
+ * How this proxy pays BlockRun.
+ * - "wallet"  — x402 micropayments signed per call from a local USDC wallet.
+ * - "api-key" — a `brk_…` bearer token drawing on account credit topped up by
+ *               card at https://user.blockrun.ai. No wallet, no chain, no gas.
+ */
+type AuthMode = "wallet" | "api-key";
 type ProxyOptions = {
-    wallet: WalletConfig;
+    /**
+     * Wallet material for x402 mode. Optional only when `apiKey` is set — one of
+     * the two must be present or the proxy has no way to pay for anything.
+     */
+    wallet?: WalletConfig;
+    /**
+     * BlockRun API key (`brk_…`). When present it wins over `wallet`: the proxy
+     * talks to api.blockrun.ai with a bearer token and signs no payments at all.
+     * Also readable from BLOCKRUN_API_KEY / ~/.blockrun/.api-key via
+     * resolveApiKey(); callers resolve it and pass it in.
+     */
+    apiKey?: string;
     apiBase?: string;
     /**
      * Payment chain: "base" or "solana". New installs persist "solana" at wallet
@@ -1132,19 +1182,16 @@ type ProxyOptions = {
 type ProxyHandle = {
     port: number;
     baseUrl: string;
+    /** The x402 signer's address, or "" in API-key mode (there is no wallet). */
     walletAddress: string;
     solanaAddress?: string;
+    /** Which credential this proxy is paying with. */
+    authMode: AuthMode;
+    /** Masked API key, for status display. Only set in API-key mode. */
+    apiKeyLabel?: string;
     balanceMonitor: AnyBalanceMonitor;
     close: () => Promise<void>;
 };
-/**
- * Start the local x402 proxy server.
- *
- * If a proxy is already running on the target port, reuses it instead of failing.
- * Port can be configured via BLOCKRUN_PROXY_PORT environment variable.
- *
- * Returns a handle with the assigned port, base URL, and a close function.
- */
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
 
 /**

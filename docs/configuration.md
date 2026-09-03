@@ -5,6 +5,8 @@ Complete reference for ClawRouter configuration options.
 ## Table of Contents
 
 - [Environment Variables](#environment-variables)
+- [API Key Authentication](#api-key-authentication)
+- [Environment Variable Reference](#environment-variable-reference)
 - [Wallet Configuration](#wallet-configuration)
 - [Wallet Backup & Recovery](#wallet-backup--recovery)
 - [Proxy Settings](#proxy-settings)
@@ -19,15 +21,106 @@ Complete reference for ClawRouter configuration options.
 
 ## Environment Variables
 
-| Variable                    | Default                               | Description                                                                       |
-| --------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
-| `BLOCKRUN_WALLET_KEY`       | -                                     | Explicit Base wallet override (hex, 0x-prefixed).                                 |
-| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Port for the local x402 proxy server.                                             |
-| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                                      |
-| `CLAWROUTER_DISABLED`       | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).             |
-| `CLAWROUTER_WORKER`         | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).            |
-| `CLAWROUTER_DEBUG_HEADERS`  | (on)                                  | Set to `off`/`false`/`0` to suppress the `x-clawrouter-*` debug response headers. |
-| `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.          |
+| Variable                    | Default                               | Description                                                                                                                                                 |
+| --------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BLOCKRUN_API_KEY`          | -                                     | BlockRun API key (`brk_live_…`). Pays from card-funded account credit via `api.blockrun.ai` instead of a wallet. Takes precedence over every wallet source. |
+| `BLOCKRUN_API_BASE_URL`     | `https://api.blockrun.ai`             | Override the API-key gateway (staging deploys only).                                                                                                        |
+| `BLOCKRUN_WALLET_KEY`       | -                                     | Explicit Base wallet override (hex, 0x-prefixed).                                                                                                           |
+| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Port for the local x402 proxy server.                                                                                                                       |
+| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                                                                                                                |
+| `CLAWROUTER_DISABLED`       | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).                                                                                       |
+| `CLAWROUTER_WORKER`         | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).                                                                                      |
+| `CLAWROUTER_DEBUG_HEADERS`  | (on)                                  | Set to `off`/`false`/`0` to suppress the `x-clawrouter-*` debug response headers.                                                                           |
+| `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.                                                                                    |
+
+---
+
+## API Key Authentication
+
+ClawRouter has two ways to pay BlockRun, and they are mutually exclusive per
+process:
+
+|              | Wallet (default)                                         | API key                                                              |
+| ------------ | -------------------------------------------------------- | -------------------------------------------------------------------- |
+| Credential   | An EVM/Solana private key held locally                   | `brk_live_…`, issued at [user.blockrun.ai](https://user.blockrun.ai) |
+| Gateway      | `blockrun.ai/api` (Base), `sol.blockrun.ai/api` (Solana) | `api.blockrun.ai`                                                    |
+| Wire auth    | An x402 signature per request                            | `Authorization: Bearer brk_live_…`                                   |
+| Funding      | USDC you send to the wallet                              | Credit card top-up on the portal                                     |
+| Out of money | Local balance check → free-model fallback                | Gateway answers `402 insufficient_quota`                             |
+
+**An API key wins whenever one is present.** A machine holding both a legacy
+wallet and a key the user just added means "bill my account", not "keep spending
+my USDC". Nothing is deleted — `clawrouter logout` puts the wallet back in
+charge.
+
+### Resolution order
+
+1. `BLOCKRUN_API_KEY` environment variable
+2. BlockRun Core — `~/.blockrun/.api-key`, shared with other BlockRun products
+3. Legacy ClawRouter location — `~/.openclaw/blockrun/api-key`
+4. The OpenClaw plugin's `apiKey` config value (checked first inside the plugin)
+
+A file that exists but does not hold a `brk_`-prefixed value is reported and
+skipped rather than sent upstream — a malformed credential otherwise surfaces as
+an unexplained 401 on every request.
+
+### Commands
+
+```bash
+clawrouter login brk_live_...   # save to ~/.blockrun/.api-key (mode 0600)
+clawrouter login                # prompt for the key instead
+clawrouter logout               # delete stored keys, fall back to the wallet
+clawrouter status               # shows the mode, gateway, and masked key
+clawrouter doctor               # verifies the key against api.blockrun.ai
+```
+
+### Behaviour in API-key mode
+
+- **No wallet is created or read.** `startProxy` skips the x402 client, the EVM
+  and Solana signers, and the spend-policy pre-sign hook entirely — there is
+  nothing to sign. `clawrouter doctor` will not generate one either.
+- **No payment chain.** `/health` reports `authMode: "api-key"` with a masked
+  key and no `paymentChain`, `wallet` or `solana` field. Two ClawRouters on the
+  same port refuse to reuse each other across modes, the same way they already
+  refuse across chains.
+- **No local balance gate.** The gateway holds the books and publishes no
+  key-readable balance, so ClawRouter does not guess one: it makes the call, and
+  a 402 with `insufficient_quota` is the answer when credit runs out. The free
+  models remain free and need no credit.
+- **Endpoint coverage.** `api.blockrun.ai` currently serves `/v1/chat/completions`,
+  `/v1/messages`, `GET /v1/models` and `GET /v1/images/models`. Media and partner
+  endpoints stay wallet-only until BlockRun publishes them on the API-key rail;
+  ClawRouter passes every path through and rewrites the gateway's
+  `Unsupported endpoint` 404 into an explanation, so new services work the day
+  they ship with no ClawRouter release.
+- **Routing is unchanged.** Model ids, aliases, the 15-dimension classifier, the
+  fallback chains, `/exclude`, `maxCostPerRun` and the response cache all behave
+  identically.
+- **`clawrouter policy` limits are NOT enforced.** The spend windows
+  (`perRequest`/`hourly`/`daily`/`session`) and the payee/network/asset lists are
+  checked in the x402 pre-sign hook, which does not run when nothing is signed.
+  Your BlockRun account balance is the cap. ClawRouter warns at startup if any
+  limit is configured, so a disabled cap is never silent. `maxCostPerRun` is
+  unaffected — it is enforced by the router.
+
+### Using the key without ClawRouter
+
+The same key works against `api.blockrun.ai` from any OpenAI-compatible client
+(`Authorization: Bearer`) or Anthropic client (`x-api-key`):
+
+```bash
+curl https://api.blockrun.ai/v1/chat/completions \
+  -H "Authorization: Bearer brk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"model": "anthropic/claude-sonnet-5", "messages": [{"role": "user", "content": "hello"}]}'
+```
+
+Going through ClawRouter is what adds smart routing, fallback chains, the
+response cache and local spend controls.
+
+---
+
+## Environment Variable Reference
 
 ### BLOCKRUN_WALLET_KEY
 

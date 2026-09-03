@@ -43,6 +43,10 @@
   "configSchema": {
     "type": "object",
     "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "BlockRun API key (brk_live_...). Optional \u2014 sign up at https://user.blockrun.ai, pay by card, and calls bill your account credit instead of a wallet. Takes precedence over walletKey."
+      },
       "walletKey": {
         "type": "string",
         "description": "EVM wallet private key (0x...). Optional \u2014 auto-generated if not set."
@@ -54,6 +58,11 @@
     }
   },
   "uiHints": {
+    "apiKey": {
+      "label": "BlockRun API Key",
+      "sensitive": true,
+      "placeholder": "brk_live_... (optional \u2014 pay by card at user.blockrun.ai)"
+    },
     "walletKey": {
       "label": "Wallet Private Key",
       "sensitive": true,
