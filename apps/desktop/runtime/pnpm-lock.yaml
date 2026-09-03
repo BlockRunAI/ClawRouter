@@ -5,15 +5,15 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@blockrun/clawrouter': 0.12.266
+  '@blockrun/clawrouter': 0.12.267
 
 importers:
 
   .:
     dependencies:
       '@blockrun/clawrouter':
-        specifier: 0.12.266
-        version: 0.12.266(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
+        specifier: 0.12.267
+        version: 0.12.267(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
       '@blockrun/clawrouter-codex':
         specifier: 0.4.0
         version: 0.4.0(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
@@ -155,8 +155,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@blockrun/clawrouter@0.12.266':
-    resolution: {integrity: sha512-xvnDv4vfYP+v219Q26otCACM+BJDQ+LGuL0ZI8Dy7pJTu0BzplPNsrYhjK2VO83FRNnf2bpwQDRi1T8u6gCuBw==}
+  '@blockrun/clawrouter@0.12.267':
+    resolution: {integrity: sha512-ZEF7i3eOYdz0lL6skn5BJB+nHe/e8fznGpM1NYjhQPRMRiNkWYTJsfWVWW/jESDPbMG1IxjN5rVcroB+psYKVw==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -4806,7 +4806,7 @@ snapshots:
 
   '@blockrun/clawrouter-codex@0.4.0(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)':
     dependencies:
-      '@blockrun/clawrouter': 0.12.266(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
+      '@blockrun/clawrouter': 0.12.267(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.5.4)
       viem: 2.56.2(typescript@5.9.3)(zod@4.5.4)
     transitivePeerDependencies:
@@ -4824,7 +4824,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@blockrun/clawrouter@0.12.266(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)':
+  '@blockrun/clawrouter@0.12.267(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)':
     dependencies:
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.5.4)
       '@noble/hashes': 2.4.0

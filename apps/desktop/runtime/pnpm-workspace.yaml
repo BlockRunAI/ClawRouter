@@ -8,6 +8,6 @@ allowBuilds:
 packages:
   - "."
 overrides:
-  "@blockrun/clawrouter": 0.12.266
+  "@blockrun/clawrouter": 0.12.267
 minimumReleaseAgeExclude:
-  - "@blockrun/clawrouter@0.12.266"
+  - "@blockrun/clawrouter@0.12.267"
