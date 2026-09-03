@@ -7,14 +7,15 @@
 <p>Agents can't sign up for accounts. Agents can't enter credit cards.<br>
 Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
-<em><!-- br:models.free -->7<!-- /br:models.free --> models free, no crypto required. No signup. No API key. No credit card.</em><br><br>
-<em>Not an agent? Sign up at <a href="https://user.blockrun.ai">user.blockrun.ai</a>, top up with a card, and use the same router with an API key.</em></p>
+<em>Pay however you like: <strong>credit card</strong> (API key, via <a href="https://user.blockrun.ai">user.blockrun.ai</a>)<br>
+or <strong>USDC</strong> on Base or Solana (x402 wallet, no account at all).<br>
+Or neither — <!-- br:models.free -->7<!-- /br:models.free --> models are free, with no signup, no key and no wallet.</em></p>
 
 <br>
 
 <img src="https://img.shields.io/badge/🆓_7_Free_Models-success?style=for-the-badge" alt="7 free models">&nbsp;
 <img src="https://img.shields.io/badge/🤖_Agent--Native-black?style=for-the-badge" alt="Agent native">&nbsp;
-<img src="https://img.shields.io/badge/🔑_Zero_API_Keys-blue?style=for-the-badge" alt="No API keys">&nbsp;
+<img src="https://img.shields.io/badge/💳_Card_or_USDC-blue?style=for-the-badge" alt="Card or USDC">&nbsp;
 <img src="https://img.shields.io/badge/⚡_Local_Routing-yellow?style=for-the-badge" alt="Local routing">&nbsp;
 <img src="https://img.shields.io/badge/💰_x402_USDC-purple?style=for-the-badge" alt="x402 USDC">&nbsp;
 <img src="https://img.shields.io/badge/🔓_Open_Source-green?style=for-the-badge" alt="Open source">
@@ -35,7 +36,7 @@ Agents can only sign transactions.<br><br>
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. ClawRouter is the only LLM router built for autonomous AI agents — it uses wallet signatures for authentication (no API keys) and USDC micropayments via the x402 protocol (no credit cards). <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. It is the only LLM router that an autonomous agent can pay for by itself — a wallet signature is the account, and USDC micropayments over the x402 protocol are the billing — and it takes an ordinary credit card too: sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, and run the same router on an API key. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -48,21 +49,25 @@ Every other LLM router was built for **human developers** — create an account,
 ClawRouter is built for the agent-first world:
 
 - **Starts at $0** — <!-- br:models.free -->7<!-- /br:models.free --> open-weight models are free forever (incl. a 1M-context reasoner and two sub-second coders). Image turns route to paid models — see the free-tier note below.
-- **No accounts** — a wallet is generated locally, no signup
-- **No API keys** — your wallet signature IS authentication
+- **No accounts needed** — a wallet is generated locally, no signup
+- **No API keys needed** — your wallet signature IS authentication
 - **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring + constraint-first ranking ([router-core](https://github.com/BlockRunAI/router-core)) picks the right model automatically
-- **No credit cards** — agents pay per-request with USDC via [x402](https://x402.org)
+- **No credit card needed** — agents pay per-request with USDC via [x402](https://x402.org)
 - **No trust required** — runs locally, <1ms routing, zero external dependencies
 
 This is the stack that lets agents operate autonomously: **x402 + USDC + local routing**.
 
-**And if you are a human, not an agent:** wallets are the default, not the only
-option. Sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, add credit
-with a credit card, mint an API key, and run `clawrouter login brk_live_…`. Same
-router, same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same local routing — calls go to
-`api.blockrun.ai` on a bearer token and bill your account instead of a wallet.
-No crypto, no gas, no seed phrase to look after. See
-[Paying with a credit card](#paying-with-a-credit-card-api-key).
+### …and if you are a human, not an agent
+
+Every "no X needed" above is a capability, not a restriction. **ClawRouter takes a credit card too.** Sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, top up, mint an API key, and run `clawrouter login brk_live_…`. Same router, same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same local routing — calls go to `api.blockrun.ai` on a bearer token and bill your account credit. No crypto, no gas, no seed phrase.
+
+| You are             | Pay with                                | Setup                                                                        |
+| ------------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
+| Just trying it      | Nothing                                 | Install and pin a free model                                                 |
+| A person            | **Credit card** → account credit        | [user.blockrun.ai](https://user.blockrun.ai) → `clawrouter login brk_live_…` |
+| An autonomous agent | **USDC** on Base or Solana, per request | Nothing — a wallet is generated on first run                                 |
+
+Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key).
 
 ---
 
@@ -87,7 +92,7 @@ No crypto, no gas, no seed phrase to look after. See
 
 ## Quick Start
 
-> **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add USDC later when you want paid models.
+> **No wallet? <!-- br:models.free -->7<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->7<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add a credit card or USDC later when you want paid models.
 
 **Two ways to pay for the paid ones — pick one, the rest of ClawRouter is identical:**
 
@@ -547,7 +552,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 Two rails. This section covers the wallet one; the card/API-key one is
 [below](#paying-with-a-credit-card-api-key).
 
-No account. No API key. **Payment IS authentication** via [x402](https://x402.org).
+Here, no account and no API key are needed at all — **payment IS authentication**, via [x402](https://x402.org).
 
 ```
 Request → 402 (price: $0.003) → wallet signs USDC → retry → response
@@ -797,7 +802,7 @@ npm test
 
 **The LLM router built for autonomous agents**
 
-You're here. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, local smart routing, x402 USDC payments — the only stack that lets agents operate independently.
+You're here. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, local smart routing, and two ways to pay — a credit-card-funded API key, or x402 USDC from a wallet, which is what lets an agent operate independently.
 
 `curl -fsSL https://blockrun.ai/ClawRouter-update | bash`
 
@@ -877,7 +882,7 @@ ClawRouter is open source and runs locally. It supports wallet-based authenticat
 
 ### How does ClawRouter compare to LiteLLM?
 
-Both are open source and run locally. But ClawRouter adds smart routing (automatic model selection), wallet-based auth, and USDC payments. LiteLLM requires you to bring your own API keys and manually choose models.
+Both are open source and run locally. But ClawRouter adds smart routing (automatic model selection) and its own billing — a credit-card-funded API key, or a wallet paying USDC per request. LiteLLM has no billing of its own: you bring your own provider API keys and manually choose models.
 
 ### What agents does ClawRouter work with?
 
