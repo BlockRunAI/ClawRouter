@@ -89,7 +89,20 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            apps/desktop/package-lock.json
+
+      # The Desktop typecheck reaches into the repo root: manager.ts imports
+      # `../../../../src/solana-key.js` (the Solana derivation shared with the
+      # proxy). TypeScript resolves that file's own imports from ITS directory,
+      # so @noble/hashes and @scure/bip39 must be present in the ROOT
+      # node_modules — declaring them in apps/desktop/package.json does not
+      # satisfy it. Locally this passes only because the root install happens to
+      # be there; in a clean checkout it fails.
+      - name: Install root dependencies
+        run: npm ci
+        working-directory: .
 
       - run: npm ci
 
