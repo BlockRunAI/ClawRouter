@@ -2414,6 +2414,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     // payment still covers the (possibly larger) request — BlockRun prices per
     // token, so one model can cost different amounts across requests.
     estimateAmount,
+    onPayment: options.onPayment,
   });
 
   // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
