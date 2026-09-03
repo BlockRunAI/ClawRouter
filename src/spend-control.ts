@@ -94,6 +94,18 @@ function isPolicyList(value: string): value is PolicyList {
  * pay, which is the one direction this file must never fail in. Callers
  * classify on `instanceof`, not on the message text.
  */
+/**
+ * spending.json exists but could not be read or parsed. Distinct from "no file
+ * yet" (load() returns null) so a reload can tell a failed read from an empty
+ * store and refuse to widen what the agent may pay.
+ */
+export class UnreadableSpendPolicyError extends Error {
+  constructor(cause: unknown) {
+    super(`[ClawRouter] Failed to load spending data: ${cause}`);
+    this.name = "UnreadableSpendPolicyError";
+  }
+}
+
 export class MalformedSpendPolicyError extends Error {
   constructor(key: string) {
     super(
@@ -273,11 +285,10 @@ export class FileSpendControlStorage implements SpendControlStorage {
         throw err;
       }
       // A torn or unparseable file loses history, which is safe. It must not
-      // also silently drop configured policy lists — but at this point we
-      // cannot tell whether any were configured, so say so loudly.
-      console.error(
-        `[ClawRouter] Failed to load spending data, starting fresh (any configured spend policy is NOT in effect until this file is repaired): ${err}`,
-      );
+      // also silently drop configured policy lists. Callers decide: the
+      // constructor starts fresh and says so loudly, a reload keeps enforcing
+      // what it already has.
+      throw new UnreadableSpendPolicyError(err);
     }
     return null;
   }
@@ -471,6 +482,14 @@ export class SpendControl {
     try {
       data = this.storage.load();
     } catch (err) {
+      if (err instanceof UnreadableSpendPolicyError) {
+        // The constructor can start fresh on an unreadable file because it has
+        // nothing to lose. A reload does: dropping the live limits here would
+        // widen what the agent may pay because a read failed. Keep enforcing
+        // what is already loaded and leave any refusal state alone.
+        console.error(`${err.message} — keeping the limits already in effect`);
+        return;
+      }
       if (!(err instanceof MalformedSpendPolicyError)) throw err;
       this.policyFileBroken = err.message;
       console.error(`[ClawRouter] ${err.message}`);
@@ -825,6 +844,14 @@ export class SpendControl {
     try {
       data = this.storage.load();
     } catch (err) {
+      if (err instanceof UnreadableSpendPolicyError) {
+        // Unchanged startup behaviour: begin with no limits, and say loudly
+        // that whatever the file configured is not in effect.
+        console.error(
+          `${err.message} — starting fresh (any configured spend policy is NOT in effect until this file is repaired)`,
+        );
+        return;
+      }
       if (!(err instanceof MalformedSpendPolicyError)) throw err;
       // Refuse every paid request rather than either (a) running with the
       // policy silently dropped, or (b) throwing out of the constructor and
