@@ -22,6 +22,8 @@ Electron 44 embeds Node 24, so end users do not need a separate Node
 installation. Hermes remains installed in Hermes' own Python environment.
 The distribution command recreates `runtime/node_modules` from the committed,
 frozen pnpm lockfile before packaging; local leftovers cannot affect a release.
+Use `npm run dist:release` to produce the macOS ZIP uploaded to the Desktop
+GitHub release.
 
 ## Shared BlockRun Core wallet
 

@@ -16,7 +16,9 @@
     "build": "npm run build:renderer && npm run build:electron",
     "stage:runtime": "corepack pnpm install --dir runtime --prod --frozen-lockfile",
     "start": "electron .",
-    "dist": "npm run stage:runtime && npm run build && npm run build:icon && electron-builder --mac dir"
+    "dist": "npm run stage:runtime && npm run verify:runtime && npm run build && npm run build:icon && electron-builder --mac dir",
+    "dist:release": "npm run stage:runtime && npm run verify:runtime && npm run build && npm run build:icon && electron-builder --mac zip",
+    "verify:runtime": "node scripts/verify-runtime-pin.mjs"
   },
   "dependencies": {
     "@noble/curves": "2.2.0",
