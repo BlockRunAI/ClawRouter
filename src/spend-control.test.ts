@@ -847,6 +847,19 @@ describe("formatDuration", () => {
 });
 
 describe("process-wide shared instance", () => {
+  it("keeps the ledger on process, so a second module copy resolves the same one", () => {
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    setSharedSpendControl(control);
+    // Pins WHERE the instance lives rather than simulating a dual load: a
+    // second copy of this module reads the same process slot, which is what
+    // makes the ledger process-wide instead of module-wide.
+    const host = process as NodeJS.Process & {
+      __clawrouterSharedSpendControl?: SpendControl;
+    };
+    expect(host.__clawrouterSharedSpendControl).toBe(control);
+    expect(getSharedSpendControl()).toBe(control);
+  });
+
   it("hands every surface the same instance", () => {
     const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
     setSharedSpendControl(control);
