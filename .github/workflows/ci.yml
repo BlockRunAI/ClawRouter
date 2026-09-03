@@ -63,3 +63,41 @@ jobs:
 
       - name: Integration tests (lifecycle)
         run: npx vitest run --config vitest.integration.config.ts test/integration/lifecycle.test.ts
+
+  # apps/desktop is a separate npm project — the root `npm ci` and `npm test`
+  # above never touch it. Without this job its 47 tests, its typecheck and both
+  # its builds are unrun on every PR, which is how the Desktop app landed in
+  # #313 with no coverage at all: #291 added this job, and the branch that
+  # superseded it did not carry it over.
+  #
+  # Deliberately NOT running `verify:runtime` here. That guard compares the
+  # runtime lockfile to CLAWROUTER_PACKAGE_VERSION, and it is expected to fail
+  # between a release commit and the follow-up relock — npm cannot serve the
+  # version the release commit is publishing. It belongs in `dist`/`dist:release`
+  # (see apps/desktop/scripts/verify-runtime-pin.mjs), where packaging happens
+  # after both. Running it on every push would make each release red.
+  desktop:
+    name: Desktop
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
