@@ -875,7 +875,20 @@ export class SpendControl {
 
 export type SpendPolicyAbort = { abort: true; reason: string };
 
-let sharedControl: SpendControl | undefined;
+/**
+ * The ledger lives on `process`, not in a module variable, for the same reason
+ * `__clawrouterProxyStarted` and the other startup flags in index.ts do: a
+ * global install and an npm-projects install can both be resolved in one
+ * gateway, and two module copies each holding their own `sharedControl` would
+ * enforce every window twice over -- once per copy -- which is exactly the
+ * per-surface split this singleton exists to end.
+ */
+type ProcessWithSharedSpendControl = NodeJS.Process & {
+  __clawrouterSharedSpendControl?: SpendControl;
+};
+
+const sharedControlHost = (): ProcessWithSharedSpendControl =>
+  process as ProcessWithSharedSpendControl;
 
 /**
  * The process-wide SpendControl instance: ONE ledger for every signing surface
@@ -884,13 +897,14 @@ let sharedControl: SpendControl | undefined;
  * history — aggregate caps only hold against a single shared instance.
  */
 export function getSharedSpendControl(): SpendControl {
-  sharedControl ??= new SpendControl();
-  return sharedControl;
+  const host = sharedControlHost();
+  host.__clawrouterSharedSpendControl ??= new SpendControl();
+  return host.__clawrouterSharedSpendControl;
 }
 
 /** Replace the shared instance. Tests inject in-memory storage here. */
 export function setSharedSpendControl(control: SpendControl): void {
-  sharedControl = control;
+  sharedControlHost().__clawrouterSharedSpendControl = control;
 }
 
 /**
