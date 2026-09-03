@@ -49,12 +49,14 @@ describe("plugin lifecycle", () => {
       __clawrouterStartupGeneration?: number;
       __clawrouterStartedWithEmptyConfig?: boolean;
       __clawrouterStartupPhase?: "idle" | "probing" | "starting" | "running";
+      __clawrouterSharedSpendControl?: unknown;
     };
     proc.__clawrouterProxyStarted = undefined;
     proc.__clawrouterDeferredStartTimer = undefined;
     proc.__clawrouterStartupGeneration = undefined;
     proc.__clawrouterStartedWithEmptyConfig = undefined;
     proc.__clawrouterStartupPhase = undefined;
+    proc.__clawrouterSharedSpendControl = undefined;
   });
 
   it("clears deferred proxy startup state during deactivate", async () => {
@@ -85,6 +87,50 @@ describe("plugin lifecycle", () => {
     expect(fired).toBe(false);
     expect(proc.__clawrouterProxyStarted).toBe(false);
     expect(proc.__clawrouterDeferredStartTimer).toBeUndefined();
+  });
+
+  it("connects /policy to the process-wide ledger when another module owns the proxy", async () => {
+    const { InMemorySpendControlStorage, SpendControl, setSharedSpendControl } =
+      await import("./spend-control.js");
+    const shared = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    shared.setLimit("daily", 7);
+    setSharedSpendControl(shared);
+
+    const proc = process as NodeJS.Process & { __clawrouterProxyStarted?: boolean };
+    proc.__clawrouterProxyStarted = true;
+    const commands: import("./types.js").OpenClawPluginCommandDefinition[] = [];
+    const api = {
+      id: "duplicate-module",
+      name: "duplicate-module",
+      source: "local",
+      config: {},
+      pluginConfig: {},
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      registerProvider: vi.fn(),
+      registerImageGenerationProvider: vi.fn(),
+      registerMusicGenerationProvider: vi.fn(),
+      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
+      registerHook: vi.fn(),
+      registerHttpRoute: vi.fn(),
+      registerService: vi.fn(),
+      registerCommand: vi.fn((command) => commands.push(command)),
+      resolvePath: vi.fn((input: string) => input),
+      on: vi.fn(),
+    } as unknown as import("./types.js").OpenClawPluginApi;
+
+    const { default: plugin } = await import("./index.js");
+    plugin.register?.(api);
+    const policy = commands.find((command) => command.name === "policy");
+    expect(policy).toBeDefined();
+    const result = await policy!.handler({
+      channel: "test",
+      isAuthorizedSender: true,
+      commandBody: "",
+      args: "",
+      config: {},
+    });
+    expect(result.text).toContain("daily: $7");
   });
 
   it("restarts a provisional default-config proxy when populated pluginConfig arrives later", async () => {

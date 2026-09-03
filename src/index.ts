@@ -2306,7 +2306,10 @@ const plugin: OpenClawPluginDefinition = {
     api.registerCommand(createExcludeCommand());
     api.registerCommand(
       createPolicyCommand({
-        liveControl: () => (activeProxyHandle ? getSharedSpendControl() : undefined),
+        liveControl: () =>
+          (process as ProcessWithClawRouterState).__clawrouterProxyStarted
+            ? getSharedSpendControl()
+            : undefined,
       }),
     );
     if (shouldLogRegistration) {
