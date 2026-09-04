@@ -1,4 +1,8 @@
+# Both forms on purpose: the trailing slash matches only a directory, so a
+# node_modules SYMLINK (which is what a scratch worktree pointing at the real
+# install creates) slipped past it and got committed once.
 node_modules/
+node_modules
 dist/
 dist-e2e/
 .tmp-e2e/
