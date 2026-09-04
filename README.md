@@ -522,11 +522,11 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | zai/glm-5.2                 |     $1.40 |      $4.40 |    $0.0029 | 1M      | reasoning, coding, tools (flagship)       |
 | zai/glm-5.1                 |     $1.40 |      $4.40 |    $0.0029 | 200K    | reasoning, tools (promo ended 2026-06-05) |
 | qwen/qwen3.7-max            |    $1.475 |     $4.425 |    $0.0030 | 1M      | reasoning, agentic, tools (Qwen flagship) |
-| xai/grok-4.3                |     $1.50 |      $4.00 |    $0.0028 | 1M      | reasoning, vision, agentic, tools         |
+| xai/grok-4.3                |     $1.25 |      $2.50 |    $0.0019 | 1M      | reasoning, vision, agentic, tools         |
 | google/gemini-3.6-flash     |     $1.50 |      $7.50 |    $0.0045 | 1M      | reasoning, vision, tools (newest Flash)   |
 | google/gemini-3.5-flash     |     $1.50 |      $9.00 |    $0.0053 | 1M      | reasoning, vision, tools (thinking)       |
-| xai/grok-4.5                |     $2.50 |      $9.00 |    $0.0058 | 500K    | reasoning, vision, agentic, tools         |
-| xai/grok-build-0.1          |     $1.50 |      $3.00 |    $0.0023 | 256K    | agentic coding, tools                     |
+| xai/grok-4.5                |     $2.00 |      $6.00 |    $0.0040 | 500K    | reasoning, vision, agentic, tools         |
+| xai/grok-build-0.1          |     $1.00 |      $2.00 |    $0.0015 | 256K    | agentic coding, tools                     |
 | openai/gpt-5.2              |     $1.75 |     $14.00 |    $0.0079 | 400K    | reasoning, vision, agentic, tools         |
 | openai/gpt-5.3              |     $1.75 |     $14.00 |    $0.0079 | 128K    | reasoning, vision, agentic, tools         |
 | openai/gpt-5.3-codex        |     $1.75 |     $14.00 |    $0.0079 | 400K    | agentic, tools                            |
