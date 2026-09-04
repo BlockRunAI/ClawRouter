@@ -8,7 +8,7 @@
 Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
 <em>Pay however you like: <strong>credit card</strong> (API key, via <a href="https://user.blockrun.ai">user.blockrun.ai</a>)<br>
-or <strong>USDC</strong> on Base or Solana (x402 wallet, no account at all).<br>
+or <strong>USDC</strong> on Solana or Base (x402 wallet, no account at all).<br>
 Or neither — <!-- br:models.free -->7<!-- /br:models.free --> models are free, with no signup, no key and no wallet.</em></p>
 
 <br>
@@ -29,8 +29,8 @@ Or neither — <!-- br:models.free -->7<!-- /br:models.free --> models are free,
 
 [![USDC Hackathon Winner](https://img.shields.io/badge/🏆_USDC_Hackathon-Agentic_Commerce_Winner-gold?style=flat-square)](https://x.com/USDC/status/2021625822294216977)
 [![x402 Protocol](https://img.shields.io/badge/x402-Micropayments-purple?style=flat-square)](https://x402.org)
-[![Base Network](https://img.shields.io/badge/Base-USDC-0052FF?style=flat-square&logo=coinbase&logoColor=white)](https://base.org)
 [![Solana](https://img.shields.io/badge/Solana-USDC-9945FF?style=flat-square&logo=solana&logoColor=white)](https://solana.com)
+[![Base Network](https://img.shields.io/badge/Base-USDC-0052FF?style=flat-square&logo=coinbase&logoColor=white)](https://base.org)
 [![OpenClaw Plugin](https://img.shields.io/badge/OpenClaw-Plugin-orange?style=flat-square)](https://openclaw.ai)
 [![Telegram](https://img.shields.io/badge/Telegram-Community-26A5E4?style=flat-square&logo=telegram)](https://t.me/blockrunAI)
 
@@ -82,7 +82,7 @@ Every "no X needed" above is a capability, not a restriction. **ClawRouter takes
 | ------------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
 | Just trying it      | Nothing                                 | Install and pin a free model                                                 |
 | A person            | **Credit card** → account credit        | [user.blockrun.ai](https://user.blockrun.ai) → `clawrouter login brk_live_…` |
-| An autonomous agent | **USDC** on Base or Solana, per request | Nothing — a wallet is generated on first run                                 |
+| An autonomous agent | **USDC** on Solana or Base, per request | Nothing — a wallet is generated on first run                                 |
 
 Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key).
 
@@ -118,7 +118,7 @@ Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key
 | **Who it is for** | Autonomous agents, and anyone happy holding USDC  | People who would rather pay with a card                                                                    |
 | **Setup**         | Nothing — a wallet is generated on first run      | Sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, mint a key, `clawrouter login brk_live_…` |
 | **Auth**          | An x402 signature per request                     | `Authorization: Bearer brk_live_…`                                                                         |
-| **Gateway**       | `blockrun.ai` (Base) / `sol.blockrun.ai` (Solana) | `api.blockrun.ai`                                                                                          |
+| **Gateway**       | `sol.blockrun.ai` (Solana) / `blockrun.ai` (Base) | `api.blockrun.ai`                                                                                          |
 | **Billing**       | USDC leaves your wallet per call, non-custodial   | Card-funded account credit, drawn down at exact usage                                                      |
 
 ClawRouter prefers the API key whenever one is configured, so `clawrouter login`
@@ -128,7 +128,7 @@ is all it takes to switch and `clawrouter logout` is all it takes to switch back
 
 The Electron app in [`apps/desktop`](apps/desktop) provides one-click connections
 for OpenClaw, Codex, Hermes, DeepSeek Harness, and Pi, plus model pricing/context,
-wallet balances, Base/Solana switching, and Coinbase Onramp. It snapshots each
+wallet balances, Solana/Base switching, and Coinbase Onramp. It snapshots each
 agent's existing config before changing it and restores the original bytes when
 you disconnect. Wallets are shared through `~/.blockrun`; older ClawRouter
 wallets are copied there automatically without overwriting existing Core files.
@@ -165,7 +165,7 @@ openclaw gateway restart
 
 > **Using Claude Code?** Check out [BRCC](https://github.com/BlockRunAI/brcc) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
-> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Base & Solana.
+> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Solana & Base.
 
 No OpenClaw required. ClawRouter runs as a local proxy on port 8402.
 
@@ -176,7 +176,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Base or Solana — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->7<!-- /br:models.free --> free models (e.g. `free/nemotron-3.5-lightning`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Solana or Base — $5 covers thousands of requests. To stay at $0, pin any of the <!-- br:models.free -->7<!-- /br:models.free --> free models (e.g. `free/nemotron-3.5-lightning`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -577,7 +577,7 @@ Request → 402 (price: $0.003) → wallet signs USDC → retry → response
 
 USDC stays in your wallet until spent — non-custodial. Price is visible in the 402 header before signing.
 
-**Dual-chain support:** Pay with **USDC** on **Base (EVM)** or **USDC on Solana**. Both wallets are derived from a single BIP-39 mnemonic on first run. New installs default to **Solana**; existing installs stay on **Base** unless switched with `/wallet solana`.
+**Dual-chain support:** Pay with **USDC** on **Solana** or **Base (EVM)**. Both wallets are derived from a single BIP-39 mnemonic on first run. New installs default to **Solana**; existing installs stay on **Base** unless switched with `/wallet solana`.
 
 ```bash
 /wallet              # Check balance and address (both chains)
@@ -595,8 +595,8 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 
 **Fund your wallet:**
 
-- **Base (EVM):** Send USDC on Base to your EVM address
 - **Solana:** Send USDC on Solana to your Solana address
+- **Base (EVM):** Send USDC on Base to your EVM address
 - **Coinbase/CEX:** Withdraw USDC to either network
 - **Credit card:** don't fund a wallet at all — use an API key instead (below)
 
@@ -675,11 +675,17 @@ chains, the response cache and the local spend controls.
 - **Balance lives server-side.** There is no local balance to check: a call that
   outruns your credit comes back as HTTP `402 insufficient_quota`, naming the
   top-up page. Free models stay free and need no credit at all.
-- **Chat today, media next.** `api.blockrun.ai` currently serves the chat and
-  text-completion endpoints (`/v1/chat/completions`, `/v1/messages`, `/v1/models`).
-  Image, video, audio and the partner APIs are still wallet-only; ClawRouter says
-  so explicitly instead of returning a bare 404, and they light up on the API-key
-  path as BlockRun publishes them — no ClawRouter release needed.
+- **Account services are available.** Chat, Messages, Responses (including SSE),
+  image/video/music/speech, search, RPC and partner/data endpoints use the same
+  API key. Specialized media routes retain polling and local downloads; other
+  `/v1/*` routes preserve the upstream status, task URLs and response body.
+  Account job polling stays on the configured gateway origin, including the
+  vendored `/api/v1/*` polling paths. No key is sent to media download hosts.
+- **Registration:** [user.blockrun.ai](https://user.blockrun.ai),
+  [API Keys](https://user.blockrun.ai/dashboard/keys), and
+  [Credits](https://user.blockrun.ai/dashboard/credits).
+- **Cost display:** local estimates and x402-only policy controls do not replace
+  the account ledger. Check actual account usage in the portal.
 - **`maxCostPerRun` and `/exclude` still apply**, along with the router's own
   budget filter — they live in the router, not the signer. **`clawrouter policy`
   limits do not**: they are enforced in the x402 pre-sign hook, and nothing is
@@ -843,7 +849,7 @@ Run Claude Code with <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible
 
 **ClawRouter for NousResearch Hermes**
 
-Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same x402 USDC payments on Base & Solana, native Hermes ergonomics.
+Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, same x402 USDC payments on Solana & Base, native Hermes ergonomics.
 
 `pip install hermes-plugin-clawrouter`
 

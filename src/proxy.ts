@@ -27,7 +27,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 // The x402 onAfterPaymentCreation hook writes the actual payment amount into the
 // request-scoped store, and the logging code reads it after payFetch completes.
 const paymentStore = new AsyncLocalStorage<{ amountUsd: number }>();
-import { finished } from "node:stream";
+import { finished, Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -84,6 +85,8 @@ import {
   BLOCKRUN_API_KEY_API,
   PORTAL_CREDITS_URL,
   createApiKeyFetch,
+  normalizeApiKeyBase,
+  pollApiKeyJob,
   isValidApiKey,
   maskApiKey,
 } from "./api-key.js";
@@ -237,10 +240,13 @@ async function loadGatewayCatalog(apiBase: string, apiKey?: string): Promise<voi
     const timer = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
     // api.blockrun.ai authenticates its catalog too; an unauthenticated read
     // there is a 401, which would leave every free rung eligible forever.
-    const res = await fetch(`${apiBase}/v1/models`, {
-      signal: controller.signal,
-      ...(apiKey ? { headers: { authorization: `Bearer ${apiKey}` } } : {}),
-    });
+    const res = await (apiKey ? createApiKeyFetch(apiKey, fetch, apiBase) : fetch)(
+      `${apiBase}/v1/models`,
+      {
+        signal: controller.signal,
+        ...(apiKey ? { headers: { authorization: `Bearer ${apiKey}` } } : {}),
+      },
+    );
     clearTimeout(timer);
     if (!res.ok) return;
     const body = (await res.json()) as { data?: Array<{ id?: string }> };
@@ -2096,6 +2102,7 @@ async function proxyPaidApiRequest(
   apiBase: string,
   payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
   getActualPaymentUsd: () => number,
+  accountPassthrough = false,
 ): Promise<void> {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -2169,6 +2176,17 @@ async function proxyPaidApiRequest(
   });
 
   res.writeHead(upstream.status, responseHeaders);
+
+  if (accountPassthrough) {
+    if (upstream.body)
+      await pipeline(
+        Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream<Uint8Array>),
+        res,
+        { signal: clientAbort.signal },
+      );
+    else res.end();
+    return; // Account billing is authoritative in the portal, not the x402 ledger.
+  }
 
   // Stream response body
   if (upstream.body) {
@@ -2361,13 +2379,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Meaningless in API-key mode (there is no chain to sign on), and reported as
   // undefined there so /health never advertises a rail this proxy cannot use.
   const paymentChain = options.paymentChain ?? (await resolvePaymentChain());
-  const apiBase =
+  const requestedApiBase =
     options.apiBase ??
     (authMode === "api-key"
       ? BLOCKRUN_API_KEY_API
       : paymentChain === "solana" && solanaPrivateKeyBytes
         ? BLOCKRUN_SOLANA_API
         : BLOCKRUN_API);
+  const apiBase = authMode === "api-key" ? normalizeApiKeyBase(requestedApiBase) : requestedApiBase;
   if (authMode === "api-key") {
     console.log(`[ClawRouter] Auth: BlockRun API key ${maskApiKey(apiKey!)} (${apiBase})`);
     console.log(`[ClawRouter] Billing: account credit — top up at ${PORTAL_CREDITS_URL}`);
@@ -2558,7 +2577,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // was already good for the request (or was not, and the gateway says so).
   const payFetch =
     authMode === "api-key"
-      ? createApiKeyFetch(apiKey!)
+      ? createApiKeyFetch(apiKey!, fetch, apiBase)
       : createPayFetchWithPreAuth(fetch, x402!, undefined, {
           skipPreAuth: paymentChain === "solana",
           // Per-request cost estimate so pre-auth is only reused when the cached
@@ -3250,12 +3269,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }
 
         try {
-          const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
+          let upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal,
           });
+          if (authMode === "api-key")
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3356,12 +3377,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           /* use defaults */
         }
         try {
-          const upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
+          let upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal,
           });
+          if (authMode === "api-key")
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3630,6 +3653,29 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Video generation failed", details: msg }));
           }
+        }
+        return;
+      }
+
+      // Account service endpoints retain their native payload/status/SSE contract.
+      // Chat/Messages keep smart routing; specialized media routes above keep
+      // their existing polling and local-download behavior.
+      if (
+        authMode === "api-key" &&
+        /^\/v1\//.test(req.url ?? "") &&
+        !/^\/v1\/(?:chat\/completions|messages)(?:\?|$)/.test(req.url ?? "")
+      ) {
+        try {
+          await proxyPaidApiRequest(req, res, apiBase, payFetch, () => 0, true);
+        } catch (err) {
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: { message: err instanceof Error ? err.message : "Account API proxy failed" },
+              }),
+            );
+          } else res.destroy();
         }
         return;
       }

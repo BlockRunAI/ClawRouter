@@ -45,7 +45,8 @@ export const PORTAL_CREDITS_URL = `${PORTAL_URL}/dashboard/credits`;
  * Overridable for staging deploys, same as the wallet gateways.
  */
 export const BLOCKRUN_API_KEY_API =
-  process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "") || "https://api.blockrun.ai";
+  process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "").replace(/\/v1$/, "") ||
+  "https://api.blockrun.ai";
 
 export type ApiKeySource = "env" | "core" | "saved" | "config";
 
@@ -99,10 +100,10 @@ async function readOptional(path: string): Promise<string | undefined> {
  */
 export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
   const envKey = process["env"].BLOCKRUN_API_KEY?.trim();
-  if (envKey) {
+  if (process["env"].BLOCKRUN_API_KEY !== undefined) {
     if (isValidApiKey(envKey)) return { key: envKey, source: "env" };
-    console.warn(
-      `[ClawRouter] ⚠ BLOCKRUN_API_KEY is set but does not look like a BlockRun key (expected brk_…) — ignoring.`,
+    throw new Error(
+      `BLOCKRUN_API_KEY is malformed (expected brk_…). Check ${PORTAL_KEYS_URL}; refusing to fall back to a wallet.`,
     );
   }
 
@@ -163,19 +164,84 @@ export async function clearApiKey(): Promise<{ removed: string[]; envStillSet: b
  * rather than defaulting is what stops a placeholder from shadowing the real
  * credential and turning every call into a 401.
  */
+export function normalizeApiKeyBase(raw: string): string {
+  const base = raw.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = new URL(base);
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (url.protocol !== "https:" &&
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
+  ) {
+    throw new Error(
+      "Account API URL requires HTTPS (except localhost) and no credentials, query or fragment.",
+    );
+  }
+  return base;
+}
+
 export function createApiKeyFetch(
   apiKey: string,
   baseFetch: typeof fetch = fetch,
+  apiBase: string = BLOCKRUN_API_KEY_API,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  const base = new URL(normalizeApiKeyBase(apiBase));
   return async (input, init) => {
-    const headers = new Headers(init?.headers as HeadersInit | undefined);
+    const request = input instanceof Request ? input : undefined;
+    const url = new URL(request?.url ?? String(input), `${base}/`);
+    if (url.origin !== base.origin || url.username || url.password)
+      throw new Error("Refusing to forward a BlockRun account key to another origin.");
+    if (base.pathname === "/" && url.pathname.startsWith("/api/v1/"))
+      url.pathname = url.pathname.slice(4);
+    const headers = new Headers(init?.headers ?? request?.headers);
+    for (const name of [...headers.keys()])
+      if (/payment/i.test(name) || name.toLowerCase() === "x-api-key") headers.delete(name);
     headers.set("authorization", `Bearer ${apiKey}`);
-    // An x402 header on an API-key request is a payment nobody asked for.
-    headers.delete("x-payment");
-    headers.delete("x-api-key");
-    const response = await baseFetch(input, { ...init, headers });
+    const response = await baseFetch(request ? new Request(url, request) : url.href, {
+      ...init,
+      headers,
+      redirect: "error",
+    });
     return response.ok ? response : explainApiKeyFailure(response);
   };
+}
+
+/** Complete first-response async account jobs (music/image editing) without x402. */
+export async function pollApiKeyJob(
+  response: Response,
+  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  apiBase: string,
+  signal: AbortSignal,
+  intervalMs = 2000,
+): Promise<Response> {
+  if (response.status !== 202) return response;
+  const initial = (await response.clone().json()) as { poll_url?: string };
+  if (!initial.poll_url) throw new Error("Async account response missing poll_url");
+  const pollUrl = new URL(initial.poll_url, `${normalizeApiKeyBase(apiBase)}/`).href;
+  const abort = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
+  while (!abort.aborted) {
+    const polled = await payFetch(pollUrl, { signal: abort });
+    if (!polled.ok) return polled;
+    const data = (await polled.clone().json()) as { status?: string };
+    if (data.status === "completed") return polled;
+    if (["failed", "cancelled", "canceled"].includes(data.status || ""))
+      throw new Error("Account job failed or was cancelled");
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(abort.reason);
+      };
+      const timer = setTimeout(() => {
+        abort.removeEventListener("abort", onAbort);
+        resolve();
+      }, intervalMs);
+      abort.addEventListener("abort", onAbort, { once: true });
+      if (abort.aborted) onAbort();
+    });
+  }
+  throw new Error("Account job polling stopped; check job before resubmitting.");
 }
 
 /**
@@ -224,8 +290,5 @@ async function explainApiKeyFailure(response: Response): Promise<Response> {
 const HINTS: Record<number, string> = {
   401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
   402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
-  404:
-    `api.blockrun.ai does not serve this endpoint yet — it currently carries chat and text ` +
-    `completions. For media and partner APIs, run ClawRouter in wallet mode (unset BLOCKRUN_API_KEY ` +
-    `and run "clawrouter logout").`,
+  404: `Check the endpoint path and API availability at ${PORTAL_URL}. Account mode does not switch to wallet payment.`,
 };

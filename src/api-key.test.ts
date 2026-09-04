@@ -6,19 +6,24 @@
  * three refusals a key can hit must arrive with the URL that fixes them while
  * keeping the status and error `code` an SDK branches on.
  *
- * Uses a temp HOME set BEFORE importing api-key.js — the key file paths are
- * computed from homedir() at module load (same pattern as
- * auth.payment-chain-default.test.ts).
+ * Mocks homedir() before importing api-key.js so account fixtures cannot
+ * touch real credentials or interfere with other workers through HOME.
  */
 
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
-const TEMP_HOME = mkdtempSync(join(tmpdir(), "clawrouter-api-key-"));
-process.env.HOME = TEMP_HOME;
-process.env.USERPROFILE = TEMP_HOME;
+const { TEMP_HOME } = await vi.hoisted(async () => {
+  const fs = await import("node:fs");
+  const os = await vi.importActual<typeof import("node:os")>("node:os");
+  const path = await import("node:path");
+  return { TEMP_HOME: fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-api-key-")) };
+});
+vi.mock("node:os", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:os")>()),
+  homedir: () => TEMP_HOME,
+}));
 delete process.env.BLOCKRUN_API_KEY;
 
 const {
@@ -28,6 +33,8 @@ const {
   isValidApiKey,
   maskApiKey,
   createApiKeyFetch,
+  normalizeApiKeyBase,
+  pollApiKeyJob,
   API_KEY_FILE,
   CORE_API_KEY_FILE,
 } = await import("./api-key.js");
@@ -123,11 +130,11 @@ describe("resolveApiKey", () => {
     await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
   });
 
-  it("skips a malformed environment variable", async () => {
+  it("rejects a malformed environment variable without falling back", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     process.env.BLOCKRUN_API_KEY = "0x" + "ab".repeat(32);
     writeCore(KEY_A);
-    await expect(resolveApiKey()).resolves.toEqual({ key: KEY_A, source: "core" });
+    await expect(resolveApiKey()).rejects.toThrow(/refusing to fall back/);
   });
 });
 
@@ -262,7 +269,7 @@ describe("createApiKeyFetch", () => {
     )("https://api.blockrun.ai/v1/videos/generations");
 
     const body = (await wrapped.json()) as { error: { message: string } };
-    expect(body.error.message).toContain("wallet mode");
+    expect(body.error.message).toContain("Check the endpoint path");
   });
 
   it("leaves an ordinary 404 alone — a bad model id is not our error to rewrite", async () => {
@@ -289,5 +296,56 @@ describe("createApiKeyFetch", () => {
       (async () => html) as unknown as typeof fetch,
     )("https://api.blockrun.ai/v1/chat/completions");
     expect(wrapped).toBe(html);
+  });
+});
+
+describe("account endpoint and polling boundaries", () => {
+  it("normalizes /v1 and refuses credential-bearing or insecure bases", () => {
+    expect(normalizeApiKeyBase("https://api.blockrun.ai/v1/")).toBe("https://api.blockrun.ai");
+    for (const value of [
+      "http://example.com",
+      "https://u:p@example.com",
+      "https://example.com?q=1",
+    ])
+      expect(() => normalizeApiKeyBase(value)).toThrow();
+  });
+  it("preserves Request bodies and strips all payment headers", async () => {
+    const base = vi.fn(async () => new Response("ok"));
+    const request = new Request("https://api.blockrun.ai/v1/responses", {
+      method: "POST",
+      body: "payload",
+      headers: { "payment-signature": "signed", "content-type": "application/json" },
+    });
+    await createApiKeyFetch(KEY_A, base as unknown as typeof fetch)(request);
+    const [input, init] = base.mock.calls[0] as unknown as [Request, RequestInit];
+    expect(await input.text()).toBe("payload");
+    expect((init.headers as Headers).get("payment-signature")).toBeNull();
+    expect(init.redirect).toBe("error");
+  });
+  it("rejects foreign poll origins before sending any request", async () => {
+    const base = vi.fn();
+    const authenticated = createApiKeyFetch(KEY_A, base as unknown as typeof fetch);
+    await expect(authenticated("https://evil.example/poll")).rejects.toThrow(/another origin/);
+    expect(base).not.toHaveBeenCalled();
+  });
+  it("rewrites vendored poll paths and completes a first-response async job", async () => {
+    const base = vi.fn(
+      async () => new Response(JSON.stringify({ status: "completed", data: [] }), { status: 200 }),
+    );
+    const authenticated = createApiKeyFetch(KEY_A, base as unknown as typeof fetch);
+    const first = new Response(JSON.stringify({ poll_url: "/api/v1/audio/generations/job-1" }), {
+      status: 202,
+    });
+    const result = await pollApiKeyJob(
+      first,
+      authenticated,
+      "https://api.blockrun.ai",
+      new AbortController().signal,
+      1,
+    );
+    expect((await result.json()).status).toBe("completed");
+    expect((base.mock.calls[0] as unknown as [string])[0]).toBe(
+      "https://api.blockrun.ai/v1/audio/generations/job-1",
+    );
   });
 });
