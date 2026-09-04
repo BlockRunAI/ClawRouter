@@ -34446,6 +34446,11 @@ function canonicalLimits(limits) {
     Object.fromEntries(Object.entries(limits).sort(([a], [b]) => a < b ? -1 : 1))
   );
 }
+function getSharedSpendControl() {
+  const host = sharedControlHost();
+  host.__clawrouterSharedSpendControl ??= new SpendControl();
+  return host.__clawrouterSharedSpendControl;
+}
 function parseQuotedAmountUsd(selected) {
   const raw = selected.amount ?? selected.maxAmountRequired;
   if (typeof raw !== "string" || !CANONICAL_AMOUNT.test(raw)) {
@@ -34521,7 +34526,7 @@ function formatDuration(seconds) {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
 }
-var WALLET_DIR, HOUR_MS, DAY_MS, CAIP2_BASE, CAIP2_SOLANA_MAINNET, PAYABLE_NETWORKS, POLICY_LISTS, ADDRESS_LISTS, EVM_ADDRESS, MalformedSpendPolicyError, SpendPolicyConflictError, FileSpendControlStorage, InMemorySpendControlStorage, RESERVATION_TTL_MS, SpendControl, SpendPolicyError, CANONICAL_AMOUNT;
+var WALLET_DIR, HOUR_MS, DAY_MS, CAIP2_BASE, CAIP2_SOLANA_MAINNET, PAYABLE_NETWORKS, POLICY_LISTS, ADDRESS_LISTS, EVM_ADDRESS, UnreadableSpendPolicyError, MalformedSpendPolicyError, SpendPolicyConflictError, FileSpendControlStorage, InMemorySpendControlStorage, RESERVATION_TTL_MS, SpendControl, sharedControlHost, SpendPolicyError, CANONICAL_AMOUNT;
 var init_spend_control = __esm({
   "src/spend-control.ts"() {
     "use strict";
@@ -34540,6 +34545,12 @@ var init_spend_control = __esm({
     ];
     ADDRESS_LISTS = ["allowedPayees", "blockedPayees", "allowedAssets"];
     EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+    UnreadableSpendPolicyError = class extends Error {
+      constructor(cause) {
+        super(`[ClawRouter] Failed to load spending data: ${cause}`);
+        this.name = "UnreadableSpendPolicyError";
+      }
+    };
     MalformedSpendPolicyError = class extends Error {
       constructor(key2) {
         super(
@@ -34600,9 +34611,7 @@ var init_spend_control = __esm({
           if (err instanceof MalformedSpendPolicyError) {
             throw err;
           }
-          console.error(
-            `[ClawRouter] Failed to load spending data, starting fresh (any configured spend policy is NOT in effect until this file is repaired): ${err}`
-          );
+          throw new UnreadableSpendPolicyError(err);
         }
         return null;
       }
@@ -34742,6 +34751,33 @@ var init_spend_control = __esm({
        */
       getPolicyFileError() {
         return this.policyFileBroken;
+      }
+      /**
+       * Re-read limits from storage, keeping this instance's history and open
+       * reservations. Used on an in-process proxy restart so a hand-edit to
+       * spending.json made while the process was running still applies, without
+       * resetting the rolling windows. Fails closed exactly like the constructor:
+       * a malformed file refuses every payment until repaired, and a repaired
+       * file clears that refusal.
+       */
+      reloadLimits() {
+        let data;
+        try {
+          data = this.storage.load();
+        } catch (err) {
+          if (err instanceof UnreadableSpendPolicyError) {
+            console.error(`${err.message} \u2014 keeping the limits already in effect`);
+            return;
+          }
+          if (!(err instanceof MalformedSpendPolicyError)) throw err;
+          this.policyFileBroken = err.message;
+          console.error(`[ClawRouter] ${err.message}`);
+          return;
+        }
+        this.policyFileBroken = void 0;
+        this.limits = data ? cloneLimits(data.limits) : {};
+        this.diskLimits = cloneLimits(this.limits);
+        this.limitsDirty = false;
       }
       check(estimatedCost2, counterparty) {
         if (this.policyFileBroken !== void 0) {
@@ -34987,6 +35023,16 @@ var init_spend_control = __esm({
         const records = [...this.history].reverse();
         return limit ? records.slice(0, limit) : records;
       }
+      /**
+       * Reset the session window. `sessionSpent`/`sessionCalls` are instance state
+       * that is never persisted, so this used to happen implicitly: every
+       * startProxy() built a fresh SpendControl. The process-wide ledger outlives
+       * an in-process proxy restart, which would silently redefine `session` as
+       * "since the gateway booted" — docs/configuration.md and the /policy help
+       * both promise "session resets on restart". The restart path in index.ts
+       * calls this to keep that promise. History and the rolling hourly/daily
+       * windows are deliberately untouched.
+       */
       resetSession() {
         this.sessionSpent = 0;
         this.sessionCalls = 0;
@@ -35008,10 +35054,13 @@ var init_spend_control = __esm({
             this.storage.saveLimits(cloneLimits(this.limits), cloneLimits(this.diskLimits));
           } catch (err) {
             if (err instanceof SpendPolicyConflictError) {
-              const current = this.storage.load();
-              this.limits = cloneLimits(current?.limits ?? {});
-              this.diskLimits = cloneLimits(this.limits);
-              this.limitsDirty = false;
+              try {
+                const current = this.storage.load();
+                this.limits = cloneLimits(current?.limits ?? {});
+                this.diskLimits = cloneLimits(this.limits);
+                this.limitsDirty = false;
+              } catch {
+              }
             }
             throw err;
           }
@@ -35029,6 +35078,12 @@ var init_spend_control = __esm({
         try {
           data = this.storage.load();
         } catch (err) {
+          if (err instanceof UnreadableSpendPolicyError) {
+            console.error(
+              `${err.message} \u2014 starting fresh (any configured spend policy is NOT in effect until this file is repaired)`
+            );
+            return;
+          }
           if (!(err instanceof MalformedSpendPolicyError)) throw err;
           this.policyFileBroken = err.message;
           console.error(`[ClawRouter] ${err.message}`);
@@ -35045,6 +35100,7 @@ var init_spend_control = __esm({
         }
       }
     };
+    sharedControlHost = () => process;
     SpendPolicyError = class extends Error {
       blockedBy;
       blockedByPolicy;
@@ -35082,6 +35138,21 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
       }
     }
     const cacheKey2 = `${urlPath}:${requestModel}`;
+    const notifyAcceptedPayment = (response2, payload2) => {
+      const settled = response2.headers.has("payment-response") || response2.headers.has("x-payment-response");
+      if (!settled || !options?.onPayment) return;
+      try {
+        options.onPayment({
+          model: requestModel,
+          amount: payload2.accepted.amount,
+          network: payload2.accepted.network
+        });
+      } catch (error) {
+        console.error(
+          `[ClawRouter] onPayment callback failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    };
     const estimateMicros = () => {
       if (!options?.estimateAmount || !requestModel) return void 0;
       const est = options.estimateAmount(requestModel, bodyLength, maxTokens);
@@ -35102,6 +35173,7 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
         paymentInFlight = true;
         const response2 = await baseFetch(preAuthRequest);
         if (response2.status !== 402) {
+          notifyAcceptedPayment(response2, payload2);
           return response2;
         }
         paymentInFlight = false;
@@ -35148,7 +35220,9 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
     for (const [key2, value] of Object.entries(paymentHeaders)) {
       clonedRequest.headers.set(key2, value);
     }
-    return baseFetch(clonedRequest);
+    const paidResponse = await baseFetch(clonedRequest);
+    notifyAcceptedPayment(paidResponse, payload);
+    return paidResponse;
   };
 }
 var DEFAULT_TTL_MS;
@@ -91375,7 +91449,7 @@ async function startProxy(options) {
   if (x402 && account) {
     const evmPublicClient = createPublicClient({ chain: base, transport: http() });
     const evmSigner = toClientEvmSigner(account, evmPublicClient);
-    const spendControl = options.spendControl ?? new SpendControl();
+    const spendControl = options.spendControl ?? getSharedSpendControl();
     registerSpendPolicyHook(x402, spendControl);
     registerExactEvmScheme(x402, { signer: evmSigner });
   }
@@ -91407,7 +91481,11 @@ async function startProxy(options) {
     // Per-request cost estimate so pre-auth is only reused when the cached
     // payment still covers the (possibly larger) request — BlockRun prices per
     // token, so one model can cost different amounts across requests.
-    estimateAmount
+    estimateAmount,
+    // Only the wallet rail settles per call. The API-key rail is billed
+    // server-side against account credit, so there is no per-request
+    // settlement for an observer to report.
+    onPayment: options.onPayment
   });
   let balanceMonitor;
   if (options._balanceMonitorOverride) {
@@ -117475,9 +117553,7 @@ var init_client5 = __esm({
 
 // src/polymarket/spend-policy.ts
 function resolveSpendControl(deps) {
-  if (deps?.spendControl) return deps.spendControl;
-  defaultControl ??= new SpendControl();
-  return defaultControl;
+  return deps?.spendControl ?? getSharedSpendControl();
 }
 function usdToMicros(usd) {
   return String(Math.ceil(usd * 1e6));
@@ -117494,7 +117570,6 @@ async function signUnderSpendPolicy(deps, quote, action, sign4) {
     throw err;
   }
 }
-var defaultControl;
 var init_spend_policy = __esm({
   "src/polymarket/spend-policy.ts"() {
     "use strict";
@@ -226859,7 +226934,7 @@ var init_fund = __esm({
 });
 
 // src/polymarket/tool.ts
-function buildPolymarketTool() {
+function buildPolymarketTool(deps) {
   return {
     name: "blockrun_polymarket",
     description: DESCRIPTION,
@@ -226944,26 +227019,32 @@ function buildPolymarketTool() {
           result = await runSetup({ confirm });
           break;
         case "fund":
-          result = await fundVault({
-            amount_usd: params.amount_usd,
-            confirm
-          });
+          result = await fundVault(
+            {
+              amount_usd: params.amount_usd,
+              confirm
+            },
+            deps
+          );
           break;
         case "buy":
         case "sell":
-          result = await executeTrade({
-            action,
-            token_id: params.token_id,
-            condition_id: params.condition_id,
-            outcome: params.outcome,
-            price: params.price,
-            size: params.size,
-            amount_usd: params.amount_usd,
-            order_type: params.order_type,
-            expires_at: params.expires_at,
-            post_only: params.post_only,
-            confirm
-          });
+          result = await executeTrade(
+            {
+              action,
+              token_id: params.token_id,
+              condition_id: params.condition_id,
+              outcome: params.outcome,
+              price: params.price,
+              size: params.size,
+              amount_usd: params.amount_usd,
+              order_type: params.order_type,
+              expires_at: params.expires_at,
+              post_only: params.post_only,
+              confirm
+            },
+            deps
+          );
           break;
         case "orders":
           result = await listOpenOrders({
@@ -226980,17 +227061,23 @@ function buildPolymarketTool() {
           result = await listPositions();
           break;
         case "redeem":
-          result = await redeemPosition({
-            condition_id: params.condition_id,
-            confirm
-          });
+          result = await redeemPosition(
+            {
+              condition_id: params.condition_id,
+              confirm
+            },
+            deps
+          );
           break;
         case "withdraw":
-          result = await withdrawFunds({
-            amount_usd: params.amount_usd,
-            to_address: params.to_address,
-            confirm
-          });
+          result = await withdrawFunds(
+            {
+              amount_usd: params.amount_usd,
+              to_address: params.to_address,
+              confirm
+            },
+            deps
+          );
           break;
         default:
           throw new Error(`Unknown blockrun_polymarket action: ${action}`);
@@ -228110,12 +228197,18 @@ async function startProxyInBackground(api, startupGeneration) {
       `Cost cap: $${maxCostPerRunUsd.toFixed(2)} per session (mode: ${maxCostPerRunMode})`
     );
   }
+  const sharedControl = getSharedSpendControl();
+  sharedControl.reloadLimits();
+  sharedControl.resetSession();
   const proxy = await startProxy({
     ...apiKey ? { apiKey } : { wallet },
     routingConfig,
     maxCostPerRunUsd,
     maxCostPerRunMode,
-    spendControl: liveSpendControl = new SpendControl(),
+    // The process-wide ledger: the polymarket tool and the /policy command
+    // registered below use the same instance, so hourly/daily/session windows
+    // cover every surface and a /policy write reaches the live signer.
+    spendControl: sharedControl,
     onReady: (port) => {
       api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);
     },
@@ -228858,7 +228951,7 @@ function createWalletCommand(api) {
     }
   };
 }
-var activeProxyHandle, liveSpendControl, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, plugin, index_default2;
+var activeProxyHandle, pendingConfiguredStartupApi, IMAGE_DIR2, AUDIO_DIR2, VIDEO_DIR2, plugin, index_default2;
 var init_index = __esm({
   "src/index.ts"() {
     init_provider();
@@ -228876,10 +228969,10 @@ var init_index = __esm({
     init_stats();
     init_partners();
     init_tool();
+    init_spend_control();
     init_stats2();
     init_exclude();
     init_policy();
-    init_spend_control();
     init_mcp_config();
     init_openclaw_plugin_config();
     init_openclaw_plugin_config();
@@ -228901,7 +228994,6 @@ var init_index = __esm({
     init_response_cache();
     init_partners();
     activeProxyHandle = null;
-    liveSpendControl = null;
     pendingConfiguredStartupApi = null;
     IMAGE_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "images");
     AUDIO_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "audio");
@@ -229217,7 +229309,7 @@ ${errText}`
         api.registerCommand(createExcludeCommand());
         api.registerCommand(
           createPolicyCommand({
-            liveControl: () => activeProxyHandle ? liveSpendControl ?? void 0 : void 0
+            liveControl: () => process.__clawrouterProxyStarted ? getSharedSpendControl() : void 0
           })
         );
         if (shouldLogRegistration) {
@@ -229415,6 +229507,7 @@ export {
   SolanaBalanceMonitor,
   SpendControl,
   SpendPolicyError,
+  UnreadableSpendPolicyError,
   VISIBLE_OPENCLAW_MODELS,
   blockrunProvider,
   buildImageGenerationProvider,

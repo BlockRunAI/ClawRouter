@@ -4,6 +4,41 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.269 — September 4, 2026
+
+### Fixed — one spend ledger for every signing surface, and a `session` cap that still means what the docs say
+
+The proxy, the Polymarket tool and `doctor` each constructed their own `SpendControl`. Amount windows were therefore enforced once per surface, and `saveHistory()` was last-writer-wins on disk: LLM spend through the proxy did not count against a Polymarket order, and either could overwrite the other's history. `getSharedSpendControl()` is now the single default; `startProxy`, `buildPolymarketTool`, `createDoctorX402Client` and `/policy`'s `liveControl` all resolve to it. Injection is unchanged — every surface still accepts an explicit `spendControl`.
+
+The ledger lives on `process`, not in a module variable, for the same reason the startup flags do: a global install and an npm-projects install can both be resolved in one gateway, and two module copies each holding their own singleton would enforce every window twice over.
+
+**One trap the shared ledger opened, closed in the same release.** `sessionSpent` is instance state that is never persisted, so `session` used to reset by accident — every `startProxy()` built a fresh `SpendControl`. A ledger that outlives an in-process restart quietly redefines `session` as "since the gateway booted", and leaves it asymmetric: a gateway restart still reset it, an in-process restart no longer did. `docs/configuration.md` and the `/policy` help both promise "session resets on restart", and `supersedeEmptyConfigStartup` puts ordinary boots through two starts, so this was not a corner case. The restart path now calls `resetSession()` on purpose. History and the rolling hourly/daily windows still survive, which is the point of sharing the ledger.
+
+Also in this area:
+
+- A torn or unreadable `spending.json` no longer gets **overwritten with empty limits** by a history save. `load()` throws `UnreadableSpendPolicyError` instead of returning null, and both writers leave the file alone. A reload keeps enforcing the limits already in effect rather than widening what the agent may pay because a read failed.
+- `buildPolymarketTool()` takes no deps at the registration site. It was handed `getSharedSpendControl()`, which is exactly what the tool already falls back to — so the argument bought nothing and cost a synchronous read of `spending.json` on every plugin registration, including the installs that never place a bet.
+
+### Fixed — `onPayment` actually fires
+
+`ProxyOptions.onPayment` was public, documented, and invoked nowhere. It now fires at the layer that owns both paid paths — the normal 402 → signed retry, and the cached pre-auth → paid first request — gated on the v2 `PAYMENT-RESPONSE` or v1 `X-PAYMENT-RESPONSE` settlement header, so a rejected 402 does not fire it. An observer that throws is contained after settlement: its failure must not turn a paid response into a retryable request and risk a second charge.
+
+The API-key rail does not notify, deliberately: it is billed server-side against account credit, so there is no per-request settlement for an observer to report.
+
+### Added — the README says what BlockRun is
+
+The README explained ClawRouter thoroughly and mentioned BlockRun exactly once, in passing, as the thing that issues API keys. **BlockRun lets agents pay for the outcome — every LLM, tool and data source, best value per dollar.** That definition now leads, before "Why ClawRouter exists", with the surface behind each claim and a `What is BlockRun?` FAQ entry. Every figure is a brand-numbers marker, including three new to the file (`models.video`, `models.speech`, `chains.rpc`).
+
+### Fixed — a `node_modules` symlink was committed to the repo
+
+v0.12.268's follow-up merge carried `node_modules` into git as a **symlink to an absolute path on one machine**. Pulling main dropped that link into your working tree, where it shadows the real install and breaks `npm ci`, `tsup` and every `.bin/*` lookup with "too many levels of symbolic links". Untracked here, with `.gitignore` now listing both `node_modules/` and `node_modules` — the trailing slash matches a directory and only a directory, which is exactly how a symlink of that name got past it.
+
+If you pulled `main` between v0.12.268 and this release, run `rm -f node_modules && npm ci` once. npm package installs were never affected: `files` in `package.json` is an allowlist and never included it.
+
+Thanks to @twzrd-sol for the shared spend ledger (#322 → #331) and the `onPayment` fix (#321, #325 → #330). Both branches were rebased onto the v0.12.268 API-key rail and landed with their authorship preserved.
+
+---
+
 ## v0.12.268 — September 3, 2026
 
 ### Added — API keys, so a person can pay with a card instead of a wallet

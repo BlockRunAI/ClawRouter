@@ -665,6 +665,14 @@ declare const PAYABLE_NETWORKS: readonly string[];
  * pay, which is the one direction this file must never fail in. Callers
  * classify on `instanceof`, not on the message text.
  */
+/**
+ * spending.json exists but could not be read or parsed. Distinct from "no file
+ * yet" (load() returns null) so a reload can tell a failed read from an empty
+ * store and refuse to widen what the agent may pay.
+ */
+declare class UnreadableSpendPolicyError extends Error {
+    constructor(cause: unknown);
+}
 declare class MalformedSpendPolicyError extends Error {
     constructor(key: string);
 }
@@ -816,6 +824,15 @@ declare class SpendControl {
      * reporting a change as applied.
      */
     getPolicyFileError(): string | undefined;
+    /**
+     * Re-read limits from storage, keeping this instance's history and open
+     * reservations. Used on an in-process proxy restart so a hand-edit to
+     * spending.json made while the process was running still applies, without
+     * resetting the rolling windows. Fails closed exactly like the constructor:
+     * a malformed file refuses every payment until repaired, and a repaired
+     * file clears that refusal.
+     */
+    reloadLimits(): void;
     check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult;
     record(amount: number, metadata?: {
         model?: string;
@@ -850,6 +867,16 @@ declare class SpendControl {
     getRemaining(window: "hourly" | "daily" | "session"): number | null;
     getStatus(): SpendingStatus;
     getHistory(limit?: number): SpendRecord[];
+    /**
+     * Reset the session window. `sessionSpent`/`sessionCalls` are instance state
+     * that is never persisted, so this used to happen implicitly: every
+     * startProxy() built a fresh SpendControl. The process-wide ledger outlives
+     * an in-process proxy restart, which would silently redefine `session` as
+     * "since the gateway booted" — docs/configuration.md and the /policy help
+     * both promise "session resets on restart". The restart path in index.ts
+     * calls this to keep that promise. History and the rolling hourly/daily
+     * windows are deliberately untouched.
+     */
     resetSession(): void;
     private cleanup;
     private save;
@@ -1814,4 +1841,4 @@ declare function buildImageGenerationProvider(): ImageGenerationProviderPlugin;
 
 declare const plugin: OpenClawPluginDefinition;
 
-export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, PAYABLE_NETWORKS, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };
+export { type AggregatedStats, BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, type BalanceInfo, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, type CachedLLMResponse, type CachedResponse, type CheckResult, type CounterpartyInfo, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, type DailyStats, type DerivedKeys, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, type InsufficientFundsInfo, type LowBalanceInfo, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, PAYABLE_NETWORKS, type PartnerServiceDefinition, type PartnerToolDefinition, type PaymentChain, type PolicyList, type ProxyHandle, type ProxyOptions, RequestDeduplicator, ResponseCache, type ResponseCacheConfig, type RetryConfig, RpcError, type SessionConfig, type SessionEntry, SessionStore, type SolanaBalanceInfo, SolanaBalanceMonitor, SpendControl, type SpendControlOptions, type SpendControlStorage, type SpendLimits, SpendPolicyError, type SpendRecord, type SpendWindow, type SpendingStatus, type SufficiencyResult, UnreadableSpendPolicyError, type UsageEntry, VISIBLE_OPENCLAW_MODELS, type WalletConfig, type WalletResolution, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, resolveModelAlias, resolvePaymentChain, savePaymentChain, setupSolana, startProxy, syncAgentModelCache };
