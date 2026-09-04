@@ -13,6 +13,10 @@ import {
   formatDuration,
   registerSpendPolicyHook,
   assertSpendPolicyAllows,
+  getSharedSpendControl,
+  MalformedSpendPolicyError,
+  UnreadableSpendPolicyError,
+  setSharedSpendControl,
   SpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
@@ -839,5 +843,132 @@ describe("formatDuration", () => {
   it("formats hours and minutes", () => {
     expect(formatDuration(3660)).toBe("1h 1m");
     expect(formatDuration(7200)).toBe("2h");
+  });
+});
+
+describe("process-wide shared instance", () => {
+  it("keeps the ledger on process, so a second module copy resolves the same one", () => {
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    setSharedSpendControl(control);
+    // Pins WHERE the instance lives rather than simulating a dual load: a
+    // second copy of this module reads the same process slot, which is what
+    // makes the ledger process-wide instead of module-wide.
+    const host = process as NodeJS.Process & {
+      __clawrouterSharedSpendControl?: SpendControl;
+    };
+    expect(host.__clawrouterSharedSpendControl).toBe(control);
+    expect(getSharedSpendControl()).toBe(control);
+  });
+
+  it("hands every surface the same instance", () => {
+    const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    setSharedSpendControl(control);
+
+    expect(getSharedSpendControl()).toBe(control);
+    expect(getSharedSpendControl()).toBe(getSharedSpendControl());
+  });
+
+  it("a restart sees history from every surface because both recorded on ONE instance", () => {
+    const storage = new InMemorySpendControlStorage();
+    const clock = Date.now();
+    setSharedSpendControl(new SpendControl({ storage, now: () => clock }));
+
+    // The proxy's x402 hook settles with "x402 payment"; signUnderSpendPolicy
+    // with "polymarket order". Both must land on the same instance.
+    const control = getSharedSpendControl();
+    control.settleReservation(control.reserve(2), { action: "x402 payment" });
+    control.settleReservation(control.reserve(25), { action: "polymarket order" });
+    expect(control.getSpending("hourly")).toBeCloseTo(27);
+
+    // Restart: a fresh instance must see BOTH records — the old per-surface
+    // shape last-writer-won the file and dropped the other surface's history.
+    const restarted = new SpendControl({ storage, now: () => clock });
+    expect(restarted.getSpending("hourly")).toBeCloseTo(27);
+    const actions = restarted.getHistory().map((r) => r.action);
+    expect(actions).toContain("x402 payment");
+    expect(actions).toContain("polymarket order");
+  });
+});
+
+// The singleton is process state; leave a fresh in-memory one behind so no
+// test in this file can see another's instance.
+afterEach(() => {
+  setSharedSpendControl(new SpendControl({ storage: new InMemorySpendControlStorage() }));
+});
+
+describe("reloadLimits (in-process proxy restart)", () => {
+  it("adopts an on-disk edit and keeps this instance's history and windows", () => {
+    const storage = new InMemorySpendControlStorage();
+    const clock = Date.now();
+    const live = new SpendControl({ storage, now: () => clock });
+    live.record(2, { action: "x402 payment" });
+
+    // A CLI in another process (or a hand-edit) lands a new cap on disk.
+    new SpendControl({ storage, now: () => clock }).setLimit("hourly", 5);
+    expect(live.getLimits().hourly).toBeUndefined();
+
+    live.reloadLimits();
+
+    expect(live.getLimits().hourly).toBe(5);
+    expect(live.getSpending("hourly")).toBeCloseTo(2);
+    expect(live.check(4).allowed).toBe(false); // 2 recorded + 4 > 5: the window survived
+  });
+
+  it("a write after reloadLimits uses the reloaded state as its compare-and-swap baseline", () => {
+    const storage = new InMemorySpendControlStorage();
+    const live = new SpendControl({ storage });
+    new SpendControl({ storage }).setLimit("hourly", 5); // lands behind live's back
+    live.reloadLimits();
+
+    // Without refreshing the baseline this would be refused as a conflict:
+    // live's last-read limits would still be {} while disk holds {hourly:5}.
+    expect(() => live.setLimit("daily", 2)).not.toThrow();
+    expect(storage.load()?.limits).toEqual({ hourly: 5, daily: 2 });
+  });
+
+  it("keeps enforcing limits when an unreadable file makes load() return null", () => {
+    let torn = false;
+    class TornStorage extends InMemorySpendControlStorage {
+      override load() {
+        // What FileSpendControlStorage does for a JSON-parse or read error.
+        if (torn) throw new UnreadableSpendPolicyError(new Error("Unexpected end of JSON input"));
+        return super.load();
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const live = new SpendControl({ storage: new TornStorage() });
+    live.setLimit("daily", 1);
+    expect(live.check(5).allowed).toBe(false);
+
+    torn = true;
+    live.reloadLimits();
+    // A torn file must not widen what the agent may pay. Before this fix the
+    // reload reset limits to {} and the over-cap payment was allowed.
+    expect(live.check(5).allowed).toBe(false);
+    errors.mockRestore();
+  });
+
+  it("fails closed on a malformed file and recovers once it is repaired", () => {
+    let broken = false;
+    class FlakyStorage extends InMemorySpendControlStorage {
+      override load() {
+        if (broken) throw new MalformedSpendPolicyError("blockedPayees");
+        return super.load();
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const live = new SpendControl({ storage: new FlakyStorage() });
+    expect(live.check(0.01).allowed).toBe(true);
+
+    broken = true;
+    live.reloadLimits();
+    expect(live.check(0.01).allowed).toBe(false);
+    expect(live.getPolicyFileError()).toMatch(/blockedPayees/);
+
+    broken = false;
+    live.reloadLimits();
+    expect(live.check(0.01).allowed).toBe(true);
+    expect(live.getPolicyFileError()).toBeUndefined();
+    errors.mockRestore();
   });
 });

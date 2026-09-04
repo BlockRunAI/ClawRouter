@@ -11,6 +11,7 @@
 // engine's guardrails (confirm:true hard gate, POLYMARKET_MAX_BET_USD per-order
 // cap, optional session cap) are unchanged from the source.
 import type { PartnerToolDefinition } from "../partners/tools.js";
+import type { PolymarketSpendDeps } from "./spend-policy.js";
 import {
   executeTrade,
   listOpenOrders,
@@ -42,9 +43,12 @@ Prices are probabilities 0–1 on the market's tick grid. token_id = clobTokenId
 
 /**
  * Build the blockrun_polymarket tool. Registered alongside the partner tools in
- * src/index.ts via api.registerTool().
+ * src/index.ts via api.registerTool(). `deps` carries the process-wide
+ * SpendControl from the wiring site so the tool's signing paths enforce the
+ * SAME amount-window ledger the proxy records x402 payments against — omit it
+ * and the tool functions resolve the same shared instance themselves.
  */
-export function buildPolymarketTool(): PartnerToolDefinition {
+export function buildPolymarketTool(deps?: PolymarketSpendDeps): PartnerToolDefinition {
   return {
     name: "blockrun_polymarket",
     description: DESCRIPTION,
@@ -134,26 +138,32 @@ export function buildPolymarketTool(): PartnerToolDefinition {
           result = await runSetup({ confirm });
           break;
         case "fund":
-          result = await fundVault({
-            amount_usd: params.amount_usd as number | undefined,
-            confirm,
-          });
+          result = await fundVault(
+            {
+              amount_usd: params.amount_usd as number | undefined,
+              confirm,
+            },
+            deps,
+          );
           break;
         case "buy":
         case "sell":
-          result = await executeTrade({
-            action,
-            token_id: params.token_id as string | undefined,
-            condition_id: params.condition_id as string | undefined,
-            outcome: params.outcome as string | undefined,
-            price: params.price as number | undefined,
-            size: params.size as number | undefined,
-            amount_usd: params.amount_usd as number | undefined,
-            order_type: params.order_type as "GTC" | "GTD" | "FOK" | "FAK" | undefined,
-            expires_at: params.expires_at as number | undefined,
-            post_only: params.post_only as boolean | undefined,
-            confirm,
-          });
+          result = await executeTrade(
+            {
+              action,
+              token_id: params.token_id as string | undefined,
+              condition_id: params.condition_id as string | undefined,
+              outcome: params.outcome as string | undefined,
+              price: params.price as number | undefined,
+              size: params.size as number | undefined,
+              amount_usd: params.amount_usd as number | undefined,
+              order_type: params.order_type as "GTC" | "GTD" | "FOK" | "FAK" | undefined,
+              expires_at: params.expires_at as number | undefined,
+              post_only: params.post_only as boolean | undefined,
+              confirm,
+            },
+            deps,
+          );
           break;
         case "orders":
           result = await listOpenOrders({
@@ -170,17 +180,23 @@ export function buildPolymarketTool(): PartnerToolDefinition {
           result = await listPositions();
           break;
         case "redeem":
-          result = await redeemPosition({
-            condition_id: params.condition_id as string | undefined,
-            confirm,
-          });
+          result = await redeemPosition(
+            {
+              condition_id: params.condition_id as string | undefined,
+              confirm,
+            },
+            deps,
+          );
           break;
         case "withdraw":
-          result = await withdrawFunds({
-            amount_usd: params.amount_usd as number | undefined,
-            to_address: params.to_address as string | undefined,
-            confirm,
-          });
+          result = await withdrawFunds(
+            {
+              amount_usd: params.amount_usd as number | undefined,
+              to_address: params.to_address as string | undefined,
+              confirm,
+            },
+            deps,
+          );
           break;
         default:
           throw new Error(`Unknown blockrun_polymarket action: ${action}`);

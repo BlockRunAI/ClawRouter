@@ -94,6 +94,18 @@ function isPolicyList(value: string): value is PolicyList {
  * pay, which is the one direction this file must never fail in. Callers
  * classify on `instanceof`, not on the message text.
  */
+/**
+ * spending.json exists but could not be read or parsed. Distinct from "no file
+ * yet" (load() returns null) so a reload can tell a failed read from an empty
+ * store and refuse to widen what the agent may pay.
+ */
+export class UnreadableSpendPolicyError extends Error {
+  constructor(cause: unknown) {
+    super(`[ClawRouter] Failed to load spending data: ${cause}`);
+    this.name = "UnreadableSpendPolicyError";
+  }
+}
+
 export class MalformedSpendPolicyError extends Error {
   constructor(key: string) {
     super(
@@ -273,11 +285,10 @@ export class FileSpendControlStorage implements SpendControlStorage {
         throw err;
       }
       // A torn or unparseable file loses history, which is safe. It must not
-      // also silently drop configured policy lists — but at this point we
-      // cannot tell whether any were configured, so say so loudly.
-      console.error(
-        `[ClawRouter] Failed to load spending data, starting fresh (any configured spend policy is NOT in effect until this file is repaired): ${err}`,
-      );
+      // also silently drop configured policy lists. Callers decide: the
+      // constructor starts fresh and says so loudly, a reload keeps enforcing
+      // what it already has.
+      throw new UnreadableSpendPolicyError(err);
     }
     return null;
   }
@@ -456,6 +467,38 @@ export class SpendControl {
    */
   getPolicyFileError(): string | undefined {
     return this.policyFileBroken;
+  }
+
+  /**
+   * Re-read limits from storage, keeping this instance's history and open
+   * reservations. Used on an in-process proxy restart so a hand-edit to
+   * spending.json made while the process was running still applies, without
+   * resetting the rolling windows. Fails closed exactly like the constructor:
+   * a malformed file refuses every payment until repaired, and a repaired
+   * file clears that refusal.
+   */
+  reloadLimits(): void {
+    let data: { limits: SpendLimits; history: SpendRecord[] } | null;
+    try {
+      data = this.storage.load();
+    } catch (err) {
+      if (err instanceof UnreadableSpendPolicyError) {
+        // The constructor can start fresh on an unreadable file because it has
+        // nothing to lose. A reload does: dropping the live limits here would
+        // widen what the agent may pay because a read failed. Keep enforcing
+        // what is already loaded and leave any refusal state alone.
+        console.error(`${err.message} — keeping the limits already in effect`);
+        return;
+      }
+      if (!(err instanceof MalformedSpendPolicyError)) throw err;
+      this.policyFileBroken = err.message;
+      console.error(`[ClawRouter] ${err.message}`);
+      return;
+    }
+    this.policyFileBroken = undefined;
+    this.limits = data ? cloneLimits(data.limits) : {};
+    this.diskLimits = cloneLimits(this.limits); // the CAS baseline follows what was just read
+    this.limitsDirty = false;
   }
 
   check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult {
@@ -751,6 +794,16 @@ export class SpendControl {
     return limit ? records.slice(0, limit) : records;
   }
 
+  /**
+   * Reset the session window. `sessionSpent`/`sessionCalls` are instance state
+   * that is never persisted, so this used to happen implicitly: every
+   * startProxy() built a fresh SpendControl. The process-wide ledger outlives
+   * an in-process proxy restart, which would silently redefine `session` as
+   * "since the gateway booted" — docs/configuration.md and the /policy help
+   * both promise "session resets on restart". The restart path in index.ts
+   * calls this to keep that promise. History and the rolling hourly/daily
+   * windows are deliberately untouched.
+   */
   resetSession(): void {
     this.sessionSpent = 0;
     this.sessionCalls = 0;
@@ -779,10 +832,19 @@ export class SpendControl {
         this.storage.saveLimits(cloneLimits(this.limits), cloneLimits(this.diskLimits));
       } catch (err) {
         if (err instanceof SpendPolicyConflictError) {
-          const current = this.storage.load();
-          this.limits = cloneLimits(current?.limits ?? {});
-          this.diskLimits = cloneLimits(this.limits);
-          this.limitsDirty = false;
+          // Adopt what actually landed. load() can now throw (the file went
+          // unreadable between the conflict check and here), and reconciling
+          // against nothing would clear the limits and report the wrong error
+          // to /policy. Leave this instance as it is and let the conflict
+          // surface — the caller re-reads and retries either way.
+          try {
+            const current = this.storage.load();
+            this.limits = cloneLimits(current?.limits ?? {});
+            this.diskLimits = cloneLimits(this.limits);
+            this.limitsDirty = false;
+          } catch {
+            /* keep the in-memory limits; the conflict below is still the right answer */
+          }
         }
         throw err;
       }
@@ -801,6 +863,14 @@ export class SpendControl {
     try {
       data = this.storage.load();
     } catch (err) {
+      if (err instanceof UnreadableSpendPolicyError) {
+        // Unchanged startup behaviour: begin with no limits, and say loudly
+        // that whatever the file configured is not in effect.
+        console.error(
+          `${err.message} — starting fresh (any configured spend policy is NOT in effect until this file is repaired)`,
+        );
+        return;
+      }
       if (!(err instanceof MalformedSpendPolicyError)) throw err;
       // Refuse every paid request rather than either (a) running with the
       // policy silently dropped, or (b) throwing out of the constructor and
@@ -823,6 +893,38 @@ export class SpendControl {
 }
 
 export type SpendPolicyAbort = { abort: true; reason: string };
+
+/**
+ * The ledger lives on `process`, not in a module variable, for the same reason
+ * `__clawrouterProxyStarted` and the other startup flags in index.ts do: a
+ * global install and an npm-projects install can both be resolved in one
+ * gateway, and two module copies each holding their own `sharedControl` would
+ * enforce every window twice over -- once per copy -- which is exactly the
+ * per-surface split this singleton exists to end.
+ */
+type ProcessWithSharedSpendControl = NodeJS.Process & {
+  __clawrouterSharedSpendControl?: SpendControl;
+};
+
+const sharedControlHost = (): ProcessWithSharedSpendControl =>
+  process as ProcessWithSharedSpendControl;
+
+/**
+ * The process-wide SpendControl instance: ONE ledger for every signing surface
+ * (the proxy's x402 hook, the Polymarket tools, doctor). Per-surface instances
+ * enforced each window once per surface and last-writer-won spending.json
+ * history — aggregate caps only hold against a single shared instance.
+ */
+export function getSharedSpendControl(): SpendControl {
+  const host = sharedControlHost();
+  host.__clawrouterSharedSpendControl ??= new SpendControl();
+  return host.__clawrouterSharedSpendControl;
+}
+
+/** Replace the shared instance. Tests inject in-memory storage here. */
+export function setSharedSpendControl(control: SpendControl): void {
+  sharedControlHost().__clawrouterSharedSpendControl = control;
+}
 
 /**
  * Thrown from the pre-sign hook when policy or an amount window refuses.

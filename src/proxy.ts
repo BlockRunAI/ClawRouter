@@ -87,7 +87,12 @@ import {
   isValidApiKey,
   maskApiKey,
 } from "./api-key.js";
-import { registerSpendPolicyHook, SpendControl, SpendPolicyError } from "./spend-control.js";
+import {
+  getSharedSpendControl,
+  registerSpendPolicyHook,
+  SpendControl,
+  SpendPolicyError,
+} from "./spend-control.js";
 import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
 // Error classes available for programmatic use but not used in proxy
 // (universal free fallback means we don't throw balance errors anymore)
@@ -2493,7 +2498,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   if (x402 && account) {
     const evmPublicClient = createPublicClient({ chain: base, transport: http() });
     const evmSigner = toClientEvmSigner(account, evmPublicClient);
-    const spendControl = options.spendControl ?? new SpendControl();
+    const spendControl = options.spendControl ?? getSharedSpendControl();
     registerSpendPolicyHook(x402, spendControl);
     registerExactEvmScheme(x402, { signer: evmSigner });
   }
