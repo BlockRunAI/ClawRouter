@@ -40,6 +40,23 @@ Or neither — <!-- br:models.free -->7<!-- /br:models.free --> models are free,
 
 ---
 
+## What BlockRun is
+
+> **BlockRun lets agents pay for the outcome — every LLM, tool and data source, best value per dollar.**
+
+Not a seat, not a subscription, not a monthly minimum you keep paying while the agent idles. An agent asks for one thing — an answer, an image, a transcript, a price, a call placed — and pays for that one thing at the moment it happens. Nothing to sign up for, nothing to cancel.
+
+|                           |                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Every LLM**             | <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> chat models across 9 providers, behind one endpoint and one balance                                                                                                                                                                                                                           |
+| **Every tool**            | <!-- br:models.image -->9<!-- /br:models.image --> image models, <!-- br:models.video -->8<!-- /br:models.video --> video models, music, <!-- br:models.speech -->5<!-- /br:models.speech --> voices, img2img editing, and outbound phone calls that come back as transcripts                                                                                 |
+| **Every data source**     | web, news and neural search; prediction markets; live crypto and equity quotes; on-chain SQL over 100M+ labeled wallets; DEX routing; RPC across <!-- br:chains.rpc -->40<!-- /br:chains.rpc --> chains                                                                                                                                                       |
+| **Best value per dollar** | <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension local routing sends each request to the cheapest model that can actually do it — <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% below pinning Claude Opus 5 on the same traffic, computed from a published workload mix rather than estimated |
+
+**ClawRouter is how an agent reaches it.** BlockRun is the gateway and the billing; ClawRouter is the MIT-licensed router that runs on your machine, decides which model each request deserves, and settles the bill — a wallet signature in USDC, or a credit-card-funded API key. The rest of this README is about ClawRouter.
+
+---
+
 ## Why ClawRouter exists
 
 Every other LLM router was built for **human developers** — create an account, get an API key, pick a model from a dashboard, pay with a credit card.
@@ -867,6 +884,10 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:m
 ---
 
 ## Frequently Asked Questions
+
+### What is BlockRun?
+
+BlockRun lets agents pay for the outcome — every LLM, tool and data source, best value per dollar. One endpoint and one balance covering <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> chat models plus image, video, music and speech generation, search, market data and multi-chain RPC, billed per call with USDC over [x402](https://x402.org) or a credit-card-funded API key — no seat, no subscription, no minimum. ClawRouter is the open-source local router agents use to reach it.
 
 ### What is ClawRouter?
 
