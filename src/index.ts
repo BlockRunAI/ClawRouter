@@ -950,10 +950,19 @@ async function startProxyInBackground(
     );
   }
 
-  // Restart semantics for the process-wide ledger: history and rolling
-  // windows survive an in-process proxy restart, but limits are re-read so a
-  // hand-edit to spending.json made while the proxy was up still applies.
-  getSharedSpendControl().reloadLimits();
+  // Restart semantics for the process-wide ledger. The rolling hourly/daily
+  // windows and the history behind them survive an in-process proxy restart —
+  // that is the point of a shared ledger. Two things must NOT survive it:
+  //   - limits, which are re-read so a hand-edit to spending.json made while
+  //     the proxy was up still applies
+  //   - the session window, which docs/configuration.md and the /policy help
+  //     both define as resetting on restart. It used to reset by accident
+  //     (every startProxy built its own SpendControl); with one ledger for the
+  //     whole process it has to be reset on purpose, or `session` quietly
+  //     becomes "since the gateway booted".
+  const sharedControl = getSharedSpendControl();
+  sharedControl.reloadLimits();
+  sharedControl.resetSession();
   const proxy = await startProxy({
     ...(apiKey ? { apiKey } : { wallet: wallet! }),
     routingConfig,
@@ -962,7 +971,7 @@ async function startProxyInBackground(
     // The process-wide ledger: the polymarket tool and the /policy command
     // registered below use the same instance, so hourly/daily/session windows
     // cover every surface and a /policy write reaches the live signer.
-    spendControl: getSharedSpendControl(),
+    spendControl: sharedControl,
     onReady: (port) => {
       api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);
     },
@@ -2041,7 +2050,11 @@ const plugin: OpenClawPluginDefinition = {
       // blockrun_polymarket is a LOCAL trading tool (signs CLOB orders with the
       // ClawRouter wallet key), not an HTTP-proxy partner tool — register it
       // separately so real-money betting works out of the box.
-      api.registerTool(buildPolymarketTool({ spendControl: getSharedSpendControl() }));
+      // No deps: the tool's signing paths resolve the same process-wide ledger
+      // themselves, at call time. Passing it here instead would construct the
+      // SpendControl — and read spending.json off disk — on every plugin
+      // registration, including for the many installs that never place a bet.
+      api.registerTool(buildPolymarketTool());
       if (partnerTools.length > 0 && shouldLogRegistration) {
         api.logger.info(
           `Registered ${partnerTools.length} partner tool(s): ${partnerTools.map((t) => t.name).join(", ")}, blockrun_polymarket`,

@@ -794,6 +794,16 @@ export class SpendControl {
     return limit ? records.slice(0, limit) : records;
   }
 
+  /**
+   * Reset the session window. `sessionSpent`/`sessionCalls` are instance state
+   * that is never persisted, so this used to happen implicitly: every
+   * startProxy() built a fresh SpendControl. The process-wide ledger outlives
+   * an in-process proxy restart, which would silently redefine `session` as
+   * "since the gateway booted" — docs/configuration.md and the /policy help
+   * both promise "session resets on restart". The restart path in index.ts
+   * calls this to keep that promise. History and the rolling hourly/daily
+   * windows are deliberately untouched.
+   */
   resetSession(): void {
     this.sessionSpent = 0;
     this.sessionCalls = 0;
@@ -822,10 +832,19 @@ export class SpendControl {
         this.storage.saveLimits(cloneLimits(this.limits), cloneLimits(this.diskLimits));
       } catch (err) {
         if (err instanceof SpendPolicyConflictError) {
-          const current = this.storage.load();
-          this.limits = cloneLimits(current?.limits ?? {});
-          this.diskLimits = cloneLimits(this.limits);
-          this.limitsDirty = false;
+          // Adopt what actually landed. load() can now throw (the file went
+          // unreadable between the conflict check and here), and reconciling
+          // against nothing would clear the limits and report the wrong error
+          // to /policy. Leave this instance as it is and let the conflict
+          // surface — the caller re-reads and retries either way.
+          try {
+            const current = this.storage.load();
+            this.limits = cloneLimits(current?.limits ?? {});
+            this.diskLimits = cloneLimits(this.limits);
+            this.limitsDirty = false;
+          } catch {
+            /* keep the in-memory limits; the conflict below is still the right answer */
+          }
         }
         throw err;
       }
