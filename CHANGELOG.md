@@ -4,7 +4,7 @@ All notable changes to ClawRouter.
 
 ---
 
-## Unreleased
+## v0.12.270 — September 5, 2026
 
 ### Fixed — the Grok rate sync was docs-only; the code still quoted the old prices
 
