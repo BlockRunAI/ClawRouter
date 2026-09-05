@@ -95086,9 +95086,20 @@ data: [DONE]
         maxTokens,
         routingProfile ?? void 0
       );
-      logCost = FREE_MODELS.has(logModel) ? 0 : costs.costEstimate;
+      const apiKeyPricing = options.apiKey ? routerOpts.modelPricing.get(logModel) : void 0;
+      if (FREE_MODELS.has(logModel)) {
+        logCost = 0;
+        logSavings = 1;
+      } else if (apiKeyPricing) {
+        const inTokens = responseInputTokens ?? chargedInputTokens;
+        const outTokens = responseOutputTokens ?? 0;
+        logCost = (inTokens * (apiKeyPricing.inputPrice ?? 0) + outTokens * (apiKeyPricing.outputPrice ?? 0)) / 1e6;
+        logSavings = costs.baselineCost > 0 ? Math.max(0, (costs.baselineCost - logCost) / costs.baselineCost) : 0;
+      } else {
+        logCost = costs.costEstimate;
+        logSavings = costs.savings;
+      }
       logBaseline = costs.baselineCost;
-      logSavings = FREE_MODELS.has(logModel) ? 1 : costs.savings;
     }
     const entry = {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),

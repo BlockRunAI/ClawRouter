@@ -7164,11 +7164,44 @@ async function proxyRequest(
         maxTokens,
         routingProfile ?? undefined,
       );
-      // Free models: actual cost is $0 (no x402 payment ever made).
-      // MIN_PAYMENT_USD floor in calculateModelCost would falsely inflate stats.
-      logCost = FREE_MODELS.has(logModel) ? 0 : costs.costEstimate;
+      const apiKeyPricing = options.apiKey ? routerOpts.modelPricing.get(logModel) : undefined;
+      if (FREE_MODELS.has(logModel)) {
+        // Free models: actual cost is $0 (no x402 payment ever made).
+        // MIN_PAYMENT_USD floor in calculateModelCost would falsely inflate stats.
+        logCost = 0;
+        logSavings = 1;
+      } else if (apiKeyPricing) {
+        // API-key rail: no x402 payment happens, so `actualPayment` is always 0
+        // and every call used to land on the estimate below — which adds a 5%
+        // server margin, a $0.001 per-transaction settlement fee and a
+        // MIN_PAYMENT_USD floor. All three are x402 concepts: the fee covers
+        // on-chain gas and the floor is the CDP facilitator's minimum. Account
+        // credit settles none of that, and BlockRun confirms this rail charges
+        // provider list price with no markup, no per-call fee and no minimum.
+        //
+        // Measured 2026-09-05: a 12-in/8-out gpt-4o-mini call was billed
+        // $0.0000066 while this branch logged $0.001 — a 152x overstatement on
+        // small calls, in the number `/stats` reports as money spent.
+        //
+        // So price it the way the gateway does, and prefer the token counts the
+        // response actually reported over an estimate from body length:
+        //   (12 * 0.15 + 8 * 0.60) / 1e6 = $0.0000066, matching to the cent.
+        const inTokens = responseInputTokens ?? chargedInputTokens;
+        const outTokens = responseOutputTokens ?? 0;
+        logCost =
+          (inTokens * (apiKeyPricing.inputPrice ?? 0) +
+            outTokens * (apiKeyPricing.outputPrice ?? 0)) /
+          1_000_000;
+        logSavings =
+          costs.baselineCost > 0
+            ? Math.max(0, (costs.baselineCost - logCost) / costs.baselineCost)
+            : 0;
+      } else {
+        // Wallet rail with no payment recorded, or a model we have no price for.
+        logCost = costs.costEstimate;
+        logSavings = costs.savings;
+      }
       logBaseline = costs.baselineCost;
-      logSavings = FREE_MODELS.has(logModel) ? 1 : costs.savings;
     }
 
     const entry: UsageEntry = {
