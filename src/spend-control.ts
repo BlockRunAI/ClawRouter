@@ -574,6 +574,33 @@ export class SpendControl {
       }
     }
 
+    return this.checkAmount(estimatedCost);
+  }
+
+  /**
+   * The amount windows alone, with no counterparty to inspect.
+   *
+   * `perRequest` / `hourly` / `daily` / `session` are denominated in USD and
+   * say nothing about how the money moves, so they are the part of the policy
+   * that means the same thing on the API-key rail as on the wallet rail — a
+   * daily cap is as sensible against account credit as against USDC, and both
+   * are read from the same `spending.json` (#329). The counterparty lists are
+   * the part that does NOT translate: `blockedPayees`, `allowedPayees`,
+   * `blockedNetworks` and `allowedAssets` presuppose a payee, a network and an
+   * asset, and on the key rail there is one counterparty and no on-chain asset.
+   * They are vacuous there rather than missing, which is why `check()` layers
+   * them on top of this instead of the other way round.
+   */
+  checkAmount(estimatedCost: number): CheckResult {
+    // Repeated from `check()` so this stays fail-closed when called directly:
+    // a policy we could not read is not a policy that allows everything.
+    if (this.policyFileBroken !== undefined) {
+      return {
+        allowed: false,
+        reason: `Spend policy is unreadable, refusing all payments: ${this.policyFileBroken}`,
+      };
+    }
+
     const now = this.now();
 
     if (this.limits.perRequest !== undefined) {
@@ -1073,6 +1100,102 @@ export function registerSpendPolicyHook(x402: x402Client, control: SpendControl)
       control.releaseReservation(id);
     }
   });
+}
+
+type PayFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+/**
+ * The gateway's settled charge for a response, in USD, or undefined.
+ *
+ * Absent is NOT zero: BlockRun writes a genuine zero charge as "0.000000" and
+ * omits the header when nothing has settled yet (the chat path commits the
+ * charge after the response). A caller must fall back to its own estimate
+ * rather than record $0 against a call that really was billed.
+ */
+function settledChargeUsd(response: Response): number | undefined {
+  const raw = response.headers.get("x-blockrun-cost-usd");
+  if (raw === null) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined; // Number("") is 0, not NaN
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
+ * Enforce the amount windows on a rail that never signs anything (#329).
+ *
+ * On the wallet rail the policy lives inside the signer: `registerSpendPolicyHook`
+ * refuses before a USDC authorization is created. The API-key rail has no
+ * signature to refuse — `createApiKeyFetch` sets a bearer header and dispatches
+ * — so a `daily=5` written while on a wallet went on reading like a $5/day cap
+ * after `clawrouter login`, while the real ceiling was the account balance.
+ *
+ * This moves the same windows to that rail's only equivalent choke point: the
+ * fetch itself, which every paid call goes through, so there is no per-endpoint
+ * site to forget. The counterparty lists stay wallet-only on purpose — see
+ * `checkAmount`.
+ *
+ * `consumeEstimateUsd` returns what the caller published for the dispatch it is
+ * about to make, and CONSUMES it, which is what distinguishes a billable call
+ * from the follow-ups it spawns:
+ *
+ *   - a published number (0 when ClawRouter cannot price the route locally)
+ *     means "this call gets billed": it is checked against the windows, held
+ *     against the aggregate ones for the duration, and recorded afterwards
+ *   - undefined means "not a billable dispatch" — the status polls of an async
+ *     image, audio or video job. Those are neither checked nor recorded, so a
+ *     job cannot be charged once at submit and again on the poll that finishes
+ *     it, and a long poll loop cannot drain a daily window on its own.
+ *
+ * Two things differ from the signing hook, both in the operator's favour:
+ *
+ *   - what gets recorded is what the gateway actually charged
+ *     (`x-blockrun-cost-usd`) when it says so; the estimate is the fallback for
+ *     chat and async media, which settle after the response
+ *   - a failed call records nothing. The wallet rail is conservative because a
+ *     signed payment can settle even if the request then fails; account credit
+ *     is not debited for a request the gateway rejected.
+ */
+export function withSpendPolicy(
+  inner: PayFetch,
+  control: SpendControl,
+  consumeEstimateUsd: () => number | undefined,
+): PayFetch {
+  return async (input, init) => {
+    const published = consumeEstimateUsd();
+    if (published === undefined || !control.hasAmountLimits()) return inner(input, init);
+
+    const estimate = Number.isFinite(published) && published > 0 ? published : 0;
+
+    const result = control.checkAmount(estimate);
+    if (!result.allowed) {
+      throw new SpendPolicyError(result.reason ?? "blocked by spend policy", {
+        blockedBy: result.blockedBy,
+      });
+    }
+
+    // Reserve synchronously — no await between checkAmount() and reserve() —
+    // so two concurrent calls cannot both clear the same remaining budget.
+    const reservationId = control.hasAggregateLimits() ? control.reserve(estimate) : undefined;
+
+    let response: Response;
+    try {
+      response = await inner(input, init);
+    } catch (err) {
+      if (reservationId !== undefined) control.releaseReservation(reservationId);
+      throw err;
+    }
+
+    const settled = settledChargeUsd(response);
+    // A rejected request is not a charge. When the gateway does report one on a
+    // non-2xx (a partial, or a job that settled and then failed), believe it.
+    const charged = response.ok ? (settled ?? estimate) : (settled ?? 0);
+
+    if (reservationId !== undefined) control.releaseReservation(reservationId);
+    if (charged > 0) control.record(charged, { action: "BlockRun account charge" });
+
+    return response;
+  };
 }
 
 export function formatDuration(seconds: number): string {

@@ -4,6 +4,46 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.274 — September 5, 2026
+
+### Fixed — `clawrouter policy` spend limits now hold on the API-key rail
+
+`SpendControl` was reached only through the x402 pre-sign hook, so on the API-key rail none of it ran. Someone who set `daily=5` on a wallet and then ran `clawrouter login` kept a config file that read like a $5/day cap and got their account balance instead. The startup warning was the only thing standing between those two readings.
+
+The amount windows — `perRequest`, `hourly`, `daily`, `session` — are denominated in USD and say nothing about how money moves, so they mean the same thing on both rails and are now enforced on both, from the same `spending.json`. The key rail has no signature to refuse, so they moved to its only equivalent choke point: the fetch every paid call goes through.
+
+Two things there work out better than on the wallet rail. What gets recorded is what the gateway actually **charged** (`x-blockrun-cost-usd`) when it says so, not a local estimate; and a request the gateway rejected costs the window nothing, because account credit is not debited for it. An async image, audio or video job is billed once at submit — its status polls are neither checked nor recorded, so a long poll loop cannot drain a daily window on its own.
+
+The counterparty lists (`blockedPayees`, `allowedPayees`, `allowedNetworks`, `allowedAssets`) stay wallet-only, on purpose: they presuppose a payee, a network and an on-chain asset, and account credit has one counterparty and no asset. They are vacuous on that rail rather than missing. The startup warning narrowed to say exactly that, and now also states plainly that the amount limits **do** apply.
+
+Reported by [@twzrd-sol](https://github.com/twzrd-sol) in [#329](https://github.com/BlockRunAI/ClawRouter/issues/329).
+
+### Fixed — the plugin-id migration missed the config an ordinary pre-rename install actually has
+
+Since [#313](https://github.com/BlockRunAI/ClawRouter/pull/313) the gateway-start migration asked for BlockRun-owned fields (`walletKey`, `routing`) under `plugins.entries.clawrouter` before touching that entry. OpenClaw's installer commits `{ "enabled": true }` and nothing else for an `enabledByDefault` plugin, and the wallet lives at `~/.openclaw/blockrun/wallet.key` rather than in `openclaw.json` — so the common case carries neither field and was never migrated on the `npm update -g` + restart path.
+
+Verified against a real `openclaw@2026.8.2`, that left two shapes on disk. A legacy `{ enabled: true }` ended up explicitly enabling **OpenClaw's own bundled router**, a product the user never configured. Worse, a legacy `{ enabled: false }` — a pre-rename opt-out — was **inverted**: the bundled router went off, BlockRun came on by the installer default, and the proxy started on a machine where the user had turned it off.
+
+The gate now also accepts what `clawrouter setup` already treats as proof: a legacy package directory whose `package.json` names `@blockrun/clawrouter`. That is unambiguous where config fields are not, and it does not widen the heuristic #313 narrowed — an entry OpenClaw wrote for its own router has no such directory behind it. Without either kind of evidence the entry is still left alone.
+
+Reported by [@twzrd-sol](https://github.com/twzrd-sol) in [#319](https://github.com/BlockRunAI/ClawRouter/issues/319).
+
+### Fixed — the EADDRINUSE reuse path checked the payment chain and nothing else
+
+v0.12.273 bound proxy reuse to the credential, but only on the pre-listen probe. `startProxy` reaches a running proxy a second way: the EADDRINUSE branch taken when another process wins the bind in between. That branch compared the payment chain alone, so an API-key caller landing on a Base wallet proxy reused it and got back a handle reporting `authMode: "api-key"` and the key's masked label — while every request was paid in USDC from the wallet. It also tested the reported wallet for truthiness, and an API-key proxy publishes an empty one, so that case fell through to a non-`Error` throw.
+
+Both paths now run the same validator: auth mode, API key and payment chain, one rule instead of two.
+
+### Fixed — two different wallets no longer swap silently
+
+`resolveExistingWalletKey` prefers BlockRun Core over ClawRouter's legacy `wallet.key`, and the legacy→Core migration copies only when Core is absent — so in the common case both hold the same key and the precedence is invisible. It becomes visible when Core was written independently by another BlockRun product while ClawRouter already had its own funded wallet: payment moved on upgrade, requests started failing on an empty balance, and the funded wallet sat idle with nothing having said so.
+
+Core still wins. Preferring legacy would make Desktop display and fund one address while the proxy spent from another, and refusing outright would turn a working install into a hard failure for anyone legitimately holding two wallets. What was wrong was the silence: startup now names both addresses and the one line that keeps paying from the old one. `~/.blockrun/.chain` overriding this install's own saved chain — a different signer and a different gateway — is reported the same way.
+
+Reported in [#315](https://github.com/BlockRunAI/ClawRouter/issues/315).
+
+---
+
 ## v0.12.273 — September 5, 2026
 
 ### Fixed — a second API key could attach to a proxy billing the first account

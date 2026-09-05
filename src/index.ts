@@ -182,6 +182,36 @@ function isBlockrunWebSearchDisabled(config?: unknown): boolean {
  * grandchildren were leaking). The scrub only removes entries matching the
  * managed shape; user-defined `blockrun` MCP servers are left alone.
  */
+/**
+ * Did a pre-rename @blockrun/clawrouter really occupy the `clawrouter` id?
+ *
+ * The same on-disk proof `clawrouter setup` uses (src/cli.ts): a legacy package
+ * directory whose package.json names @blockrun/clawrouter. Config fields can be
+ * absent on a perfectly ordinary BlockRun install; this cannot be produced by
+ * OpenClaw's own bundled router, which ships inside OpenClaw and never writes
+ * `~/.openclaw/extensions/clawrouter`.
+ *
+ * Missing, unreadable, or non-BlockRun reads as "not ours" — this only ever
+ * grants a migration, so failing closed costs a stale key and never touches
+ * someone else's plugin.
+ */
+function legacyPackageIsBlockRun(): boolean {
+  for (const dir of [
+    join(homedir(), ".openclaw", "extensions", "clawrouter"),
+    join(homedir(), ".openclaw", "npm", "node_modules", "@blockrun", "clawrouter"),
+  ]) {
+    try {
+      const metadata = JSON.parse(readTextFileSync(join(dir, "package.json"))) as {
+        name?: unknown;
+      };
+      if (metadata.name === "@blockrun/clawrouter") return true;
+    } catch {
+      // Not installed there, or not readable — no evidence, not a refutation.
+    }
+  }
+  return false;
+}
+
 function injectModelsConfig(
   logger: { info: (msg: string) => void },
   options: { forceWrite?: boolean } = {},
@@ -409,9 +439,27 @@ function injectModelsConfig(
   // release. Restore it here, where the write is already `isGatewayMode()`-gated
   // below and so cannot trip OpenClaw's install-time baseHash check.
   //
-  // Gate it on evidence rather than running unconditionally: BlockRun-owned
-  // fields under `plugins.entries.clawrouter` are proof that entry was written
-  // by us and not by OpenClaw's bundled router, which now owns that id.
+  // Gate it on evidence rather than running unconditionally: that id belongs to
+  // OpenClaw's bundled router now, so migrating an entry we did not write would
+  // reconfigure an unrelated official plugin.
+  //
+  // Two kinds of evidence, because config fields alone miss the ordinary case
+  // (#319). OpenClaw's installer commits `{ enabled: true }` and nothing else
+  // for an enabledByDefault plugin, and the wallet lives at
+  // `~/.openclaw/blockrun/wallet.key` rather than in openclaw.json — so a
+  // pre-rename BlockRun install usually carries a bare
+  // `"clawrouter": { "enabled": true }` with no `walletKey` and no `routing`.
+  // Requiring those fields left exactly those users unmigrated on the
+  // `npm update -g` + restart path, and the stale key then either enabled a
+  // bundled router they never configured or, for a pre-rename opt-out,
+  // inverted it: `clawrouter` disabled, `blockrun-clawrouter` enabled by the
+  // installer default, and the proxy back up on a machine where it was off.
+  //
+  // So also accept what `clawrouter setup` already treats as proof: a legacy
+  // package directory whose package.json names @blockrun/clawrouter. That is
+  // unambiguous in a way config fields are not, and it does not widen the
+  // heuristic #313 deliberately narrowed — an entry OpenClaw wrote for its own
+  // router has no such directory behind it.
   const legacyEntry = (
     (config.plugins as Record<string, unknown> | undefined)?.entries as
       Record<string, unknown> | undefined
@@ -419,9 +467,10 @@ function injectModelsConfig(
   const legacyEntryConfig = legacyEntry?.config as Record<string, unknown> | undefined;
   const legacyBlockRunInstall = Boolean(
     legacyEntry &&
-    (["walletKey", "routing"] as const).some(
+    ((["walletKey", "routing"] as const).some(
       (key) => key in legacyEntry || (legacyEntryConfig ? key in legacyEntryConfig : false),
-    ),
+    ) ||
+      legacyPackageIsBlockRun()),
   );
   if (legacyBlockRunInstall && prepareBlockRunPluginConfig(config, { legacyBlockRunInstall })) {
     needsWrite = true;

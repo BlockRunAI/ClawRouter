@@ -26,7 +26,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 // Per-request payment tracking via AsyncLocalStorage (safe for concurrent requests).
 // The x402 onAfterPaymentCreation hook writes the actual payment amount into the
 // request-scoped store, and the logging code reads it after payFetch completes.
-const paymentStore = new AsyncLocalStorage<{ amountUsd: number }>();
+// `amountUsd` is what an x402 payment actually signed for; `estimatedUsd` is
+// what THIS attempt is expected to cost, published for the API-key rail's
+// spend-window check, which has no 402 quote to read (#329).
+const paymentStore = new AsyncLocalStorage<{ amountUsd: number; estimatedUsd?: number }>();
 import { finished, Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { AddressInfo } from "node:net";
@@ -95,6 +98,8 @@ import {
 import {
   getSharedSpendControl,
   registerSpendPolicyHook,
+  withSpendPolicy,
+  POLICY_LISTS,
   SpendControl,
   SpendPolicyError,
 } from "./spend-control.js";
@@ -2189,6 +2194,23 @@ function settledMediaCostUsd(
   return estimate;
 }
 
+/**
+ * Declare what the dispatch about to happen is expected to cost, in USD.
+ *
+ * Read and cleared by the API-key rail's spend-window wrapper (`withSpendPolicy`),
+ * so it must be published immediately before a BILLABLE upstream call and never
+ * before a status poll — an unpublished dispatch is treated as free, which is
+ * what keeps an async media job from being charged once at submit and again on
+ * the poll that completes it. Pass 0 for routes ClawRouter cannot price locally
+ * (flat-priced partner endpoints); the gateway's settled charge then governs.
+ *
+ * A no-op on the wallet rail, where the 402 quote is the authority.
+ */
+function publishDispatchCost(usd: number): void {
+  const store = paymentStore.getStore();
+  if (store) store.estimatedUsd = Number.isFinite(usd) && usd > 0 ? usd : 0;
+}
+
 /** $1.00, matching the wallet rail's low-balance threshold. */
 const LOW_CREDIT_USD = 1.0;
 /** Warn on a threshold crossing, not per call; re-arms when credit goes back up. */
@@ -2304,6 +2326,9 @@ async function proxyPaidApiRequest(
     if (!res.writableEnded) clientAbort.abort();
   });
 
+  // Billable, but ClawRouter has no local price for partner endpoints — publish
+  // 0 and let the gateway's settled charge feed the windows.
+  publishDispatchCost(0);
   const upstream = await payFetch(upstreamUrl, {
     method: req.method ?? "POST",
     headers,
@@ -2498,6 +2523,109 @@ async function uploadDataUriToHost(dataUri: string): Promise<string> {
 }
 
 /**
+ * Tell the operator which parts of `clawrouter policy` cannot fire on this rail.
+ *
+ * Since #329 the amount windows DO hold on the API-key rail — `withSpendPolicy`
+ * enforces them at the dispatch boundary, reading the same `spending.json`. What
+ * still cannot fire are the counterparty lists: `blockedPayees`,
+ * `allowedPayees`, `allowedNetworks` and `allowedAssets` each presuppose a
+ * payee, a network and an on-chain asset, and account credit has one
+ * counterparty and no asset. They are vacuous here, not merely disabled — but an
+ * operator who configured one is entitled to hear that it is not doing anything.
+ *
+ * Silent when none are configured, which is the common path.
+ */
+function warnIfSpendLimitsUnenforced(spendControl: SpendControl | undefined): void {
+  let configured: string[];
+  try {
+    const limits = (spendControl ?? new SpendControl()).getStatus().limits;
+    configured = POLICY_LISTS.filter((list) => (limits[list]?.length ?? 0) > 0);
+  } catch {
+    return; // an unreadable policy file is its own problem, reported elsewhere
+  }
+  if (configured.length === 0) return;
+
+  console.warn(
+    `[ClawRouter] \u26A0 Counterparty policy (${configured.join(", ")}) does not apply in API-key mode — there is one counterparty and no on-chain asset.`,
+  );
+  console.warn(
+    `[ClawRouter]   Your perRequest/hourly/daily/session limits DO apply here and are enforced per call.`,
+  );
+}
+
+/**
+ * Refuse to attach to a proxy that is not billing what this process configured.
+ *
+ * Two paths reach an already-running proxy: the pre-listen probe, and the
+ * EADDRINUSE race when another process wins the bind between that probe and
+ * `listen()`. Only the first one checked credentials, so the race path could
+ * hand an API-key caller a wallet proxy — the caller believes it is billing
+ * account credit while every request spends USDC, and the handle it gets back
+ * even reports `authMode: "api-key"` and the key's label. Both paths validate
+ * here so the rule is one rule and not two.
+ *
+ * The three refusals, all for the same reason (reuse would spend money the
+ * caller did not mean to spend):
+ *
+ *   - a different auth mode: the two rails bill different accounts from
+ *     different hosts
+ *   - a different API key: `clawrouter login` with a second key on a port
+ *     already serving the first used to attach silently, and every request was
+ *     charged to the old account. An older proxy that reports no label cannot
+ *     be verified, and an unverifiable credential on a money path is refused
+ *     rather than assumed to match.
+ *   - a different payment chain: a different signer and a different gateway
+ */
+function assertExistingProxyBillsUs(
+  existing: { wallet: string; paymentChain?: string; authMode: AuthMode; apiKeyLabel?: string },
+  requested: {
+    listenPort: number;
+    authMode: AuthMode;
+    apiKeyLabel?: string;
+    paymentChain: string;
+  },
+): void {
+  const { listenPort } = requested;
+  const describe = (mode: AuthMode) => (mode === "api-key" ? "a BlockRun API key" : "a wallet");
+
+  if (existing.authMode !== requested.authMode) {
+    throw new Error(
+      `Existing proxy on port ${listenPort} is authenticating with ${describe(existing.authMode)} but ${describe(requested.authMode)} was requested. ` +
+        `Stop the existing proxy first or use a different port.`,
+    );
+  }
+
+  if (requested.authMode === "api-key") {
+    if (existing.apiKeyLabel !== requested.apiKeyLabel) {
+      throw new Error(
+        `Existing proxy on port ${listenPort} is billing ${existing.apiKeyLabel ?? "an unidentified BlockRun account"}, ` +
+          `but this process is configured for ${requested.apiKeyLabel}. Reusing it would charge the other account. ` +
+          `Stop that proxy first, or use a different port.`,
+      );
+    }
+    return;
+  }
+
+  if (existing.paymentChain) {
+    if (existing.paymentChain !== requested.paymentChain) {
+      throw new Error(
+        `Existing proxy on port ${listenPort} is using ${existing.paymentChain} but ${requested.paymentChain} was requested. ` +
+          `Stop the existing proxy first or use a different port.`,
+      );
+    }
+  } else if (requested.paymentChain !== "base") {
+    // Old proxy doesn't report chain — assume Base. Reject if Solana was requested.
+    console.warn(
+      `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`,
+    );
+    throw new Error(
+      `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${requested.paymentChain} was requested. ` +
+        `Stop the existing proxy first or use a different port.`,
+    );
+  }
+}
+
+/**
  * Start the local x402 proxy server.
  *
  * If a proxy is already running on the target port, reuses it instead of failing.
@@ -2505,35 +2633,6 @@ async function uploadDataUriToHost(dataUri: string): Promise<string> {
  *
  * Returns a handle with the assigned port, base URL, and a close function.
  */
-/**
- * Tell the operator that their `clawrouter policy` spend limits are inert.
- *
- * The limits (and the payee/network/asset lists) live in a hook that runs just
- * before a payment is signed. API-key mode signs nothing, so none of them can
- * fire. Reading the configured limits and staying silent when there are none
- * keeps the common path quiet while making the gap loud for the operator who
- * actually set one — the person for whom a silently-disabled cap is a problem.
- */
-function warnIfSpendLimitsUnenforced(spendControl: SpendControl | undefined): void {
-  let configured: string[];
-  try {
-    const limits = (spendControl ?? new SpendControl()).getStatus().limits;
-    configured = (["perRequest", "hourly", "daily", "session"] as const)
-      .filter((window) => typeof limits[window] === "number")
-      .map((window) => `${window}=$${limits[window]!.toFixed(2)}`);
-  } catch {
-    return; // an unreadable policy file is its own problem, reported elsewhere
-  }
-  if (configured.length === 0) return;
-
-  console.warn(
-    `[ClawRouter] ⚠ Spend limits (${configured.join(", ")}) are NOT enforced in API-key mode — they gate x402 signing, and nothing is signed here.`,
-  );
-  console.warn(
-    `[ClawRouter]   Your BlockRun account balance is the cap instead. Use maxCostPerRun for a per-session limit that still applies.`,
-  );
-}
-
 export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Apply upstream proxy (SOCKS5/HTTP) before any outgoing requests
   const upstreamProxy = await applyUpstreamProxy(options.upstreamProxy);
@@ -2616,48 +2715,26 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Check if a proxy is already running on this port
   const existingProxy =
     options.allowExistingProxy === false ? undefined : await checkExistingProxy(listenPort);
+  const ourApiKeyLabel = apiKey ? maskApiKey(apiKey) : undefined;
   if (existingProxy) {
     // Proxy already running — reuse it instead of failing with EADDRINUSE
     const baseUrl = `http://127.0.0.1:${listenPort}`;
 
-    // Never reuse across credentials. The two modes bill different accounts
-    // from different hosts, so silently attaching to the other one would spend
-    // money the caller did not mean to spend — the same reason a chain
-    // mismatch is fatal below.
-    if (existingProxy.authMode !== authMode) {
-      throw new Error(
-        `Existing proxy on port ${listenPort} is authenticating with ${existingProxy.authMode === "api-key" ? "a BlockRun API key" : "a wallet"} but ${authMode === "api-key" ? "an API key" : "a wallet"} was requested. ` +
-          `Stop the existing proxy first or use a different port.`,
-      );
-    }
+    assertExistingProxyBillsUs(existingProxy, {
+      listenPort,
+      authMode,
+      apiKeyLabel: ourApiKeyLabel,
+      paymentChain,
+    });
 
     if (authMode === "api-key") {
-      // Reusing a proxy holding a DIFFERENT key bills someone else's account.
-      // The mode check above only separates wallet from key; it says nothing
-      // about WHICH key, so `clawrouter login` with a second key on a port
-      // already serving the first used to attach silently — the new process
-      // printed the new key and reported "listening", while every request was
-      // charged to the old account. Compare the masked label /health publishes.
-      //
-      // An older proxy that reports no label cannot be verified, and an
-      // unverifiable credential on a money path is refused rather than assumed
-      // to match.
-      const runningLabel = existingProxy.apiKeyLabel;
-      const ourLabel = maskApiKey(apiKey!);
-      if (runningLabel !== ourLabel) {
-        throw new Error(
-          `Existing proxy on port ${listenPort} is billing ${runningLabel ?? "an unidentified BlockRun account"}, ` +
-            `but this process is configured for ${ourLabel}. Reusing it would charge the other account. ` +
-            `Stop that proxy first, or use a different port.`,
-        );
-      }
       options.onReady?.(listenPort);
       return {
         port: listenPort,
         baseUrl,
         walletAddress: "",
         authMode,
-        apiKeyLabel: ourLabel,
+        apiKeyLabel: ourApiKeyLabel!,
         balanceMonitor: new ApiKeyBalanceMonitor(),
         // No-op: we didn't start this proxy, so we shouldn't close it
         close: async () => {},
@@ -2670,25 +2747,6 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     if (existingProxy.wallet !== account.address) {
       console.warn(
         `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account.address}. Reusing existing proxy.`,
-      );
-    }
-
-    // Verify the existing proxy is using the same payment chain
-    if (existingProxy.paymentChain) {
-      if (existingProxy.paymentChain !== paymentChain) {
-        throw new Error(
-          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. ` +
-            `Stop the existing proxy first or use a different port.`,
-        );
-      }
-    } else if (paymentChain !== "base") {
-      // Old proxy doesn't report chain — assume Base. Reject if Solana was requested.
-      console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`,
-      );
-      throw new Error(
-        `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${paymentChain} was requested. ` +
-          `Stop the existing proxy first or use a different port.`,
       );
     }
 
@@ -2815,9 +2873,23 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // handler below stay unaware of how the call is being paid for: one settles a
   // 402 by signing USDC, the other never sees a 402 because the bearer token
   // was already good for the request (or was not, and the gateway says so).
+  //
+  // The key rail's wrapper is where its spend windows live. On the wallet rail
+  // the same windows are enforced inside the signer (`registerSpendPolicyHook`
+  // above); there is no signer here, so they move to the only other place every
+  // paid call on this rail passes through (#329).
   const payFetch =
     authMode === "api-key"
-      ? createApiKeyFetch(apiKey!, fetch, apiBase)
+      ? withSpendPolicy(
+          createApiKeyFetch(apiKey!, fetch, apiBase),
+          options.spendControl ?? getSharedSpendControl(),
+          () => {
+            const store = paymentStore.getStore();
+            const published = store?.estimatedUsd;
+            if (store) store.estimatedUsd = undefined; // consume: polls are not billable
+            return published;
+          },
+        )
       : createPayFetchWithPreAuth(fetch, x402!, undefined, {
           skipPreAuth: paymentChain === "solana",
           // Per-request cost estimate so pre-auth is only reused when the cached
@@ -3285,6 +3357,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           // Step 1: submit job. Fast models return 200 + image data inline within
           // BlockRun's 30s window. Slow models (e.g. openai/gpt-image-2) return
           // 202 + { id, poll_url } and we poll below — same pattern as video.
+          publishDispatchCost(imgCost);
           const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -3527,6 +3600,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }
 
         try {
+          publishDispatchCost(img2imgCost);
           let upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -3645,6 +3719,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           /* use defaults */
         }
         try {
+          publishDispatchCost(0.15);
           let upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -3764,6 +3839,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }
         try {
           // Step 1: submit job. Server returns 202 with poll_url.
+          publishDispatchCost(estimateVideoCost(videoModel, videoDuration, videoHasImageInput));
           const submitResp = await payFetch(`${apiBase}/v1/videos/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -4153,11 +4229,11 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           if (existingProxy2) {
             // Proxy is actually running - this is fine, reuse it
             console.log(`[ClawRouter] Existing proxy detected on port ${listenPort}, reusing`);
-            rejectAttempt({
-              code: "REUSE_EXISTING",
-              wallet: existingProxy2.wallet,
-              existingChain: existingProxy2.paymentChain,
-            });
+            // Carry the whole probe result, not just the wallet: the credential
+            // check below needs authMode and the key label too, and an API-key
+            // proxy publishes an EMPTY wallet — a truthiness test on that field
+            // dropped straight through to the generic error path.
+            rejectAttempt({ code: "REUSE_EXISTING", existing: existingProxy2 });
             return;
           }
 
@@ -4198,20 +4274,25 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     } catch (err: unknown) {
       const error = err as {
         code?: string;
-        wallet?: string;
-        existingChain?: string;
+        existing?: {
+          wallet: string;
+          paymentChain?: string;
+          authMode: AuthMode;
+          apiKeyLabel?: string;
+        };
         attempt?: number;
       };
 
-      if (error.code === "REUSE_EXISTING" && error.wallet) {
-        // Validate payment chain matches (same check as pre-listen reuse path)
-        if (error.existingChain && error.existingChain !== paymentChain) {
-          throw new Error(
-            `Existing proxy on port ${listenPort} is using ${error.existingChain} but ${paymentChain} was requested. ` +
-              `Stop the existing proxy first or use a different port.`,
-            { cause: err },
-          );
-        }
+      if (error.code === "REUSE_EXISTING" && error.existing) {
+        // Same credential rule as the pre-listen reuse path — auth mode, API
+        // key and chain must all match before this process attaches to someone
+        // else's payer.
+        assertExistingProxyBillsUs(error.existing, {
+          listenPort,
+          authMode,
+          apiKeyLabel: ourApiKeyLabel,
+          paymentChain,
+        });
 
         // Proxy is running, reuse it
         const baseUrl = `http://127.0.0.1:${listenPort}`;
@@ -4219,9 +4300,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         return {
           port: listenPort,
           baseUrl,
-          walletAddress: error.wallet,
+          walletAddress: error.existing.wallet,
           authMode,
-          ...(apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {}),
+          ...(ourApiKeyLabel ? { apiKeyLabel: ourApiKeyLabel } : {}),
           balanceMonitor,
           close: async () => {
             // No-op: we didn't start this proxy, so we shouldn't close it
@@ -4941,6 +5022,7 @@ async function proxyRequest(
             size: imageSize,
             n: 1,
           });
+          publishDispatchCost(estimateImageCost(imageModel, imageSize, 1));
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -5272,6 +5354,7 @@ async function proxyRequest(
             n: 1,
           });
 
+          publishDispatchCost(estimateImageCost(img2imgModel, img2imgSize, 1));
           const img2imgResponse = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -6464,6 +6547,17 @@ async function proxyRequest(
 
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
 
+      // Publish what THIS attempt should cost, for the API-key rail's spend
+      // windows (#329). Per attempt, not per request: a fallback chain can end
+      // on a different model at a different price, and the wallet rail likewise
+      // re-checks policy against each attempt's own 402 quote. Free models
+      // publish 0 rather than being skipped, so a previous attempt's estimate
+      // cannot leak into a call that costs nothing.
+      const attemptEst = FREE_MODELS.has(tryModel)
+        ? undefined
+        : estimateAmount(tryModel, body.length, maxTokens);
+      publishDispatchCost(attemptEst ? Number(attemptEst) / 1_000_000 : 0);
+
       // Per-model abort controller — each attempt gets its own window.
       // Reasoning models (o-series, GPT-5 reasoning, Claude opus, V4 Pro, etc.)
       // get 3min for cold-start first-token; everything else 60s. When it fires,
@@ -6602,6 +6696,9 @@ async function proxyRequest(
         );
         await new Promise<void>((resolve) => setTimeout(resolve, 500));
         if (!globalController.signal.aborted) {
+          // The first attempt consumed the published estimate; this retry is a
+          // second billable dispatch and needs its own.
+          publishDispatchCost(attemptEst ? Number(attemptEst) / 1_000_000 : 0);
           const retryController = new AbortController();
           const retryTimeoutId = setTimeout(
             () => retryController.abort(),
@@ -6675,6 +6772,8 @@ async function proxyRequest(
             );
             await new Promise<void>((resolve) => setTimeout(resolve, 200));
             if (!globalController.signal.aborted) {
+              // Second billable dispatch — republish, the first one consumed it.
+              publishDispatchCost(attemptEst ? Number(attemptEst) / 1_000_000 : 0);
               const retryController = new AbortController();
               const retryTimeoutId = setTimeout(
                 () => retryController.abort(),

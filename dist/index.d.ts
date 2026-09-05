@@ -834,6 +834,21 @@ declare class SpendControl {
      */
     reloadLimits(): void;
     check(estimatedCost: number, counterparty?: CounterpartyInfo): CheckResult;
+    /**
+     * The amount windows alone, with no counterparty to inspect.
+     *
+     * `perRequest` / `hourly` / `daily` / `session` are denominated in USD and
+     * say nothing about how the money moves, so they are the part of the policy
+     * that means the same thing on the API-key rail as on the wallet rail — a
+     * daily cap is as sensible against account credit as against USDC, and both
+     * are read from the same `spending.json` (#329). The counterparty lists are
+     * the part that does NOT translate: `blockedPayees`, `allowedPayees`,
+     * `blockedNetworks` and `allowedAssets` presuppose a payee, a network and an
+     * asset, and on the key rail there is one counterparty and no on-chain asset.
+     * They are vacuous there rather than missing, which is why `check()` layers
+     * them on top of this instead of the other way round.
+     */
+    checkAmount(estimatedCost: number): CheckResult;
     record(amount: number, metadata?: {
         model?: string;
         action?: string;
@@ -1219,6 +1234,14 @@ type ProxyHandle = {
     balanceMonitor: AnyBalanceMonitor;
     close: () => Promise<void>;
 };
+/**
+ * Start the local x402 proxy server.
+ *
+ * If a proxy is already running on the target port, reuses it instead of failing.
+ * Port can be configured via BLOCKRUN_PROXY_PORT environment variable.
+ *
+ * Returns a handle with the assigned port, base URL, and a close function.
+ */
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
 
 /**
@@ -1778,23 +1801,6 @@ declare function buildPartnerTools(proxyBaseUrl: string): PartnerToolDefinition[
  * opt-in.
  */
 declare function isBlockrunWebSearchDisabled(config?: unknown): boolean;
-/**
- * Inject BlockRun models config into OpenClaw config file.
- * This is required because registerProvider() alone doesn't make models available.
- *
- * CRITICAL: This function must be idempotent and handle ALL edge cases:
- * - Config file doesn't exist (create it)
- * - Config file exists but is empty/invalid (reinitialize)
- * - blockrun provider exists but has undefined fields (fix them)
- * - Config exists but uses old port/models (update them)
- *
- * This function is called on EVERY plugin load to ensure config is always correct.
- *
- * Also strips any previously managed `mcp.servers.blockrun` entry we wrote in
- * older releases — ClawRouter no longer bundles the MCP bridge (the npx-spawned
- * grandchildren were leaking). The scrub only removes entries matching the
- * managed shape; user-defined `blockrun` MCP servers are left alone.
- */
 declare function injectModelsConfig(logger: {
     info: (msg: string) => void;
 }, options?: {

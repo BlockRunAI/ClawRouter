@@ -353,6 +353,39 @@ export type WalletResolution = {
   solanaPrivateKeyBytes?: Uint8Array;
 };
 
+/** Warned once per process: this is startup noise, not a per-request condition. */
+let legacyWalletDivergenceWarned = false;
+
+/**
+ * Say so when the wallet that pays is not the wallet the user funded.
+ *
+ * Silent in the ordinary case (no legacy file, or the same key in both), which
+ * is every install that ClawRouter migrated into Core itself.
+ */
+async function warnIfLegacyWalletDiffers(coreAddress: string): Promise<void> {
+  if (legacyWalletDivergenceWarned) return;
+  let legacyAddress: string;
+  try {
+    const saved = await loadSavedWallet();
+    if (!saved) return;
+    legacyAddress = privateKeyToAccount(saved as `0x${string}`).address;
+  } catch {
+    return; // an unreadable legacy file is not evidence of a second wallet
+  }
+  if (legacyAddress === coreAddress) return;
+
+  legacyWalletDivergenceWarned = true;
+  console.warn(
+    `[ClawRouter] \u26A0 Two different wallets are configured. Paying from the BlockRun Core wallet ${coreAddress}.`,
+  );
+  console.warn(
+    `[ClawRouter]   ClawRouter's older wallet ${legacyAddress} (${WALLET_FILE}) is NOT being used — if that is the funded one, requests will fail on an empty balance.`,
+  );
+  console.warn(
+    `[ClawRouter]   To keep paying from it: export BLOCKRUN_WALLET_KEY=$(cat ${WALLET_FILE})`,
+  );
+}
+
 /** Resolve configured wallet material without creating any new files. */
 export async function resolveExistingWalletKey(): Promise<WalletResolution | undefined> {
   const coreSolanaKey = await loadCoreSolanaKeyForSelectedChain();
@@ -373,6 +406,24 @@ export async function resolveExistingWalletKey(): Promise<WalletResolution | und
   const core = await loadCoreWallet();
   if (core) {
     const account = privateKeyToAccount(core as `0x${string}`);
+    // Core outranks the legacy file, and `migrateLegacyWalletToCore` copies
+    // legacy into Core only when Core is ABSENT — so in the common case both
+    // hold the same key and the order is invisible. The one case where it is
+    // not: Core was written independently by another BlockRun product while
+    // ClawRouter already had its own funded wallet.key. Payment then moves to
+    // the Core wallet on upgrade, requests start failing on an empty balance,
+    // and the funded wallet sits idle with nothing having announced the switch
+    // (#315).
+    //
+    // Core still wins. Preferring legacy would break the other direction:
+    // Desktop reads ~/.blockrun/.session directly, so it would display and fund
+    // one address while the proxy spent from another — the fund-vs-spend
+    // mismatch that blocked #291. Refusing outright would turn a working install
+    // into a hard failure for anyone legitimately holding two wallets.
+    //
+    // What was actually wrong was the silence. Name both addresses and the
+    // one-line way to keep paying from the old one.
+    await warnIfLegacyWalletDiffers(account.address);
     return {
       key: core,
       address: account.address,
@@ -622,14 +673,37 @@ export async function savePaymentChain(chain: "base" | "solana"): Promise<void> 
  */
 export async function loadPaymentChain(): Promise<"base" | "solana"> {
   const core = await readOptional(CORE_CHAIN_FILE);
-  if (core === "solana") return "solana";
-  if (core === "base") return "base";
   const legacy = await readOptional(CHAIN_FILE);
+  if (core === "solana" || core === "base") {
+    // Same precedence as the wallet, and the same silence it used to keep: a
+    // chain another BlockRun product wrote moves this install to a different
+    // signer and a different gateway, where its USDC may not be (#315). Core
+    // still wins — Desktop reads the Core files directly — but say it.
+    if ((legacy === "solana" || legacy === "base") && legacy !== core) {
+      warnChainOverride(core, legacy);
+    }
+    return core;
+  }
   if (legacy === "solana") return "solana";
   if (legacy === "base") return "base";
   // No selection recorded anywhere. Prefer Solana unless a wallet predates the
   // preference, in which case its funds decide.
   return (await hasExistingWallet()) ? "base" : "solana";
+}
+
+/** Warned once per process, like the wallet divergence it mirrors. */
+let chainOverrideWarned = false;
+
+function warnChainOverride(core: string, legacy: string): void {
+  if (chainOverrideWarned) return;
+  chainOverrideWarned = true;
+  console.warn(
+    `[ClawRouter] \u26A0 Payment chain is ${core} (from ${CORE_CHAIN_FILE}), overriding this install's saved ${legacy}.`,
+  );
+  console.warn(
+    `[ClawRouter]   A different chain means a different signer and gateway — funds on ${legacy} will not be spendable.`,
+  );
+  console.warn(`[ClawRouter]   To go back: npx @blockrun/clawrouter wallet ${legacy}`);
 }
 
 /**

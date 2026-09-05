@@ -32378,6 +32378,40 @@ function registerSpendPolicyHook(x402, control) {
     }
   });
 }
+function settledChargeUsd(response) {
+  const raw = response.headers.get("x-blockrun-cost-usd");
+  if (raw === null) return void 0;
+  const trimmed = raw.trim();
+  if (trimmed === "") return void 0;
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value >= 0 ? value : void 0;
+}
+function withSpendPolicy(inner, control, consumeEstimateUsd) {
+  return async (input, init2) => {
+    const published = consumeEstimateUsd();
+    if (published === void 0 || !control.hasAmountLimits()) return inner(input, init2);
+    const estimate = Number.isFinite(published) && published > 0 ? published : 0;
+    const result = control.checkAmount(estimate);
+    if (!result.allowed) {
+      throw new SpendPolicyError(result.reason ?? "blocked by spend policy", {
+        blockedBy: result.blockedBy
+      });
+    }
+    const reservationId = control.hasAggregateLimits() ? control.reserve(estimate) : void 0;
+    let response;
+    try {
+      response = await inner(input, init2);
+    } catch (err) {
+      if (reservationId !== void 0) control.releaseReservation(reservationId);
+      throw err;
+    }
+    const settled = settledChargeUsd(response);
+    const charged = response.ok ? settled ?? estimate : settled ?? 0;
+    if (reservationId !== void 0) control.releaseReservation(reservationId);
+    if (charged > 0) control.record(charged, { action: "BlockRun account charge" });
+    return response;
+  };
+}
 function formatDuration(seconds) {
   if (seconds < 60) {
     return `${seconds}s`;
@@ -32706,6 +32740,29 @@ var init_spend_control = __esm({
               reason: `Asset is not in the configured allowlist: ${counterparty.asset}`
             };
           }
+        }
+        return this.checkAmount(estimatedCost2);
+      }
+      /**
+       * The amount windows alone, with no counterparty to inspect.
+       *
+       * `perRequest` / `hourly` / `daily` / `session` are denominated in USD and
+       * say nothing about how the money moves, so they are the part of the policy
+       * that means the same thing on the API-key rail as on the wallet rail — a
+       * daily cap is as sensible against account credit as against USDC, and both
+       * are read from the same `spending.json` (#329). The counterparty lists are
+       * the part that does NOT translate: `blockedPayees`, `allowedPayees`,
+       * `blockedNetworks` and `allowedAssets` presuppose a payee, a network and an
+       * asset, and on the key rail there is one counterparty and no on-chain asset.
+       * They are vacuous there rather than missing, which is why `check()` layers
+       * them on top of this instead of the other way round.
+       */
+      checkAmount(estimatedCost2) {
+        if (this.policyFileBroken !== void 0) {
+          return {
+            allowed: false,
+            reason: `Spend policy is unreadable, refusing all payments: ${this.policyFileBroken}`
+          };
         }
         const now2 = this.now();
         if (this.limits.perRequest !== void 0) {
@@ -59882,6 +59939,28 @@ Then run: npx @blockrun/clawrouter`
     solanaPrivateKeyBytes
   };
 }
+async function warnIfLegacyWalletDiffers(coreAddress) {
+  if (legacyWalletDivergenceWarned) return;
+  let legacyAddress;
+  try {
+    const saved = await loadSavedWallet();
+    if (!saved) return;
+    legacyAddress = privateKeyToAccount(saved).address;
+  } catch {
+    return;
+  }
+  if (legacyAddress === coreAddress) return;
+  legacyWalletDivergenceWarned = true;
+  console.warn(
+    `[ClawRouter] \u26A0 Two different wallets are configured. Paying from the BlockRun Core wallet ${coreAddress}.`
+  );
+  console.warn(
+    `[ClawRouter]   ClawRouter's older wallet ${legacyAddress} (${WALLET_FILE}) is NOT being used \u2014 if that is the funded one, requests will fail on an empty balance.`
+  );
+  console.warn(
+    `[ClawRouter]   To keep paying from it: export BLOCKRUN_WALLET_KEY=$(cat ${WALLET_FILE})`
+  );
+}
 async function resolveExistingWalletKey() {
   const coreSolanaKey = await loadCoreSolanaKeyForSelectedChain();
   const envKey = process["env"].BLOCKRUN_WALLET_KEY;
@@ -59897,6 +59976,7 @@ async function resolveExistingWalletKey() {
   const core = await loadCoreWallet();
   if (core) {
     const account = privateKeyToAccount(core);
+    await warnIfLegacyWalletDiffers(account.address);
     return {
       key: core,
       address: account.address,
@@ -60064,12 +60144,27 @@ async function savePaymentChain(chain3) {
 }
 async function loadPaymentChain() {
   const core = await readOptional(CORE_CHAIN_FILE);
-  if (core === "solana") return "solana";
-  if (core === "base") return "base";
   const legacy = await readOptional(CHAIN_FILE);
+  if (core === "solana" || core === "base") {
+    if ((legacy === "solana" || legacy === "base") && legacy !== core) {
+      warnChainOverride(core, legacy);
+    }
+    return core;
+  }
   if (legacy === "solana") return "solana";
   if (legacy === "base") return "base";
   return await hasExistingWallet() ? "base" : "solana";
+}
+function warnChainOverride(core, legacy) {
+  if (chainOverrideWarned) return;
+  chainOverrideWarned = true;
+  console.warn(
+    `[ClawRouter] \u26A0 Payment chain is ${core} (from ${CORE_CHAIN_FILE}), overriding this install's saved ${legacy}.`
+  );
+  console.warn(
+    `[ClawRouter]   A different chain means a different signer and gateway \u2014 funds on ${legacy} will not be spendable.`
+  );
+  console.warn(`[ClawRouter]   To go back: npx @blockrun/clawrouter wallet ${legacy}`);
 }
 async function hasExistingWallet() {
   if (process["env"].BLOCKRUN_WALLET_KEY?.trim()) return true;
@@ -60084,7 +60179,7 @@ async function resolvePaymentChain() {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "base") return "base";
   return loadPaymentChain();
 }
-var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE, CORE_WALLET_DIR, CORE_WALLET_FILE, CORE_SOLANA_WALLET_FILE, CORE_CHAIN_FILE;
+var WALLET_DIR2, WALLET_FILE, MNEMONIC_FILE, CHAIN_FILE, CORE_WALLET_DIR, CORE_WALLET_FILE, CORE_SOLANA_WALLET_FILE, CORE_CHAIN_FILE, legacyWalletDivergenceWarned, chainOverrideWarned;
 var init_auth = __esm({
   "src/auth.ts"() {
     "use strict";
@@ -60100,6 +60195,8 @@ var init_auth = __esm({
     CORE_WALLET_FILE = join7(CORE_WALLET_DIR, ".session");
     CORE_SOLANA_WALLET_FILE = join7(CORE_WALLET_DIR, ".solana-session");
     CORE_CHAIN_FILE = join7(CORE_WALLET_DIR, ".chain");
+    legacyWalletDivergenceWarned = false;
+    chainOverrideWarned = false;
   }
 });
 
@@ -91608,6 +91705,10 @@ function settledMediaCostUsd(upstream, body, x402AmountUsd, estimate) {
   if (typeof x402AmountUsd === "number" && x402AmountUsd > 0) return x402AmountUsd;
   return estimate;
 }
+function publishDispatchCost(usd2) {
+  const store = paymentStore.getStore();
+  if (store) store.estimatedUsd = Number.isFinite(usd2) && usd2 > 0 ? usd2 : 0;
+}
 function noteRemainingCredit(response) {
   const remaining = gatewayRemainingCreditUsd(response);
   if (remaining === void 0) return;
@@ -91657,6 +91758,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   res.on("close", () => {
     if (!res.writableEnded) clientAbort.abort();
   });
+  publishDispatchCost(0);
   const upstream = await payFetch(upstreamUrl, {
     method: req.method ?? "POST",
     headers,
@@ -91766,17 +91868,48 @@ function warnIfSpendLimitsUnenforced(spendControl) {
   let configured;
   try {
     const limits = (spendControl ?? new SpendControl()).getStatus().limits;
-    configured = ["perRequest", "hourly", "daily", "session"].filter((window2) => typeof limits[window2] === "number").map((window2) => `${window2}=$${limits[window2].toFixed(2)}`);
+    configured = POLICY_LISTS.filter((list) => (limits[list]?.length ?? 0) > 0);
   } catch {
     return;
   }
   if (configured.length === 0) return;
   console.warn(
-    `[ClawRouter] \u26A0 Spend limits (${configured.join(", ")}) are NOT enforced in API-key mode \u2014 they gate x402 signing, and nothing is signed here.`
+    `[ClawRouter] \u26A0 Counterparty policy (${configured.join(", ")}) does not apply in API-key mode \u2014 there is one counterparty and no on-chain asset.`
   );
   console.warn(
-    `[ClawRouter]   Your BlockRun account balance is the cap instead. Use maxCostPerRun for a per-session limit that still applies.`
+    `[ClawRouter]   Your perRequest/hourly/daily/session limits DO apply here and are enforced per call.`
   );
+}
+function assertExistingProxyBillsUs(existing, requested) {
+  const { listenPort } = requested;
+  const describe = (mode) => mode === "api-key" ? "a BlockRun API key" : "a wallet";
+  if (existing.authMode !== requested.authMode) {
+    throw new Error(
+      `Existing proxy on port ${listenPort} is authenticating with ${describe(existing.authMode)} but ${describe(requested.authMode)} was requested. Stop the existing proxy first or use a different port.`
+    );
+  }
+  if (requested.authMode === "api-key") {
+    if (existing.apiKeyLabel !== requested.apiKeyLabel) {
+      throw new Error(
+        `Existing proxy on port ${listenPort} is billing ${existing.apiKeyLabel ?? "an unidentified BlockRun account"}, but this process is configured for ${requested.apiKeyLabel}. Reusing it would charge the other account. Stop that proxy first, or use a different port.`
+      );
+    }
+    return;
+  }
+  if (existing.paymentChain) {
+    if (existing.paymentChain !== requested.paymentChain) {
+      throw new Error(
+        `Existing proxy on port ${listenPort} is using ${existing.paymentChain} but ${requested.paymentChain} was requested. Stop the existing proxy first or use a different port.`
+      );
+    }
+  } else if (requested.paymentChain !== "base") {
+    console.warn(
+      `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`
+    );
+    throw new Error(
+      `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${requested.paymentChain} was requested. Stop the existing proxy first or use a different port.`
+    );
+  }
 }
 async function startProxy(options) {
   const upstreamProxy = await applyUpstreamProxy(options.upstreamProxy);
@@ -91818,28 +91951,23 @@ async function startProxy(options) {
   void loadGatewayCatalog(apiBase, apiKey);
   const listenPort = options.port ?? getProxyPort();
   const existingProxy = options.allowExistingProxy === false ? void 0 : await checkExistingProxy(listenPort);
+  const ourApiKeyLabel = apiKey ? maskApiKey(apiKey) : void 0;
   if (existingProxy) {
     const baseUrl2 = `http://127.0.0.1:${listenPort}`;
-    if (existingProxy.authMode !== authMode) {
-      throw new Error(
-        `Existing proxy on port ${listenPort} is authenticating with ${existingProxy.authMode === "api-key" ? "a BlockRun API key" : "a wallet"} but ${authMode === "api-key" ? "an API key" : "a wallet"} was requested. Stop the existing proxy first or use a different port.`
-      );
-    }
+    assertExistingProxyBillsUs(existingProxy, {
+      listenPort,
+      authMode,
+      apiKeyLabel: ourApiKeyLabel,
+      paymentChain
+    });
     if (authMode === "api-key") {
-      const runningLabel = existingProxy.apiKeyLabel;
-      const ourLabel = maskApiKey(apiKey);
-      if (runningLabel !== ourLabel) {
-        throw new Error(
-          `Existing proxy on port ${listenPort} is billing ${runningLabel ?? "an unidentified BlockRun account"}, but this process is configured for ${ourLabel}. Reusing it would charge the other account. Stop that proxy first, or use a different port.`
-        );
-      }
       options.onReady?.(listenPort);
       return {
         port: listenPort,
         baseUrl: baseUrl2,
         walletAddress: "",
         authMode,
-        apiKeyLabel: ourLabel,
+        apiKeyLabel: ourApiKeyLabel,
         balanceMonitor: new ApiKeyBalanceMonitor(),
         // No-op: we didn't start this proxy, so we shouldn't close it
         close: async () => {
@@ -91850,20 +91978,6 @@ async function startProxy(options) {
     if (existingProxy.wallet !== account2.address) {
       console.warn(
         `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account2.address}. Reusing existing proxy.`
-      );
-    }
-    if (existingProxy.paymentChain) {
-      if (existingProxy.paymentChain !== paymentChain) {
-        throw new Error(
-          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`
-        );
-      }
-    } else if (paymentChain !== "base") {
-      console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`
-      );
-      throw new Error(
-        `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`
       );
     }
     let reuseSolanaAddress;
@@ -91935,7 +92049,16 @@ async function startProxy(options) {
     if (store) store.amountUsd = amountUsd;
     console.log(`[ClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsd.toFixed(6)}`);
   });
-  const payFetch = authMode === "api-key" ? createApiKeyFetch(apiKey, fetch, apiBase) : createPayFetchWithPreAuth(fetch, x402, void 0, {
+  const payFetch = authMode === "api-key" ? withSpendPolicy(
+    createApiKeyFetch(apiKey, fetch, apiBase),
+    options.spendControl ?? getSharedSpendControl(),
+    () => {
+      const store = paymentStore.getStore();
+      const published = store?.estimatedUsd;
+      if (store) store.estimatedUsd = void 0;
+      return published;
+    }
+  ) : createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana",
     // Per-request cost estimate so pre-auth is only reused when the cached
     // payment still covers the (possibly larger) request — BlockRun prices per
@@ -92318,6 +92441,7 @@ async function startProxy(options) {
         } catch {
         }
         try {
+          publishDispatchCost(imgCost);
           const upstream = await payFetch(`${apiBase}/v1/images/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -92516,6 +92640,7 @@ async function startProxy(options) {
           return;
         }
         try {
+          publishDispatchCost(img2imgCost);
           let upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -92619,6 +92744,7 @@ async function startProxy(options) {
         } catch {
         }
         try {
+          publishDispatchCost(0.15);
           let upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -92718,6 +92844,7 @@ async function startProxy(options) {
         } catch {
         }
         try {
+          publishDispatchCost(estimateVideoCost(videoModel, videoDuration, videoHasImageInput));
           const submitResp = await payFetch(`${apiBase}/v1/videos/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -93002,11 +93129,7 @@ async function startProxy(options) {
           const existingProxy2 = await checkExistingProxy(listenPort);
           if (existingProxy2) {
             console.log(`[ClawRouter] Existing proxy detected on port ${listenPort}, reusing`);
-            rejectAttempt({
-              code: "REUSE_EXISTING",
-              wallet: existingProxy2.wallet,
-              existingChain: existingProxy2.paymentChain
-            });
+            rejectAttempt({ code: "REUSE_EXISTING", existing: existingProxy2 });
             return;
           }
           if (attempt < PORT_RETRY_ATTEMPTS) {
@@ -93038,21 +93161,21 @@ async function startProxy(options) {
       break;
     } catch (err) {
       const error = err;
-      if (error.code === "REUSE_EXISTING" && error.wallet) {
-        if (error.existingChain && error.existingChain !== paymentChain) {
-          throw new Error(
-            `Existing proxy on port ${listenPort} is using ${error.existingChain} but ${paymentChain} was requested. Stop the existing proxy first or use a different port.`,
-            { cause: err }
-          );
-        }
+      if (error.code === "REUSE_EXISTING" && error.existing) {
+        assertExistingProxyBillsUs(error.existing, {
+          listenPort,
+          authMode,
+          apiKeyLabel: ourApiKeyLabel,
+          paymentChain
+        });
         const baseUrl2 = `http://127.0.0.1:${listenPort}`;
         options.onReady?.(listenPort);
         return {
           port: listenPort,
           baseUrl: baseUrl2,
-          walletAddress: error.wallet,
+          walletAddress: error.existing.wallet,
           authMode,
-          ...apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {},
+          ...ourApiKeyLabel ? { apiKeyLabel: ourApiKeyLabel } : {},
           balanceMonitor,
           close: async () => {
           }
@@ -93517,6 +93640,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             size: imageSize,
             n: 1
           });
+          publishDispatchCost(estimateImageCost(imageModel, imageSize, 1));
           const imageResponse = await payFetch(imageUpstreamUrl, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -93798,6 +93922,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
             size: img2imgSize,
             n: 1
           });
+          publishDispatchCost(estimateImageCost(img2imgModel, img2imgSize, 1));
           const img2imgResponse = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
@@ -94627,6 +94752,8 @@ data: [DONE]
         throw abortError();
       }
       console.log(`[ClawRouter] Trying model ${i + 1}/${modelsToTry.length}: ${tryModel}`);
+      const attemptEst = FREE_MODELS.has(tryModel) ? void 0 : estimateAmount(tryModel, body.length, maxTokens);
+      publishDispatchCost(attemptEst ? Number(attemptEst) / 1e6 : 0);
       const perAttemptTimeoutMs = timeoutForModel(tryModel);
       const modelController = new AbortController();
       const modelTimeoutId = setTimeout(() => modelController.abort(), perAttemptTimeoutMs);
@@ -94726,6 +94853,7 @@ data: [DONE]
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
         if (!globalController.signal.aborted) {
+          publishDispatchCost(attemptEst ? Number(attemptEst) / 1e6 : 0);
           const retryController = new AbortController();
           const retryTimeoutId = setTimeout(
             () => retryController.abort(),
@@ -94788,6 +94916,7 @@ data: [DONE]
             );
             await new Promise((resolve) => setTimeout(resolve, 200));
             if (!globalController.signal.aborted) {
+              publishDispatchCost(attemptEst ? Number(attemptEst) / 1e6 : 0);
               const retryController = new AbortController();
               const retryTimeoutId = setTimeout(
                 () => retryController.abort(),
@@ -228566,6 +228695,19 @@ function isBlockrunWebSearchDisabled(config) {
   const cfg = config ?? {};
   return cfg.tools?.web?.search?.enabled === false;
 }
+function legacyPackageIsBlockRun() {
+  for (const dir of [
+    join18(homedir15(), ".openclaw", "extensions", "clawrouter"),
+    join18(homedir15(), ".openclaw", "npm", "node_modules", "@blockrun", "clawrouter")
+  ]) {
+    try {
+      const metadata = JSON.parse(readTextFileSync(join18(dir, "package.json")));
+      if (metadata.name === "@blockrun/clawrouter") return true;
+    } catch {
+    }
+  }
+  return false;
+}
 function injectModelsConfig(logger48, options = {}) {
   const configDir = join18(homedir15(), ".openclaw");
   const configPath = join18(configDir, "openclaw.json");
@@ -228729,9 +228871,9 @@ function injectModelsConfig(logger48, options = {}) {
   const legacyEntry = config.plugins?.entries?.clawrouter;
   const legacyEntryConfig = legacyEntry?.config;
   const legacyBlockRunInstall = Boolean(
-    legacyEntry && ["walletKey", "routing"].some(
+    legacyEntry && (["walletKey", "routing"].some(
       (key2) => key2 in legacyEntry || (legacyEntryConfig ? key2 in legacyEntryConfig : false)
-    )
+    ) || legacyPackageIsBlockRun())
   );
   if (legacyBlockRunInstall && prepareBlockRunPluginConfig(config, { legacyBlockRunInstall })) {
     needsWrite = true;
