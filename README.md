@@ -444,11 +444,19 @@ Surf is BlockRun's unified crypto data API — **84 endpoints across 13 domains*
 
 ClawRouter ships Surf as a **skill, not as typed wrappers**. The proxy whitelists `/v1/surf/*` so any call through the local proxy is paid x402 from the same wallet; the agent reads `skills/surf/SKILL.md` for the endpoint catalog and crafts the HTTP call. No `blockrun_surf_*` tool definitions to maintain; a new Surf endpoint requires zero ClawRouter release.
 
-| Tier |       Cost | Examples                                                      |
-| ---- | ---------: | ------------------------------------------------------------- |
-| 1    | **$0.001** | prices, rankings, lists, news                                 |
-| 2    | **$0.005** | orderbooks, candles, search, wallet details, social mindshare |
-| 3    | **$0.020** | on-chain SQL / query / schema, chat completions               |
+**Flat per-call pricing** — every Surf endpoint costs the same. The old
+$0.001/$0.005/$0.020 tiers no longer apply; upstream prices all three tiers
+identically, and the tier now describes only endpoint weight.
+
+| Rail                        | Price per call                     |
+| --------------------------- | ---------------------------------- |
+| API key (`api.blockrun.ai`) | **$0.0075** (base rate, no tx fee) |
+| Wallet — Solana             | **$0.0075**                        |
+| Wallet — Base               | **$0.0085**                        |
+
+Measured 2026-09-05: the API-key rate from the account ledger, the wallet rates
+from the x402 challenge, which quotes the price before anything is signed. On the
+wallet rail that quote is always authoritative.
 
 **Usage (HTTP):**
 

@@ -26,11 +26,27 @@ license: MIT
 
 Surf bundles **83 endpoints across 12 domains** into one paid HTTP API. ClawRouter exposes them at `http://127.0.0.1:8402/v1/surf/*`, paid the same way ClawRouter pays for LLM calls — an x402 USDC micropayment from the local wallet, or a draw on BlockRun account credit if an API key is configured (verified working on both, 2026-09-05). **No Surf account and no Surf API key either way.** Upstream lives at `api.asksurf.ai/gateway/v1` — ClawRouter forwards transparently.
 
-**Pricing tiers (per call):**
+**Pricing — flat per call, the same for every endpoint.**
 
-- **Tier 1 — $0.001** — prices, rankings, lists, news, simple reads
-- **Tier 2 — $0.005** — orderbooks, candles, search, wallet details, social
-- **Tier 3 — $0.020** — on-chain SQL queries, structured queries, schema introspection
+Surf used to be tiered at $0.001 / $0.005 / $0.020. It is not any more: upstream
+now prices all three tiers identically (`SURF_TIER_{1,2,3}_PRICE` are equal). The
+`Tier` column in the catalog below still describes endpoint weight, but it no
+longer affects what you pay. Anything quoting the old tier prices is stale.
+
+| Rail                        | Price per call                              |
+| --------------------------- | ------------------------------------------- |
+| API key (`api.blockrun.ai`) | **$0.0075** — base rate, no transaction fee |
+| Wallet, Solana              | **$0.0075**                                 |
+| Wallet, Base                | **$0.0085**                                 |
+
+Verified 2026-09-05 by measurement, not from a price page: the API-key figure by
+diffing the account ledger across one call, the wallet figures by reading the
+`amount` in the x402 402 challenge, which quotes the price before anything is
+signed. Base and Solana genuinely differ for the same endpoint.
+
+**The 402 quote is always authoritative.** On the wallet rail the price arrives
+in the challenge before you pay, so if this table ever disagrees with it, believe
+the challenge and treat the table as stale.
 
 > The legacy **surf-1.5 chat** surface is intentionally NOT exposed yet — it's held until per-token settlement is wired. Trying `/v1/surf/chat/completions` returns 404 ("Unknown Surf endpoint"), no payment is taken.
 
