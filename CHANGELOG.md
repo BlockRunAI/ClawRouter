@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Fixed — the wallet rails never said which gateway they were using
+
+Three rails, three gateways: an API key goes to `api.blockrun.ai`, a Solana wallet to `sol.blockrun.ai`, a Base wallet to `blockrun.ai`. Only two of them said so. `/health` reported `gateway` in API-key mode only, and startup logged the chain for Solana but printed nothing at all for Base — so the default rail was the one that never announced itself.
+
+Which gateway a request went to is the single most useful fact when a paid call fails, and its absence cost a round trip on every report that needed it. All three now name it, in both `/health` and the startup log.
+
 ## v0.12.274 — September 5, 2026
 
 ### Fixed — `clawrouter policy` spend limits now hold on the API-key rail

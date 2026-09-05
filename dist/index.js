@@ -91700,6 +91700,8 @@ async function startProxy(options) {
     console.warn(`[ClawRouter]   or run "npx @blockrun/clawrouter chain base" to switch to EVM.`);
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
+  } else {
+    console.log(`[ClawRouter] Payment chain: Base (${apiBase})`);
   }
   void loadGatewayCatalog(apiBase, apiKey);
   const listenPort = options.port ?? getProxyPort();
@@ -91876,6 +91878,7 @@ async function startProxy(options) {
         } else {
           response.wallet = account.address;
           response.paymentChain = paymentChain;
+          response.gateway = apiBase;
           if (solanaAddress) {
             response.solana = solanaAddress;
           }

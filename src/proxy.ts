@@ -2701,6 +2701,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.warn(`[ClawRouter]   or run "npx @blockrun/clawrouter chain base" to switch to EVM.`);
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
+  } else {
+    // Base said nothing, so the one rail that never announced itself was also
+    // the default. Three rails, three gateways — each should say which.
+    console.log(`[ClawRouter] Payment chain: Base (${apiBase})`);
   }
 
   // Learn which models THIS chain's gateway serves, so the free cascade can skip
@@ -2986,6 +2990,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         } else {
           response.wallet = account!.address;
           response.paymentChain = paymentChain;
+          // Name the gateway on the wallet rails too. It was reported only in
+          // API-key mode, so a wallet user could not tell from /health whether
+          // they were pointed at blockrun.ai or sol.blockrun.ai — the single
+          // most useful fact when a paid call fails, and the one missing from
+          // every report that took a round trip to diagnose.
+          response.gateway = apiBase;
           if (solanaAddress) {
             response.solana = solanaAddress;
           }
