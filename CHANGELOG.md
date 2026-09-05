@@ -4,6 +4,26 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Added — warn before the account credit runs out, not after
+
+A card-paying user had no warning at all: the first sign of trouble was a call failing with `402`, while wallet users have had a live balance all along. BlockRun now publishes `x-blockrun-credit-remaining-usd`, and ClawRouter warns once when it drops to $1.00 or below — the same threshold the wallet rail uses — re-arming after a top-up so the next drop is reported too. Once per crossing, not once per call, so a busy agent does not get the same line on every request.
+
+Two properties of the header decide whether it is safe to act on, and both are honoured. **Absent means "nothing to report", never zero**: the gateway omits it entirely on ungated accounts, which have no allowance to run down, so reading absence as `0` would announce "credit exhausted" at an account with no limit at all. A genuine zero balance is written `0.000000`, and the parser keeps the two distinguishable by returning `number | undefined`. The figure is also derived net of every concurrent in-flight hold, so it can understate what is left but never overstate it — for a warning that is the right error direction.
+
+`Number("")` is `0`, not `NaN`, so an empty header value would otherwise parse as a settled zero. Empty, malformed and negative all read as absent.
+
+### Fixed — "the 402 quote is always authoritative" was wrong across rails
+
+A heading in `skills/surf/SKILL.md` said a 402 quote is _always_ authoritative. The paragraph under it scoped that to the wallet rail; the heading did not, and a heading is what an agent skims. The API-key rail issues no 402 at all, and a wallet-rail quote includes the chain transaction fee that account credit does not pay — so carrying a Base 402 across quotes $0.0085 for something billed $0.0075. That mistake was made for real by another BlockRun client the same day.
+
+Now scoped: authoritative **for the rail that issued it, and only that rail**, with an explicit warning against reading one rail's quote as the other's price.
+
+Both files also now state that the Base/Solana Surf difference is deliberate — the $0.001 is Base's transaction fee and Solana omitting it is a migration incentive. Solana being _cheaper_ is expected; Solana priced **above** Base would be the bug worth reporting, since estimates generally assume the Base figure is the ceiling. Two sessions filed the spread as a defect before it was written down.
+
+---
+
 ## v0.12.271 — September 5, 2026
 
 ### Fixed — every paid Solana call failed on hosts that cannot reach the public Solana RPC

@@ -91499,6 +91499,28 @@ function blockrunRequestId(response) {
   }
   return void 0;
 }
+function gatewayRemainingCreditUsd(response) {
+  const raw = response?.headers.get("x-blockrun-credit-remaining-usd");
+  if (raw === null || raw === void 0) return void 0;
+  const trimmed = raw.trim();
+  if (trimmed === "") return void 0;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return void 0;
+  return value;
+}
+function noteRemainingCredit(response) {
+  const remaining = gatewayRemainingCreditUsd(response);
+  if (remaining === void 0) return;
+  if (remaining > LOW_CREDIT_USD) {
+    lowCreditWarned = false;
+    return;
+  }
+  if (lowCreditWarned) return;
+  lowCreditWarned = true;
+  console.warn(
+    remaining <= 0 ? `[ClawRouter] \u26A0 BlockRun account credit is exhausted \u2014 calls will fail with 402. Top up: ${PORTAL_CREDITS_URL}` : `[ClawRouter] \u26A0 BlockRun account credit low: $${remaining.toFixed(2)} remaining. Top up: ${PORTAL_CREDITS_URL}`
+  );
+}
 function gatewaySettledCostUsd(response) {
   const raw = response?.headers.get("x-blockrun-cost-usd");
   if (raw === null || raw === void 0) return void 0;
@@ -91557,6 +91579,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   res.end();
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] ${requestLabel} response: ${upstream.status} (${latencyMs}ms)`);
+  noteRemainingCredit(upstream);
   const settledCostUsd = gatewaySettledCostUsd(upstream);
   const paidAmount = settledCostUsd ?? getActualPaymentUsd();
   const requestCost = settledCostUsd !== void 0 ? settledCostUsd : resolvePhoneTelemetryCost({
@@ -94686,6 +94709,7 @@ data: [DONE]
       }
     }
     upstreamRequestId = blockrunRequestId(upstream);
+    noteRemainingCredit(upstream);
     if (!upstream) {
       const attemptSummary = failedAttempts.length > 0 ? failedAttempts.map((a) => `${a.model} (${a.reason})`).join(", ") : "unknown";
       const structuredMessage = failedAttempts.length > 0 ? `All ${failedAttempts.length} models failed. Tried: ${attemptSummary}` : "All models in fallback chain failed";
@@ -95226,7 +95250,7 @@ data: [DONE]
     });
   }
 }
-var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, DESKTOP_SERVICE_TOKEN_FILE, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, gatewayModelIds, FREE_MODEL, FREE_UPSTREAM_OVERRIDES, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, GATEWAY_CATALOG_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING;
+var paymentStore, BLOCKRUN_API, BLOCKRUN_SOLANA_API, DESKTOP_SERVICE_TOKEN_FILE, IMAGE_DIR, AUDIO_DIR, VIDEO_DIR, AUTO_MODEL, ROUTING_PROFILES, FREE_MODELS, gatewayModelIds, FREE_MODEL, FREE_UPSTREAM_OVERRIDES, MAX_MESSAGES, CONTEXT_LIMIT_KB, HEARTBEAT_INTERVAL_MS, BALANCE_CHECK_TIMEOUT_MS, GATEWAY_CATALOG_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, PER_MODEL_TIMEOUT_MS, REASONING_MODEL_TIMEOUT_MS, REASONING_MODEL_IDS, MAX_FALLBACK_ATTEMPTS, HEALTH_CHECK_TIMEOUT_MS, RATE_LIMIT_COOLDOWN_MS, OVERLOAD_COOLDOWN_MS, PORT_RETRY_ATTEMPTS, PORT_RETRY_DELAY_MS, MODEL_BODY_READ_TIMEOUT_MS, ERROR_BODY_READ_TIMEOUT_MS, ClientDisconnectedError, rateLimitedModels, overloadedModels, perProviderErrors, BALANCE_CHECK_BUFFER, BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP, PROVIDER_ERROR_PATTERNS, DEGRADED_RESPONSE_PATTERNS, DEGRADED_LOOP_PATTERNS, VALID_ROLES, ROLE_MAPPINGS, VALID_TOOL_ID_PATTERN, KIMI_BLOCK_RE, KIMI_TOKEN_RE, THINKING_TAG_RE, THINKING_BLOCK_RE, BLOCKRUN_MODEL_BY_ID, IMAGE_PRICING, IMAGE_MODEL_IDS, IMAGE_MODEL_SIZES, IMAGE_MODEL_ALIASES, VIDEO_PRICING, PHONE_PRICING, LOW_CREDIT_USD, lowCreditWarned;
 var init_proxy = __esm({
   "src/proxy.ts"() {
     "use strict";
@@ -95488,6 +95512,8 @@ var init_proxy = __esm({
       "phone/numbers/release": 0,
       "voice/call": 0.54
     };
+    LOW_CREDIT_USD = 1;
+    lowCreditWarned = false;
   }
 });
 

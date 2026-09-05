@@ -455,8 +455,11 @@ identically, and the tier now describes only endpoint weight.
 | Wallet — Base               | **$0.0085**                        |
 
 Measured 2026-09-05: the API-key rate from the account ledger, the wallet rates
-from the x402 challenge, which quotes the price before anything is signed. On the
-wallet rail that quote is always authoritative.
+from the x402 challenge, which quotes the price before anything is signed. That
+quote is authoritative for the rail that issued it — the key rail issues no 402,
+and the wallet quote includes a transaction fee account credit does not pay, so
+the two are not interchangeable. Solana being cheaper than Base is deliberate
+(the $0.001 is Base's transaction fee), not drift.
 
 **Usage (HTTP):**
 

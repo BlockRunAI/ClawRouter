@@ -2119,6 +2119,60 @@ function blockrunRequestId(response: Response | undefined): string | undefined {
 }
 
 /**
+ * Remaining account credit, from `x-blockrun-credit-remaining-usd`.
+ *
+ * Same contract as the cost header: absent means "nothing to report", never
+ * zero. The gateway omits it entirely on ungated accounts — which have no
+ * allowance to run down — and a genuine zero balance is written "0.000000". A
+ * client that read absence as 0 would refuse to call on behalf of an account
+ * with no limit at all, which is the failure this header exists to prevent,
+ * inverted. So this returns `number | undefined`, like its sibling.
+ *
+ * The gateway derives it net of every concurrent in-flight hold, so it can
+ * understate what is left but never overstate it. For a warning that is the
+ * right error direction: warn slightly early under concurrency, never too late.
+ */
+function gatewayRemainingCreditUsd(response: Response | undefined): number | undefined {
+  const raw = response?.headers.get("x-blockrun-credit-remaining-usd");
+  if (raw === null || raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined; // Number("") is 0, not NaN
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return undefined;
+  return value;
+}
+
+/** $1.00, matching the wallet rail's low-balance threshold. */
+const LOW_CREDIT_USD = 1.0;
+/** Warn on a threshold crossing, not per call; re-arms when credit goes back up. */
+let lowCreditWarned = false;
+
+/**
+ * Warn before the account runs out, rather than after.
+ *
+ * Until the gateway published a remaining figure a card-paying user had no
+ * warning at all: the first sign of trouble was a request failing with 402.
+ * Wallet users have had a live balance all along. Fires once per crossing so a
+ * busy agent does not get the same line on every call, and re-arms after a
+ * top-up so the next drop is reported.
+ */
+function noteRemainingCredit(response: Response | undefined): void {
+  const remaining = gatewayRemainingCreditUsd(response);
+  if (remaining === undefined) return; // ungated account, or nothing to report
+  if (remaining > LOW_CREDIT_USD) {
+    lowCreditWarned = false;
+    return;
+  }
+  if (lowCreditWarned) return;
+  lowCreditWarned = true;
+  console.warn(
+    remaining <= 0
+      ? `[ClawRouter] ⚠ BlockRun account credit is exhausted — calls will fail with 402. Top up: ${PORTAL_CREDITS_URL}`
+      : `[ClawRouter] ⚠ BlockRun account credit low: $${remaining.toFixed(2)} remaining. Top up: ${PORTAL_CREDITS_URL}`,
+  );
+}
+
+/**
  * The amount BlockRun actually settled for this response, from
  * `x-blockrun-cost-usd`, or undefined when the header is absent.
  *
@@ -2257,6 +2311,7 @@ async function proxyPaidApiRequest(
   // settlement) would be under-counted instead of over-counted.
   //
   // Phone/voice telemetry rules — see resolvePhoneTelemetryCost.
+  noteRemainingCredit(upstream);
   const settledCostUsd = gatewaySettledCostUsd(upstream);
   const paidAmount = settledCostUsd ?? getActualPaymentUsd();
   const requestCost =
@@ -6563,6 +6618,7 @@ async function proxyRequest(
     // Record the answering attempt's gateway id before `upstream` goes out of
     // scope — this is the join key the usage journal needs.
     upstreamRequestId = blockrunRequestId(upstream);
+    noteRemainingCredit(upstream);
 
     // --- Handle case where all models failed ---
     if (!upstream) {

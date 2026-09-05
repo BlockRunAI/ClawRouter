@@ -44,9 +44,20 @@ diffing the account ledger across one call, the wallet figures by reading the
 `amount` in the x402 402 challenge, which quotes the price before anything is
 signed. Base and Solana genuinely differ for the same endpoint.
 
-**The 402 quote is always authoritative.** On the wallet rail the price arrives
-in the challenge before you pay, so if this table ever disagrees with it, believe
-the challenge and treat the table as stale.
+**A 402 quote is authoritative for the rail that issued it — and only that rail.**
+On the wallet rail the price arrives in the challenge before you pay, so if this
+table disagrees with it, believe the challenge and treat the table as stale.
+
+Do NOT carry a wallet-rail 402 figure over to the API-key rail. The key rail
+issues no 402 at all, and the wallet quote includes the chain's transaction fee
+that account credit does not pay — on Base that is $0.0085 quoted against
+$0.0075 actually billed to an account. Reading across rails turns a correct
+number into a wrong one; it has already happened once.
+
+The Base/Solana difference is deliberate, not drift: the $0.001 is the Base
+transaction fee, and Solana omitting it is a migration incentive. Solana being
+cheaper is expected — Solana priced _above_ Base would be the bug worth
+reporting, since estimates generally assume the Base figure is the ceiling.
 
 > The legacy **surf-1.5 chat** surface is intentionally NOT exposed yet — it's held until per-token settlement is wired. Trying `/v1/surf/chat/completions` returns 404 ("Unknown Surf endpoint"), no payment is taken.
 
