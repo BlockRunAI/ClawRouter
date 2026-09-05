@@ -20,7 +20,7 @@ metadata: { "openclaw": { "emoji": "🖼️", "requires": { "config": ["models.p
 
 # Image Generation & Editing
 
-Generate or edit images through ClawRouter. Payment is automatic via x402.
+Generate or edit images through ClawRouter. Payment uses the configured BlockRun API account credit or x402 wallet.
 
 **Shortcuts:**
 

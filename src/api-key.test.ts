@@ -28,6 +28,7 @@ const {
   isValidApiKey,
   maskApiKey,
   createApiKeyFetch,
+  pollApiKeyJob,
   API_KEY_FILE,
   CORE_API_KEY_FILE,
 } = await import("./api-key.js");
@@ -116,18 +117,30 @@ describe("resolveApiKey", () => {
     await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
   });
 
-  it("skips a malformed file rather than sending garbage upstream as a 401", async () => {
+  it("rejects a malformed file instead of switching accounts", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     writeCore("not-a-key");
     writeLegacy(KEY_B);
-    await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
+    await expect(resolveApiKey()).rejects.toThrow(/Invalid API key/);
   });
 
-  it("skips a malformed environment variable", async () => {
+  it("rejects a malformed environment variable instead of switching accounts", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     process.env.BLOCKRUN_API_KEY = "0x" + "ab".repeat(32);
     writeCore(KEY_A);
-    await expect(resolveApiKey()).resolves.toEqual({ key: KEY_A, source: "core" });
+    await expect(resolveApiKey()).rejects.toThrow(/BLOCKRUN_API_KEY/);
+  });
+
+  it.each(["", "   "])("rejects a configured blank env key (%j)", async (value) => {
+    process.env.BLOCKRUN_API_KEY = value;
+    writeCore(KEY_A);
+    await expect(resolveApiKey()).rejects.toThrow(/BLOCKRUN_API_KEY/);
+  });
+
+  it("rejects an empty file instead of selecting another saved key", async () => {
+    writeCore("");
+    writeLegacy(KEY_B);
+    await expect(resolveApiKey()).rejects.toThrow(/Invalid API key/);
   });
 });
 
@@ -299,3 +312,62 @@ describe("createApiKeyFetch", () => {
     expect(wrapped).toBe(html);
   });
 });
+
+it("never forwards an account key to a foreign polling origin", async () => {
+  const base = vi.fn(async () => new Response("{}"));
+  await expect(createApiKeyFetch(KEY_A, base)("https://foreign.example/job")).rejects.toThrow(
+    /origin/,
+  );
+  expect(base).not.toHaveBeenCalled();
+});
+
+it("preserves Request metadata while stripping all wallet credentials and disabling redirects", async () => {
+  const base = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+    async () => new Response("{}"),
+  );
+  const input = new Request("https://api.blockrun.ai/v1/x", {
+    headers: {
+      "x-request-id": "customer-request",
+      "payment-signature": "old-wallet",
+      "x-payment-signature": "old-wallet",
+    },
+  });
+  await createApiKeyFetch(KEY_A, base)(input);
+  const init = base.mock.calls[0][1]!;
+  const headers = new Headers(init.headers);
+  expect(headers.get("x-request-id")).toBe("customer-request");
+  expect(headers.get("payment-signature")).toBeNull();
+  expect(headers.get("x-payment-signature")).toBeNull();
+  expect(init.redirect).toBe("error");
+});
+
+it("consumes queued job responses and returns a readable completed response", async () => {
+  const initial = Response.json({ poll_url: "/v1/audio/generations/job" }, { status: 202 });
+  const queued = Response.json({ status: "queued" }, { status: 202 });
+  const running = Response.json({ status: "in_progress" });
+  const completed = Response.json({ status: "completed", data: [] });
+  const replies = [queued, running, completed];
+  const send = vi.fn(async () => replies.shift()!);
+  const result = await pollApiKeyJob(
+    initial,
+    send,
+    "https://api.blockrun.ai",
+    new AbortController().signal,
+    0,
+  );
+  expect(await result.json()).toEqual({ status: "completed", data: [] });
+  expect(initial.bodyUsed && queued.bodyUsed && running.bodyUsed && completed.bodyUsed).toBe(true);
+  expect(send).toHaveBeenCalledTimes(3);
+});
+
+it.each(["failed", "cancelled", "canceled"])(
+  "stops polling a %s job without resubmitting",
+  async (status) => {
+    const initial = Response.json({ poll_url: "/v1/images/generations/job" }, { status: 202 });
+    const send = vi.fn(async () => Response.json({ status }));
+    await expect(
+      pollApiKeyJob(initial, send, "https://api.blockrun.ai", new AbortController().signal, 0),
+    ).rejects.toThrow(/failed|cancelled/);
+    expect(send).toHaveBeenCalledTimes(1);
+  },
+);

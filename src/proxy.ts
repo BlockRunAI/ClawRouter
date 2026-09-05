@@ -20,14 +20,15 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 // Per-request payment tracking via AsyncLocalStorage (safe for concurrent requests).
 // The x402 onAfterPaymentCreation hook writes the actual payment amount into the
 // request-scoped store, and the logging code reads it after payFetch completes.
 const paymentStore = new AsyncLocalStorage<{ amountUsd: number }>();
-import { finished } from "node:stream";
+import { finished, Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -84,6 +85,8 @@ import {
   BLOCKRUN_API_KEY_API,
   PORTAL_CREDITS_URL,
   createApiKeyFetch,
+  normalizeApiKeyBase,
+  pollApiKeyJob,
   fetchCreditBalance,
   formatCreditBalance,
   isValidApiKey,
@@ -789,9 +792,16 @@ export function getProxyPort(): number {
  * Check if a proxy is already running on the given port.
  * Returns the wallet address if running, undefined otherwise.
  */
-async function checkExistingProxy(
-  port: number,
-): Promise<{ wallet: string; paymentChain?: string; authMode: AuthMode } | undefined> {
+type ExistingProxy = {
+  wallet: string;
+  paymentChain?: string;
+  authMode: AuthMode;
+  apiKeyId?: string;
+  gateway?: string;
+  solana?: string;
+};
+
+async function checkExistingProxy(port: number): Promise<ExistingProxy | undefined> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
@@ -807,13 +817,23 @@ async function checkExistingProxy(
         wallet?: string;
         paymentChain?: string;
         authMode?: string;
+        apiKeyId?: string;
+        gateway?: string;
+        solana?: string;
       };
       // An API-key proxy has no wallet to report, so `wallet` alone can no
       // longer be the liveness signal. Anything that does not name its mode is
       // a pre-v0.12.268 instance, which could only have been a wallet proxy.
       const authMode: AuthMode = data.authMode === "api-key" ? "api-key" : "wallet";
       if (data.status === "ok" && (data.wallet || authMode === "api-key")) {
-        return { wallet: data.wallet ?? "", paymentChain: data.paymentChain, authMode };
+        return {
+          wallet: data.wallet ?? "",
+          paymentChain: data.paymentChain,
+          authMode,
+          apiKeyId: data.apiKeyId,
+          gateway: data.gateway,
+          solana: data.solana,
+        };
       }
     }
     return undefined;
@@ -2137,6 +2157,7 @@ async function proxyPaidApiRequest(
   apiBase: string,
   payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
   getActualPaymentUsd: () => number,
+  accountPassthrough = false,
 ): Promise<void> {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -2209,10 +2230,22 @@ async function proxyPaidApiRequest(
     responseHeaders[key] = value;
   });
 
+  if (accountPassthrough) responseHeaders["cache-control"] = "no-store";
   res.writeHead(upstream.status, responseHeaders);
 
+  // Account streams must be delivered incrementally with backpressure. The
+  // wallet path keeps its existing bounded read behavior.
+  if (accountPassthrough && upstream.body) {
+    await pipeline(
+      Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream<Uint8Array>),
+      res,
+    );
+  } else if (accountPassthrough) {
+    res.end();
+  }
+
   // Stream response body
-  if (upstream.body) {
+  if (!accountPassthrough && upstream.body) {
     const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
     for (const chunk of chunks) {
       safeWrite(res, Buffer.from(chunk));
@@ -2394,7 +2427,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // credential, and a machine that has both (a legacy wallet plus a key the
   // user just added) means "bill my account", not "keep spending my USDC".
   const apiKey = options.apiKey?.trim() || undefined;
-  if (apiKey && !isValidApiKey(apiKey)) {
+  if (options.apiKey !== undefined && !isValidApiKey(apiKey)) {
     throw new Error(
       `BlockRun API key is malformed (expected it to start with "brk_"). Mint one at https://user.blockrun.ai/dashboard/keys`,
     );
@@ -2408,13 +2441,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   // Normalize wallet config: string = EVM-only, object = full resolution
   const walletKey =
-    options.wallet === undefined
+    authMode === "api-key" || options.wallet === undefined
       ? undefined
       : typeof options.wallet === "string"
         ? options.wallet
         : options.wallet.key;
   const solanaPrivateKeyBytes =
-    options.wallet === undefined || typeof options.wallet === "string"
+    authMode === "api-key" || options.wallet === undefined || typeof options.wallet === "string"
       ? undefined
       : options.wallet.solanaPrivateKeyBytes;
 
@@ -2423,13 +2456,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Meaningless in API-key mode (there is no chain to sign on), and reported as
   // undefined there so /health never advertises a rail this proxy cannot use.
   const paymentChain = options.paymentChain ?? (await resolvePaymentChain());
-  const apiBase =
+  const requestedApiBase =
     options.apiBase ??
     (authMode === "api-key"
       ? BLOCKRUN_API_KEY_API
       : paymentChain === "solana" && solanaPrivateKeyBytes
         ? BLOCKRUN_SOLANA_API
         : BLOCKRUN_API);
+  const apiBase = authMode === "api-key" ? normalizeApiKeyBase(requestedApiBase) : requestedApiBase;
   if (authMode === "api-key") {
     console.log(`[ClawRouter] Auth: BlockRun API key ${maskApiKey(apiKey!)} (${apiBase})`);
     console.log(`[ClawRouter] Billing: account credit — top up at ${PORTAL_CREDITS_URL}`);
@@ -2459,6 +2493,39 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Determine port: options.port > env var > default
   const listenPort = options.port ?? getProxyPort();
 
+  // A masked label can collide. Compare a one-way fingerprint of the full key,
+  // plus the gateway, before attaching to any existing billing session.
+  const apiKeyId = apiKey ? createHash("sha256").update(apiKey).digest("hex") : undefined;
+  const validateExistingProxy = async (existing: ExistingProxy): Promise<void> => {
+    const reject = (reason: string): never => {
+      throw new Error(
+        `Existing proxy on port ${listenPort} ${reason}. Stop the existing proxy first or use a different port.`,
+      );
+    };
+    if (existing.authMode !== authMode)
+      reject("uses a different authentication mode than requested");
+    if (authMode === "api-key") {
+      if (!existing.apiKeyId || existing.apiKeyId !== apiKeyId)
+        reject("uses a different or unverifiable API key");
+      if (existing.gateway?.replace(/\/+$/, "") !== apiBase.replace(/\/+$/, ""))
+        reject("uses a different gateway than requested");
+      return;
+    }
+    const expectedWallet = privateKeyToAccount(walletKey as `0x${string}`).address;
+    if (existing.wallet.toLowerCase() !== expectedWallet.toLowerCase())
+      reject("uses a different wallet than requested");
+    if ((existing.paymentChain ?? "base") !== paymentChain)
+      reject(`is using ${existing.paymentChain ?? "base"} but ${paymentChain} was requested`);
+    if (existing.gateway && existing.gateway.replace(/\/+$/, "") !== apiBase.replace(/\/+$/, ""))
+      reject("uses a different gateway than requested");
+    if (paymentChain === "solana" && solanaPrivateKeyBytes) {
+      const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
+      const signer = await createKeyPairSignerFromPrivateKeyBytes(solanaPrivateKeyBytes);
+      if (existing.solana !== signer.address)
+        reject("uses a different or unverifiable Solana wallet");
+    }
+  };
+
   // Check if a proxy is already running on this port
   const existingProxy =
     options.allowExistingProxy === false ? undefined : await checkExistingProxy(listenPort);
@@ -2466,16 +2533,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     // Proxy already running — reuse it instead of failing with EADDRINUSE
     const baseUrl = `http://127.0.0.1:${listenPort}`;
 
-    // Never reuse across credentials. The two modes bill different accounts
-    // from different hosts, so silently attaching to the other one would spend
-    // money the caller did not mean to spend — the same reason a chain
-    // mismatch is fatal below.
-    if (existingProxy.authMode !== authMode) {
-      throw new Error(
-        `Existing proxy on port ${listenPort} is authenticating with ${existingProxy.authMode === "api-key" ? "a BlockRun API key" : "a wallet"} but ${authMode === "api-key" ? "an API key" : "a wallet"} was requested. ` +
-          `Stop the existing proxy first or use a different port.`,
-      );
-    }
+    await validateExistingProxy(existingProxy);
 
     if (authMode === "api-key") {
       options.onReady?.(listenPort);
@@ -2492,32 +2550,6 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     }
 
     const account = privateKeyToAccount(walletKey as `0x${string}`);
-
-    // Verify the existing proxy is using the same wallet (or warn if different)
-    if (existingProxy.wallet !== account.address) {
-      console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} uses wallet ${existingProxy.wallet}, but current config uses ${account.address}. Reusing existing proxy.`,
-      );
-    }
-
-    // Verify the existing proxy is using the same payment chain
-    if (existingProxy.paymentChain) {
-      if (existingProxy.paymentChain !== paymentChain) {
-        throw new Error(
-          `Existing proxy on port ${listenPort} is using ${existingProxy.paymentChain} but ${paymentChain} was requested. ` +
-            `Stop the existing proxy first or use a different port.`,
-        );
-      }
-    } else if (paymentChain !== "base") {
-      // Old proxy doesn't report chain — assume Base. Reject if Solana was requested.
-      console.warn(
-        `[ClawRouter] Existing proxy on port ${listenPort} does not report paymentChain (pre-v0.11 instance). Assuming Base.`,
-      );
-      throw new Error(
-        `Existing proxy on port ${listenPort} is a pre-v0.11 instance (assumed Base) but ${paymentChain} was requested. ` +
-          `Stop the existing proxy first or use a different port.`,
-      );
-    }
 
     // Derive Solana address if keys are available (for wallet status display)
     let reuseSolanaAddress: string | undefined;
@@ -2620,7 +2652,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // was already good for the request (or was not, and the gateway says so).
   const payFetch =
     authMode === "api-key"
-      ? createApiKeyFetch(apiKey!)
+      ? createApiKeyFetch(apiKey!, fetch, apiBase)
       : createPayFetchWithPreAuth(fetch, x402!, undefined, {
           skipPreAuth: paymentChain === "solana",
           // Per-request cost estimate so pre-auth is only reused when the cached
@@ -2713,8 +2745,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           // No wallet, no chain, and deliberately no full key: /health is
           // unauthenticated on localhost and a bearer token is not a status field.
           response.apiKey = maskApiKey(apiKey!);
+          response.apiKeyId = apiKeyId;
           response.gateway = apiBase;
         } else {
+          response.gateway = apiBase;
           response.wallet = account!.address;
           response.paymentChain = paymentChain;
           if (solanaAddress) {
@@ -3094,6 +3128,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             body: reqBody,
             signal: clientAbort.signal,
           });
+          let imageSettlement = upstream;
           const text = await upstream.text();
           if (!upstream.ok && upstream.status !== 202) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3167,6 +3202,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
               if (pollResp.ok && pollBody.status === "completed") {
                 result = pollBody;
+                imageSettlement = pollResp;
                 completed = true;
                 break;
               }
@@ -3190,7 +3226,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               res.end(
                 JSON.stringify({
                   error: "Image generation timed out",
-                  details: `Upstream did not complete within 5 minutes (job id=${result.id}). No payment has been settled.`,
+                  details: `Upstream did not complete within 5 minutes (job id=${result.id}). A polling timeout does not confirm billing status. Check the existing job and account Activity or wallet receipts before submitting another job.`,
                 }),
               );
               return;
@@ -3237,7 +3273,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           // Log image generation usage with actual x402 payment (previously missing entirely)
-          const imgActualCost = paymentStore.getStore()?.amountUsd ?? imgCost;
+          const imgActualCost =
+            gatewaySettledCostUsd(imageSettlement) ?? paymentStore.getStore()?.amountUsd ?? imgCost;
           logUsage({
             timestamp: new Date().toISOString(),
             model: imgModel,
@@ -3324,12 +3361,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }
 
         try {
-          const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
+          let upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal,
           });
+          if (authMode === "api-key")
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3384,7 +3423,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           // Log image editing usage with actual x402 payment (previously missing entirely)
-          const img2imgActualCost = paymentStore.getStore()?.amountUsd ?? img2imgCost;
+          const img2imgActualCost =
+            gatewaySettledCostUsd(upstream) ?? paymentStore.getStore()?.amountUsd ?? img2imgCost;
           logUsage({
             timestamp: new Date().toISOString(),
             model: img2imgModel,
@@ -3430,12 +3470,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           /* use defaults */
         }
         try {
-          const upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
+          let upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal,
           });
+          if (authMode === "api-key")
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3479,7 +3521,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
             }
           }
-          const audioActualCost = paymentStore.getStore()?.amountUsd ?? 0.15;
+          const audioActualCost =
+            gatewaySettledCostUsd(upstream) ?? paymentStore.getStore()?.amountUsd ?? 0.15;
           logUsage({
             timestamp: new Date().toISOString(),
             model: audioModel,
@@ -3543,6 +3586,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             body: reqBody,
             signal: clientAbort.signal,
           });
+          let videoSettlement = submitResp;
           const submitText = await submitResp.text();
           if (!submitResp.ok && submitResp.status !== 202) {
             res.writeHead(submitResp.status, { "Content-Type": "application/json" });
@@ -3620,6 +3664,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
               if (pollResp.ok && pollBody.status === "completed") {
                 finalResult = pollBody;
+                videoSettlement = pollResp;
                 videoCompleted = true;
                 break;
               }
@@ -3646,7 +3691,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               res.end(
                 JSON.stringify({
                   error: "Video generation timed out",
-                  details: `Upstream did not complete within 5 minutes (job id=${submitResult.id}). No payment has been settled.`,
+                  details: `Upstream did not complete within 5 minutes (job id=${submitResult.id}). A polling timeout does not confirm billing status. Check the existing job and account Activity or wallet receipts before submitting another job.`,
                 }),
               );
               return;
@@ -3683,6 +3728,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           const videoActualCost =
+            gatewaySettledCostUsd(videoSettlement) ??
             paymentStore.getStore()?.amountUsd ??
             estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
           logUsage({
@@ -3704,6 +3750,30 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Video generation failed", details: msg }));
           }
+        }
+        return;
+      }
+
+      // Preserve native account API paths, status, headers and incremental SSE.
+      // Chat retains routing; media submissions above retain their adapters.
+      if (
+        authMode === "api-key" &&
+        /^\/v1\//.test(req.url ?? "") &&
+        !/^\/v1\/chat\/completions(?:\?|$)/.test(req.url ?? "")
+      ) {
+        try {
+          await proxyPaidApiRequest(req, res, apiBase, payFetch, () => 0, true);
+        } catch (error) {
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: {
+                  message: error instanceof Error ? error.message : "Account API proxy failed",
+                },
+              }),
+            );
+          } else res.destroy();
         }
         return;
       }
@@ -3882,8 +3952,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             console.log(`[ClawRouter] Existing proxy detected on port ${listenPort}, reusing`);
             rejectAttempt({
               code: "REUSE_EXISTING",
-              wallet: existingProxy2.wallet,
-              existingChain: existingProxy2.paymentChain,
+              existing: existingProxy2,
             });
             return;
           }
@@ -3925,20 +3994,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     } catch (err: unknown) {
       const error = err as {
         code?: string;
-        wallet?: string;
-        existingChain?: string;
+        existing?: ExistingProxy;
         attempt?: number;
       };
 
-      if (error.code === "REUSE_EXISTING" && error.wallet) {
-        // Validate payment chain matches (same check as pre-listen reuse path)
-        if (error.existingChain && error.existingChain !== paymentChain) {
-          throw new Error(
-            `Existing proxy on port ${listenPort} is using ${error.existingChain} but ${paymentChain} was requested. ` +
-              `Stop the existing proxy first or use a different port.`,
-            { cause: err },
-          );
-        }
+      if (error.code === "REUSE_EXISTING" && error.existing) {
+        await validateExistingProxy(error.existing);
 
         // Proxy is running, reuse it
         const baseUrl = `http://127.0.0.1:${listenPort}`;
@@ -3946,7 +4007,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         return {
           port: listenPort,
           baseUrl,
-          walletAddress: error.wallet,
+          walletAddress: error.existing.wallet,
+          solanaAddress: error.existing.solana,
           authMode,
           ...(apiKey ? { apiKeyLabel: maskApiKey(apiKey) } : {}),
           balanceMonitor,

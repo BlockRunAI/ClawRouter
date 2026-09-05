@@ -82,9 +82,13 @@ export function maskApiKey(key: string): string {
 
 async function readOptional(path: string): Promise<string | undefined> {
   try {
-    return (await readTextFile(path)).trim() || undefined;
-  } catch {
-    return undefined;
+    return (await readTextFile(path)).trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new Error(
+      "Cannot read the configured API key file. Fix its permissions before selecting a payment method.",
+      { cause: error },
+    );
   }
 }
 
@@ -92,17 +96,15 @@ async function readOptional(path: string): Promise<string | undefined> {
  * Resolve the configured API key without creating anything.
  *
  * Returns undefined when no key is configured — that is the normal state for a
- * wallet user, not an error. A file that exists but holds something that is not
- * a key is reported (once, to stderr) and skipped rather than sent upstream:
- * a malformed credential is a 401 per request, and an unexplained 401 is the
- * hardest failure mode there is to diagnose.
+ * wallet user, not an error. A configured but invalid or unreadable key is an
+ * error: it must never silently select another account or a wallet.
  */
 export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
   const envKey = process["env"].BLOCKRUN_API_KEY?.trim();
-  if (envKey) {
+  if (envKey !== undefined) {
     if (isValidApiKey(envKey)) return { key: envKey, source: "env" };
-    console.warn(
-      `[ClawRouter] ⚠ BLOCKRUN_API_KEY is set but does not look like a BlockRun key (expected brk_…) — ignoring.`,
+    throw new Error(
+      "Invalid BLOCKRUN_API_KEY. Correct or unset it before selecting a payment method.",
     );
   }
 
@@ -113,8 +115,8 @@ export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
     const stored = await readOptional(path);
     if (stored === undefined) continue;
     if (isValidApiKey(stored)) return { key: stored, source };
-    console.warn(
-      `[ClawRouter] ⚠ ${path} does not contain a BlockRun key (expected brk_…) — ignoring.`,
+    throw new Error(
+      `Invalid API key in ${path}. Correct or remove it before selecting a payment method.`,
     );
   }
 
@@ -149,7 +151,7 @@ export async function clearApiKey(): Promise<{ removed: string[]; envStillSet: b
     await rm(path, { force: true });
     removed.push(path);
   }
-  return { removed, envStillSet: Boolean(process["env"].BLOCKRUN_API_KEY?.trim()) };
+  return { removed, envStillSet: process["env"].BLOCKRUN_API_KEY !== undefined };
 }
 
 /**
@@ -236,19 +238,92 @@ export function formatCreditBalance(b: CreditBalance): string {
  * rather than defaulting is what stops a placeholder from shadowing the real
  * credential and turning every call into a 401.
  */
+export function normalizeApiKeyBase(raw: string): string {
+  const base = raw.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = new URL(base);
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (url.protocol !== "https:" &&
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
+  ) {
+    throw new Error(
+      "Account API URL requires HTTPS (except localhost) and no credentials, query or fragment.",
+    );
+  }
+  return base;
+}
+
 export function createApiKeyFetch(
   apiKey: string,
   baseFetch: typeof fetch = fetch,
+  apiBase: string = BLOCKRUN_API_KEY_API,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  const base = new URL(normalizeApiKeyBase(apiBase));
   return async (input, init) => {
-    const headers = new Headers(init?.headers as HeadersInit | undefined);
+    const request = input instanceof Request ? input : undefined;
+    const url = new URL(request?.url ?? String(input), `${base}/`);
+    if (url.origin !== base.origin || url.username || url.password)
+      throw new Error("Refusing to forward a BlockRun account key to another origin.");
+    if (base.pathname === "/" && url.pathname.startsWith("/api/v1/"))
+      url.pathname = url.pathname.slice(4);
+    const headers = new Headers(init?.headers ?? request?.headers);
+    for (const name of [...headers.keys()])
+      if (/payment/i.test(name) || name.toLowerCase() === "x-api-key") headers.delete(name);
     headers.set("authorization", `Bearer ${apiKey}`);
-    // An x402 header on an API-key request is a payment nobody asked for.
-    headers.delete("x-payment");
-    headers.delete("x-api-key");
-    const response = await baseFetch(input, { ...init, headers });
+    const response = await baseFetch(request ? new Request(url, request) : url.href, {
+      ...init,
+      headers,
+      redirect: "error",
+    });
     return response.ok ? response : explainApiKeyFailure(response);
   };
+}
+
+/** Complete first-response async account jobs (music/image editing) without x402. */
+export async function pollApiKeyJob(
+  response: Response,
+  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  apiBase: string,
+  signal: AbortSignal,
+  intervalMs = 2000,
+): Promise<Response> {
+  if (response.status !== 202) return response;
+  const initial = (await response.json()) as { poll_url?: string };
+  if (!initial.poll_url) throw new Error("Async account response missing poll_url");
+  const pollUrl = new URL(initial.poll_url, `${normalizeApiKeyBase(apiBase)}/`).href;
+  const abort = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
+  while (!abort.aborted) {
+    const polled = await payFetch(pollUrl, { signal: abort });
+    if ([502, 503, 504, 522, 524].includes(polled.status)) {
+      await polled.body?.cancel();
+    } else {
+      if (!polled.ok) return polled;
+      // Fully consume each queued response, including its original body.
+      // Parsing a clone alone would retain the unread original across polls.
+      const raw = await polled.text();
+      const data = JSON.parse(raw) as { status?: string };
+      if (data.status === "completed")
+        return new Response(raw, { status: polled.status, headers: polled.headers });
+      if (["failed", "cancelled", "canceled"].includes(data.status || ""))
+        throw new Error("Account job failed or was cancelled");
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(abort.reason);
+      };
+      const timer = setTimeout(() => {
+        abort.removeEventListener("abort", onAbort);
+        resolve();
+      }, intervalMs);
+      abort.addEventListener("abort", onAbort, { once: true });
+      if (abort.aborted) onAbort();
+    });
+  }
+  throw new Error("Account job polling stopped; check job before resubmitting.");
 }
 
 /**
