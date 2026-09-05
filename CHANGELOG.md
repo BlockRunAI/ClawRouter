@@ -6,6 +6,23 @@ All notable changes to ClawRouter.
 
 ## Unreleased
 
+### Fixed — the Grok rate sync was docs-only; the code still quoted the old prices
+
+`d9fb986` corrected three Grok rows in the README and stopped there. `src/models.ts` still carried the pre-repricing numbers, and it carried them for **six** SKUs, not three — the README had also been left stale on `gemini-3.6-flash` and both `gpt-5.6-sol` tiers. Diffed against the live gateway catalog:
+
+| Model                     | Was           | Now               |
+| ------------------------- | ------------- | ----------------- |
+| `openai/gpt-5.6-sol`      | $5 / $30      | **$4 / $20**      |
+| `openai/gpt-5.6-sol-pro`  | $5 / $30      | **$4 / $20**      |
+| `google/gemini-3.6-flash` | $1.50 / $7.50 | **$0.75 / $3.75** |
+| `xai/grok-4.3`            | $1.50 / $4.00 | **$1.25 / $2.50** |
+| `xai/grok-4.5`            | $2.50 / $9.00 | **$2.00 / $6.00** |
+| `xai/grok-build-0.1`      | $1.50 / $3.00 | **$1.00 / $2.00** |
+
+Not cosmetic: `inputPrice`/`outputPrice` are published through `GET /v1/models` (which Pi persists into `~/.pi/agent/models.json`, so a wrong number becomes durable downstream), drive per-request cost accounting behind `/stats`, and feed the pre-flight estimate behind balance pre-checks and `maxCostPerRun` — overstated output by up to 50%, so strict mode could refuse a Grok request that was actually affordable.
+
+`src/top-models.json` carries no prices and needed no change. A repo-vs-gateway diff over the whole catalog now reports zero drift across 100 live entries.
+
 ### Fixed — API-key mode could still mint a wallet you never asked for
 
 `resolveOrGenerateWalletKey()` creates a private key as a side effect, so every call site has to resolve the BlockRun API key first. Three of the four did. The fourth — the plugin's non-gateway-mode branch of `register()` — called it unconditionally, so a card-paying user installing the OpenClaw plugin got a freshly minted key plus a `NEW WALLET GENERATED — BACK UP YOUR KEY NOW / losing this key = losing your USDC` banner for a wallet that would never be used. That contradicted the documented promise that API-key mode "never generates, reads or signs with a private key". The branch now resolves the key first and returns before touching a wallet, and `src/index.api-key-no-wallet.test.ts` guards every call site so a fifth one cannot be added unguarded.
