@@ -4,7 +4,19 @@ All notable changes to ClawRouter.
 
 ---
 
-## Unreleased
+## v0.12.272 — September 5, 2026
+
+### Added — the API key is pinned to one origin, and never falls back to a wallet by accident
+
+Rebase of [#338](https://github.com/BlockRunAI/ClawRouter/pull/338) by [@KillerQueen-Z](https://github.com/KillerQueen-Z), whose security work this is.
+
+The bearer token is now pinned to a single origin and `redirect: "error"` refuses to follow a redirect — a redirect being the quiet way a credential leaves the host it was minted for. The account URL must be HTTPS (loopback excepted) with no credentials, query or fragment, validated once at startup rather than per call. Payment headers are stripped by pattern rather than exact name, so a new x402 spelling cannot ride along on a rail that signs nothing.
+
+**A malformed key is now fatal instead of skipped.** Skipping fell through to the _next_ credential, and the next credential can be a different account or a funded wallet — spending USDC because a key file was corrupt is worse than refusing to start. An empty `BLOCKRUN_API_KEY` still counts as unset, since `FOO=""` is the ordinary way to clear a variable in CI.
+
+Authenticated responses carry `Cache-Control: no-store`, keyed on the credential rather than the route: downstream caches key on URL, so two API keys on one proxy port could otherwise share `/v1/phone/numbers` — which answers "which numbers do I own" and which upstream marks `public, max-age=3600`.
+
+Account-rail async jobs (`202` + `poll_url`) are driven to completion by polling the signed URL, never by resubmitting — a resubmit would be a second _paid_ job. And the long tail of non-chat account services is forwarded verbatim and streamed, so payload, status and SSE contract survive.
 
 ### Fixed — image, video and audio calls were journaled at $0 on the API-key rail
 

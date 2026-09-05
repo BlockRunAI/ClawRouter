@@ -1,6 +1,6 @@
 {
   "name": "@blockrun/clawrouter",
-  "version": "0.12.271",
+  "version": "0.12.272",
   "description": "Smart LLM router — save 84% on inference costs. 76 models (7 free). Pay by credit card (API key) or USDC (x402 wallet).",
   "type": "module",
   "main": "dist/index.js",
