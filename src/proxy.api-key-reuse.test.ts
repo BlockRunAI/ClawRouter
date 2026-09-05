@@ -25,7 +25,11 @@ import { startProxy } from "./proxy.js";
 const KEY_A = "brk_live_" + "A".repeat(32);
 const KEY_B = "brk_live_" + "B".repeat(32);
 
-const freePort = () => 22000 + Math.floor(Math.random() * 10000);
+// A range no other suite uses. 22000-32000 overlapped payment-chain-reuse
+// (21000-31000), solana-rpc-override (22000-23000) and 23500-24000, so under
+// vitest's parallel file execution two suites could bind the same port and
+// fail each other intermittently — which they did, twice, before this narrowed.
+const freePort = () => 34000 + Math.floor(Math.random() * 800);
 
 describe("startProxy API-key reuse guard", () => {
   it("refuses to reuse a proxy that is billing a different key", async () => {
