@@ -15,6 +15,7 @@ describe("account API service parity through the proxy", () => {
   let proxy: ProxyHandle;
   let calls: Array<{ path: string; method: string; auth?: string; payment?: string }> = [];
   let quota = 0;
+  let mediaBilling = false;
   let finishStream: (() => void) | undefined;
   beforeAll(async () => {
     upstream = createServer((req, res) => {
@@ -54,6 +55,31 @@ describe("account API service parity through the proxy", () => {
         finishStream = () => res.end('event: response.completed\ndata: {"id":"r-1"}\n\n');
         return;
       }
+      if (
+        mediaBilling &&
+        req.method === "POST" &&
+        [
+          "/v1/images/generations",
+          "/v1/images/image2image",
+          "/v1/audio/generations",
+          "/v1/videos/generations",
+        ].includes(req.url!)
+      ) {
+        res.writeHead(202, { "content-type": "application/json", "x-blockrun-cost-usd": "0" });
+        res.end(
+          JSON.stringify({
+            id: "billing-job",
+            status: "queued",
+            poll_url: "/api/v1/jobs/billing-job",
+          }),
+        );
+        return;
+      }
+      if (req.url === "/v1/jobs/billing-job") {
+        res.writeHead(200, { "content-type": "application/json", "x-blockrun-cost-usd": "0.0125" });
+        res.end(JSON.stringify({ status: "completed", data: [] }));
+        return;
+      }
       if (req.url === "/v1/audio/generations") {
         res.writeHead(202, { "content-type": "application/json" });
         res.end('{"id":"m-1","status":"queued","poll_url":"/api/v1/audio/generations/m-1"}');
@@ -79,6 +105,7 @@ describe("account API service parity through the proxy", () => {
   beforeEach(() => {
     calls = [];
     quota = 0;
+    mediaBilling = false;
   });
   afterAll(async () => {
     finishStream?.();
@@ -172,6 +199,29 @@ describe("account API service parity through the proxy", () => {
       ),
     );
   });
+  it.each([
+    ["/v1/images/generations", "IMAGE"],
+    ["/v1/images/image2image", "IMAGE"],
+    ["/v1/audio/generations", "AUDIO"],
+    ["/v1/videos/generations", "VIDEO"],
+  ])(
+    "records the completed poll charge for %s",
+    async (path, tier) => {
+      mediaBilling = true;
+      vi.mocked(logUsage).mockClear();
+      const response = await fetch(proxy.baseUrl + path, {
+        method: "POST",
+        body: JSON.stringify({ prompt: "test" }),
+      });
+      expect(response.status).toBe(200);
+      await response.json();
+      await vi.waitFor(() =>
+        expect(logUsage).toHaveBeenCalledWith(expect.objectContaining({ tier, cost: 0.0125 })),
+      );
+      expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    },
+    10_000,
+  );
   it("streams Responses before upstream completes", async () => {
     const res = await fetch(proxy.baseUrl + "/v1/responses", {
       method: "POST",

@@ -92217,6 +92217,7 @@ async function startProxy(options) {
             body: reqBody,
             signal: clientAbort.signal
           });
+          let imageSettlement = upstream;
           const text = await upstream.text();
           if (!upstream.ok && upstream.status !== 202) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -92272,6 +92273,7 @@ async function startProxy(options) {
               }
               if (pollResp.ok && pollBody.status === "completed") {
                 result = pollBody;
+                imageSettlement = pollResp;
                 completed = true;
                 break;
               }
@@ -92332,7 +92334,7 @@ async function startProxy(options) {
               }
             }
           }
-          const imgActualCost = paymentStore.getStore()?.amountUsd ?? imgCost;
+          const imgActualCost = gatewaySettledCostUsd(imageSettlement) ?? paymentStore.getStore()?.amountUsd ?? imgCost;
           logUsage({
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             model: imgModel,
@@ -92457,7 +92459,7 @@ async function startProxy(options) {
               }
             }
           }
-          const img2imgActualCost = paymentStore.getStore()?.amountUsd ?? img2imgCost;
+          const img2imgActualCost = gatewaySettledCostUsd(upstream) ?? paymentStore.getStore()?.amountUsd ?? img2imgCost;
           logUsage({
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             model: img2imgModel,
@@ -92545,7 +92547,7 @@ async function startProxy(options) {
               }
             }
           }
-          const audioActualCost = paymentStore.getStore()?.amountUsd ?? 0.15;
+          const audioActualCost = gatewaySettledCostUsd(upstream) ?? paymentStore.getStore()?.amountUsd ?? 0.15;
           logUsage({
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             model: audioModel,
@@ -92597,6 +92599,7 @@ async function startProxy(options) {
             body: reqBody,
             signal: clientAbort.signal
           });
+          let videoSettlement = submitResp;
           const submitText = await submitResp.text();
           if (!submitResp.ok && submitResp.status !== 202) {
             res.writeHead(submitResp.status, { "Content-Type": "application/json" });
@@ -92653,6 +92656,7 @@ async function startProxy(options) {
               }
               if (pollResp.ok && pollBody.status === "completed") {
                 finalResult = pollBody;
+                videoSettlement = pollResp;
                 videoCompleted = true;
                 break;
               }
@@ -92705,7 +92709,7 @@ async function startProxy(options) {
               }
             }
           }
-          const videoActualCost = paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
+          const videoActualCost = gatewaySettledCostUsd(videoSettlement) ?? paymentStore.getStore()?.amountUsd ?? estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
           logUsage({
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
             model: videoModel,

@@ -3128,6 +3128,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             body: reqBody,
             signal: clientAbort.signal,
           });
+          let imageSettlement = upstream;
           const text = await upstream.text();
           if (!upstream.ok && upstream.status !== 202) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3201,6 +3202,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
               if (pollResp.ok && pollBody.status === "completed") {
                 result = pollBody;
+                imageSettlement = pollResp;
                 completed = true;
                 break;
               }
@@ -3271,7 +3273,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           // Log image generation usage with actual x402 payment (previously missing entirely)
-          const imgActualCost = paymentStore.getStore()?.amountUsd ?? imgCost;
+          const imgActualCost =
+            gatewaySettledCostUsd(imageSettlement) ?? paymentStore.getStore()?.amountUsd ?? imgCost;
           logUsage({
             timestamp: new Date().toISOString(),
             model: imgModel,
@@ -3420,7 +3423,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           // Log image editing usage with actual x402 payment (previously missing entirely)
-          const img2imgActualCost = paymentStore.getStore()?.amountUsd ?? img2imgCost;
+          const img2imgActualCost =
+            gatewaySettledCostUsd(upstream) ?? paymentStore.getStore()?.amountUsd ?? img2imgCost;
           logUsage({
             timestamp: new Date().toISOString(),
             model: img2imgModel,
@@ -3517,7 +3521,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
             }
           }
-          const audioActualCost = paymentStore.getStore()?.amountUsd ?? 0.15;
+          const audioActualCost =
+            gatewaySettledCostUsd(upstream) ?? paymentStore.getStore()?.amountUsd ?? 0.15;
           logUsage({
             timestamp: new Date().toISOString(),
             model: audioModel,
@@ -3581,6 +3586,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             body: reqBody,
             signal: clientAbort.signal,
           });
+          let videoSettlement = submitResp;
           const submitText = await submitResp.text();
           if (!submitResp.ok && submitResp.status !== 202) {
             res.writeHead(submitResp.status, { "Content-Type": "application/json" });
@@ -3658,6 +3664,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
               if (pollResp.ok && pollBody.status === "completed") {
                 finalResult = pollBody;
+                videoSettlement = pollResp;
                 videoCompleted = true;
                 break;
               }
@@ -3721,6 +3728,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           const videoActualCost =
+            gatewaySettledCostUsd(videoSettlement) ??
             paymentStore.getStore()?.amountUsd ??
             estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
           logUsage({

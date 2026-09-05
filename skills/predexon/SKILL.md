@@ -339,7 +339,7 @@ All endpoints are GET unless marked **POST**. Query params go in the URL; POST t
 ## Notes
 
 - Payment uses the configured API account credit or x402 wallet
-- If payment fails, tell the user to fund their wallet at [blockrun.ai](https://blockrun.ai)
+- If API account credit is insufficient, add credit at [user.blockrun.ai](https://user.blockrun.ai/dashboard/credits). For an invalid API key, correct it in the account settings. If wallet funds are insufficient, fund the selected Solana or Base wallet. Do not switch payment methods automatically.
 - Retry once on 502 — Predexon can occasionally be slow
 - Inspect the payload: tool results use `details` / JSON `content`; HTTP responses retain their upstream shape.
 - Synthesize data into plain-language analysis — never dump raw JSON
