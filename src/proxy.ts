@@ -2103,6 +2103,34 @@ function blockrunRequestId(response: Response | undefined): string | undefined {
   return response?.headers.get("x-blockrun-request-id") ?? undefined;
 }
 
+/**
+ * The amount BlockRun actually settled for this response, from
+ * `x-blockrun-cost-usd`, or undefined when the header is absent.
+ *
+ * Absent is NOT zero — the gateway writes a genuine zero charge as "0.000000"
+ * and omits the header when nothing settled at response time (the chat path,
+ * where the charge commits after the response, and async media billed on a
+ * later settlement). Callers must fall back rather than record $0, so a value
+ * of exactly 0 has to stay distinguishable from a missing header; that is why
+ * this returns `number | undefined` and not a defaulted number.
+ *
+ * A malformed or negative value is treated as absent: an unparseable charge is
+ * not evidence of a free call, and letting NaN through would poison every
+ * total computed from the journal.
+ */
+function gatewaySettledCostUsd(response: Response | undefined): number | undefined {
+  const raw = response?.headers.get("x-blockrun-cost-usd");
+  if (raw === null || raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  // Number("") is 0, not NaN — an empty header would otherwise read as a
+  // settled zero charge, which is the exact confusion this header exists to
+  // avoid, and would record $0 against a call that really was billed.
+  if (trimmed === "") return undefined;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return undefined;
+  return value;
+}
+
 async function proxyPaidApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -2196,16 +2224,36 @@ async function proxyPaidApiRequest(
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] ${requestLabel} response: ${upstream.status} (${latencyMs}ms)`);
 
-  // Log paid tool usage with actual x402 payment amount.
+  // Log paid tool usage with the actual amount charged.
+  //
+  // On the wallet rail that is the x402 payment. On the API-key rail no x402
+  // ever happens, so this was 0 for every paid partner call — Surf, Exa,
+  // prediction markets, images, speech all landed in the journal at $0 and were
+  // invisible in `/stats`. That is the mirror of the 152x chat overstatement:
+  // there we inherited an x402 cost model that did not apply, here we inherited
+  // an x402 payment that never occurs. Unlike chat we have no local price model
+  // for these services, so the gateway's own figure is the only truthful source.
+  //
+  // BlockRun publishes it as `x-blockrun-cost-usd` on pre-priced (non-chat)
+  // services. Its contract, per the gateway: ABSENT means "no charge settled at
+  // the time of the response", NOT "this call was free" — a charge that really
+  // is zero is written explicitly as 0.000000. So absence must fall back to the
+  // previous behaviour rather than assert $0, or async media (billed on a later
+  // settlement) would be under-counted instead of over-counted.
+  //
   // Phone/voice telemetry rules — see resolvePhoneTelemetryCost.
-  const paidAmount = getActualPaymentUsd();
-  const requestCost = resolvePhoneTelemetryCost({
-    paidAmount,
-    isPhone,
-    upstreamStatus: upstream.status,
-    method: req.method,
-    urlPath: req.url ?? "",
-  });
+  const settledCostUsd = gatewaySettledCostUsd(upstream);
+  const paidAmount = settledCostUsd ?? getActualPaymentUsd();
+  const requestCost =
+    settledCostUsd !== undefined
+      ? settledCostUsd
+      : resolvePhoneTelemetryCost({
+          paidAmount,
+          isPhone,
+          upstreamStatus: upstream.status,
+          method: req.method,
+          urlPath: req.url ?? "",
+        });
   logUsage({
     timestamp: new Date().toISOString(),
     ...(blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {}),

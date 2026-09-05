@@ -91251,6 +91251,15 @@ function estimateImageCost(model, size5, n = 1) {
 function blockrunRequestId(response) {
   return response?.headers.get("x-blockrun-request-id") ?? void 0;
 }
+function gatewaySettledCostUsd(response) {
+  const raw = response?.headers.get("x-blockrun-cost-usd");
+  if (raw === null || raw === void 0) return void 0;
+  const trimmed = raw.trim();
+  if (trimmed === "") return void 0;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return void 0;
+  return value;
+}
 async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -91300,8 +91309,9 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   res.end();
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] ${requestLabel} response: ${upstream.status} (${latencyMs}ms)`);
-  const paidAmount = getActualPaymentUsd();
-  const requestCost = resolvePhoneTelemetryCost({
+  const settledCostUsd = gatewaySettledCostUsd(upstream);
+  const paidAmount = settledCostUsd ?? getActualPaymentUsd();
+  const requestCost = settledCostUsd !== void 0 ? settledCostUsd : resolvePhoneTelemetryCost({
     paidAmount,
     isPhone,
     upstreamStatus: upstream.status,
