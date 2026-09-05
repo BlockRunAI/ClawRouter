@@ -63,8 +63,8 @@ describe("Core vs legacy wallet divergence", () => {
     return { auth, warn };
   }
 
-  const warned = (warn: ReturnType<typeof vi.spyOn>) =>
-    warn.mock.calls.map((c) => String(c[0])).join("\n");
+  const warned = (warn: { mock: { calls: unknown[][] } }) =>
+    warn.mock.calls.map((call) => String(call[0])).join("\n");
 
   it("still pays from Core, and names both addresses", async () => {
     const { auth, warn } = await withWallets(CORE_KEY, LEGACY_KEY);
