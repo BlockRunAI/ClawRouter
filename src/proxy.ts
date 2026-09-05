@@ -2090,6 +2090,17 @@ function estimateImageCost(model: string, size?: string, n: number = 1): number 
  * or sessions — just collect body, forward via payFetch (which handles 402
  * automatically), and stream back.
  */
+/**
+ * The gateway's id for a response, from `x-blockrun-request-id`.
+ *
+ * Undefined when the response never came from BlockRun (a locally served cache
+ * hit, a refusal) — recorded in the usage journal as the join key for billing
+ * reconciliation. See UsageEntry.requestId.
+ */
+function blockrunRequestId(response: Response | undefined): string | undefined {
+  return response?.headers.get("x-blockrun-request-id") ?? undefined;
+}
+
 async function proxyPaidApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -2195,6 +2206,7 @@ async function proxyPaidApiRequest(
   });
   logUsage({
     timestamp: new Date().toISOString(),
+    ...(blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {}),
     model: isBlockrunExa
       ? "blockrun-exa"
       : isModalSandbox
@@ -4231,6 +4243,12 @@ async function proxyRequest(
   let accumulatedContent = ""; // For session journal event extraction
   let responseInputTokens: number | undefined;
   let responseOutputTokens: number | undefined;
+  /**
+   * The gateway's `x-blockrun-request-id` for whichever attempt actually
+   * answered. Captured here rather than read at logging time because `upstream`
+   * is scoped to the fallback loop and is gone by then. See UsageEntry.requestId.
+   */
+  let upstreamRequestId: string | undefined;
   let requestHadError = false; // Set to true when all models fail → used in logUsage
   let requestSummaryForStore = ""; // Truncated user prompt — captured for response-store entry
   const isChatCompletion = req.url?.includes("/chat/completions");
@@ -6418,6 +6436,10 @@ async function proxyRequest(
       }
     }
 
+    // Record the answering attempt's gateway id before `upstream` goes out of
+    // scope — this is the join key the usage journal needs.
+    upstreamRequestId = blockrunRequestId(upstream);
+
     // --- Handle case where all models failed ---
     if (!upstream) {
       // Build structured error summary listing all attempted models
@@ -7151,6 +7173,7 @@ async function proxyRequest(
 
     const entry: UsageEntry = {
       timestamp: new Date().toISOString(),
+      ...(upstreamRequestId ? { requestId: upstreamRequestId } : {}),
       model: logModel,
       tier: routingDecision?.tier ?? "DIRECT",
       cost: logCost,

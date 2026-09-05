@@ -1416,6 +1416,23 @@ type UsageEntry = {
     partnerId?: string;
     /** Partner service name (e.g., "BlockRun") — only set for partner API calls */
     service?: string;
+    /**
+     * The gateway's own id for this request, from the `x-blockrun-request-id`
+     * response header. Absent for requests that never reached the gateway (a
+     * cache hit, a local refusal, an aborted call).
+     *
+     * This is the JOIN KEY for billing reconciliation. Every `cost` in this file
+     * is a LOCAL estimate computed from our copy of the price table, so it drifts
+     * whenever that copy goes stale — six prices were wrong until v0.12.270, and
+     * `/stats` had been reporting the wrong money the whole time. Recording the
+     * gateway's id is what will let us diff this journal line-by-line against a
+     * server-side ledger and show what was actually charged instead of what we
+     * guessed. It cannot be backfilled: a call whose id we did not record is
+     * unreconcilable forever, which is why this is captured before the ledger API
+     * that will consume it exists. It is also the id support needs to trace one
+     * failed call.
+     */
+    requestId?: string;
 };
 /**
  * Log a usage entry as a JSON line.

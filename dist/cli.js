@@ -91427,6 +91427,9 @@ function estimateImageCost(model, size5, n = 1) {
   const pricePerImage = sizePrice ?? pricing.default;
   return pricePerImage * n * 1.05;
 }
+function blockrunRequestId(response) {
+  return response?.headers.get("x-blockrun-request-id") ?? void 0;
+}
 async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -91486,6 +91489,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   });
   logUsage({
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    ...blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {},
     model: isBlockrunExa ? "blockrun-exa" : isModalSandbox ? "modal-sandbox" : isPhone ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : isSurf ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : "partner",
     tier: isPhone ? "PHONE" : isSurf ? "SURF" : "PARTNER",
     cost: requestCost,
@@ -92955,6 +92959,7 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   let accumulatedContent = "";
   let responseInputTokens;
   let responseOutputTokens;
+  let upstreamRequestId;
   let requestHadError = false;
   let requestSummaryForStore = "";
   const isChatCompletion = req.url?.includes("/chat/completions");
@@ -94575,6 +94580,7 @@ data: [DONE]
         }
       }
     }
+    upstreamRequestId = blockrunRequestId(upstream);
     if (!upstream) {
       const attemptSummary = failedAttempts.length > 0 ? failedAttempts.map((a) => `${a.model} (${a.reason})`).join(", ") : "unknown";
       const structuredMessage = failedAttempts.length > 0 ? `All ${failedAttempts.length} models failed. Tried: ${attemptSummary}` : "All models in fallback chain failed";
@@ -95086,6 +95092,7 @@ data: [DONE]
     }
     const entry = {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      ...upstreamRequestId ? { requestId: upstreamRequestId } : {},
       model: logModel,
       tier: routingDecision?.tier ?? "DIRECT",
       cost: logCost,
