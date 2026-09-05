@@ -342,13 +342,13 @@ curl -X POST http://localhost:8402/v1/videos/generations \
   -d '{"model":"bytedance/seedance-2.0-fast","prompt":"a red apple slowly spinning","duration_seconds":5}'
 ```
 
-| Model                         | Provider            | 5s text-to-video | 5s image-to-video | Duration              |
-| ----------------------------- | ------------------- | ---------------- | ----------------- | --------------------- |
-| `bytedance/seedance-1.5-pro`  | ByteDance Seedance  | ~$0.46           | ~$0.46 (flat)     | 5s default, up to 10s |
-| `bytedance/seedance-2.0-fast` | ByteDance Seedance  | ~$1.19           | ~$1.19 (flat)     | 5s default, up to 10s |
-| `bytedance/seedance-2.0`      | ByteDance Seedance  | ~$1.49           | ~$1.49 (flat)     | 5s default, up to 10s |
-| `azure/sora-2`                | OpenAI Sora (Azure) | ~$0.42 (4s)      | ~$0.42 (4s, flat) | 4s default; 4/8/12s   |
-| `xai/grok-imagine-video`      | xAI Grok Imagine    | $0.40 (8s at 480p, before fees)      | n/a               | 8s default            |
+| Model                         | Provider            | 5s text-to-video                | 5s image-to-video | Duration              |
+| ----------------------------- | ------------------- | ------------------------------- | ----------------- | --------------------- |
+| `bytedance/seedance-1.5-pro`  | ByteDance Seedance  | ~$0.46                          | ~$0.46 (flat)     | 5s default, up to 10s |
+| `bytedance/seedance-2.0-fast` | ByteDance Seedance  | ~$1.19                          | ~$1.19 (flat)     | 5s default, up to 10s |
+| `bytedance/seedance-2.0`      | ByteDance Seedance  | ~$1.49                          | ~$1.49 (flat)     | 5s default, up to 10s |
+| `azure/sora-2`                | OpenAI Sora (Azure) | ~$0.42 (4s)                     | ~$0.42 (4s, flat) | 4s default; 4/8/12s   |
+| `xai/grok-imagine-video`      | xAI Grok Imagine    | $0.40 (8s at 480p, before fees) | n/a               | 8s default            |
 
 Seedance is **token-priced upstream** at ~20,256 tokens/sec — the blockrun videos route now defaults Seedance to `resolution=720p` with `generate_audio=true` for text-to-video (2× the per-second token count of the older 480p baseline; audio is included in that rate). The quote is `duration × tokens/sec × $/1M tokens × 1.05 margin`. Image-to-video is priced the same as text-to-video (the earlier ~40% i2v discount was removed upstream on 2026-06-01; only video-to-video remains cheaper). Sora 2 is flat-priced at $0.10/sec for both t2v and i2v — note it rejects human faces in reference images (use Seedance + RealFace for real people). Calls block for 30–120s while the upstream polls the job. Seedance 2.0 Fast typically returns in 60–80s; 2.0 Pro trades latency for quality.
 
@@ -940,7 +940,6 @@ ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls r
 ⭐ If ClawRouter powers your agents, consider starring the repo!
 
 </div>
-
 
 ## Account setup, billing, and switching back to wallets
 

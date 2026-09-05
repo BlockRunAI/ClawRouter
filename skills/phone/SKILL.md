@@ -21,6 +21,7 @@ triggers:
   - "blockrun bland"
 metadata: { "openclaw": { "emoji": "📞", "requires": { "config": ["models.providers.blockrun"] } } }
 ---
+
 ## Authentication and billing
 
 Use `clawrouter status` or the local `/health` response to identify the active mode. Never read or print the API key.
@@ -28,8 +29,6 @@ Use `clawrouter status` or the local `/health` response to identify the active m
 - **Account API:** requests through the local proxy use the configured BlockRun key and prepaid credits. No wallet or payment-chain switch is needed. Register at [user.blockrun.ai](https://user.blockrun.ai), manage [keys](https://user.blockrun.ai/dashboard/keys), and add [credits](https://user.blockrun.ai/dashboard/credits). Check [Activity](https://user.blockrun.ai/dashboard/activity) for actual charges.
 - **Wallet x402:** the proxy signs payments from the configured wallet. Preserve the user's selected chain and wallet.
 - **Errors:** in account mode, 401 means check the key, 402 means check account credits/status, and 429 means respect Retry-After. Do not switch to wallet billing or resubmit an accepted media job to recover from these errors.
-
-
 
 # Phone & Voice
 
