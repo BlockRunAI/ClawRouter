@@ -3640,7 +3640,30 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // /v1/voice/* (Bland.ai outbound AI voice calls),
       // /v1/surf/* (Surf unified crypto data API: 84 endpoints across CEX/DEX,
       //   on-chain SQL, wallet intelligence, prediction markets, social, news)) ---
+      // Gateway endpoints that carry no `model` we route on, and so must be
+      // forwarded verbatim rather than fed to the chat path:
+      //   /v1/messages       — the Anthropic-shaped chat surface
+      //   /v1/audio/speech   — ElevenLabs/Seed TTS (distinct from the
+      //                        /v1/audio/generations music route handled above)
+      // Without this they fall through to proxyRequest, where `modelsToTry` is
+      // `modelId ? [modelId] : []` — empty, because neither body carries a model
+      // this proxy routes on. The attempt loop then never issues an upstream
+      // request at all and the caller gets a 502 "All models in fallback chain
+      // failed" for an endpoint the gateway serves perfectly well. Both are
+      // verified live against api.blockrun.ai and blockrun.ai/api.
+      //
+      // Note the passthrough buffers the response before writing it, so an SSE
+      // stream arrives complete rather than incrementally. That is correct but
+      // not incremental; smart routing, sessions and the response cache do not
+      // apply on these paths either.
+      const isVerbatimGatewayPath =
+        req.url === "/v1/messages" ||
+        (req.url?.startsWith("/v1/messages?") ?? false) ||
+        req.url === "/v1/audio/speech" ||
+        (req.url?.startsWith("/v1/audio/speech?") ?? false);
+
       if (
+        isVerbatimGatewayPath ||
         req.url?.match(
           /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice|surf)\//,
         )
@@ -3676,6 +3699,32 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       if (!req.url?.startsWith("/v1")) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Not found" }));
+        return;
+      }
+
+      // Everything still here is handed to proxyRequest, which is the chat
+      // path: it routes on the body's `model`, and its attempt loop is keyed on
+      // that model. A /v1 path with no model reaches the loop with nothing to
+      // try, issues no upstream request, and returns 502 "All models in
+      // fallback chain failed" — an answer that blames the model catalog for
+      // what is really an unrouted URL, and sends people debugging the wrong
+      // thing. Say what actually happened instead.
+      if (!req.url.includes("/chat/completions")) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: {
+              message:
+                `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, ` +
+                `/v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, ` +
+                `/v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,` +
+                `modal,stocks,usstock,crypto,fx,commodity,phone,voice,surf}/. ` +
+                `If BlockRun serves this endpoint, call it directly against the gateway.`,
+              type: "invalid_request_error",
+              code: "unsupported_endpoint",
+            },
+          }),
+        );
         return;
       }
 

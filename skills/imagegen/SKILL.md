@@ -137,8 +137,8 @@ Response is identical to generation:
 
 ## Notes
 
-- Payment is automatic via x402 — deducted from the user's BlockRun wallet
-- If the call fails with a payment error, tell the user to fund their wallet at [blockrun.ai](https://blockrun.ai)
+- Payment is automatic, and which rail it uses depends on how ClawRouter was started: an x402 USDC micropayment from the user's wallet, or a draw on account credit if a BlockRun API key is configured. Either way the agent does nothing.
+- If the call fails with a payment error, check `GET http://localhost:8402/health` and read `authMode` before telling the user how to fix it: `wallet` → fund the wallet at [blockrun.ai](https://blockrun.ai); `api-key` → top up account credit at [user.blockrun.ai/dashboard/credits](https://user.blockrun.ai/dashboard/credits). Naming the wrong one sends the user to a page that cannot fix their error.
 - Google models may return base64 internally — ClawRouter uploads automatically and returns a hosted URL
 - OpenAI image models enforce OpenAI content policy; use `nano-banana` or `grok-imagine` for more flexibility
 - Image editing is only available with `gpt-image-1`; generation supports all listed models

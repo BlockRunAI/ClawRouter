@@ -250,19 +250,27 @@ describe("createApiKeyFetch", () => {
   });
 
   it("explains a 404 for an endpoint the API-key gateway does not carry", async () => {
+    // NOT /v1/videos/generations, which this test used to name: video, images,
+    // speech, /v1/messages and the partner APIs were all verified live on an
+    // API key on 2026-09-05, so the hint no longer sends those to wallet mode.
+    // /v1/embeddings is a real "unsupported endpoint" from the gateway.
     const wrapped = await createApiKeyFetch(
       KEY_A,
       (async () =>
         new Response(
           JSON.stringify({
-            error: { message: "Unsupported endpoint: /v1/videos/generations" },
+            error: { message: "Unsupported endpoint: /v1/embeddings" },
           }),
           { status: 404, headers: { "content-type": "application/json" } },
         )) as unknown as typeof fetch,
-    )("https://api.blockrun.ai/v1/videos/generations");
+    )("https://api.blockrun.ai/v1/embeddings");
 
     const body = (await wrapped.json()) as { error: { message: string } };
-    expect(body.error.message).toContain("wallet mode");
+    // Still names the escape hatch, but only for what is genuinely wallet-only.
+    expect(body.error.message).toContain("clawrouter logout");
+    expect(body.error.message).toContain("phone numbers");
+    // and must say media works on the key rather than sending it to a wallet
+    expect(body.error.message).toMatch(/images, speech, video[^.]*work on an API key/i);
   });
 
   it("leaves an ordinary 404 alone — a bad model id is not our error to rewrite", async () => {

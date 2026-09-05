@@ -2362,30 +2362,44 @@ const plugin: OpenClawPluginDefinition = {
       if (shouldLogRegistration) {
         // Generate wallet on first install (even outside gateway mode)
         // This ensures users can see their wallet address immediately after install
-        resolveOrGenerateWalletKey()
-          .then(({ address, source }) => {
-            if (source === "generated") {
-              api.logger.warn(`════════════════════════════════════════════════`);
-              api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
-              api.logger.warn(`  Address : ${address}`);
-              api.logger.warn(`  Run /wallet export to get your private key`);
-              api.logger.warn(`  Losing this key = losing your USDC funds`);
-              api.logger.warn(`════════════════════════════════════════════════`);
-            } else if (source === "core") {
-              api.logger.info(`Using BlockRun Core wallet: ${address}`);
-            } else if (source === "saved") {
-              api.logger.info(`Using saved wallet: ${address}`);
-            } else if (source === "config") {
-              api.logger.info(`Using wallet from plugin config: ${address}`);
-            } else {
-              api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
-            }
-          })
-          .catch((err) => {
-            api.logger.warn(
-              `Failed to initialize wallet: ${err instanceof Error ? err.message : String(err)}`,
+        //
+        // ...unless the user pays by card. resolveOrGenerateWalletKey() MINTS a
+        // key as a side effect, so running it unconditionally handed an API-key
+        // customer a private key they never asked for plus a "back this up or
+        // lose your USDC" warning they cannot act on — and broke the documented
+        // promise that API-key mode never generates, reads or signs with one.
+        // The gateway-mode path (startProxyInBackground) has always resolved the
+        // key before touching a wallet; this path had not.
+        void (async () => {
+          const keyResolution = await resolveApiKey().catch(() => undefined);
+          if (keyResolution) {
+            api.logger.info(
+              `Using BlockRun API key ${maskApiKey(keyResolution.key)} (from ${keyResolution.source}) — billing account credit, no wallet`,
             );
-          });
+            return;
+          }
+          const { address, source } = await resolveOrGenerateWalletKey();
+          if (source === "generated") {
+            api.logger.warn(`════════════════════════════════════════════════`);
+            api.logger.warn(`  NEW WALLET GENERATED — BACK UP YOUR KEY NOW!`);
+            api.logger.warn(`  Address : ${address}`);
+            api.logger.warn(`  Run /wallet export to get your private key`);
+            api.logger.warn(`  Losing this key = losing your USDC funds`);
+            api.logger.warn(`════════════════════════════════════════════════`);
+          } else if (source === "core") {
+            api.logger.info(`Using BlockRun Core wallet: ${address}`);
+          } else if (source === "saved") {
+            api.logger.info(`Using saved wallet: ${address}`);
+          } else if (source === "config") {
+            api.logger.info(`Using wallet from plugin config: ${address}`);
+          } else {
+            api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
+          }
+        })().catch((err) => {
+          api.logger.warn(
+            `Failed to initialize wallet: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
         api.logger.info("Not in gateway mode — proxy will start when gateway runs");
       }
       return;

@@ -53,7 +53,7 @@ metadata:
 
 # ClawRouter
 
-Hosted-gateway LLM router that saves <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% on inference costs by forwarding each request to the blockrun.ai gateway, which picks the cheapest model capable of handling it across <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from 9 providers (<!-- br:models.free -->7<!-- /br:models.free --> free open-weight models). All billing flows through one USDC wallet; you do not hold provider API keys.
+Hosted-gateway LLM router that saves <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% on inference costs by forwarding each request to the blockrun.ai gateway, which picks the cheapest model capable of handling it across <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from 9 providers (<!-- br:models.free -->7<!-- /br:models.free --> free open-weight models). All billing flows through one BlockRun credential — either a USDC wallet paying x402 per call, or a BlockRun API key drawing on card-funded account credit. Either way you do not hold provider API keys.
 
 **This is not a local-inference tool.** ClawRouter is a thin local proxy. Your prompts are sent over HTTPS to the blockrun.ai gateway for model execution. If your workload requires inference that never leaves your machine, use a local runtime like Ollama — ClawRouter is not the right tool for that use case.
 
@@ -69,7 +69,7 @@ Your app → localhost proxy (ClawRouter) → https://blockrun.ai/api  (or sol.b
                                         Response → back through proxy → your app
 ```
 
-**Sent to blockrun.ai on every request:** the model name, the full prompt/messages body, sampling params (temperature, max_tokens, tools, etc.), and an `X-PAYMENT` header containing a signed x402 USDC micropayment.
+**Sent to blockrun.ai on every request:** the model name, the full prompt/messages body, sampling params (temperature, max_tokens, tools, etc.), and a payment credential — an `X-PAYMENT` header containing a signed x402 USDC micropayment in wallet mode, or an `Authorization: Bearer brk_live_…` header in API-key mode.
 
 **Not sent:** your wallet private key (only the detached payment signature is sent), any other local files, environment variables, or OpenClaw config beyond what's needed for this request.
 
@@ -81,12 +81,12 @@ ClawRouter does **not** collect or forward third-party provider API keys. You do
 
 **What `models.providers.blockrun` stores (fully enumerated):**
 
-| Field       | Sensitive | Purpose                                                                                                                                                                                                    |
-| ----------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `walletKey` | Yes       | EVM private key used to sign USDC micropayments via x402. **Auto-generated locally on first run** — no user input required. Never transmitted over the network; only detached payment signatures are sent. |
-| `solanaKey` | Yes       | Solana keypair (BIP-44 `m/44'/501'/0'/0'`). Auto-derived from the same local mnemonic via `@scure/bip32` + `@scure/bip39`.                                                                                 |
-| `gateway`   | No        | Gateway URL. Defaults: `https://sol.blockrun.ai/api` (Solana, default chain for new installs) · `https://blockrun.ai/api` (Base, default for pre-existing installs).                                       |
-| `routing`   | No        | Optional override of the router-core config (tier chains, `strategy: "rules"` rollback, `shadow` comparison, scorer keywords).                                                                             |
+| Field       | Sensitive           | Purpose                                                                                                                                                                                                                                                                               |
+| ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `walletKey` | Only in wallet mode | EVM private key used to sign USDC micropayments via x402. **Auto-generated locally on first run** — no user input required. Never transmitted over the network; only detached payment signatures are sent. Not used, read, or generated at all when a BlockRun API key is configured. |
+| `solanaKey` | Yes                 | Solana keypair (BIP-44 `m/44'/501'/0'/0'`). Auto-derived from the same local mnemonic via `@scure/bip32` + `@scure/bip39`.                                                                                                                                                            |
+| `gateway`   | No                  | Gateway URL. Defaults: `https://sol.blockrun.ai/api` (Solana, default chain for new installs) · `https://blockrun.ai/api` (Base, default for pre-existing installs).                                                                                                                  |
+| `routing`   | No                  | Optional override of the router-core config (tier chains, `strategy: "rules"` rollback, `shadow` comparison, scorer keywords).                                                                                                                                                        |
 
 **How and where keys are stored:**
 

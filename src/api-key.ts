@@ -225,7 +225,10 @@ const HINTS: Record<number, string> = {
   401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
   402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
   404:
-    `api.blockrun.ai does not serve this endpoint yet — it currently carries chat and text ` +
-    `completions. For media and partner APIs, run ClawRouter in wallet mode (unset BLOCKRUN_API_KEY ` +
-    `and run "clawrouter logout").`,
+    `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, ` +
+    `speech, video and the partner APIs (Surf, Exa, prediction markets, phone lookup) all work ` +
+    `on an API key. The wallet-only exceptions are the routes that bind a lease or a position to ` +
+    `a payer address — buying/renewing/releasing phone numbers, and Polymarket trading — which ` +
+    `need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run ` +
+    `"clawrouter logout".`,
 };

@@ -200,8 +200,9 @@ GET `http://localhost:8402/v1/voice/call/{call_id}`. Returns:
 
 ## Notes
 
-- Payment is automatic via x402 — deducted from the user's BlockRun wallet on every call
-- If a call fails with a 402, tell the user to fund their wallet at [blockrun.ai](https://blockrun.ai)
+- Payment is automatic on every call — an x402 USDC micropayment from the user's wallet, or a draw on account credit if a BlockRun API key is configured.
+- If a call fails with a 402, check `GET http://localhost:8402/health` and read `authMode` first: `wallet` → fund the wallet at [blockrun.ai](https://blockrun.ai); `api-key` → top up at [user.blockrun.ai/dashboard/credits](https://user.blockrun.ai/dashboard/credits).
+- Number leases are bound to the **wallet's** payer address, so `phone numbers list/buy/renew/release` and the `from` parameter are wallet-mode features. In API-key mode the gateway answers those routes with a raw `402` x402 challenge (verified 2026-09-05) because there is no payer address to bind a lease to. Lookups, fraud checks and outbound calls all work on an API key; just let the server auto-pick `from`.
 - Phone numbers are real, regulated resources — numbers bought are reachable from any phone within ~60 seconds of purchase
 - Bland.ai's emergency-number blocklist is enforced server-side; ClawRouter does not duplicate it but trusts upstream
 - Recordings and transcripts are retained by Bland.ai; ClawRouter does not download them locally (returns the upstream URL)

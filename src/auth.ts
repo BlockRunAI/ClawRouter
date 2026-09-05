@@ -601,25 +601,53 @@ export async function savePaymentChain(chain: "base" | "solana"): Promise<void> 
 
 /**
  * Load the persisted payment chain selection from disk.
- * Returns "base" if no file exists or the file is invalid.
- * New installs persist "solana" at wallet generation, so an absent file
- * means a pre-existing install whose funds live on Base.
+ *
+ * Solana is the preferred rail, and since v0.12.246 wallet generation persists
+ * `solana` outright — so a fresh install answers "solana" from its own chain
+ * file, not from a default. This function only decides the case where no chain
+ * file exists at all, and there the answer turns on whether a wallet already
+ * does:
+ *
+ *   no chain file, no wallet   → "solana"  (nothing to strand; prefer Solana)
+ *   no chain file, wallet on disk → "base" (a pre-v0.12.246 install)
+ *
+ * That second line is the one that must not move. An install predating the
+ * Solana default has USDC sitting in its Base wallet and no Solana balance;
+ * flipping it would point every request at a gateway its money is not on and
+ * fail them all with an empty balance. The same reasoning covers a wallet
+ * supplied through BLOCKRUN_WALLET_KEY, and a generated wallet whose Solana
+ * derivation failed (no chain file is written in that case, on purpose — see
+ * resolveOrGenerateWalletKey — and the wallet it did write keeps us on Base,
+ * which is the only chain that proxy can actually sign for).
  */
 export async function loadPaymentChain(): Promise<"base" | "solana"> {
   const core = await readOptional(CORE_CHAIN_FILE);
   if (core === "solana") return "solana";
   if (core === "base") return "base";
-  try {
-    const content = (await readTextFile(CHAIN_FILE)).trim();
-    if (content === "solana") return "solana";
-    return "base";
-  } catch {
-    return "base";
-  }
+  const legacy = await readOptional(CHAIN_FILE);
+  if (legacy === "solana") return "solana";
+  if (legacy === "base") return "base";
+  // No selection recorded anywhere. Prefer Solana unless a wallet predates the
+  // preference, in which case its funds decide.
+  return (await hasExistingWallet()) ? "base" : "solana";
 }
 
 /**
- * Resolve payment chain: env var first → persisted file second → default "base".
+ * Is there already a wallet on this machine? Read-only — never creates one, so
+ * it is safe to call before the wallet is resolved.
+ */
+async function hasExistingWallet(): Promise<boolean> {
+  if (process["env"].BLOCKRUN_WALLET_KEY?.trim()) return true;
+  const [core, legacy] = await Promise.all([
+    readOptional(CORE_WALLET_FILE),
+    readOptional(WALLET_FILE),
+  ]);
+  return Boolean(core || legacy);
+}
+
+/**
+ * Resolve payment chain: env var first → persisted file second → the
+ * fresh-install preference (Solana) last. See loadPaymentChain.
  */
 export async function resolvePaymentChain(): Promise<"base" | "solana"> {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "solana") return "solana";

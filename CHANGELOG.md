@@ -4,6 +4,41 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Fixed — API-key mode could still mint a wallet you never asked for
+
+`resolveOrGenerateWalletKey()` creates a private key as a side effect, so every call site has to resolve the BlockRun API key first. Three of the four did. The fourth — the plugin's non-gateway-mode branch of `register()` — called it unconditionally, so a card-paying user installing the OpenClaw plugin got a freshly minted key plus a `NEW WALLET GENERATED — BACK UP YOUR KEY NOW / losing this key = losing your USDC` banner for a wallet that would never be used. That contradicted the documented promise that API-key mode "never generates, reads or signs with a private key". The branch now resolves the key first and returns before touching a wallet, and `src/index.api-key-no-wallet.test.ts` guards every call site so a fifth one cannot be added unguarded.
+
+### Fixed — endpoints the gateway serves returned "All models in fallback chain failed"
+
+Every `/v1/*` path the proxy did not explicitly route fell through to the chat handler, whose attempt loop is `modelsToTry = modelId ? [modelId] : []`. A body with no routable `model` therefore produced an empty chain, issued **no upstream request at all**, and answered `502 All models in fallback chain failed` — blaming the model catalog for what was really an unrouted URL.
+
+Two real endpoints were caught by this in **both wallet and API-key mode**:
+
+- `/v1/messages` — the Anthropic-shaped chat surface, which the README already listed as supported
+- `/v1/audio/speech` — TTS, distinct from the `/v1/audio/generations` music route that _was_ handled
+
+Both now forward verbatim through the existing paid-passthrough, verified live against `api.blockrun.ai` and `blockrun.ai/api`. Anything still unrouted gets an honest `404 unsupported_endpoint` naming what the proxy does serve, instead of a misleading 502.
+
+### Fixed — the API-key docs described a gateway that no longer exists
+
+The 404 hint and the README both said `api.blockrun.ai` "currently carries chat and text completions" and that "image, video, audio and the partner APIs are still wallet-only". Probing the live gateway on 2026-09-05 disproved it: chat, `/v1/messages`, `/v1/models`, image generation, speech, video, Surf, Exa, prediction markets and phone lookup/fraud **all work on an API key**, and so do all <!-- br:models.free -->7<!-- /br:models.free --> free models. The genuine wallet-only exceptions are the routes that bind a lease or a position to a payer address — buying/renewing/releasing phone numbers, and Polymarket trading — and those are now what the hint names.
+
+### Changed — Solana is the stated preference, without stranding Base wallets
+
+New installs have persisted `payment-chain=solana` since v0.12.246, but everything that _described_ the product still led with Base, and `loadPaymentChain()` fell back to `base` for any install with no chain file. That fallback now resolves to **solana** — except when a wallet already exists on disk (or in `BLOCKRUN_WALLET_KEY`), where it stays on **base**, because a pre-v0.12.246 install has its USDC in the Base wallet and flipping it would point every call at a gateway its money is not on. An explicitly recorded choice and `CLAWROUTER_PAYMENT_CHAIN` still win over both. README, docs and skills now name Solana first.
+
+### Changed — skills no longer assume a wallet
+
+Every skill told the agent "payment is deducted from the user's BlockRun wallet" and, on a 402, "tell the user to fund their wallet at blockrun.ai" — advice that sends a card-paying user to a page that cannot fix their error. `imagegen`, `phone`, `surf`, `predexon` and `clawrouter` now describe both rails and tell the agent to read `authMode` from `GET /health` before naming a fix. The `phone` skill also records that wallet-owned number leases are wallet-mode only.
+
+### Changed — README says where to sign up
+
+The card rail is now signposted from the hero, the pay-rails table, the funding list and the support table, with the actual top-up fee (5.5% + $0.30, charged once at purchase, then provider list price with nothing per call).
+
+---
+
 ## v0.12.269 — September 4, 2026
 
 ### Fixed — one spend ledger for every signing surface, and a `session` cap that still means what the docs say

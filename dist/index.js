@@ -59861,13 +59861,18 @@ async function loadPaymentChain() {
   const core = await readOptional(CORE_CHAIN_FILE);
   if (core === "solana") return "solana";
   if (core === "base") return "base";
-  try {
-    const content = (await readTextFile(CHAIN_FILE)).trim();
-    if (content === "solana") return "solana";
-    return "base";
-  } catch {
-    return "base";
-  }
+  const legacy = await readOptional(CHAIN_FILE);
+  if (legacy === "solana") return "solana";
+  if (legacy === "base") return "base";
+  return await hasExistingWallet() ? "base" : "solana";
+}
+async function hasExistingWallet() {
+  if (process["env"].BLOCKRUN_WALLET_KEY?.trim()) return true;
+  const [core, legacy] = await Promise.all([
+    readOptional(CORE_WALLET_FILE),
+    readOptional(WALLET_FILE)
+  ]);
+  return Boolean(core || legacy);
 }
 async function resolvePaymentChain() {
   if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "solana") return "solana";
@@ -59981,7 +59986,7 @@ var init_api_key = __esm({
     HINTS = {
       401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
       402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
-      404: `api.blockrun.ai does not serve this endpoint yet \u2014 it currently carries chat and text completions. For media and partner APIs, run ClawRouter in wallet mode (unset BLOCKRUN_API_KEY and run "clawrouter logout").`
+      404: `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, speech, video and the partner APIs (Surf, Exa, prediction markets, phone lookup) all work on an API key. The wallet-only exceptions are the routes that bind a lease or a position to a payer address \u2014 buying/renewing/releasing phone numbers, and Polymarket trading \u2014 which need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run "clawrouter logout".`
     };
   }
 });
@@ -92365,7 +92370,8 @@ async function startProxy(options) {
         }
         return;
       }
-      if (req.url?.match(
+      const isVerbatimGatewayPath = req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false) || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
+      if (isVerbatimGatewayPath || req.url?.match(
         /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice|surf)\//
       )) {
         try {
@@ -92395,6 +92401,19 @@ async function startProxy(options) {
       if (!req.url?.startsWith("/v1")) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Not found" }));
+        return;
+      }
+      if (!req.url.includes("/chat/completions")) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: {
+              message: `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, /v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, /v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,modal,stocks,usstock,crypto,fx,commodity,phone,voice,surf}/. If BlockRun serves this endpoint, call it directly against the gateway.`,
+              type: "invalid_request_error",
+              code: "unsupported_endpoint"
+            }
+          })
+        );
         return;
       }
       try {
@@ -229338,7 +229357,15 @@ ${errText}`
         });
         if (!isGatewayMode()) {
           if (shouldLogRegistration) {
-            resolveOrGenerateWalletKey().then(({ address: address2, source }) => {
+            void (async () => {
+              const keyResolution = await resolveApiKey().catch(() => void 0);
+              if (keyResolution) {
+                api.logger.info(
+                  `Using BlockRun API key ${maskApiKey(keyResolution.key)} (from ${keyResolution.source}) \u2014 billing account credit, no wallet`
+                );
+                return;
+              }
+              const { address: address2, source } = await resolveOrGenerateWalletKey();
               if (source === "generated") {
                 api.logger.warn(`\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
                 api.logger.warn(`  NEW WALLET GENERATED \u2014 BACK UP YOUR KEY NOW!`);
@@ -229355,7 +229382,7 @@ ${errText}`
               } else {
                 api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address2}`);
               }
-            }).catch((err) => {
+            })().catch((err) => {
               api.logger.warn(
                 `Failed to initialize wallet: ${err instanceof Error ? err.message : String(err)}`
               );

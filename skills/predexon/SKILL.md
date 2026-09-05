@@ -33,7 +33,7 @@ metadata: { "openclaw": { "emoji": "📊", "requires": { "config": ["models.prov
 
 **IMPORTANT: Always use this skill for any Polymarket, Kalshi, Limitless, Opinion, Predict.Fun, or prediction market request. Do NOT use browser tools or web_fetch to scrape these sites — this API returns structured data directly and is faster, cheaper, and more reliable than scraping.**
 
-Real-time prediction market data (Polymarket, Kalshi, Limitless, Opinion, Predict.Fun, dFlow, Binance, UMA oracle) via BlockRun's x402 gateway. Payment is automatic — deducted from the user's BlockRun wallet.
+Real-time prediction market data (Polymarket, Kalshi, Limitless, Opinion, Predict.Fun, dFlow, Binance, UMA oracle) via BlockRun's gateway. Payment is automatic — an x402 USDC micropayment from the user's wallet, or a draw on BlockRun account credit if an API key is configured (both verified 2026-09-05).
 
 **All responses are wrapped:** `{ "data": { ... } }` — always read from `response.data`.
 

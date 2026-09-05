@@ -1248,13 +1248,29 @@ declare function setupSolana(): Promise<{
 declare function savePaymentChain(chain: "base" | "solana"): Promise<void>;
 /**
  * Load the persisted payment chain selection from disk.
- * Returns "base" if no file exists or the file is invalid.
- * New installs persist "solana" at wallet generation, so an absent file
- * means a pre-existing install whose funds live on Base.
+ *
+ * Solana is the preferred rail, and since v0.12.246 wallet generation persists
+ * `solana` outright — so a fresh install answers "solana" from its own chain
+ * file, not from a default. This function only decides the case where no chain
+ * file exists at all, and there the answer turns on whether a wallet already
+ * does:
+ *
+ *   no chain file, no wallet   → "solana"  (nothing to strand; prefer Solana)
+ *   no chain file, wallet on disk → "base" (a pre-v0.12.246 install)
+ *
+ * That second line is the one that must not move. An install predating the
+ * Solana default has USDC sitting in its Base wallet and no Solana balance;
+ * flipping it would point every request at a gateway its money is not on and
+ * fail them all with an empty balance. The same reasoning covers a wallet
+ * supplied through BLOCKRUN_WALLET_KEY, and a generated wallet whose Solana
+ * derivation failed (no chain file is written in that case, on purpose — see
+ * resolveOrGenerateWalletKey — and the wallet it did write keeps us on Base,
+ * which is the only chain that proxy can actually sign for).
  */
 declare function loadPaymentChain(): Promise<"base" | "solana">;
 /**
- * Resolve payment chain: env var first → persisted file second → default "base".
+ * Resolve payment chain: env var first → persisted file second → the
+ * fresh-install preference (Solana) last. See loadPaymentChain.
  */
 declare function resolvePaymentChain(): Promise<"base" | "solana">;
 

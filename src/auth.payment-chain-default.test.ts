@@ -61,6 +61,49 @@ afterAll(() => {
   rmSync(TEMP_HOME, { recursive: true, force: true });
 });
 
+describe("Solana is the fresh-install preference", () => {
+  it("prefers solana when nothing is on disk at all", async () => {
+    await expect(loadPaymentChain()).resolves.toBe("solana");
+    await expect(resolvePaymentChain()).resolves.toBe("solana");
+  });
+
+  it("stays on base when a legacy wallet exists but no chain file does", async () => {
+    // A pre-v0.12.246 install: its USDC is on Base and it never recorded a
+    // choice. Flipping it to Solana would point every call at a gateway its
+    // money is not on.
+    mkdirSync(WALLET_DIR, { recursive: true });
+    writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n");
+    expect(existsSync(CHAIN_FILE)).toBe(false);
+    await expect(loadPaymentChain()).resolves.toBe("base");
+  });
+
+  it("stays on base when a Core wallet exists but no chain file does", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(CORE_DIR, ".session"), CORE_TEST_KEY + "\n");
+    await expect(loadPaymentChain()).resolves.toBe("base");
+  });
+
+  it("stays on base for a BLOCKRUN_WALLET_KEY wallet with no chain file", async () => {
+    process.env.BLOCKRUN_WALLET_KEY = TEST_KEY;
+    await expect(loadPaymentChain()).resolves.toBe("base");
+  });
+
+  it("an explicit recorded choice always wins over the preference", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    writeFileSync(join(CORE_DIR, ".chain"), "base\n");
+    await expect(loadPaymentChain()).resolves.toBe("base");
+  });
+
+  it("CLAWROUTER_PAYMENT_CHAIN still overrides everything", async () => {
+    mkdirSync(WALLET_DIR, { recursive: true });
+    writeFileSync(join(WALLET_DIR, "wallet.key"), TEST_KEY + "\n");
+    process.env.CLAWROUTER_PAYMENT_CHAIN = "solana";
+    await expect(resolvePaymentChain()).resolves.toBe("solana");
+    process.env.CLAWROUTER_PAYMENT_CHAIN = "base";
+    await expect(resolvePaymentChain()).resolves.toBe("base");
+  });
+});
+
 describe("payment chain default for new installs", () => {
   it("does not create files when only checking for an existing wallet", async () => {
     await expect(resolveExistingWalletKey()).resolves.toBeUndefined();
