@@ -26,6 +26,30 @@ Both files also now state that the Base/Solana Surf difference is deliberate —
 
 ## v0.12.271 — September 5, 2026
 
+### Fixed — API-key calls were logged at up to 152x their real cost
+
+On the wallet rail `logUsage` records the actual x402 payment. On the API-key rail no x402 payment ever happens, so `actualPayment` was always 0 and every call fell through to a local estimate that adds a 5% server margin, a $0.001 per-transaction settlement fee and router-core's `MIN_PAYMENT_USD` floor. All three are x402 concepts — the fee covers on-chain gas, the floor is the CDP facilitator's minimum — and account credit settles none of them.
+
+Measured against the gateway's own ledger by diffing `spent_usd` across a single call: a 12-in/8-out `gpt-4o-mini` call was billed **$0.0000066** while `/stats` reported **$0.001**. API-key mode now prices a call the way the gateway does, using the token counts the response actually reports: `(inputTokens × inputPrice + outputTokens × outputPrice) / 1e6`. Re-measured after the fix — gateway charged $0.00000675, ClawRouter logged $0.00000675, delta zero.
+
+**If you pay by API key, the numbers `/stats` reports will drop sharply after upgrading.** The old ones were wrong; the new ones reconcile against the gateway to the cent. Wallet mode is unchanged — it still logs the real x402 amount.
+
+### Fixed — paid partner calls were logged at $0 on the API-key rail
+
+The mirror of the same bug. `getActualPaymentUsd()` returns the x402 payment, which never happens on the API-key rail, so Surf, Exa, prediction-market, image and speech calls all landed in the journal at zero and were invisible in `/stats`. Unlike chat there is no local price model for these services, so the gateway's own figure is the only truthful source: ClawRouter now reads `x-blockrun-cost-usd` when BlockRun sends it.
+
+Its contract is that **absent means "no charge settled at response time", not "the call was free"** — chat is always absent, since the charge commits after the response is sent — so absence falls back rather than asserting $0.
+
+### Added — `clawrouter status` shows account credit
+
+BlockRun now publishes a key-readable credit position, so the balance a card-paying user could previously only see by logging into the dashboard is available from the CLI, and on `/health?full=true`.
+
+`remaining_usd` is legitimately null on an ungated account (no prepaid allowance), so it renders as `spent $4.29 — no prepaid limit` rather than a fabricated `$0.00`; a prepaid account shows `$12.50 remaining (spent $4.29)`. Also surfaces the account's blocked flag.
+
+### Added — the gateway request id is recorded for billing reconciliation
+
+Every `cost` in the usage journal is a local estimate, so it drifts whenever the local price table does. Reconciling against a server-side ledger needs a key both sides share, and the gateway already returns one on every response. `UsageEntry.requestId` now captures it. It cannot be backfilled, so it is recorded ahead of the ledger API that will consume it.
+
 ### Fixed — every paid Solana call failed on hosts that cannot reach the public Solana RPC
 
 Signing an x402 payment on Solana fetches the asset's mint account from a Solana RPC, defaulting to `api.mainnet-beta.solana.com`. A host with blocked egress — or one the public node refuses — therefore failed **every** paid Solana call with a bare `fetch failed`, while the gateway itself answered fine and free models kept working. Indistinguishable from a gateway outage, and the reason [ClawRouter-Hermes#38](https://github.com/BlockRunAI/ClawRouter-Hermes/issues/38) looked like a Solana gateway fault.
