@@ -4,7 +4,7 @@ All notable changes to ClawRouter.
 
 ---
 
-## Unreleased
+## v0.12.273 — September 5, 2026
 
 ### Fixed — a second API key could attach to a proxy billing the first account
 
