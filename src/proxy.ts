@@ -795,7 +795,9 @@ export function getProxyPort(): number {
  */
 async function checkExistingProxy(
   port: number,
-): Promise<{ wallet: string; paymentChain?: string; authMode: AuthMode } | undefined> {
+): Promise<
+  { wallet: string; paymentChain?: string; authMode: AuthMode; apiKeyLabel?: string } | undefined
+> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
@@ -811,13 +813,19 @@ async function checkExistingProxy(
         wallet?: string;
         paymentChain?: string;
         authMode?: string;
+        apiKey?: string;
       };
       // An API-key proxy has no wallet to report, so `wallet` alone can no
       // longer be the liveness signal. Anything that does not name its mode is
       // a pre-v0.12.268 instance, which could only have been a wallet proxy.
       const authMode: AuthMode = data.authMode === "api-key" ? "api-key" : "wallet";
       if (data.status === "ok" && (data.wallet || authMode === "api-key")) {
-        return { wallet: data.wallet ?? "", paymentChain: data.paymentChain, authMode };
+        return {
+          wallet: data.wallet ?? "",
+          paymentChain: data.paymentChain,
+          authMode,
+          apiKeyLabel: typeof data.apiKey === "string" ? data.apiKey : undefined,
+        };
       }
     }
     return undefined;
@@ -2624,13 +2632,32 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     }
 
     if (authMode === "api-key") {
+      // Reusing a proxy holding a DIFFERENT key bills someone else's account.
+      // The mode check above only separates wallet from key; it says nothing
+      // about WHICH key, so `clawrouter login` with a second key on a port
+      // already serving the first used to attach silently — the new process
+      // printed the new key and reported "listening", while every request was
+      // charged to the old account. Compare the masked label /health publishes.
+      //
+      // An older proxy that reports no label cannot be verified, and an
+      // unverifiable credential on a money path is refused rather than assumed
+      // to match.
+      const runningLabel = existingProxy.apiKeyLabel;
+      const ourLabel = maskApiKey(apiKey!);
+      if (runningLabel !== ourLabel) {
+        throw new Error(
+          `Existing proxy on port ${listenPort} is billing ${runningLabel ?? "an unidentified BlockRun account"}, ` +
+            `but this process is configured for ${ourLabel}. Reusing it would charge the other account. ` +
+            `Stop that proxy first, or use a different port.`,
+        );
+      }
       options.onReady?.(listenPort);
       return {
         port: listenPort,
         baseUrl,
         walletAddress: "",
         authMode,
-        apiKeyLabel: maskApiKey(apiKey!),
+        apiKeyLabel: ourLabel,
         balanceMonitor: new ApiKeyBalanceMonitor(),
         // No-op: we didn't start this proxy, so we shouldn't close it
         close: async () => {},

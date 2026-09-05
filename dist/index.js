@@ -90891,7 +90891,12 @@ async function checkExistingProxy(port) {
       const data = await response.json();
       const authMode = data.authMode === "api-key" ? "api-key" : "wallet";
       if (data.status === "ok" && (data.wallet || authMode === "api-key")) {
-        return { wallet: data.wallet ?? "", paymentChain: data.paymentChain, authMode };
+        return {
+          wallet: data.wallet ?? "",
+          paymentChain: data.paymentChain,
+          authMode,
+          apiKeyLabel: typeof data.apiKey === "string" ? data.apiKey : void 0
+        };
       }
     }
     return void 0;
@@ -91574,13 +91579,20 @@ async function startProxy(options) {
       );
     }
     if (authMode === "api-key") {
+      const runningLabel = existingProxy.apiKeyLabel;
+      const ourLabel = maskApiKey(apiKey);
+      if (runningLabel !== ourLabel) {
+        throw new Error(
+          `Existing proxy on port ${listenPort} is billing ${runningLabel ?? "an unidentified BlockRun account"}, but this process is configured for ${ourLabel}. Reusing it would charge the other account. Stop that proxy first, or use a different port.`
+        );
+      }
       options.onReady?.(listenPort);
       return {
         port: listenPort,
         baseUrl: baseUrl2,
         walletAddress: "",
         authMode,
-        apiKeyLabel: maskApiKey(apiKey),
+        apiKeyLabel: ourLabel,
         balanceMonitor: new ApiKeyBalanceMonitor(),
         // No-op: we didn't start this proxy, so we shouldn't close it
         close: async () => {

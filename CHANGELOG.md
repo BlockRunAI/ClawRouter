@@ -4,6 +4,20 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Fixed — a second API key could attach to a proxy billing the first account
+
+Proxy reuse compared wallet-vs-key but never **which** key, while its own comment claimed to "never reuse across credentials". So `clawrouter login` with a second key, against a port already serving the first, attached silently: the new process printed the new key and reported `listening`, and every request went on being charged to the previous account.
+
+Reproduced on the shipped v0.12.272 — a proxy started with key A kept answering `/health` as key A while a second process configured for key B reported success on the same port. Cross-account billing behind a success message.
+
+Reuse is now bound to the credential: the masked label `/health` publishes must match, and an older proxy that reports no label is refused rather than assumed to match, because an unverifiable credential on a money path is not a match. Same-key reuse — one machine, one key, a second client attaching — is unaffected.
+
+Reported by [@KillerQueen-Z](https://github.com/KillerQueen-Z) in [#343](https://github.com/BlockRunAI/ClawRouter/pull/343).
+
+---
+
 ## v0.12.272 — September 5, 2026
 
 ### Added — the API key is pinned to one origin, and never falls back to a wallet by accident
