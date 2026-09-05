@@ -34,6 +34,8 @@ v0.12.273 bound proxy reuse to the credential, but only on the pre-listen probe.
 
 Both paths now run the same validator: auth mode, API key and payment chain, one rule instead of two.
 
+Found by [@KillerQueen-Z](https://github.com/KillerQueen-Z) in [#343](https://github.com/BlockRunAI/ClawRouter/pull/343), the remaining finding on that PR after v0.12.273 landed the rest.
+
 ### Fixed — two different wallets no longer swap silently
 
 `resolveExistingWalletKey` prefers BlockRun Core over ClawRouter's legacy `wallet.key`, and the legacy→Core migration copies only when Core is absent — so in the common case both hold the same key and the precedence is invisible. It becomes visible when Core was written independently by another BlockRun product while ClawRouter already had its own funded wallet: payment moved on upgrade, requests started failing on an empty balance, and the funded wallet sat idle with nothing having said so.
