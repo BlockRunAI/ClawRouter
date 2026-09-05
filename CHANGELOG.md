@@ -4,7 +4,13 @@ All notable changes to ClawRouter.
 
 ---
 
-## Unreleased
+## v0.12.275 — September 5, 2026
+
+### Added — a collision gate pinned to an OpenClaw version that actually collides
+
+The existing container harness pins `openclaw@2026.5.4` — the release before OpenClaw began bundling its own `clawrouter` plugin — so the id collision from #305 cannot occur there, and every other harness floats on `@latest`, which cannot hold a version-specific regression still. The unit tests mock `homedir` and never see the installer, while both production failures were installer-shaped.
+
+`npm run test:e2e:openclaw-collision` drives the real installer against a pinned 2026.8.2. Opt-in, not wired into CI; it sandboxes `HOME` and strips `BLOCKRUN_WALLET_KEY` and the `OPENCLAW_*` overrides from the child environment, so it cannot touch a real wallet or config. From [#320](https://github.com/BlockRunAI/ClawRouter/pull/320) by [@twzrd-sol](https://github.com/twzrd-sol).
 
 ### Fixed — the wallet rails never said which gateway they were using
 
