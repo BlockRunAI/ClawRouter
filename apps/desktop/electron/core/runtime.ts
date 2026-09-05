@@ -6,7 +6,7 @@ import type { AdapterContext } from "./types.js";
 import { ensureServiceToken, verifyClawRouter } from "./service-auth.js";
 
 /** Keep in sync with the root package; runtime-version.test.ts enforces it. */
-export const CLAWROUTER_PACKAGE_VERSION = "0.12.270";
+export const CLAWROUTER_PACKAGE_VERSION = "0.12.271";
 
 export function managedBin(context: AdapterContext, name: string): string {
   const suffix = process.platform === "win32" ? ".cmd" : "";

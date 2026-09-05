@@ -4,7 +4,7 @@ All notable changes to ClawRouter.
 
 ---
 
-## Unreleased
+## v0.12.271 — September 5, 2026
 
 ### Fixed — every paid Solana call failed on hosts that cannot reach the public Solana RPC
 
