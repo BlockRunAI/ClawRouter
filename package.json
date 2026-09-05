@@ -58,6 +58,7 @@
     "test:resilience:full": "npm run test:resilience:errors && npm run test:resilience:lifecycle && npm run test:resilience:stability:full",
     "test:e2e": "tsx test/test-e2e.ts",
     "test:e2e:tool-ids": "npm run build && tsx test/e2e-tool-id-sanitization.ts",
+    "test:e2e:openclaw-collision": "npm run build && tsx test/openclaw-plugin-collision-e2e.ts",
     "test:docker:install": "bash test/run-docker-test.sh",
     "test:docker:edge-cases": "bash test/docker/run-edge-cases.sh",
     "test:docker:integration": "docker compose -f test/integration/docker-compose.yml up --build --abort-on-container-exit --exit-code-from integration"
