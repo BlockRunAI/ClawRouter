@@ -17,6 +17,15 @@ triggers:
   - "usdc image generation"
 metadata: { "openclaw": { "emoji": "🖼️", "requires": { "config": ["models.providers.blockrun"] } } }
 ---
+## Authentication and billing
+
+Use `clawrouter status` or the local `/health` response to identify the active mode. Never read or print the API key.
+
+- **Account API:** requests through the local proxy use the configured BlockRun key and prepaid credits. No wallet or payment-chain switch is needed. Register at [user.blockrun.ai](https://user.blockrun.ai), manage [keys](https://user.blockrun.ai/dashboard/keys), and add [credits](https://user.blockrun.ai/dashboard/credits). Check [Activity](https://user.blockrun.ai/dashboard/activity) for actual charges.
+- **Wallet x402:** the proxy signs payments from the configured wallet. Preserve the user's selected chain and wallet.
+- **Errors:** in account mode, 401 means check the key, 402 means check account credits/status, and 429 means respect Retry-After. Do not switch to wallet billing or resubmit an accepted media job to recover from these errors.
+
+
 
 # Image Generation & Editing
 
@@ -137,8 +146,8 @@ Response is identical to generation:
 
 ## Notes
 
-- Payment is automatic via x402 — deducted from the user's BlockRun wallet
-- If the call fails with a payment error, tell the user to fund their wallet at [blockrun.ai](https://blockrun.ai)
+- Payment uses account credits in API mode, or x402 USDC in wallet mode
+- Follow the mode-specific error guidance above; account users add credits in the portal.
 - Google models may return base64 internally — ClawRouter uploads automatically and returns a hosted URL
 - OpenAI image models enforce OpenAI content policy; use `nano-banana` or `grok-imagine` for more flexibility
 - Image editing is only available with `gpt-image-1`; generation supports all listed models

@@ -53,7 +53,7 @@ metadata:
 
 # ClawRouter
 
-Hosted-gateway LLM router that saves <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% on inference costs by forwarding each request to the blockrun.ai gateway, which picks the cheapest model capable of handling it across <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from 9 providers (<!-- br:models.free -->7<!-- /br:models.free --> free open-weight models). All billing flows through one USDC wallet; you do not hold provider API keys.
+Hosted-gateway LLM router that saves <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% on inference costs by forwarding each request to the blockrun.ai gateway, which picks the cheapest model capable of handling it across <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from 9 providers (<!-- br:models.free -->7<!-- /br:models.free --> free open-weight models). Use one BlockRun account API key with prepaid credits, or an x402 USDC wallet on Solana or Base; no separate provider API keys are required.
 
 **This is not a local-inference tool.** ClawRouter is a thin local proxy. Your prompts are sent over HTTPS to the blockrun.ai gateway for model execution. If your workload requires inference that never leaves your machine, use a local runtime like Ollama — ClawRouter is not the right tool for that use case.
 
@@ -69,7 +69,7 @@ Your app → localhost proxy (ClawRouter) → https://blockrun.ai/api  (or sol.b
                                         Response → back through proxy → your app
 ```
 
-**Sent to blockrun.ai on every request:** the model name, the full prompt/messages body, sampling params (temperature, max_tokens, tools, etc.), and an `X-PAYMENT` header containing a signed x402 USDC micropayment.
+**Sent to the configured BlockRun gateway:** the model name, full prompt/messages body and request parameters. Account mode sends bearer authentication to `api.blockrun.ai`; wallet mode sends x402 payment proof to the selected wallet gateway. Never print either credential.
 
 **Not sent:** your wallet private key (only the detached payment signature is sent), any other local files, environment variables, or OpenClaw config beyond what's needed for this request.
 
@@ -83,7 +83,7 @@ ClawRouter does **not** collect or forward third-party provider API keys. You do
 
 | Field       | Sensitive | Purpose                                                                                                                                                                                                    |
 | ----------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `walletKey` | Yes       | EVM private key used to sign USDC micropayments via x402. **Auto-generated locally on first run** — no user input required. Never transmitted over the network; only detached payment signatures are sent. |
+| `walletKey` | Wallet mode only | EVM private key used to sign USDC micropayments via x402. **Auto-generated locally on first run** — no user input required. Never transmitted over the network; only detached payment signatures are sent. |
 | `solanaKey` | Yes       | Solana keypair (BIP-44 `m/44'/501'/0'/0'`). Auto-derived from the same local mnemonic via `@scure/bip32` + `@scure/bip39`.                                                                                 |
 | `gateway`   | No        | Gateway URL. Defaults: `https://sol.blockrun.ai/api` (Solana, default chain for new installs) · `https://blockrun.ai/api` (Base, default for pre-existing installs).                                       |
 | `routing`   | No        | Optional override of the router-core config (tier chains, `strategy: "rules"` rollback, `shadow` comparison, scorer keywords).                                                                             |
@@ -151,7 +151,7 @@ it against a baseline nobody wrote down. See
 
 ## Built-in Agent Tools
 
-In addition to LLM routing, ClawRouter exposes BlockRun's x402-gated data APIs as ready-to-use OpenClaw tools. Every tool is paid from the same USDC wallet — no extra setup, no extra API keys.
+In addition to LLM routing, ClawRouter exposes BlockRun's x402-gated data APIs as ready-to-use OpenClaw tools. Model, media and data tools use the configured account API key or wallet. Trading and wallet-owned resources retain their separate wallet requirements.
 
 ### Market Data
 
@@ -202,17 +202,17 @@ Full prediction-market toolbox spanning **Polymarket, Kalshi, Limitless, Opinion
 
 | Tool                                 | Coverage                                                                                                                                                                                                                                                                             | Price                  |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
-| `blockrun_predexon_events`           | Live Polymarket events with current odds                                                                                                                                                                                                                                             | $0.001 / call          |
-| `blockrun_predexon_markets`          | Search Polymarket markets by keyword                                                                                                                                                                                                                                                 | $0.001 / call          |
-| `blockrun_predexon_leaderboard`      | Top Polymarket traders ranked by profit                                                                                                                                                                                                                                              | $0.001 / call          |
-| `blockrun_predexon_smart_money`      | Smart-money positions on a specific market                                                                                                                                                                                                                                           | $0.005 / call          |
-| `blockrun_predexon_smart_activity`   | Markets where smart money is currently active                                                                                                                                                                                                                                        | $0.005 / call          |
-| `blockrun_predexon_wallet`           | Polymarket wallet profile (PnL, winrate, positions)                                                                                                                                                                                                                                  | $0.005 / call          |
-| `blockrun_predexon_wallet_pnl`       | Wallet P&L time series                                                                                                                                                                                                                                                               | $0.005 / call          |
-| `blockrun_predexon_matching_markets` | Polymarket ↔ Kalshi market pairs (arb compare)                                                                                                                                                                                                                                       | $0.005 / call          |
-| `blockrun_predexon_endpoint_call`    | Catch-all for the remaining 49 endpoints — orderbooks, candlesticks, top-holders, UMA oracle, wallet identity/cluster, Kalshi/Limitless/Opinion/Predict.Fun, dFlow, Binance Futures, cross-venue search, sports, canonical markets. Takes `path` + optional `method`/`query`/`body`. | $0.001 / $0.005 / call |
+| `blockrun_predexon_events`           | Live Polymarket events with current odds                                                                                                                                                                                                                                             | $0.0075 / call          |
+| `blockrun_predexon_markets`          | Search Polymarket markets by keyword                                                                                                                                                                                                                                                 | $0.0075 / call          |
+| `blockrun_predexon_leaderboard`      | Top Polymarket traders ranked by profit                                                                                                                                                                                                                                              | $0.0075 / call          |
+| `blockrun_predexon_smart_money`      | Smart-money positions on a specific market                                                                                                                                                                                                                                           | $0.0075 / call          |
+| `blockrun_predexon_smart_activity`   | Markets where smart money is currently active                                                                                                                                                                                                                                        | $0.0075 / call          |
+| `blockrun_predexon_wallet`           | Polymarket wallet profile (PnL, winrate, positions)                                                                                                                                                                                                                                  | $0.0075 / call          |
+| `blockrun_predexon_wallet_pnl`       | Wallet P&L time series                                                                                                                                                                                                                                                               | $0.0075 / call          |
+| `blockrun_predexon_matching_markets` | Polymarket ↔ Kalshi market pairs (arb compare)                                                                                                                                                                                                                                       | $0.0075 / call          |
+| `blockrun_predexon_endpoint_call`    | Catch-all for the remaining 49 endpoints — orderbooks, candlesticks, top-holders, UMA oracle, wallet identity/cluster, Kalshi/Limitless/Opinion/Predict.Fun, dFlow, Binance Futures, cross-venue search, sports, canonical markets. Takes `path` + optional `method`/`query`/`body`. | $0.0075 / call |
 
-Pricing: `$0.001` per market-data call, `$0.005` per analytics / search / wallet call. See the `predexon` skill for the full endpoint reference.
+Pricing: `$0.0075` per data or analytics call. Gateway billing is authoritative. See the `predexon` skill for the full endpoint reference.
 
 ### Prediction-Market Trading (Polymarket) — REAL MONEY
 
@@ -242,9 +242,9 @@ egress by default, so it works out of the box in geoblocked regions).
 
 Surf is a unified crypto data API with **84 endpoints across 13 domains**: CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT mindshare, news, project/DeFi metrics, token analytics, unified search, VC fund intelligence. The killer feature is `POST /surf/onchain/sql` — ad-hoc SELECT against the warehouse, no indexer required.
 
-**ClawRouter ships Surf as a skill, not as typed wrappers.** The base proxy whitelists `/v1/surf/*` so any call through `http://127.0.0.1:8402/v1/surf/...` flows through the same x402 wallet that pays for LLM calls. The endpoint catalog, parameter shapes, and example flows live in the dedicated **`surf` skill** — Claude Code (or any agent) reads that skill on demand and crafts the HTTP call itself. No `blockrun_surf_*` tool definitions to maintain, no release of ClawRouter when Surf adds endpoint #85.
+**ClawRouter ships Surf as a skill, not as typed wrappers.** The base proxy whitelists `/v1/surf/*` so any call through `http://127.0.0.1:8402/v1/surf/...` uses the same account API key or x402 wallet as LLM calls. The endpoint catalog, parameter shapes, and example flows live in the dedicated **`surf` skill** — Claude Code (or any agent) reads that skill on demand and crafts the HTTP call itself. No `blockrun_surf_*` tool definitions to maintain, no release of ClawRouter when Surf adds endpoint #85.
 
-Pricing tiers (per call, settled in USDC directly to Surf's Base treasury): **$0.001** prices/rankings/lists/news · **$0.005** orderbooks/candles/search/wallet details/social · **$0.02** on-chain SQL/query/schema, chat completions. No monthly minimums, no Surf account, no API key. See the `surf` skill for the full endpoint reference.
+Current service price: **$0.0075/call** across Surf tiers, billed to account credits or the selected x402 wallet. No separate Surf account or key is needed. Gateway billing is authoritative. See the `surf` skill for the full endpoint reference.
 
 This is the pattern for new BlockRun-marketplace APIs going forward: base proxy whitelists the namespace, a dedicated skill documents the surface — no hand-coded tool wrappers per endpoint.
 
@@ -254,3 +254,9 @@ This is the pattern for new BlockRun-marketplace APIs going forward: base proxy 
 [ClawRouter] google/gemini-2.5-flash (SIMPLE, rules, confidence=0.92)
              Cost: $0.0025 | Baseline: $0.308 | Saved: 99.2%
 ```
+
+## Account onboarding and errors
+
+Register at [user.blockrun.ai](https://user.blockrun.ai), add [credits](https://user.blockrun.ai/dashboard/credits), and create an [API key](https://user.blockrun.ai/dashboard/keys). Use `clawrouter login` or set `BLOCKRUN_API_KEY` in the process environment. Verify `clawrouter status` before calls; never inspect or print the key. Actual account charges are in [Activity](https://user.blockrun.ai/dashboard/activity).
+
+For account errors, check the key on 401, account credits/status on 402, and Retry-After on 429. Do not suggest funding a wallet or switching chains to fix an API error. Wallet users keep their existing payment flow. To return to it intentionally, use `clawrouter logout`, unset the API-key environment variable, and restart the proxy; the wallet is preserved.

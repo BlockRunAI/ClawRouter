@@ -24,6 +24,8 @@ describe("startProxy in API-key mode", () => {
   let seenAuth: string | undefined;
   let seenPayment: string | undefined;
   let hits = 0;
+  let upstreamStatus = 200;
+  let chatHits = 0;
 
   beforeAll(async () => {
     upstream = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -32,10 +34,22 @@ describe("startProxy in API-key mode", () => {
       req.on("end", () => {
         hits++;
         seenAuth = req.headers["authorization"] as string | undefined;
-        seenPayment = req.headers["x-payment"] as string | undefined;
+        seenPayment = (req.headers["x-payment"] ?? req.headers["payment-signature"]) as
+          string | undefined;
         if (req.url === "/v1/models") {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ object: "list", data: [] }));
+          return;
+        }
+        chatHits++;
+        if (upstreamStatus !== 200) {
+          res.writeHead(upstreamStatus, {
+            "Content-Type": "application/json",
+            "payment-required": "never-sign-this",
+          });
+          res.end(
+            JSON.stringify({ error: { message: "account rejected", code: "account_error" } }),
+          );
           return;
         }
         res.writeHead(200, { "Content-Type": "application/json" });
@@ -55,9 +69,10 @@ describe("startProxy in API-key mode", () => {
     await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
     const addr = upstream.address() as AddressInfo;
 
-    // No `wallet` at all: that is the point of the mode.
+    // A stale wallet must not be parsed when the explicit API key wins.
     proxy = await startProxy({
       apiKey: KEY,
+      wallet: "not-a-valid-legacy-wallet",
       apiBase: `http://127.0.0.1:${addr.port}`,
       port: 0,
       allowExistingProxy: false,
@@ -74,7 +89,30 @@ describe("startProxy in API-key mode", () => {
     seenAuth = undefined;
     seenPayment = undefined;
     hits = 0;
+    upstreamStatus = 200;
+    chatHits = 0;
   });
+
+  it.each([401, 402])(
+    "preserves account %s without replaying against the old wallet",
+    async (status) => {
+      upstreamStatus = status;
+      const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic/claude-sonnet-4.6",
+          messages: [{ role: "user", content: `reject account ${status}` }],
+          stream: false,
+        }),
+      });
+      expect(res.status).toBe(status);
+      await res.text();
+      expect(chatHits).toBe(1);
+      expect(seenAuth).toBe(`Bearer ${KEY}`);
+      expect(seenPayment).toBeUndefined();
+    },
+  );
 
   it("starts without a wallet and reports no wallet address", () => {
     expect(proxy.authMode).toBe("api-key");
@@ -146,4 +184,10 @@ describe("startProxy credential validation", () => {
       startProxy({ apiKey: "sk-not-a-blockrun-key", port: 0, allowExistingProxy: false }),
     ).rejects.toThrow(/brk_/);
   });
+});
+
+it("rejects a blank explicit API key before selecting a legacy wallet", async () => {
+  await expect(
+    startProxy({ apiKey: " ", wallet: "unused-wallet", port: 0, allowExistingProxy: false }),
+  ).rejects.toThrow(/malformed/);
 });

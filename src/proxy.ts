@@ -2175,6 +2175,7 @@ async function proxyPaidApiRequest(
     responseHeaders[key] = value;
   });
 
+  if (accountPassthrough) responseHeaders["cache-control"] = "no-store";
   res.writeHead(upstream.status, responseHeaders);
 
   if (accountPassthrough) {
@@ -2350,7 +2351,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // credential, and a machine that has both (a legacy wallet plus a key the
   // user just added) means "bill my account", not "keep spending my USDC".
   const apiKey = options.apiKey?.trim() || undefined;
-  if (apiKey && !isValidApiKey(apiKey)) {
+  if (options.apiKey !== undefined && !isValidApiKey(apiKey)) {
     throw new Error(
       `BlockRun API key is malformed (expected it to start with "brk_"). Mint one at https://user.blockrun.ai/dashboard/keys`,
     );
@@ -2364,13 +2365,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   // Normalize wallet config: string = EVM-only, object = full resolution
   const walletKey =
-    options.wallet === undefined
+    authMode === "api-key" || options.wallet === undefined
       ? undefined
       : typeof options.wallet === "string"
         ? options.wallet
         : options.wallet.key;
   const solanaPrivateKeyBytes =
-    options.wallet === undefined || typeof options.wallet === "string"
+    authMode === "api-key" || options.wallet === undefined || typeof options.wallet === "string"
       ? undefined
       : options.wallet.solanaPrivateKeyBytes;
 
@@ -3135,7 +3136,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               res.end(
                 JSON.stringify({
                   error: "Image generation timed out",
-                  details: `Upstream did not complete within 5 minutes (job id=${result.id}). No payment has been settled.`,
+                  details: `Upstream did not complete within 5 minutes (job id=${result.id}). A polling timeout does not confirm billing status. Check the existing job and account Activity or wallet receipts before submitting another job.`,
                 }),
               );
               return;
@@ -3595,7 +3596,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               res.end(
                 JSON.stringify({
                   error: "Video generation timed out",
-                  details: `Upstream did not complete within 5 minutes (job id=${submitResult.id}). No payment has been settled.`,
+                  details: `Upstream did not complete within 5 minutes (job id=${submitResult.id}). A polling timeout does not confirm billing status. Check the existing job and account Activity or wallet receipts before submitting another job.`,
                 }),
               );
               return;

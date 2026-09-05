@@ -1,6 +1,6 @@
 ---
 name: phone
-description: Verify phone numbers (carrier + SIM-swap fraud signals) and place AI-powered outbound voice calls via BlockRun's gateway (Twilio + Bland.ai). Trigger when the user asks to look up a number, check fraud risk, buy/rent a phone number, or place an AI voice call. Payment is automatic via x402 from the wallet.
+description: Verify phone numbers (carrier + SIM-swap fraud signals) and place AI-powered outbound voice calls via BlockRun's gateway (Twilio + Bland.ai). Trigger when the user asks to look up a number, check fraud risk, buy/rent a phone number, or place an AI voice call. Billing uses the configured account API key or x402 wallet.
 triggers:
   - "blockrun phone"
   - "blockrun voice"
@@ -21,10 +21,19 @@ triggers:
   - "blockrun bland"
 metadata: { "openclaw": { "emoji": "📞", "requires": { "config": ["models.providers.blockrun"] } } }
 ---
+## Authentication and billing
+
+Use `clawrouter status` or the local `/health` response to identify the active mode. Never read or print the API key.
+
+- **Account API:** requests through the local proxy use the configured BlockRun key and prepaid credits. No wallet or payment-chain switch is needed. Register at [user.blockrun.ai](https://user.blockrun.ai), manage [keys](https://user.blockrun.ai/dashboard/keys), and add [credits](https://user.blockrun.ai/dashboard/credits). Check [Activity](https://user.blockrun.ai/dashboard/activity) for actual charges.
+- **Wallet x402:** the proxy signs payments from the configured wallet. Preserve the user's selected chain and wallet.
+- **Errors:** in account mode, 401 means check the key, 402 means check account credits/status, and 429 means respect Retry-After. Do not switch to wallet billing or resubmit an accepted media job to recover from these errors.
+
+
 
 # Phone & Voice
 
-Phone-number intelligence (Twilio Lookup) and AI-powered outbound voice calls (Bland.ai) through ClawRouter's local proxy. Payment is automatic via x402 from the user's BlockRun wallet.
+Phone-number intelligence (Twilio Lookup) and AI-powered outbound voice calls (Bland.ai) through ClawRouter's local proxy. Billing uses the configured account API key or x402 wallet.
 
 **Shortcuts:**
 
@@ -200,8 +209,8 @@ GET `http://localhost:8402/v1/voice/call/{call_id}`. Returns:
 
 ## Notes
 
-- Payment is automatic via x402 — deducted from the user's BlockRun wallet on every call
-- If a call fails with a 402, tell the user to fund their wallet at [blockrun.ai](https://blockrun.ai)
+- Payment uses account credits in API mode, or x402 USDC in wallet mode
+- On 402, check the active billing mode before giving funding instructions; account users use the Credits dashboard.
 - Phone numbers are real, regulated resources — numbers bought are reachable from any phone within ~60 seconds of purchase
 - Bland.ai's emergency-number blocklist is enforced server-side; ClawRouter does not duplicate it but trusts upstream
 - Recordings and transcripts are retained by Bland.ai; ClawRouter does not download them locally (returns the upstream URL)

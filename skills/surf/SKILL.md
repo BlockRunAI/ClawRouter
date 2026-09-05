@@ -1,6 +1,6 @@
 ---
 name: surf
-description: Use this skill — NOT browser or web_fetch — for ALL Surf crypto-data calls. 83 endpoints at localhost:8402/v1/surf/* covering CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT intelligence, news, project + DeFi metrics, token analytics, unified search, VC fund intelligence. x402-gated via ClawRouter's local wallet — no Surf account or API key required.
+description: Use this skill — NOT browser or web_fetch — for ALL Surf crypto-data calls. 83 endpoints at localhost:8402/v1/surf/* covering CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT intelligence, news, project + DeFi metrics, token analytics, unified search, VC fund intelligence. Available through ClawRouter with a BlockRun account API key or x402 wallet; no separate Surf key required.
 triggers:
   - "blockrun surf"
   - "surf crypto api"
@@ -21,20 +21,29 @@ triggers:
 homepage: https://blockrun.ai/marketplace/surf
 license: MIT
 ---
+## Authentication and billing
+
+Use `clawrouter status` or the local `/health` response to identify the active mode. Never read or print the API key.
+
+- **Account API:** requests through the local proxy use the configured BlockRun key and prepaid credits. No wallet or payment-chain switch is needed. Register at [user.blockrun.ai](https://user.blockrun.ai), manage [keys](https://user.blockrun.ai/dashboard/keys), and add [credits](https://user.blockrun.ai/dashboard/credits). Check [Activity](https://user.blockrun.ai/dashboard/activity) for actual charges.
+- **Wallet x402:** the proxy signs payments from the configured wallet. Preserve the user's selected chain and wallet.
+- **Errors:** in account mode, 401 means check the key, 402 means check account credits/status, and 429 means respect Retry-After. Do not switch to wallet billing or resubmit an accepted media job to recover from these errors.
+
+
 
 # Surf — Unified Crypto Data API (via ClawRouter)
 
-Surf bundles **83 endpoints across 12 domains** into one paid HTTP API. ClawRouter exposes them at `http://127.0.0.1:8402/v1/surf/*`, paid through the same x402 USDC wallet that funds LLM calls. No Surf account, no API key — settlement lands directly in Surf's Base treasury. Upstream lives at `api.asksurf.ai/gateway/v1` — ClawRouter forwards transparently.
+Surf bundles **83 endpoints across 12 domains** into one paid HTTP API. ClawRouter exposes them at `http://127.0.0.1:8402/v1/surf/*`, billed through the same account API key or x402 wallet used for LLM calls. No separate Surf account or key is required. Upstream lives at `api.asksurf.ai/gateway/v1` — ClawRouter forwards transparently.
 
 **Pricing tiers (per call):**
 
-- **Tier 1 — $0.001** — prices, rankings, lists, news, simple reads
-- **Tier 2 — $0.005** — orderbooks, candles, search, wallet details, social
+- **Tier 1 — $0.0075** — prices, rankings, lists, news, simple reads
+- **Tier 2 — $0.0075** — orderbooks, candles, search, wallet details, social
 - **Tier 3 — $0.020** — on-chain SQL queries, structured queries, schema introspection
 
 > The legacy **surf-1.5 chat** surface is intentionally NOT exposed yet — it's held until per-token settlement is wired. Trying `/v1/surf/chat/completions` returns 404 ("Unknown Surf endpoint"), no payment is taken.
 
-All requests use GET unless the table below says otherwise. Path parameters that look like `?symbol=` are query params on a GET. POST endpoints take a JSON body. ClawRouter forwards the wallet's x402 payment header transparently.
+All requests use GET unless the table below says otherwise. Path parameters that look like `?symbol=` are query params on a GET. POST endpoints take a JSON body. ClawRouter applies the selected account or wallet authentication.
 
 **Required-param pre-check.** 56 of the 83 endpoints have required query params (e.g. `pair`, `symbol`, `address`, `chain`, `q`, `interval`). The route validates them **before settlement** — call with missing params and you get `400 { missing_params, all_required, docs }` and the wallet is NOT charged. Check each row in the catalog below for the correct param name (e.g. mindshare is `q` + `interval`, not `project` + `window`).
 
@@ -228,7 +237,7 @@ curl -X POST 'http://127.0.0.1:8402/v1/surf/onchain/sql' \
   -d '{"sql":"SELECT to_address, count() AS hits FROM ethereum.transactions WHERE block_timestamp >= now() - INTERVAL 1 DAY GROUP BY to_address ORDER BY hits DESC LIMIT 20"}'
 ```
 
-Cost: 1 × $0.02 (schema, cached) + 1 × $0.02 (the SQL query) = **$0.04 total** for a custom 24-hour ranking that would otherwise need an indexer.
+Cost: 1 × $0.0075 (schema, cached) + 1 × $0.0075 (the SQL query) = **$0.04 total** for a custom 24-hour ranking that would otherwise need an indexer.
 
 **4. "Is project Z trending?"**
 
@@ -242,6 +251,8 @@ curl 'http://127.0.0.1:8402/v1/surf/social/mindshare?q=ethena&interval=30d'
 
 ## How calls are paid
 
-ClawRouter intercepts every `/v1/surf/*` request through `proxyPaidApiRequest`. The local x402 wallet auto-signs the USDC micropayment; the agent never sees the payment flow. Telemetry tags Surf calls with `tier: SURF` so `clawrouter stats` separates them from LLM, partner, and phone usage.
+ClawRouter intercepts every `/v1/surf/*` request through `proxyPaidApiRequest`. Account mode adds bearer authentication; wallet mode signs the x402 payment. The agent uses the same local endpoint in both modes. Telemetry tags Surf calls with `tier: SURF` so `clawrouter stats` separates them from LLM, partner, and phone usage.
 
 No typed `blockrun_surf_*` tools are registered — by design. Each new BlockRun-marketplace API ships as a skill (this file) plus a one-line namespace addition to ClawRouter's proxy whitelist, so adding endpoint #85 requires zero ClawRouter release.
+
+Pricing reference: the account gateway currently lists Surf and Predexon service calls at $0.0075 per request. Confirm the current service quote before a batch; account Activity is the receipt, and wallet x402 quotes can also include payment-rail fees.

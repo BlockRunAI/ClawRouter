@@ -123,11 +123,16 @@ describe("resolveApiKey", () => {
     await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
   });
 
-  it("skips a malformed file rather than sending garbage upstream as a 401", async () => {
+  it("rejects a malformed saved key without switching the billing account", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     writeCore("not-a-key");
     writeLegacy(KEY_B);
-    await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
+    await expect(resolveApiKey()).rejects.toThrow(/refusing to fall back/);
+  });
+
+  it("rejects an empty saved key instead of selecting wallet billing", async () => {
+    writeCore(" ");
+    await expect(resolveApiKey()).rejects.toThrow(/refusing to fall back/);
   });
 
   it("rejects a malformed environment variable without falling back", async () => {
@@ -139,6 +144,20 @@ describe("resolveApiKey", () => {
 });
 
 describe("saveApiKey / clearApiKey", () => {
+  it("login and logout preserve both wallet files and the saved chain", async () => {
+    mkdirSync(CORE_DIR, { recursive: true });
+    const wallets = {
+      ".session": "test-base-wallet",
+      ".solana-session": "test-solana-wallet",
+      "payment-chain": "solana",
+    };
+    for (const [name, value] of Object.entries(wallets)) writeFileSync(join(CORE_DIR, name), value);
+    await saveApiKey(KEY_A);
+    await clearApiKey();
+    await expect(resolveApiKey()).resolves.toBeUndefined();
+    for (const [name, value] of Object.entries(wallets))
+      expect(readFileSync(join(CORE_DIR, name), "utf8")).toBe(value);
+  });
   it("writes to BlockRun Core so other BlockRun products see the same key", async () => {
     const path = await saveApiKey(`  ${KEY_A}  `);
     expect(path).toBe(CORE_API_KEY_FILE);
@@ -349,3 +368,28 @@ describe("account endpoint and polling boundaries", () => {
     );
   });
 });
+
+it.each([502, 503, 504, 522, 524])(
+  "recovers polling the same account job after %i",
+  async (status) => {
+    const base = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ error: { message: "temporary gateway failure" } }, { status }),
+      )
+      .mockResolvedValueOnce(Response.json({ status: "completed", id: "existing" }));
+    const result = await pollApiKeyJob(
+      Response.json({ poll_url: "/v1/jobs/existing?token=signed" }, { status: 202 }),
+      createApiKeyFetch(KEY_A, base),
+      "https://api.blockrun.ai",
+      new AbortController().signal,
+      1,
+    );
+    expect((await result.json()).status).toBe("completed");
+    expect(base).toHaveBeenCalledTimes(2);
+    for (const [url, options] of base.mock.calls) {
+      expect(url).toBe("https://api.blockrun.ai/v1/jobs/existing?token=signed");
+      expect(options.method ?? "GET").toBe("GET");
+    }
+  },
+);

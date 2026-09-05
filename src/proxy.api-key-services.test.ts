@@ -24,6 +24,15 @@ describe("account API service parity through the proxy", () => {
         payment: req.headers["payment-signature"] as string | undefined,
       });
       req.resume();
+      if (req.url === "/v1/phone/numbers/owned") {
+        res.writeHead(200, {
+          "content-type": "application/json",
+          "cache-control": "public, max-age=3600",
+          etag: "account-specific",
+        });
+        res.end(JSON.stringify({ owner: req.headers.authorization }));
+        return;
+      }
       if (req.url === "/v1/models") {
         res.setHeader("content-type", "application/json");
         res.end('{"data":[]}');
@@ -75,26 +84,79 @@ describe("account API service parity through the proxy", () => {
     upstream.closeAllConnections();
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
   });
+  it("prevents cached account data from surviving an account change at the same proxy URL", async () => {
+    const baseUrl = proxy.baseUrl;
+    const first = await fetch(baseUrl + "/v1/phone/numbers/owned");
+    expect(first.headers.get("cache-control")).toBe("no-store");
+    expect(await first.json()).toEqual({ owner: `Bearer ${key}` });
+    await proxy.close();
+    proxy = await startProxy({
+      apiKey: "brk_live_second_account",
+      apiBase: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+      port: Number(new URL(baseUrl).port),
+      allowExistingProxy: false,
+    });
+    try {
+      const second = await fetch(baseUrl + "/v1/phone/numbers/owned");
+      expect(second.headers.get("cache-control")).toBe("no-store");
+      expect(await second.json()).toEqual({ owner: "Bearer brk_live_second_account" });
+    } finally {
+      await proxy.close();
+      proxy = await startProxy({
+        apiKey: key,
+        apiBase: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
+        port: Number(new URL(baseUrl).port),
+        allowExistingProxy: false,
+      });
+    }
+  });
   it.each([
-    "/v1/rpc/solana",
-    "/v1/audio/speech",
-    "/v1/search",
-    "/v1/responses/r-1",
-    "/v1/realface/status?id=a",
-    "/v1/videos/generations/v-1",
-  ])("forwards %s with account auth", async (path) => {
+    ["POST", "/v1/rpc/solana"],
+    ["POST", "/v1/rpc/base"],
+    ["POST", "/v1/audio/speech"],
+    ["POST", "/v1/audio/sound-effects"],
+    ["GET", "/v1/audio/voices"],
+    ["POST", "/v1/images/generations"],
+    ["POST", "/v1/images/image2image"],
+    ["GET", "/v1/images/models"],
+    ["POST", "/v1/videos/generations"],
+    ["GET", "/v1/videos/generations/v-1"],
+    ["POST", "/v1/search"],
+    ["POST", "/v1/exa/search"],
+    ["POST", "/v1/exa/answer"],
+    ["GET", "/v1/responses/r-1"],
+    ["POST", "/v1/portrait/enroll"],
+    ["POST", "/v1/realface/init"],
+    ["POST", "/v1/realface/enroll"],
+    ["GET", "/v1/realface/status?groupId=legacy_rf_123"],
+    ["POST", "/v1/phone/lookup"],
+    ["POST", "/v1/phone/numbers/list"],
+    ["POST", "/v1/voice/call"],
+    ["GET", "/v1/voice/call/fixture-call"],
+    ["GET", "/v1/surf/market/ranking"],
+    ["POST", "/v1/surf/onchain/sql"],
+    ["GET", "/v1/pm/polymarket/markets?q=test"],
+    ["POST", "/v1/pm/polymarket/query"],
+    ["GET", "/v1/crypto/price/BTC-USD"],
+    ["GET", "/v1/fx/price/EUR-USD"],
+    ["GET", "/v1/commodity/price/XAU-USD"],
+    ["GET", "/v1/stocks/us/price/AAPL"],
+    ["GET", "/v1/defillama/chains"],
+    ["POST", "/v1/modal/sandbox/create"],
+  ])("forwards %s %s with account auth", async (method, path) => {
     const res = await fetch(proxy.baseUrl + path, {
-      method: "POST",
+      method,
       headers: {
         "content-type": "application/json",
         "payment-signature": "strip",
         "x-api-key": "placeholder",
       },
-      body: "{}",
+      ...(method === "POST" ? { body: "{}" } : {}),
     });
     expect(res.status).toBe(200);
     expect((await res.json()).path).toBe(path);
     const request = calls.find((c) => c.path === path)!;
+    expect(request.method).toBe(method);
     expect(request.auth).toBe(`Bearer ${key}`);
     expect(request.payment).toBeUndefined();
   });

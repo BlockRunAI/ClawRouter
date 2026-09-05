@@ -36,7 +36,7 @@ Or neither — <!-- br:models.free -->7<!-- /br:models.free --> models are free,
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. It is the only LLM router that an autonomous agent can pay for by itself — a wallet signature is the account, and USDC micropayments over the x402 protocol are the billing — and it takes an ordinary credit card too: sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, and run the same router on an API key. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. It is the only LLM router that an autonomous agent can pay for by itself — in wallet mode, a wallet signature authenticates x402 USDC payments — and it takes an ordinary credit card too: sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, and run the same router on an API key. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -66,8 +66,8 @@ Every other LLM router was built for **human developers** — create an account,
 ClawRouter is built for the agent-first world:
 
 - **Starts at $0** — <!-- br:models.free -->7<!-- /br:models.free --> open-weight models are free forever (incl. a 1M-context reasoner and two sub-second coders). Image turns route to paid models — see the free-tier note below.
-- **No accounts needed** — a wallet is generated locally, no signup
-- **No API keys needed** — your wallet signature IS authentication
+- **Wallet mode needs no account** — a wallet is generated locally; API mode uses a BlockRun account.
+- **Choose authentication** — use an account API key or a wallet signature.
 - **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring + constraint-first ranking ([router-core](https://github.com/BlockRunAI/router-core)) picks the right model automatically
 - **No credit card needed** — agents pay per-request with USDC via [x402](https://x402.org)
 - **No trust required** — runs locally, <1ms routing, zero external dependencies
@@ -348,7 +348,7 @@ curl -X POST http://localhost:8402/v1/videos/generations \
 | `bytedance/seedance-2.0-fast` | ByteDance Seedance  | ~$1.19           | ~$1.19 (flat)     | 5s default, up to 10s |
 | `bytedance/seedance-2.0`      | ByteDance Seedance  | ~$1.49           | ~$1.49 (flat)     | 5s default, up to 10s |
 | `azure/sora-2`                | OpenAI Sora (Azure) | ~$0.42 (4s)      | ~$0.42 (4s, flat) | 4s default; 4/8/12s   |
-| `xai/grok-imagine-video`      | xAI Grok Imagine    | ~$0.42 (8s)      | n/a               | 8s default            |
+| `xai/grok-imagine-video`      | xAI Grok Imagine    | $0.40 (8s at 480p, before fees)      | n/a               | 8s default            |
 
 Seedance is **token-priced upstream** at ~20,256 tokens/sec — the blockrun videos route now defaults Seedance to `resolution=720p` with `generate_audio=true` for text-to-video (2× the per-second token count of the older 480p baseline; audio is included in that rate). The quote is `duration × tokens/sec × $/1M tokens × 1.05 margin`. Image-to-video is priced the same as text-to-video (the earlier ~40% i2v discount was removed upstream on 2026-06-01; only video-to-video remains cheaper). Sora 2 is flat-priced at $0.10/sec for both t2v and i2v — note it rejects human faces in reference images (use Seedance + RealFace for real people). Calls block for 30–120s while the upstream polls the job. Seedance 2.0 Fast typically returns in 60–80s; 2.0 Pro trades latency for quality.
 
@@ -459,13 +459,13 @@ curl -X POST 'http://localhost:8402/v1/surf/onchain/sql' \
   -d '{"sql":"SELECT count() FROM ethereum.transactions WHERE block_timestamp >= now() - INTERVAL 1 HOUR"}'
 ```
 
-No Surf account, no API key — settles directly to Surf's Base treasury in USDC via the same wallet as LLM calls. Full endpoint reference: [`skills/surf/SKILL.md`](skills/surf/SKILL.md). Upstream marketplace: <https://blockrun.ai/marketplace/surf>.
+No separate Surf account or Surf API key is needed. Account mode sends these calls through the account gateway and uses credits; wallet mode uses x402 payments where supported by the selected gateway. Full endpoint reference: [`skills/surf/SKILL.md`](skills/surf/SKILL.md). Upstream marketplace: <https://blockrun.ai/marketplace/surf>.
 
 ---
 
 ## Models & Pricing
 
-<!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->7<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models across 9 providers, using one account API key or wallet. **<!-- br:models.free -->7<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
 > **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
@@ -675,9 +675,12 @@ chains, the response cache and the local spend controls.
 - **Balance lives server-side.** There is no local balance to check: a call that
   outruns your credit comes back as HTTP `402 insufficient_quota`, naming the
   top-up page. Free models stay free and need no credit at all.
-- **Account services are available.** Chat, Messages, Responses (including SSE),
+- **Full account services in this source branch.** Chat, Messages, Responses (including SSE),
   image/video/music/speech, search, RPC and partner/data endpoints use the same
-  API key. Specialized media routes retain polling and local downloads; other
+  API key, subject to gateway availability. npm `@blockrun/clawrouter@0.12.269`
+  already supports API-key login; this expanded service coverage requires a
+  release containing [PR #338](https://github.com/BlockRunAI/ClawRouter/pull/338).
+  Specialized media routes retain polling and local downloads; other
   `/v1/*` routes preserve the upstream status, task URLs and response body.
   Account job polling stays on the configured gateway origin, including the
   vendored `/api/v1/*` polling paths. No key is sent to media download hosts.
@@ -836,7 +839,7 @@ You're here. <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> mod
 
 **BlockRun for Claude Code**
 
-Run Claude Code with <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
+Run Claude Code with <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models through Franklin, using account API credits or an x402 wallet. Account and provider rate limits apply.
 
 `curl -fsSL https://blockrun.ai/brcc-install | bash`
 
@@ -937,3 +940,15 @@ ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls r
 ⭐ If ClawRouter powers your agents, consider starring the repo!
 
 </div>
+
+
+## Account setup, billing, and switching back to wallets
+
+1. [Sign in to BlockRun](https://user.blockrun.ai), open [Billing](https://user.blockrun.ai/dashboard/credits), and add prepaid account credits. The checkout shows both the credit amount and the total card charge, including any processing fee; these amounts can differ.
+2. Create a key on [API Keys](https://user.blockrun.ai/dashboard/keys). Keep it in your server or local process environment as `BLOCKRUN_API_KEY`; never put it in browser code, logs, or a repository. Follow this README's client configuration example.
+3. Check [Activity](https://user.blockrun.ai/dashboard/activity) after a call. Chat uses reported token usage; media and data services can use per-image, duration, or per-request prices. Account credits and an on-chain USDC wallet are separate balances. Local wallet spend counters are not account receipts.
+4. A 401 means check the API key, 402 means check account credits or account status, and 429 means respect `Retry-After`. Poll an accepted media job using the complete returned `poll_url`, including its query parameters, with the same account key. Do not reconstruct the URL from the job ID. If polling times out, check that job and Activity before submitting another paid job.
+
+Accepted account jobs recover from temporary gateway polling errors by querying the same job within the original deadline. They do not resubmit the paid creation request. Authentication, credit, and rate-limit errors remain visible to the caller.
+
+To return to wallet billing, run `clawrouter logout`, unset `BLOCKRUN_API_KEY` in the environment that starts ClawRouter, and restart the proxy. Logout removes saved API-key files; it does not delete your wallet. A malformed saved key stops startup until corrected or removed, rather than silently selecting another key or a wallet.

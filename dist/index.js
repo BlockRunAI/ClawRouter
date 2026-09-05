@@ -59908,9 +59908,13 @@ function maskApiKey(key2) {
 }
 async function readOptional2(path5) {
   try {
-    return (await readTextFile(path5)).trim() || void 0;
-  } catch {
-    return void 0;
+    return (await readTextFile(path5)).trim();
+  } catch (error) {
+    if (error.code === "ENOENT") return void 0;
+    throw new Error(
+      `Cannot read BlockRun API key file ${path5}; refusing to fall back to another account or wallet.`,
+      { cause: error }
+    );
   }
 }
 async function resolveApiKey() {
@@ -59928,8 +59932,8 @@ async function resolveApiKey() {
     const stored = await readOptional2(path5);
     if (stored === void 0) continue;
     if (isValidApiKey(stored)) return { key: stored, source };
-    console.warn(
-      `[ClawRouter] \u26A0 ${path5} does not contain a BlockRun key (expected brk_\u2026) \u2014 ignoring.`
+    throw new Error(
+      `${path5} contains a malformed BlockRun API key; refusing to fall back to another account or wallet. Run clawrouter login with a valid key, or clawrouter logout to return to wallet billing.`
     );
   }
   return void 0;
@@ -59973,11 +59977,15 @@ async function pollApiKeyJob(response, payFetch, apiBase, signal, intervalMs = 2
   const abort = AbortSignal.any([signal, AbortSignal.timeout(15 * 6e4)]);
   while (!abort.aborted) {
     const polled = await payFetch(pollUrl, { signal: abort });
-    if (!polled.ok) return polled;
-    const data = await polled.clone().json();
-    if (data.status === "completed") return polled;
-    if (["failed", "cancelled", "canceled"].includes(data.status || ""))
-      throw new Error("Account job failed or was cancelled");
+    if ([502, 503, 504, 522, 524].includes(polled.status)) {
+      await polled.body?.cancel();
+    } else {
+      if (!polled.ok) return polled;
+      const data = await polled.clone().json();
+      if (data.status === "completed") return polled;
+      if (["failed", "cancelled", "canceled"].includes(data.status || ""))
+        throw new Error("Account job failed or was cancelled");
+    }
     await new Promise((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(timer2);
@@ -91301,6 +91309,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
       return;
     responseHeaders[key2] = value;
   });
+  if (accountPassthrough) responseHeaders["cache-control"] = "no-store";
   res.writeHead(upstream.status, responseHeaders);
   if (accountPassthrough) {
     if (upstream.body)
@@ -91408,7 +91417,7 @@ async function startProxy(options) {
     console.log(`[ClawRouter] Upstream proxy: ${upstreamProxy}`);
   }
   const apiKey = options.apiKey?.trim() || void 0;
-  if (apiKey && !isValidApiKey(apiKey)) {
+  if (options.apiKey !== void 0 && !isValidApiKey(apiKey)) {
     throw new Error(
       `BlockRun API key is malformed (expected it to start with "brk_"). Mint one at https://user.blockrun.ai/dashboard/keys`
     );
@@ -91419,8 +91428,8 @@ async function startProxy(options) {
       `startProxy needs a credential: pass either a wallet (x402) or an apiKey (brk_\u2026, from https://user.blockrun.ai/dashboard/keys).`
     );
   }
-  const walletKey = options.wallet === void 0 ? void 0 : typeof options.wallet === "string" ? options.wallet : options.wallet.key;
-  const solanaPrivateKeyBytes = options.wallet === void 0 || typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
+  const walletKey = authMode === "api-key" || options.wallet === void 0 ? void 0 : typeof options.wallet === "string" ? options.wallet : options.wallet.key;
+  const solanaPrivateKeyBytes = authMode === "api-key" || options.wallet === void 0 || typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
   const paymentChain = options.paymentChain ?? await resolvePaymentChain();
   const requestedApiBase = options.apiBase ?? (authMode === "api-key" ? BLOCKRUN_API_KEY_API : paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
   const apiBase = authMode === "api-key" ? normalizeApiKeyBase(requestedApiBase) : requestedApiBase;
@@ -91998,7 +92007,7 @@ async function startProxy(options) {
               res.end(
                 JSON.stringify({
                   error: "Image generation timed out",
-                  details: `Upstream did not complete within 5 minutes (job id=${result.id}). No payment has been settled.`
+                  details: `Upstream did not complete within 5 minutes (job id=${result.id}). A polling timeout does not confirm billing status. Check the existing job and account Activity or wallet receipts before submitting another job.`
                 })
               );
               return;
@@ -92379,7 +92388,7 @@ async function startProxy(options) {
               res.end(
                 JSON.stringify({
                   error: "Video generation timed out",
-                  details: `Upstream did not complete within 5 minutes (job id=${submitResult.id}). No payment has been settled.`
+                  details: `Upstream did not complete within 5 minutes (job id=${submitResult.id}). A polling timeout does not confirm billing status. Check the existing job and account Activity or wallet receipts before submitting another job.`
                 })
               );
               return;

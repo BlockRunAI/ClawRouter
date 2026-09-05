@@ -83,9 +83,13 @@ export function maskApiKey(key: string): string {
 
 async function readOptional(path: string): Promise<string | undefined> {
   try {
-    return (await readTextFile(path)).trim() || undefined;
-  } catch {
-    return undefined;
+    return (await readTextFile(path)).trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new Error(
+      `Cannot read BlockRun API key file ${path}; refusing to fall back to another account or wallet.`,
+      { cause: error },
+    );
   }
 }
 
@@ -93,10 +97,9 @@ async function readOptional(path: string): Promise<string | undefined> {
  * Resolve the configured API key without creating anything.
  *
  * Returns undefined when no key is configured — that is the normal state for a
- * wallet user, not an error. A file that exists but holds something that is not
- * a key is reported (once, to stderr) and skipped rather than sent upstream:
- * a malformed credential is a 401 per request, and an unexplained 401 is the
- * hardest failure mode there is to diagnose.
+ * wallet user, not an error. An existing unreadable, empty or malformed key file is an error: skipping it
+ * could silently charge a different account or an old wallet. Remove the key
+ * with logout when intentionally returning to wallet billing.
  */
 export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
   const envKey = process["env"].BLOCKRUN_API_KEY?.trim();
@@ -114,8 +117,8 @@ export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
     const stored = await readOptional(path);
     if (stored === undefined) continue;
     if (isValidApiKey(stored)) return { key: stored, source };
-    console.warn(
-      `[ClawRouter] ⚠ ${path} does not contain a BlockRun key (expected brk_…) — ignoring.`,
+    throw new Error(
+      `${path} contains a malformed BlockRun API key; refusing to fall back to another account or wallet. Run clawrouter login with a valid key, or clawrouter logout to return to wallet billing.`,
     );
   }
 
@@ -223,11 +226,15 @@ export async function pollApiKeyJob(
   const abort = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
   while (!abort.aborted) {
     const polled = await payFetch(pollUrl, { signal: abort });
-    if (!polled.ok) return polled;
-    const data = (await polled.clone().json()) as { status?: string };
-    if (data.status === "completed") return polled;
-    if (["failed", "cancelled", "canceled"].includes(data.status || ""))
-      throw new Error("Account job failed or was cancelled");
+    if ([502, 503, 504, 522, 524].includes(polled.status)) {
+      await polled.body?.cancel();
+    } else {
+      if (!polled.ok) return polled;
+      const data = (await polled.clone().json()) as { status?: string };
+      if (data.status === "completed") return polled;
+      if (["failed", "cancelled", "canceled"].includes(data.status || ""))
+        throw new Error("Account job failed or was cancelled");
+    }
     await new Promise<void>((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(timer);
