@@ -40713,6 +40713,18 @@ function isBalanceError(error) {
 function isRpcError(error) {
   return error instanceof Error && error.code === "RPC_ERROR";
 }
+function describeFetchError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = error?.cause;
+  if (!(cause instanceof Error)) return message;
+  const detail = cause;
+  const host = detail.hostname || detail.address;
+  const where = host && detail.port ? `${host}:${detail.port}` : host;
+  const parts = [detail.code, where, detail.code ? void 0 : detail.message].filter(
+    (part) => typeof part === "string" && part !== ""
+  );
+  return parts.length > 0 ? `${message} (${parts.join(" ")})` : message;
+}
 var InsufficientFundsError2, EmptyWalletError, RpcError2;
 var init_errors5 = __esm({
   "src/errors.ts"() {
@@ -90707,6 +90719,24 @@ var init_client3 = __esm({
   }
 });
 
+// node_modules/@x402/svm/dist/esm/v1/index.mjs
+var v1_exports = {};
+__export(v1_exports, {
+  ExactSvmSchemeV1: () => ExactSvmSchemeV1,
+  NETWORKS: () => NETWORKS2
+});
+var init_v1 = __esm({
+  "node_modules/@x402/svm/dist/esm/v1/index.mjs"() {
+    "use strict";
+    init_chunk_WWACQNRQ();
+    init_chunk_MNNIECS4();
+    init_chunk_WIPN332D();
+    init_chunk_FVTMOTG6();
+    init_chunk_FJ6REVHH();
+    init_chunk_QEBTC3LJ();
+  }
+});
+
 // src/proxy.ts
 import { AsyncLocalStorage } from "async_hooks";
 import { createHmac } from "crypto";
@@ -91462,7 +91492,12 @@ function estimateImageCost(model, size5, n = 1) {
   return pricePerImage * n * 1.05;
 }
 function blockrunRequestId(response) {
-  return response?.headers.get("x-blockrun-request-id") ?? void 0;
+  if (!response) return void 0;
+  for (const name of ["x-blockrun-request-id", "x-request-id", "request-id"]) {
+    const value = response.headers.get(name)?.trim();
+    if (value) return value;
+  }
+  return void 0;
 }
 function gatewaySettledCostUsd(response) {
   const raw = response?.headers.get("x-blockrun-cost-usd");
@@ -91725,8 +91760,20 @@ async function startProxy(options) {
     const { createKeyPairSignerFromPrivateKeyBytes: createKeyPairSignerFromPrivateKeyBytes2 } = await Promise.resolve().then(() => (init_index_node37(), index_node_exports));
     const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes2(solanaPrivateKeyBytes);
     solanaAddress = solanaSigner.address;
+    const solanaRpcUrl = process["env"].CLAWROUTER_SOLANA_RPC_URL;
     registerExactSvmScheme2(x402, { signer: solanaSigner });
+    if (solanaRpcUrl) {
+      const { ExactSvmScheme: ExactSvmScheme2 } = await Promise.resolve().then(() => (init_client3(), client_exports));
+      const { ExactSvmSchemeV1: ExactSvmSchemeV12, NETWORKS: SVM_V1_NETWORKS } = await Promise.resolve().then(() => (init_v1(), v1_exports));
+      x402.register("solana:*", new ExactSvmScheme2(solanaSigner, { rpcUrl: solanaRpcUrl }));
+      for (const network of SVM_V1_NETWORKS) {
+        x402.registerV1(network, new ExactSvmSchemeV12(solanaSigner, { rpcUrl: solanaRpcUrl }));
+      }
+    }
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
+    if (solanaRpcUrl) {
+      console.log(`[ClawRouter] Solana RPC (payment signing + balance): ${solanaRpcUrl}`);
+    }
   }
   x402?.onAfterPaymentCreation(async (context) => {
     if (!context.selectedRequirements.network.startsWith("eip155")) return;
@@ -92939,7 +92986,8 @@ async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxT
         errorBody,
         errorStatus: response.status,
         isProviderError: category !== null,
-        errorCategory: category ?? void 0
+        errorCategory: category ?? void 0,
+        upstreamRequestId: blockrunRequestId(response)
       };
     }
     const contentType = response.headers.get("content-type") || "";
@@ -92976,9 +93024,12 @@ async function tryModelRequest(upstreamUrl, method, headers, body, modelId, maxT
         errorCategory: "payment_error"
       };
     }
+    const networkMsg = describeFetchError(err);
+    const solanaSigningHint = upstreamUrl.startsWith(BLOCKRUN_SOLANA_API) && networkMsg.startsWith("fetch failed") ? " \u2014 on the Solana rail this may be the RPC that signs the payment rather than the gateway; if api.mainnet-beta.solana.com is unreachable from this host, set CLAWROUTER_SOLANA_RPC_URL to your own endpoint" : "";
+    console.error(`[ClawRouter] ${modelId} network error: ${networkMsg}${solanaSigningHint}`);
     return {
       success: false,
-      errorBody: errorMsg,
+      errorBody: `${networkMsg}${solanaSigningHint}`,
       errorStatus: 500,
       isProviderError: true
       // Network errors are retryable
@@ -94418,7 +94469,8 @@ data: [DONE]
       }
       lastError = {
         body: result.errorBody || "Unknown error",
-        status: result.errorStatus || 500
+        status: result.errorStatus || 500,
+        requestId: result.upstreamRequestId
       };
       failedAttempts.push({
         model: tryModel,
@@ -94490,7 +94542,8 @@ data: [DONE]
           }
           lastError = {
             body: retryResult.errorBody || lastError?.body || "Unknown error",
-            status: retryResult.errorStatus || lastError?.status || 500
+            status: retryResult.errorStatus || lastError?.status || 500,
+            requestId: retryResult.upstreamRequestId ?? lastError?.requestId
           };
           failedAttempts.push({
             model: tryModel,
@@ -94636,7 +94689,9 @@ data: [DONE]
     if (!upstream) {
       const attemptSummary = failedAttempts.length > 0 ? failedAttempts.map((a) => `${a.model} (${a.reason})`).join(", ") : "unknown";
       const structuredMessage = failedAttempts.length > 0 ? `All ${failedAttempts.length} models failed. Tried: ${attemptSummary}` : "All models in fallback chain failed";
-      console.log(`[ClawRouter] ${structuredMessage}`);
+      console.log(
+        `[ClawRouter] ${structuredMessage}${lastError?.requestId ? ` | gateway request id: ${lastError.requestId}` : ""}`
+      );
       const rawErrBody = lastError?.body || structuredMessage;
       const errStatus = lastError?.status || 502;
       const transformedErr = transformPaymentError(rawErrBody);
@@ -94674,7 +94729,8 @@ data: [DONE]
         res.writeHead(errStatus, {
           "Content-Type": "application/json",
           "x-context-used-kb": String(originalContextSizeKB),
-          "x-context-limit-kb": String(CONTEXT_LIMIT_KB)
+          "x-context-limit-kb": String(CONTEXT_LIMIT_KB),
+          ...lastError?.requestId ? { "x-blockrun-request-id": lastError.requestId } : {}
         });
         res.end(transformedErr);
         deduplicator.complete(dedupKey, {
@@ -95195,6 +95251,7 @@ var init_proxy = __esm({
     init_api_key();
     init_spend_control();
     init_compression();
+    init_errors5();
     init_version4();
     init_session();
     init_updater();

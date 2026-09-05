@@ -2101,7 +2101,21 @@ function estimateImageCost(model: string, size?: string, n: number = 1): number 
  * reconciliation. See UsageEntry.requestId.
  */
 function blockrunRequestId(response: Response | undefined): string | undefined {
-  return response?.headers.get("x-blockrun-request-id") ?? undefined;
+  if (!response) return undefined;
+  // The three gateways do NOT agree on the header name, and reading only the
+  // BlockRun-prefixed one meant this returned undefined on both wallet rails —
+  // so the reconciliation join key was always empty in wallet mode, and a
+  // failing paid call on Solana had no id to report (ClawRouter-Hermes#38).
+  // Measured 2026-09-05:
+  //   api.blockrun.ai   x-blockrun-request-id, x-request-id, request-id
+  //   sol.blockrun.ai   x-request-id only
+  //   blockrun.ai       none at all — Base publishes no id, so undefined here
+  //                     is the honest answer rather than a bug to work around.
+  for (const name of ["x-blockrun-request-id", "x-request-id", "request-id"]) {
+    const value = response.headers.get(name)?.trim();
+    if (value) return value;
+  }
+  return undefined;
 }
 
 /**
@@ -4089,6 +4103,15 @@ type ModelRequestResult = {
   errorStatus?: number;
   isProviderError?: boolean;
   errorCategory?: ErrorCategory; // Semantic error classification
+  /**
+   * The gateway's `x-blockrun-request-id` for the FAILED attempt.
+   *
+   * Without this a paid 5xx is undiagnosable from either side: the caller sees
+   * only "fetch failed" or "All models failed", and nobody can point the
+   * gateway at the request that broke (reported against the Solana rail,
+   * ClawRouter-Hermes#38). The id is the only handle the two sides share.
+   */
+  upstreamRequestId?: string;
 };
 
 /**
@@ -4212,6 +4235,7 @@ async function tryModelRequest(
         errorStatus: response.status,
         isProviderError: category !== null,
         errorCategory: category ?? undefined,
+        upstreamRequestId: blockrunRequestId(response),
       };
     }
 
@@ -6177,7 +6201,7 @@ async function proxyRequest(
 
     // --- Fallback loop: try each model until success ---
     let upstream: Response | undefined;
-    let lastError: { body: string; status: number } | undefined;
+    let lastError: { body: string; status: number; requestId?: string } | undefined;
     let actualModelUsed = modelId;
     const failedAttempts: Array<{ model: string; reason: string; status: number }> = [];
 
@@ -6269,6 +6293,7 @@ async function proxyRequest(
       lastError = {
         body: result.errorBody || "Unknown error",
         status: result.errorStatus || 500,
+        requestId: result.upstreamRequestId,
       };
       failedAttempts.push({
         model: tryModel,
@@ -6364,6 +6389,7 @@ async function proxyRequest(
           lastError = {
             body: retryResult.errorBody || lastError?.body || "Unknown error",
             status: retryResult.errorStatus || lastError?.status || 500,
+            requestId: retryResult.upstreamRequestId ?? lastError?.requestId,
           };
           failedAttempts.push({
             model: tryModel,
@@ -6549,7 +6575,15 @@ async function proxyRequest(
         failedAttempts.length > 0
           ? `All ${failedAttempts.length} models failed. Tried: ${attemptSummary}`
           : "All models in fallback chain failed";
-      console.log(`[ClawRouter] ${structuredMessage}`);
+      // Name the gateway's own id for the failed attempt. A paid 5xx is
+      // otherwise undiagnosable from both ends at once: the caller sees only
+      // "All models failed" and has nothing to give support, and the gateway
+      // cannot find the request without an id. Logged AND returned, because the
+      // person who hits this is usually reading an agent transcript, not our
+      // logs (ClawRouter-Hermes#38).
+      console.log(
+        `[ClawRouter] ${structuredMessage}${lastError?.requestId ? ` | gateway request id: ${lastError.requestId}` : ""}`,
+      );
       const rawErrBody = lastError?.body || structuredMessage;
       const errStatus = lastError?.status || 502;
 
@@ -6595,11 +6629,15 @@ async function proxyRequest(
           completedAt: Date.now(),
         });
       } else {
-        // Non-streaming: send transformed error response with context headers
+        // Non-streaming: send transformed error response with context headers.
+        // The gateway's request id rides along so a failing paid call can be
+        // traced upstream — the reporter of ClawRouter-Hermes#38 had a paid 500
+        // on Solana and no id to hand anyone, on either side.
         res.writeHead(errStatus, {
           "Content-Type": "application/json",
           "x-context-used-kb": String(originalContextSizeKB),
           "x-context-limit-kb": String(CONTEXT_LIMIT_KB),
+          ...(lastError?.requestId ? { "x-blockrun-request-id": lastError.requestId } : {}),
         });
         res.end(transformedErr);
 
