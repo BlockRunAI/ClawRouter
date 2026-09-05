@@ -153,6 +153,79 @@ export async function clearApiKey(): Promise<{ removed: string[]; envStillSet: b
 }
 
 /**
+ * What `GET /v1/credits` reports for the calling key.
+ *
+ * `remainingUsd` is deliberately nullable and that is not an error path: an
+ * account with `billingMode: "ungated"` has no granted allowance to draw down,
+ * so the gateway reports `remaining_usd: null` and only `spent_usd` is
+ * meaningful. Rendering a null as "$0.00" would tell such a user they are broke
+ * when they are not, so every consumer has to branch on it.
+ */
+export type CreditBalance = {
+  accountId?: string;
+  billingMode?: string;
+  currency: string;
+  grantedUsd: number | null;
+  spentUsd: number | null;
+  remainingUsd: number | null;
+  blocked: boolean;
+  blockedReason?: string;
+};
+
+/**
+ * Read the account's credit position, so a card-paying user can see where they
+ * stand without opening the dashboard.
+ *
+ * Returns undefined on any failure — this is a status nicety, and a gateway
+ * hiccup must never turn `clawrouter status` into an error. Note the endpoint
+ * answers 401 for a bad key and 404 only if the gateway's endpoint gate
+ * regresses (it did, briefly, on the day it shipped), so the two are worth
+ * telling apart when diagnosing.
+ */
+export async function fetchCreditBalance(
+  apiKey: string,
+  timeoutMs = 5000,
+): Promise<CreditBalance | undefined> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${BLOCKRUN_API_KEY_API}/v1/credits`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return undefined;
+    const b = (await res.json()) as Record<string, unknown>;
+    const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+    return {
+      accountId: typeof b.account_id === "string" ? b.account_id : undefined,
+      billingMode: typeof b.billing_mode === "string" ? b.billing_mode : undefined,
+      currency: typeof b.currency === "string" ? b.currency : "USD",
+      grantedUsd: num(b.granted_usd),
+      spentUsd: num(b.spent_usd),
+      remainingUsd: num(b.remaining_usd),
+      blocked: b.blocked === true,
+      blockedReason: typeof b.blocked_reason === "string" ? b.blocked_reason : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Render a credit position for a status table, honouring the nullable fields. */
+export function formatCreditBalance(b: CreditBalance): string {
+  const money = (v: number | null): string | undefined =>
+    v === null ? undefined : `$${v.toFixed(v < 0.01 && v > 0 ? 6 : 2)}`;
+  const remaining = money(b.remainingUsd);
+  const spent = money(b.spentUsd);
+  if (remaining) return `${remaining} remaining${spent ? ` (spent ${spent})` : ""}`;
+  // Ungated account: no allowance to run down, so spend-to-date is the number
+  // that means anything.
+  const mode = b.billingMode === "ungated" ? "no prepaid limit" : (b.billingMode ?? "unknown");
+  return `${spent ? `spent ${spent}` : "unknown"} — ${mode}`;
+}
+
+/**
  * The upstream fetch for API-key mode — the counterpart of the x402 payFetch.
  *
  * Two jobs, and the second is the one that matters. It attaches the bearer

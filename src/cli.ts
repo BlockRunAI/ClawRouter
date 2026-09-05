@@ -298,6 +298,12 @@ async function cmdStatus(port: number): Promise<void> {
       console.log(`  Auth:          BlockRun API key ${data.apiKey}`);
       console.log(`  Gateway:       ${data.gateway}`);
       console.log(`  Billing:       account credit — top up at ${PORTAL_CREDITS_URL}`);
+      if (data.creditSummary) console.log(`  Credit:        ${data.creditSummary}`);
+      if (data.blocked) {
+        console.log(`  ⚠ Account is blocked${data.blockedReason ? `: ${data.blockedReason}` : ""}`);
+      } else if (data.isEmpty) {
+        console.log(`  ⚠ Credit exhausted — top up at ${PORTAL_CREDITS_URL}`);
+      }
     } else {
       console.log(`  Auth:          wallet (x402)`);
       console.log(`  Payment Chain: ${data.paymentChain}`);
@@ -326,6 +332,7 @@ async function cmdWallet(port: number): Promise<void> {
       console.log(`  Auth:    BlockRun API key ${data.apiKey}`);
       console.log(`  Gateway: ${data.gateway}`);
       console.log(`  Billing: account credit (no wallet, no chain)`);
+      if (data.creditSummary) console.log(`  Credit:  ${data.creditSummary}`);
       console.log(`  Top up:  ${PORTAL_CREDITS_URL}`);
       console.log(`  Usage:   ${PORTAL_URL}/dashboard`);
       console.log();

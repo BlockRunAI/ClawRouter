@@ -60152,6 +60152,40 @@ async function clearApiKey() {
   }
   return { removed, envStillSet: Boolean(process["env"].BLOCKRUN_API_KEY?.trim()) };
 }
+async function fetchCreditBalance(apiKey, timeoutMs = 5e3) {
+  try {
+    const controller = new AbortController();
+    const timer2 = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${BLOCKRUN_API_KEY_API}/v1/credits`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: controller.signal
+    });
+    clearTimeout(timer2);
+    if (!res.ok) return void 0;
+    const b = await res.json();
+    const num2 = (v) => typeof v === "number" ? v : null;
+    return {
+      accountId: typeof b.account_id === "string" ? b.account_id : void 0,
+      billingMode: typeof b.billing_mode === "string" ? b.billing_mode : void 0,
+      currency: typeof b.currency === "string" ? b.currency : "USD",
+      grantedUsd: num2(b.granted_usd),
+      spentUsd: num2(b.spent_usd),
+      remainingUsd: num2(b.remaining_usd),
+      blocked: b.blocked === true,
+      blockedReason: typeof b.blocked_reason === "string" ? b.blocked_reason : void 0
+    };
+  } catch {
+    return void 0;
+  }
+}
+function formatCreditBalance(b) {
+  const money = (v) => v === null ? void 0 : `$${v.toFixed(v < 0.01 && v > 0 ? 6 : 2)}`;
+  const remaining = money(b.remainingUsd);
+  const spent = money(b.spentUsd);
+  if (remaining) return `${remaining} remaining${spent ? ` (spent ${spent})` : ""}`;
+  const mode = b.billingMode === "ungated" ? "no prepaid limit" : b.billingMode ?? "unknown";
+  return `${spent ? `spent ${spent}` : "unknown"} \u2014 ${mode}`;
+}
 function createApiKeyFetch(apiKey, baseFetch = fetch) {
   return async (input, init2) => {
     const headers = new Headers(init2?.headers);
@@ -91782,7 +91816,15 @@ async function startProxy(options) {
               )
             ]);
             if (authMode === "api-key") {
-              response.balance = null;
+              const credit = await fetchCreditBalance(apiKey, BALANCE_CHECK_TIMEOUT_MS);
+              response.balance = credit?.remainingUsd ?? null;
+              response.creditSpent = credit?.spentUsd ?? null;
+              response.creditGranted = credit?.grantedUsd ?? null;
+              response.billingMode = credit?.billingMode ?? null;
+              response.creditSummary = credit ? formatCreditBalance(credit) : null;
+              response.blocked = credit?.blocked ?? false;
+              if (credit?.blockedReason) response.blockedReason = credit.blockedReason;
+              response.isEmpty = credit?.remainingUsd !== null && (credit?.remainingUsd ?? 1) <= 0;
               response.billing = "BlockRun account credit";
               response.topUpUrl = PORTAL_CREDITS_URL;
             } else {
@@ -230627,6 +230669,12 @@ ClawRouter Status (port ${port})
       console.log(`  Auth:          BlockRun API key ${data.apiKey}`);
       console.log(`  Gateway:       ${data.gateway}`);
       console.log(`  Billing:       account credit \u2014 top up at ${PORTAL_CREDITS_URL}`);
+      if (data.creditSummary) console.log(`  Credit:        ${data.creditSummary}`);
+      if (data.blocked) {
+        console.log(`  \u26A0 Account is blocked${data.blockedReason ? `: ${data.blockedReason}` : ""}`);
+      } else if (data.isEmpty) {
+        console.log(`  \u26A0 Credit exhausted \u2014 top up at ${PORTAL_CREDITS_URL}`);
+      }
     } else {
       console.log(`  Auth:          wallet (x402)`);
       console.log(`  Payment Chain: ${data.paymentChain}`);
@@ -230654,6 +230702,7 @@ ClawRouter Account
       console.log(`  Auth:    BlockRun API key ${data.apiKey}`);
       console.log(`  Gateway: ${data.gateway}`);
       console.log(`  Billing: account credit (no wallet, no chain)`);
+      if (data.creditSummary) console.log(`  Credit:  ${data.creditSummary}`);
       console.log(`  Top up:  ${PORTAL_CREDITS_URL}`);
       console.log(`  Usage:   ${PORTAL_URL}/dashboard`);
       console.log();

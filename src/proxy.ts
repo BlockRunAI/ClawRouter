@@ -84,6 +84,8 @@ import {
   BLOCKRUN_API_KEY_API,
   PORTAL_CREDITS_URL,
   createApiKeyFetch,
+  fetchCreditBalance,
+  formatCreditBalance,
   isValidApiKey,
   maskApiKey,
 } from "./api-key.js";
@@ -2689,9 +2691,21 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               ),
             ]);
             if (authMode === "api-key") {
-              // The gateway keeps this account's books and publishes no
-              // key-readable balance, so reporting one would be a fabrication.
-              response.balance = null;
+              // The gateway now publishes a key-readable credit position at
+              // GET /v1/credits, so this no longer has to report `null`. Note
+              // `remaining` is legitimately null on an ungated account (no
+              // granted allowance to draw down) — that is not a failure, and a
+              // consumer must not render it as $0.00. An unreachable gateway
+              // leaves every field null and health still answers.
+              const credit = await fetchCreditBalance(apiKey!, BALANCE_CHECK_TIMEOUT_MS);
+              response.balance = credit?.remainingUsd ?? null;
+              response.creditSpent = credit?.spentUsd ?? null;
+              response.creditGranted = credit?.grantedUsd ?? null;
+              response.billingMode = credit?.billingMode ?? null;
+              response.creditSummary = credit ? formatCreditBalance(credit) : null;
+              response.blocked = credit?.blocked ?? false;
+              if (credit?.blockedReason) response.blockedReason = credit.blockedReason;
+              response.isEmpty = credit?.remainingUsd !== null && (credit?.remainingUsd ?? 1) <= 0;
               response.billing = "BlockRun account credit";
               response.topUpUrl = PORTAL_CREDITS_URL;
             } else {
