@@ -880,15 +880,21 @@ async function startProxyInBackground(
   // and a customer paying by card must not end up with a private key they never
   // asked for and a "back this up" warning they cannot act on.
   const pluginApiKey = api.pluginConfig?.apiKey as string | undefined;
+  // A configured-but-invalid key is refused rather than ignored, for the same
+  // reason resolveApiKey() refuses one: "look elsewhere" ends at a different
+  // account or at resolveOrGenerateWalletKey(), which mints a wallet and spends
+  // USDC the user meant to bill to their account. An empty value is "unset",
+  // not "invalid" — clearing a config field is a normal way to turn it off.
+  if (typeof pluginApiKey === "string" && pluginApiKey.trim() && !isValidApiKey(pluginApiKey)) {
+    throw new Error(
+      `pluginConfig.apiKey is set but is not a BlockRun key (expected brk_…). ` +
+        `Fix it or remove it — refusing to fall back to another credential.`,
+    );
+  }
   const resolvedApiKey =
     typeof pluginApiKey === "string" && isValidApiKey(pluginApiKey)
       ? { key: pluginApiKey.trim(), source: "config" as const }
       : await resolveApiKey();
-  if (typeof pluginApiKey === "string" && !isValidApiKey(pluginApiKey)) {
-    api.logger.warn(
-      `pluginConfig.apiKey is set but invalid (expected brk_...) — ignoring it and looking elsewhere`,
-    );
-  }
   const apiKey = resolvedApiKey?.key;
 
   // Resolve wallet key: plugin config → explicit env → BlockRun Core → legacy migration → generate.
@@ -2371,7 +2377,27 @@ const plugin: OpenClawPluginDefinition = {
         // The gateway-mode path (startProxyInBackground) has always resolved the
         // key before touching a wallet; this path had not.
         void (async () => {
-          const keyResolution = await resolveApiKey().catch(() => undefined);
+          // resolveApiKey() THROWS when a key is present but malformed, and
+          // that refusal is the point: falling through would resolve the next
+          // credential instead, which can be a different account or a funded
+          // wallet. Catching it here would silently undo exactly that
+          // protection, so a malformed key stops this path rather than
+          // downgrading to "generate a wallet and spend USDC". Reported and
+          // returned, not rethrown — an unhandled rejection inside plugin
+          // registration takes OpenClaw down with it, and the user needs to
+          // read the reason.
+          let keyResolution: Awaited<ReturnType<typeof resolveApiKey>>;
+          try {
+            keyResolution = await resolveApiKey();
+          } catch (error) {
+            api.logger.error(
+              `BlockRun API key is configured but unusable: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            api.logger.error(
+              `Not falling back to a wallet — fix the key, or run "clawrouter logout" to pay from the wallet deliberately.`,
+            );
+            return;
+          }
           if (keyResolution) {
             api.logger.info(
               `Using BlockRun API key ${maskApiKey(keyResolution.key)} (from ${keyResolution.source}) — billing account credit, no wallet`,

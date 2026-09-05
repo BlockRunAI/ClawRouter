@@ -116,18 +116,47 @@ describe("resolveApiKey", () => {
     await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
   });
 
-  it("skips a malformed file rather than sending garbage upstream as a 401", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+  // A malformed key used to be skipped with a warning, which meant resolution
+  // quietly continued to the NEXT source — and the next source can be a
+  // different account, or a funded wallet. Silently spending USDC because a key
+  // file was corrupt is worse than refusing to start, so both are now fatal.
+  it("refuses to fall through from a malformed file to another credential", async () => {
     writeCore("not-a-key");
     writeLegacy(KEY_B);
-    await expect(resolveApiKey()).resolves.toEqual({ key: KEY_B, source: "saved" });
+    await expect(resolveApiKey()).rejects.toThrow(/does not contain a BlockRun key/);
   });
 
-  it("skips a malformed environment variable", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("refuses to fall through from a malformed environment variable", async () => {
     process.env.BLOCKRUN_API_KEY = "0x" + "ab".repeat(32);
     writeCore(KEY_A);
+    await expect(resolveApiKey()).rejects.toThrow(/BLOCKRUN_API_KEY is malformed/);
+  });
+
+  it("names the way back to wallet billing in both refusals", async () => {
+    // The refusal has to say how to undo it, or the only way out of a corrupt
+    // key file is guessing.
+    writeCore("not-a-key");
+    await expect(resolveApiKey()).rejects.toThrow(/clawrouter logout/);
+  });
+
+  // ...but an EMPTY env var is "unset", not "malformed". `FOO=""` is the
+  // ordinary way to clear a variable in CI and container images; treating it as
+  // a fatal misconfiguration would break those pipelines and buys no safety,
+  // since an empty value cannot be mistaken for someone else's credential.
+  it("treats an empty BLOCKRUN_API_KEY as unset, not malformed", async () => {
+    process.env.BLOCKRUN_API_KEY = "";
+    writeCore(KEY_A);
     await expect(resolveApiKey()).resolves.toEqual({ key: KEY_A, source: "core" });
+  });
+
+  it("treats a whitespace-only BLOCKRUN_API_KEY as unset too", async () => {
+    process.env.BLOCKRUN_API_KEY = "   ";
+    writeCore(KEY_A);
+    await expect(resolveApiKey()).resolves.toEqual({ key: KEY_A, source: "core" });
+  });
+
+  it("still returns undefined when nothing is configured anywhere", async () => {
+    await expect(resolveApiKey()).resolves.toBeUndefined();
   });
 });
 

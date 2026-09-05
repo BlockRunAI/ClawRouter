@@ -27,7 +27,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 // The x402 onAfterPaymentCreation hook writes the actual payment amount into the
 // request-scoped store, and the logging code reads it after payFetch completes.
 const paymentStore = new AsyncLocalStorage<{ amountUsd: number }>();
-import { finished } from "node:stream";
+import { finished, Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -84,6 +85,8 @@ import {
   BLOCKRUN_API_KEY_API,
   PORTAL_CREDITS_URL,
   createApiKeyFetch,
+  normalizeApiKeyBase,
+  pollApiKeyJob,
   fetchCreditBalance,
   formatCreditBalance,
   isValidApiKey,
@@ -240,10 +243,10 @@ async function loadGatewayCatalog(apiBase: string, apiKey?: string): Promise<voi
     const timer = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
     // api.blockrun.ai authenticates its catalog too; an unauthenticated read
     // there is a 401, which would leave every free rung eligible forever.
-    const res = await fetch(`${apiBase}/v1/models`, {
-      signal: controller.signal,
-      ...(apiKey ? { headers: { authorization: `Bearer ${apiKey}` } } : {}),
-    });
+    const res = await (apiKey ? createApiKeyFetch(apiKey, fetch, apiBase) : fetch)(
+      `${apiBase}/v1/models`,
+      { signal: controller.signal },
+    );
     clearTimeout(timer);
     if (!res.ok) return;
     const body = (await res.json()) as { data?: Array<{ id?: string }> };
@@ -2206,6 +2209,8 @@ async function proxyPaidApiRequest(
   apiBase: string,
   payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
   getActualPaymentUsd: () => number,
+  accountPassthrough = false,
+  authMode: AuthMode = "wallet",
 ): Promise<void> {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -2278,17 +2283,49 @@ async function proxyPaidApiRequest(
     responseHeaders[key] = value;
   });
 
+  // An authenticated account response must never be cached: caches downstream
+  // key on the URL, not the credential, so switching API keys on one proxy port
+  // could otherwise serve one account's data to another — `/v1/phone/numbers`
+  // answers "which numbers do I own", and upstream marks it public/max-age.
+  //
+  // Keyed on the CREDENTIAL, not on which route handled the request. The
+  // partner prefixes (/v1/phone, /v1/surf, /v1/pm, ...) are matched before the
+  // generic account passthrough and would otherwise keep the upstream's caching
+  // headers while still being account-authenticated.
+  if (accountPassthrough || authMode === "api-key") {
+    responseHeaders["cache-control"] = "no-store";
+  }
   res.writeHead(upstream.status, responseHeaders);
 
-  // Stream response body
-  if (upstream.body) {
-    const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
-    for (const chunk of chunks) {
-      safeWrite(res, Buffer.from(chunk));
+  if (accountPassthrough) {
+    // Stream rather than buffer, so these routes keep their native payload,
+    // status and SSE contract instead of arriving all at once.
+    //
+    // NOTE: this deliberately does NOT skip the usage log below. Account billing
+    // is authoritative in the portal, but a local journal that silently omits
+    // paid calls is how Surf/Exa/prediction-market spend became invisible in
+    // `/stats` on this rail in the first place (fixed in 934bea4). The gateway
+    // now returns `x-blockrun-cost-usd`, so the charge is knowable here and
+    // there is no longer a reason to drop the row.
+    if (upstream.body) {
+      await pipeline(
+        Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream<Uint8Array>),
+        res,
+        { signal: clientAbort.signal },
+      );
+    } else {
+      res.end();
     }
+  } else {
+    // Stream response body
+    if (upstream.body) {
+      const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
+      for (const chunk of chunks) {
+        safeWrite(res, Buffer.from(chunk));
+      }
+    }
+    res.end();
   }
-
-  res.end();
 
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] ${requestLabel} response: ${upstream.status} (${latencyMs}ms)`);
@@ -2493,13 +2530,16 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Meaningless in API-key mode (there is no chain to sign on), and reported as
   // undefined there so /health never advertises a rail this proxy cannot use.
   const paymentChain = options.paymentChain ?? (await resolvePaymentChain());
-  const apiBase =
+  const requestedApiBase =
     options.apiBase ??
     (authMode === "api-key"
       ? BLOCKRUN_API_KEY_API
       : paymentChain === "solana" && solanaPrivateKeyBytes
         ? BLOCKRUN_SOLANA_API
         : BLOCKRUN_API);
+  // Validated once here rather than per request: an unusable account URL should
+  // fail at startup, not on the first paid call.
+  const apiBase = authMode === "api-key" ? normalizeApiKeyBase(requestedApiBase) : requestedApiBase;
   if (authMode === "api-key") {
     console.log(`[ClawRouter] Auth: BlockRun API key ${maskApiKey(apiKey!)} (${apiBase})`);
     console.log(`[ClawRouter] Billing: account credit — top up at ${PORTAL_CREDITS_URL}`);
@@ -2714,7 +2754,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // was already good for the request (or was not, and the gateway says so).
   const payFetch =
     authMode === "api-key"
-      ? createApiKeyFetch(apiKey!)
+      ? createApiKeyFetch(apiKey!, fetch, apiBase)
       : createPayFetchWithPreAuth(fetch, x402!, undefined, {
           skipPreAuth: paymentChain === "solana",
           // Per-request cost estimate so pre-auth is only reused when the cached
@@ -3418,12 +3458,18 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }
 
         try {
-          const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
+          let upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal,
           });
+          // 202 + poll_url on the account rail: complete it here. The wallet
+          // path re-signs an x402 payment per poll; there is nothing to sign on a
+          // bearer token, so without this the caller gets a raw 202 it cannot use.
+          if (authMode === "api-key") {
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
+          }
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3524,12 +3570,18 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           /* use defaults */
         }
         try {
-          const upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
+          let upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal,
           });
+          // 202 + poll_url on the account rail: complete it here. The wallet
+          // path re-signs an x402 payment per poll; there is nothing to sign on a
+          // bearer token, so without this the caller gets a raw 202 it cannot use.
+          if (authMode === "api-key") {
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
+          }
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -3843,6 +3895,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             apiBase,
             payFetch,
             () => paymentStore.getStore()?.amountUsd ?? 0,
+            false,
+            authMode,
           );
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));
@@ -3867,6 +3921,47 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       if (!req.url?.startsWith("/v1")) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Not found" }));
+        return;
+      }
+
+      // Account rail: forward everything that is not chat straight through.
+      //
+      // Placed AFTER the specialised routes above on purpose — images, videos,
+      // audio/generations, /v1/models and the partner prefixes keep their own
+      // polling, local-download and pricing behaviour. What reaches here is the
+      // long tail of account services, which have no `model` to route on and
+      // whose native payload, status and SSE contract should survive untouched.
+      // Chat and /v1/messages are excluded so smart routing still applies to
+      // them.
+      if (
+        authMode === "api-key" &&
+        /^\/v1\//.test(req.url ?? "") &&
+        !/^\/v1\/(?:chat\/completions|messages)(?:\?|$)/.test(req.url ?? "")
+      ) {
+        try {
+          await proxyPaidApiRequest(
+            req,
+            res,
+            apiBase,
+            payFetch,
+            () => paymentStore.getStore()?.amountUsd ?? 0,
+            true,
+            authMode,
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          options.onError?.(error);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: { message: `Account API error: ${error.message}`, type: "account_error" },
+              }),
+            );
+          } else if (!res.writableEnded) {
+            res.end();
+          }
+        }
         return;
       }
 

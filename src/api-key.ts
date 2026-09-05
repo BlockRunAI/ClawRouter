@@ -45,7 +45,8 @@ export const PORTAL_CREDITS_URL = `${PORTAL_URL}/dashboard/credits`;
  * Overridable for staging deploys, same as the wallet gateways.
  */
 export const BLOCKRUN_API_KEY_API =
-  process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "") || "https://api.blockrun.ai";
+  process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "").replace(/\/v1$/, "") ||
+  "https://api.blockrun.ai";
 
 export type ApiKeySource = "env" | "core" | "saved" | "config";
 
@@ -80,11 +81,24 @@ export function maskApiKey(key: string): string {
   return `${trimmed.slice(0, 14)}…${trimmed.slice(-4)}`;
 }
 
+/**
+ * Read a key file, distinguishing "absent" from "unreadable".
+ *
+ * Only ENOENT means "no key configured". Any other error — permissions, I/O, a
+ * directory where a file should be — is reported rather than swallowed: a
+ * credential we cannot read must not be silently downgraded into "bill the
+ * wallet instead", which would spend USDC the user meant to bill to their
+ * account.
+ */
 async function readOptional(path: string): Promise<string | undefined> {
   try {
     return (await readTextFile(path)).trim() || undefined;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new Error(
+      `Cannot read BlockRun API key file ${path}; refusing to fall back to another account or wallet.`,
+      { cause: error },
+    );
   }
 }
 
@@ -92,17 +106,23 @@ async function readOptional(path: string): Promise<string | undefined> {
  * Resolve the configured API key without creating anything.
  *
  * Returns undefined when no key is configured — that is the normal state for a
- * wallet user, not an error. A file that exists but holds something that is not
- * a key is reported (once, to stderr) and skipped rather than sent upstream:
- * a malformed credential is a 401 per request, and an unexplained 401 is the
- * hardest failure mode there is to diagnose.
+ * wallet user, not an error. A key that is PRESENT but malformed is fatal:
+ * skipping it would fall through to the next source and could bill a different
+ * account, or spend USDC from a wallet the user did not mean to touch. Run
+ * `clawrouter logout` to return to wallet billing deliberately.
+ *
+ * An empty `BLOCKRUN_API_KEY` counts as unset, not as malformed. `FOO=""` is
+ * the ordinary way to clear a variable in CI and container images, and treating
+ * it as a fatal misconfiguration would break those pipelines while buying no
+ * safety: an empty value cannot be mistaken for someone else's credential.
  */
 export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
   const envKey = process["env"].BLOCKRUN_API_KEY?.trim();
   if (envKey) {
     if (isValidApiKey(envKey)) return { key: envKey, source: "env" };
-    console.warn(
-      `[ClawRouter] ⚠ BLOCKRUN_API_KEY is set but does not look like a BlockRun key (expected brk_…) — ignoring.`,
+    throw new Error(
+      `BLOCKRUN_API_KEY is malformed (expected brk_…). Mint one at ${PORTAL_KEYS_URL}, ` +
+        `or unset it to pay from the wallet. Refusing to fall back silently.`,
     );
   }
 
@@ -113,8 +133,10 @@ export async function resolveApiKey(): Promise<ApiKeyResolution | undefined> {
     const stored = await readOptional(path);
     if (stored === undefined) continue;
     if (isValidApiKey(stored)) return { key: stored, source };
-    console.warn(
-      `[ClawRouter] ⚠ ${path} does not contain a BlockRun key (expected brk_…) — ignoring.`,
+    throw new Error(
+      `${path} does not contain a BlockRun key (expected brk_…). Run "clawrouter login" with a ` +
+        `valid key, or "clawrouter logout" to return to wallet billing. Refusing to fall back ` +
+        `silently: the next source could bill a different account or spend from a wallet.`,
     );
   }
 
@@ -236,19 +258,106 @@ export function formatCreditBalance(b: CreditBalance): string {
  * rather than defaulting is what stops a placeholder from shadowing the real
  * credential and turning every call into a 401.
  */
+/**
+ * Validate and normalise an account-API base URL.
+ *
+ * The bearer token is the user's money, so the host it may be sent to is
+ * checked before any request is built: HTTPS only (except loopback, for local
+ * gateways), and no credentials, query or fragment — all three are ways to
+ * smuggle a different destination past a casual eyeball. Trailing slashes and a
+ * trailing `/v1` are trimmed so callers can pass either form.
+ */
+export function normalizeApiKeyBase(raw: string): string {
+  const base = raw.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url = new URL(base);
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (url.protocol !== "https:" &&
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
+  ) {
+    throw new Error(
+      "BlockRun account API URL requires HTTPS (except localhost) and no credentials, query or fragment.",
+    );
+  }
+  return base;
+}
+
 export function createApiKeyFetch(
   apiKey: string,
   baseFetch: typeof fetch = fetch,
+  apiBase: string = BLOCKRUN_API_KEY_API,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  const base = new URL(normalizeApiKeyBase(apiBase));
   return async (input, init) => {
-    const headers = new Headers(init?.headers as HeadersInit | undefined);
+    const request = input instanceof Request ? input : undefined;
+    const url = new URL(request?.url ?? String(input), `${base}/`);
+    // The token is a bearer credential for the user's money: it goes to exactly
+    // one origin and nowhere else. A redirect is the quiet way a credential
+    // leaves the host it was minted for, so refuse to follow one rather than
+    // re-attach the token to whatever Location says.
+    if (url.origin !== base.origin || url.username || url.password) {
+      throw new Error("Refusing to forward a BlockRun account key to another origin.");
+    }
+    // api.blockrun.ai serves /v1 at its root; blockrun.ai serves it under /api.
+    // A caller that built a wallet-style path still reaches the right route.
+    if (base.pathname === "/" && url.pathname.startsWith("/api/v1/")) {
+      url.pathname = url.pathname.slice(4);
+    }
+    const headers = new Headers(init?.headers ?? request?.headers);
+    // Any payment header on an API-key request is a payment nobody asked for.
+    // Matched by pattern rather than by name so a new x402 spelling cannot
+    // slip through: this rail settles server-side and signs nothing.
+    for (const name of [...headers.keys()]) {
+      if (/payment/i.test(name) || name.toLowerCase() === "x-api-key") headers.delete(name);
+    }
     headers.set("authorization", `Bearer ${apiKey}`);
-    // An x402 header on an API-key request is a payment nobody asked for.
-    headers.delete("x-payment");
-    headers.delete("x-api-key");
-    const response = await baseFetch(input, { ...init, headers });
+    const response = await baseFetch(request ? new Request(url, request) : url.href, {
+      ...init,
+      headers,
+      redirect: "error",
+    });
     return response.ok ? response : explainApiKeyFailure(response);
   };
+}
+
+/**
+ * Drive a 202 + poll_url async job to completion on the API-key rail.
+ *
+ * The wallet rail's poller re-signs an x402 payment per poll; there is nothing
+ * to sign here, so this is the plain-bearer equivalent. Polls the SAME signed
+ * URL rather than resubmitting the creation request — a resubmit would be a
+ * second PAID job, so a transient gateway 5xx must never turn into a double
+ * charge. Gateway 5xx and timeouts are therefore retried, not restarted.
+ */
+export async function pollApiKeyJob(
+  response: Response,
+  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  apiBase: string,
+  signal: AbortSignal,
+  intervalMs = 2000,
+): Promise<Response> {
+  if (response.status !== 202) return response;
+  const initial = (await response.clone().json()) as { poll_url?: string };
+  if (!initial.poll_url) throw new Error("Async account response missing poll_url");
+  const pollUrl = new URL(initial.poll_url, `${normalizeApiKeyBase(apiBase)}/`).href;
+  const abort = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
+  while (!abort.aborted) {
+    const polled = await payFetch(pollUrl, { signal: abort });
+    if ([502, 503, 504, 522, 524].includes(polled.status)) {
+      await polled.body?.cancel();
+    } else {
+      if (!polled.ok) return polled;
+      const data = (await polled.clone().json()) as { status?: string };
+      if (data.status === "completed") return polled;
+      if (data.status === "failed") return polled;
+      await polled.body?.cancel();
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error("Async account job did not complete before the client aborted or timed out.");
 }
 
 /**

@@ -55864,7 +55864,7 @@ var require_websocket = __commonJS({
     var net3 = __require("net");
     var tls2 = __require("tls");
     var { randomBytes: randomBytes9, createHash: createHash4 } = __require("crypto");
-    var { Duplex, Readable: Readable2 } = __require("stream");
+    var { Duplex, Readable: Readable3 } = __require("stream");
     var { URL: URL3 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
     var Receiver2 = require_receiver();
@@ -59926,16 +59926,20 @@ function maskApiKey(key2) {
 async function readOptional2(path5) {
   try {
     return (await readTextFile(path5)).trim() || void 0;
-  } catch {
-    return void 0;
+  } catch (error) {
+    if (error.code === "ENOENT") return void 0;
+    throw new Error(
+      `Cannot read BlockRun API key file ${path5}; refusing to fall back to another account or wallet.`,
+      { cause: error }
+    );
   }
 }
 async function resolveApiKey() {
   const envKey = process["env"].BLOCKRUN_API_KEY?.trim();
   if (envKey) {
     if (isValidApiKey(envKey)) return { key: envKey, source: "env" };
-    console.warn(
-      `[ClawRouter] \u26A0 BLOCKRUN_API_KEY is set but does not look like a BlockRun key (expected brk_\u2026) \u2014 ignoring.`
+    throw new Error(
+      `BLOCKRUN_API_KEY is malformed (expected brk_\u2026). Mint one at ${PORTAL_KEYS_URL}, or unset it to pay from the wallet. Refusing to fall back silently.`
     );
   }
   for (const [path5, source] of [
@@ -59945,8 +59949,8 @@ async function resolveApiKey() {
     const stored = await readOptional2(path5);
     if (stored === void 0) continue;
     if (isValidApiKey(stored)) return { key: stored, source };
-    console.warn(
-      `[ClawRouter] \u26A0 ${path5} does not contain a BlockRun key (expected brk_\u2026) \u2014 ignoring.`
+    throw new Error(
+      `${path5} does not contain a BlockRun key (expected brk_\u2026). Run "clawrouter login" with a valid key, or "clawrouter logout" to return to wallet billing. Refusing to fall back silently: the next source could bill a different account or spend from a wallet.`
     );
   }
   return void 0;
@@ -59985,15 +59989,60 @@ function formatCreditBalance(b) {
   const mode = b.billingMode === "ungated" ? "no prepaid limit" : b.billingMode ?? "unknown";
   return `${spent ? `spent ${spent}` : "unknown"} \u2014 ${mode}`;
 }
-function createApiKeyFetch(apiKey, baseFetch = fetch) {
+function normalizeApiKeyBase(raw) {
+  const base4 = raw.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const url2 = new URL(base4);
+  if (url2.username || url2.password || url2.search || url2.hash || url2.protocol !== "https:" && !(url2.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url2.hostname))) {
+    throw new Error(
+      "BlockRun account API URL requires HTTPS (except localhost) and no credentials, query or fragment."
+    );
+  }
+  return base4;
+}
+function createApiKeyFetch(apiKey, baseFetch = fetch, apiBase = BLOCKRUN_API_KEY_API) {
+  const base4 = new URL(normalizeApiKeyBase(apiBase));
   return async (input, init2) => {
-    const headers = new Headers(init2?.headers);
+    const request2 = input instanceof Request ? input : void 0;
+    const url2 = new URL(request2?.url ?? String(input), `${base4}/`);
+    if (url2.origin !== base4.origin || url2.username || url2.password) {
+      throw new Error("Refusing to forward a BlockRun account key to another origin.");
+    }
+    if (base4.pathname === "/" && url2.pathname.startsWith("/api/v1/")) {
+      url2.pathname = url2.pathname.slice(4);
+    }
+    const headers = new Headers(init2?.headers ?? request2?.headers);
+    for (const name of [...headers.keys()]) {
+      if (/payment/i.test(name) || name.toLowerCase() === "x-api-key") headers.delete(name);
+    }
     headers.set("authorization", `Bearer ${apiKey}`);
-    headers.delete("x-payment");
-    headers.delete("x-api-key");
-    const response = await baseFetch(input, { ...init2, headers });
+    const response = await baseFetch(request2 ? new Request(url2, request2) : url2.href, {
+      ...init2,
+      headers,
+      redirect: "error"
+    });
     return response.ok ? response : explainApiKeyFailure(response);
   };
+}
+async function pollApiKeyJob(response, payFetch, apiBase, signal, intervalMs = 2e3) {
+  if (response.status !== 202) return response;
+  const initial = await response.clone().json();
+  if (!initial.poll_url) throw new Error("Async account response missing poll_url");
+  const pollUrl = new URL(initial.poll_url, `${normalizeApiKeyBase(apiBase)}/`).href;
+  const abort = AbortSignal.any([signal, AbortSignal.timeout(15 * 6e4)]);
+  while (!abort.aborted) {
+    const polled = await payFetch(pollUrl, { signal: abort });
+    if ([502, 503, 504, 522, 524].includes(polled.status)) {
+      await polled.body?.cancel();
+    } else {
+      if (!polled.ok) return polled;
+      const data = await polled.clone().json();
+      if (data.status === "completed") return polled;
+      if (data.status === "failed") return polled;
+      await polled.body?.cancel();
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error("Async account job did not complete before the client aborted or timed out.");
 }
 async function explainApiKeyFailure(response) {
   const hint = HINTS[response.status];
@@ -60028,7 +60077,7 @@ var init_api_key = __esm({
     PORTAL_URL = "https://user.blockrun.ai";
     PORTAL_KEYS_URL = `${PORTAL_URL}/dashboard/keys`;
     PORTAL_CREDITS_URL = `${PORTAL_URL}/dashboard/credits`;
-    BLOCKRUN_API_KEY_API = process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "") || "https://api.blockrun.ai";
+    BLOCKRUN_API_KEY_API = process["env"].BLOCKRUN_API_BASE_URL?.replace(/\/+$/, "").replace(/\/v1$/, "") || "https://api.blockrun.ai";
     HINTS = {
       401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
       402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
@@ -69174,7 +69223,7 @@ var require_client_h2 = __commonJS({
   "node_modules/undici/lib/dispatcher/client-h2.js"(exports, module) {
     "use strict";
     var assert10 = __require("assert");
-    var { pipeline } = __require("stream");
+    var { pipeline: pipeline2 } = __require("stream");
     var util5 = require_util();
     var {
       RequestContentLengthMismatchError,
@@ -70321,7 +70370,7 @@ var require_client_h2 = __commonJS({
     }
     function writeStream(abort, socket, expectsPayload, h2stream, body, client, request2, contentLength) {
       assert10(contentLength !== 0 || client[kRunning] === 0, "stream body cannot be pipelined");
-      const pipe2 = pipeline(
+      const pipe2 = pipeline2(
         body,
         h2stream,
         (err) => {
@@ -73476,7 +73525,7 @@ var require_readable = __commonJS({
     "use strict";
     var assert10 = __require("assert");
     var { addAbortListener } = __require("events");
-    var { Readable: Readable2 } = __require("stream");
+    var { Readable: Readable3 } = __require("stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError, AbortError } = require_errors();
     var util5 = require_util();
     var { ReadableStreamFrom } = require_util();
@@ -73490,7 +73539,7 @@ var require_readable = __commonJS({
     var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop2 = () => {
     };
-    var BodyReadable = class extends Readable2 {
+    var BodyReadable = class extends Readable3 {
       /**
        * @param {object} opts
        * @param {(this: Readable, size: number) => void} opts.resume
@@ -73889,7 +73938,7 @@ var require_api_request = __commonJS({
     "use strict";
     var assert10 = __require("assert");
     var { AsyncResource } = __require("async_hooks");
-    var { Readable: Readable2 } = require_readable();
+    var { Readable: Readable3 } = require_readable();
     var { InvalidArgumentError, RequestAbortedError } = require_errors();
     var util5 = require_util();
     function noop2() {
@@ -73975,7 +74024,7 @@ var require_api_request = __commonJS({
         const parsedHeaders = headers;
         const contentType = parsedHeaders?.["content-type"];
         const contentLength = parsedHeaders?.["content-length"];
-        const res = new Readable2({
+        const res = new Readable3({
           resume: () => controller.resume(),
           abort: (reason) => controller.abort(reason),
           contentType,
@@ -74351,7 +74400,7 @@ var require_api_pipeline = __commonJS({
   "node_modules/undici/lib/api/api-pipeline.js"(exports, module) {
     "use strict";
     var {
-      Readable: Readable2,
+      Readable: Readable3,
       Duplex,
       PassThrough
     } = __require("stream");
@@ -74368,7 +74417,7 @@ var require_api_pipeline = __commonJS({
     function noop2() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
-    var PipelineRequest = class extends Readable2 {
+    var PipelineRequest = class extends Readable3 {
       constructor() {
         super({ autoDestroy: true });
         this[kResume] = null;
@@ -74386,7 +74435,7 @@ var require_api_pipeline = __commonJS({
         callback(err);
       }
     };
-    var PipelineResponse = class extends Readable2 {
+    var PipelineResponse = class extends Readable3 {
       constructor(resume2) {
         super({ autoDestroy: true });
         this[kResume] = resume2;
@@ -74540,7 +74589,7 @@ var require_api_pipeline = __commonJS({
         util5.destroy(ret, err);
       }
     };
-    function pipeline(opts, handler) {
+    function pipeline2(opts, handler) {
       try {
         const pipelineHandler = new PipelineHandler(opts, handler);
         this.dispatch({ ...opts, body: pipelineHandler.req }, pipelineHandler);
@@ -74549,7 +74598,7 @@ var require_api_pipeline = __commonJS({
         return new PassThrough().destroy(err);
       }
     }
-    module.exports = pipeline;
+    module.exports = pipeline2;
   }
 });
 
@@ -79667,7 +79716,7 @@ var require_cache2 = __commonJS({
   "node_modules/undici/lib/interceptor/cache.js"(exports, module) {
     "use strict";
     var assert10 = __require("assert");
-    var { Readable: Readable2 } = __require("stream");
+    var { Readable: Readable3 } = __require("stream");
     var util5 = require_util();
     var CacheHandler = require_cache_handler();
     var MemoryCacheStore = require_memory_cache_store();
@@ -79843,7 +79892,7 @@ var require_cache2 = __commonJS({
       return dispatch(opts, new CacheHandler(globalOpts, cacheKey2, handler));
     }
     function sendCachedValue(handler, opts, result, age, context, isStale2) {
-      const stream4 = util5.isStream(result.body) ? result.body : Readable2.from(result.body ?? []);
+      const stream4 = util5.isStream(result.body) ? result.body : Readable3.from(result.body ?? []);
       assert10(!stream4.destroyed, "stream should not be destroyed");
       assert10(!stream4.readableDidRead, "stream should not be readableDidRead");
       const controller = {
@@ -80088,7 +80137,7 @@ var require_decompress = __commonJS({
   "node_modules/undici/lib/interceptor/decompress.js"(exports, module) {
     "use strict";
     var { createInflate, createGunzip, createBrotliDecompress, createZstdDecompress } = __require("zlib");
-    var { pipeline } = __require("stream");
+    var { pipeline: pipeline2 } = __require("stream");
     var DecoratorHandler = require_decorator_handler();
     var supportedEncodings = {
       gzip: createGunzip,
@@ -80198,7 +80247,7 @@ var require_decompress = __commonJS({
       #setupMultipleDecompressors(controller) {
         const lastDecompressor = this.#decompressors[this.#decompressors.length - 1];
         this.#setupDecompressorEvents(lastDecompressor, controller);
-        pipeline(this.#decompressors, (err) => {
+        pipeline2(this.#decompressors, (err) => {
           if (err) {
             super.onResponseError(controller, err);
             return;
@@ -82992,7 +83041,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants4();
     var EE = __require("events");
-    var { Readable: Readable2, pipeline, finished: finished2, isErrored, isReadable } = __require("stream");
+    var { Readable: Readable3, pipeline: pipeline2, finished: finished2, isErrored, isReadable } = __require("stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
@@ -83968,7 +84017,7 @@ var require_fetch = __commonJS({
                 const headersList = new HeadersList();
                 appendHeadersListFromResponseHeaders(headersList, headers, rawHeaders);
                 const location = headersList.get("location", true);
-                this.body = new Readable2({ read: () => controller.resume() });
+                this.body = new Readable3({ read: () => controller.resume() });
                 const willFollow = location && request2.redirect === "follow" && redirectStatusSet.has(status);
                 const decoders = [];
                 if (request2.method !== "HEAD" && request2.method !== "CONNECT" && !nullBodyStatus.includes(status) && !willFollow) {
@@ -84016,7 +84065,7 @@ var require_fetch = __commonJS({
                   status,
                   statusText,
                   headersList,
-                  body: decoders.length ? pipeline(this.body, ...decoders, (err) => {
+                  body: decoders.length ? pipeline2(this.body, ...decoders, (err) => {
                     if (err) {
                       this.onResponseError(controller, err);
                     }
@@ -87828,7 +87877,7 @@ ${value}`;
 var require_eventsource = __commonJS({
   "node_modules/undici/lib/web/eventsource/eventsource.js"(exports, module) {
     "use strict";
-    var { pipeline } = __require("stream");
+    var { pipeline: pipeline2 } = __require("stream");
     var { fetching } = require_fetch();
     var { webidl } = require_webidl();
     var { EventSourceStream } = require_eventsource_stream();
@@ -87978,7 +88027,7 @@ var require_eventsource = __commonJS({
               ));
             }
           });
-          pipeline(
+          pipeline2(
             response.body.stream,
             eventSourceStream,
             (error) => {
@@ -90528,7 +90577,8 @@ var init_v1 = __esm({
 import { AsyncLocalStorage } from "async_hooks";
 import { createHmac } from "crypto";
 import { createServer } from "http";
-import { finished } from "stream";
+import { finished, Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { homedir as homedir8 } from "os";
 import { join as join11 } from "path";
 import { mkdir as mkdir5, writeFile as writeFile3, readFile as readFile2, stat as fsStat } from "fs/promises";
@@ -90537,10 +90587,10 @@ async function loadGatewayCatalog(apiBase, apiKey) {
   try {
     const controller = new AbortController();
     const timer2 = setTimeout(() => controller.abort(), GATEWAY_CATALOG_TIMEOUT_MS);
-    const res = await fetch(`${apiBase}/v1/models`, {
-      signal: controller.signal,
-      ...apiKey ? { headers: { authorization: `Bearer ${apiKey}` } } : {}
-    });
+    const res = await (apiKey ? createApiKeyFetch(apiKey, fetch, apiBase) : fetch)(
+      `${apiBase}/v1/models`,
+      { signal: controller.signal }
+    );
     clearTimeout(timer2);
     if (!res.ok) return;
     const body = await res.json();
@@ -91317,7 +91367,7 @@ function gatewaySettledCostUsd(response) {
   if (!Number.isFinite(value) || value < 0) return void 0;
   return value;
 }
-async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd) {
+async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd, accountPassthrough = false, authMode = "wallet") {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
   const isBlockrunExa = req.url?.startsWith("/v1/exa/") ?? false;
@@ -91356,14 +91406,29 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
       return;
     responseHeaders[key2] = value;
   });
-  res.writeHead(upstream.status, responseHeaders);
-  if (upstream.body) {
-    const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
-    for (const chunk of chunks) {
-      safeWrite(res, Buffer.from(chunk));
-    }
+  if (accountPassthrough || authMode === "api-key") {
+    responseHeaders["cache-control"] = "no-store";
   }
-  res.end();
+  res.writeHead(upstream.status, responseHeaders);
+  if (accountPassthrough) {
+    if (upstream.body) {
+      await pipeline(
+        Readable.fromWeb(upstream.body),
+        res,
+        { signal: clientAbort.signal }
+      );
+    } else {
+      res.end();
+    }
+  } else {
+    if (upstream.body) {
+      const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
+      for (const chunk of chunks) {
+        safeWrite(res, Buffer.from(chunk));
+      }
+    }
+    res.end();
+  }
   const latencyMs = Date.now() - startTime;
   console.log(`[ClawRouter] ${requestLabel} response: ${upstream.status} (${latencyMs}ms)`);
   noteRemainingCredit(upstream);
@@ -91470,7 +91535,8 @@ async function startProxy(options) {
   const walletKey = options.wallet === void 0 ? void 0 : typeof options.wallet === "string" ? options.wallet : options.wallet.key;
   const solanaPrivateKeyBytes = options.wallet === void 0 || typeof options.wallet === "string" ? void 0 : options.wallet.solanaPrivateKeyBytes;
   const paymentChain = options.paymentChain ?? await resolvePaymentChain();
-  const apiBase = options.apiBase ?? (authMode === "api-key" ? BLOCKRUN_API_KEY_API : paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  const requestedApiBase = options.apiBase ?? (authMode === "api-key" ? BLOCKRUN_API_KEY_API : paymentChain === "solana" && solanaPrivateKeyBytes ? BLOCKRUN_SOLANA_API : BLOCKRUN_API);
+  const apiBase = authMode === "api-key" ? normalizeApiKeyBase(requestedApiBase) : requestedApiBase;
   if (authMode === "api-key") {
     console.log(`[ClawRouter] Auth: BlockRun API key ${maskApiKey(apiKey)} (${apiBase})`);
     console.log(`[ClawRouter] Billing: account credit \u2014 top up at ${PORTAL_CREDITS_URL}`);
@@ -91599,7 +91665,7 @@ async function startProxy(options) {
     if (store) store.amountUsd = amountUsd;
     console.log(`[ClawRouter] Payment signed on ${chain3} (${network}) \u2014 $${amountUsd.toFixed(6)}`);
   });
-  const payFetch = authMode === "api-key" ? createApiKeyFetch(apiKey) : createPayFetchWithPreAuth(fetch, x402, void 0, {
+  const payFetch = authMode === "api-key" ? createApiKeyFetch(apiKey, fetch, apiBase) : createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana",
     // Per-request cost estimate so pre-auth is only reused when the cached
     // payment still covers the (possibly larger) request — BlockRun prices per
@@ -92174,12 +92240,15 @@ async function startProxy(options) {
           return;
         }
         try {
-          const upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
+          let upstream = await payFetch(`${apiBase}/v1/images/image2image`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal
           });
+          if (authMode === "api-key") {
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
+          }
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -92268,12 +92337,15 @@ async function startProxy(options) {
         } catch {
         }
         try {
-          const upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
+          let upstream = await payFetch(`${apiBase}/v1/audio/generations`, {
             method: "POST",
             headers: { "content-type": "application/json", "user-agent": USER_AGENT },
             body: reqBody,
             signal: clientAbort.signal
           });
+          if (authMode === "api-key") {
+            upstream = await pollApiKeyJob(upstream, payFetch, apiBase, clientAbort.signal);
+          }
           const text = await upstream.text();
           if (!upstream.ok) {
             res.writeHead(upstream.status, { "Content-Type": "application/json" });
@@ -92506,7 +92578,9 @@ async function startProxy(options) {
             res,
             apiBase,
             payFetch,
-            () => paymentStore.getStore()?.amountUsd ?? 0
+            () => paymentStore.getStore()?.amountUsd ?? 0,
+            false,
+            authMode
           );
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));
@@ -92527,6 +92601,33 @@ async function startProxy(options) {
       if (!req.url?.startsWith("/v1")) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Not found" }));
+        return;
+      }
+      if (authMode === "api-key" && /^\/v1\//.test(req.url ?? "") && !/^\/v1\/(?:chat\/completions|messages)(?:\?|$)/.test(req.url ?? "")) {
+        try {
+          await proxyPaidApiRequest(
+            req,
+            res,
+            apiBase,
+            payFetch,
+            () => paymentStore.getStore()?.amountUsd ?? 0,
+            true,
+            authMode
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          options.onError?.(error);
+          if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: { message: `Account API error: ${error.message}`, type: "account_error" }
+              })
+            );
+          } else if (!res.writableEnded) {
+            res.end();
+          }
+        }
         return;
       }
       if (!req.url.includes("/chat/completions")) {
@@ -112130,7 +112231,7 @@ var init_readBlob = __esm({
 
 // node_modules/axios/lib/helpers/formDataToStream.js
 import util2 from "util";
-import { Readable } from "stream";
+import { Readable as Readable2 } from "stream";
 var BOUNDARY_ALPHABET, textEncoder, CRLF, CRLF_BYTES, CRLF_BYTES_COUNT, FormDataPart, formDataToStream, formDataToStream_default;
 var init_formDataToStream = __esm({
   "node_modules/axios/lib/helpers/formDataToStream.js"() {
@@ -112210,7 +112311,7 @@ var init_formDataToStream = __esm({
         computedHeaders["Content-Length"] = contentLength;
       }
       headersHandler && headersHandler(computedHeaders);
-      return Readable.from(
+      return Readable2.from(
         (async function* () {
           for (const part of parts) {
             yield boundaryBytes;
@@ -228320,12 +228421,12 @@ async function startProxyInBackground(api, startupGeneration) {
     proc.__clawrouterStartupPhase = "starting";
   }
   const pluginApiKey = api.pluginConfig?.apiKey;
-  const resolvedApiKey = typeof pluginApiKey === "string" && isValidApiKey(pluginApiKey) ? { key: pluginApiKey.trim(), source: "config" } : await resolveApiKey();
-  if (typeof pluginApiKey === "string" && !isValidApiKey(pluginApiKey)) {
-    api.logger.warn(
-      `pluginConfig.apiKey is set but invalid (expected brk_...) \u2014 ignoring it and looking elsewhere`
+  if (typeof pluginApiKey === "string" && pluginApiKey.trim() && !isValidApiKey(pluginApiKey)) {
+    throw new Error(
+      `pluginConfig.apiKey is set but is not a BlockRun key (expected brk_\u2026). Fix it or remove it \u2014 refusing to fall back to another credential.`
     );
   }
+  const resolvedApiKey = typeof pluginApiKey === "string" && isValidApiKey(pluginApiKey) ? { key: pluginApiKey.trim(), source: "config" } : await resolveApiKey();
   const apiKey = resolvedApiKey?.key;
   const configKey = api.pluginConfig?.walletKey;
   let wallet;
@@ -229511,7 +229612,18 @@ ${errText}`
         if (!isGatewayMode()) {
           if (shouldLogRegistration) {
             void (async () => {
-              const keyResolution = await resolveApiKey().catch(() => void 0);
+              let keyResolution;
+              try {
+                keyResolution = await resolveApiKey();
+              } catch (error) {
+                api.logger.error(
+                  `BlockRun API key is configured but unusable: ${error instanceof Error ? error.message : String(error)}`
+                );
+                api.logger.error(
+                  `Not falling back to a wallet \u2014 fix the key, or run "clawrouter logout" to pay from the wallet deliberately.`
+                );
+                return;
+              }
               if (keyResolution) {
                 api.logger.info(
                   `Using BlockRun API key ${maskApiKey(keyResolution.key)} (from ${keyResolution.source}) \u2014 billing account credit, no wallet`
