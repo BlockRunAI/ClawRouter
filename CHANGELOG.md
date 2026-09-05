@@ -4,6 +4,28 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Fixed — every paid Solana call failed on hosts that cannot reach the public Solana RPC
+
+Signing an x402 payment on Solana fetches the asset's mint account from a Solana RPC, defaulting to `api.mainnet-beta.solana.com`. A host with blocked egress — or one the public node refuses — therefore failed **every** paid Solana call with a bare `fetch failed`, while the gateway itself answered fine and free models kept working. Indistinguishable from a gateway outage, and the reason [ClawRouter-Hermes#38](https://github.com/BlockRunAI/ClawRouter-Hermes/issues/38) looked like a Solana gateway fault.
+
+`CLAWROUTER_SOLANA_RPC_URL` now applies to payment signing, not just the balance monitor. `registerExactSvmScheme` cannot forward an RPC (it constructs `new ExactSvmScheme(config.signer)` and drops the rest), so the override re-registers `solana:*` and the v1 compat networks directly; `_registerScheme` keys on version+network+scheme, so the later registration wins and everything else the helper sets up survives.
+
+`describeFetchError` also unwraps undici's three-word `fetch failed` into the errno, host and port it hides on `cause`, so the failing endpoint is named in both the response body and the proxy log rather than left to guesswork.
+
+### Fixed — the gateway request id was read under a name two of the three gateways don't use
+
+`blockrunRequestId()` read only `x-blockrun-request-id`. Measured across the three gateways: `api.blockrun.ai` sends that plus `x-request-id` and `request-id`; **`sol.blockrun.ai` sends `x-request-id` only**; `blockrun.ai` sends none at all.
+
+Two consequences, both real. The reconciliation join key added in `f927cd8` was silently always-undefined on **both wallet rails** — it only ever worked on the API-key rail, which is where it was tested. And a failing paid call had no id to report, which is exactly what the #38 reporter hit: a paid 500 with nothing to hand anyone, on either side.
+
+The failure path now carries the id through to the caller — appended to the `All N models failed` log line and returned as an `x-blockrun-request-id` response header, because whoever hits this is usually reading an agent transcript rather than our proxy log.
+
+Two theories ruled out while investigating, recorded so they are not re-tested: the reporter's low SOL balance is not the trigger (a wallet holding **0.0 SOL** settles paid calls fine — the facilitator pays the fee), and their wallet is healthy on-chain (USDC ATA initialized, standard Tokenkeg program).
+
+---
+
 ## v0.12.270 — September 5, 2026
 
 ### Fixed — the Grok rate sync was docs-only; the code still quoted the old prices
