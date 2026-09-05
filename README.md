@@ -663,10 +663,35 @@ npx @blockrun/clawrouter
 **3. Check it, and switch back whenever**
 
 ```bash
-clawrouter status     # names the mode, the gateway, and the masked key
+clawrouter status     # names the mode, the gateway, the masked key and your credit
 clawrouter doctor     # verifies the key against the gateway (401 = revoked or mistyped)
+clawrouter reconcile  # diff your local usage journal against BlockRun's billing ledger
 clawrouter logout     # delete the key and go back to paying from the wallet
 ```
+
+**Checking your bill without opening a dashboard.** `clawrouter reconcile`
+compares what ClawRouter recorded locally against `GET /v1/usage` — BlockRun's
+authoritative ledger — joined on the gateway's own request id:
+
+```
+BlockRun reconciliation — last 7 days
+
+  Gateway charged:  $12.41   (438 settled calls)
+  Journal recorded: $12.41
+  Matched:          438, of which 0 disagree on amount
+```
+
+Three outcomes are worth acting on. **Amount mismatches** mean the local price
+table has drifted from the gateway's. **Charged but not in this machine's
+journal** is the one to look at hardest: money left the account for a call this
+machine did not make — expected if the same key is used on another machine or by
+another BlockRun product, and worth investigating if not. Exit code `2` in that
+case, so a scheduled check can alert on it. Rows still **pending pricing** are
+excluded from the totals rather than counted as $0.
+
+Your per-call sum will always be less than your card statement by exactly the
+top-up fees, which are charged at purchase and never appear as ledger rows. That
+gap is arithmetic, not a discrepancy.
 
 **Using it directly, without ClawRouter.** The same key works against
 `api.blockrun.ai` from any OpenAI or Anthropic SDK — `Authorization: Bearer` for

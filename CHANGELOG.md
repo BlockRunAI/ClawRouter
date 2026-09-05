@@ -6,6 +6,18 @@ All notable changes to ClawRouter.
 
 ## Unreleased
 
+### Added — `clawrouter reconcile`, so a bill can be checked without a dashboard
+
+Two records of the same spend exist and they are not the same thing: the local journal is what ClawRouter _believed_ each call cost, and BlockRun's ledger is what it actually _charged_. Until now the only way to see the second was to log into the portal.
+
+`clawrouter reconcile` diffs them, joined on the gateway's own request id (recorded per call since the previous release). It reports amount mismatches, charges with no local record, local records with no settled charge, and rows still pending pricing — which are excluded from the totals rather than counted as a settled $0, since a pending charge can still be repriced.
+
+Run against this session's own traffic it immediately re-found both billing bugs fixed in v0.12.271, from the ledger side: a `gpt-4o-mini` call journalled at `$0.001000` against `$0.000007` actually charged, and `surf/market/price` journalled at `$0` against `$0.0075`. That is the point of it — a local price table can always drift, and only the ledger settles the argument.
+
+Exits `2` when the gateway charged for calls this machine has no record of, so a scheduled check can alert on it. That case is expected when one key is shared across machines or products, and worth investigating when it is not.
+
+Journal entries with no request id — free models, cache hits, anything written before ids were recorded — are counted and reported separately rather than shown as discrepancies. Absence of a join key is not a mismatch.
+
 ### Added — warn before the account credit runs out, not after
 
 A card-paying user had no warning at all: the first sign of trouble was a call failing with `402`, while wallet users have had a live balance all along. BlockRun now publishes `x-blockrun-credit-remaining-usd`, and ClawRouter warns once when it drops to $1.00 or below — the same threshold the wallet rail uses — re-arming after a top-up so the next drop is reported too. Once per crossing, not once per call, so a busy agent does not get the same line on every request.

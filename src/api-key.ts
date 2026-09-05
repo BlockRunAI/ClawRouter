@@ -248,6 +248,90 @@ export function formatCreditBalance(b: CreditBalance): string {
 }
 
 /**
+ * One row of the gateway's usage ledger (`GET /v1/usage`).
+ *
+ * `costState` is the field that decides whether a row can be reconciled yet:
+ *   "priced"  — final. The charge will not move.
+ *   "pending" — usage exists, the charge does not yet. It can still be repriced,
+ *               so it must NOT be reconciled as a settled $0.
+ *   "free"    — nothing to charge for.
+ *
+ * `kind` says whether the number is one we could have derived. "chat" is
+ * rebuildable from tokens and a published rate; "service" is a per-call figure
+ * only the gateway holds, so those rows are the ones a local price model can
+ * never check.
+ */
+export type UsageRow = {
+  requestId: string;
+  timestamp: string;
+  endpoint: string;
+  model: string | null;
+  kind: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+  costState: string;
+  status: number;
+};
+
+export type UsagePage = {
+  rows: UsageRow[];
+  nextCursor: string | null;
+  /** Days the gateway could not list — a visible gap beats a silently short page. */
+  unavailableDays: string[];
+};
+
+/**
+ * Read a page of the gateway's usage ledger.
+ *
+ * This is the authoritative record of what was charged; the local journal is
+ * only what ClawRouter believed. The cursor is opaque by contract — it encodes
+ * an ordering that is an implementation detail — so it is passed back verbatim
+ * and never parsed.
+ */
+export async function fetchUsagePage(
+  apiKey: string,
+  opts: { from?: string; to?: string; limit?: number; cursor?: string } = {},
+): Promise<UsagePage | undefined> {
+  const params = new URLSearchParams();
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  const query = params.toString();
+  try {
+    const res = await fetch(`${BLOCKRUN_API_KEY_API}/v1/usage${query ? `?${query}` : ""}`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as {
+      data?: Array<Record<string, unknown>>;
+      next_cursor?: string | null;
+      unavailable_days?: string[];
+    };
+    return {
+      rows: (body.data ?? []).map((r) => ({
+        requestId: String(r.request_id ?? ""),
+        timestamp: String(r.timestamp ?? ""),
+        endpoint: String(r.endpoint ?? ""),
+        model: typeof r.model === "string" ? r.model : null,
+        kind: String(r.kind ?? ""),
+        inputTokens: typeof r.input_tokens === "number" ? r.input_tokens : 0,
+        outputTokens: typeof r.output_tokens === "number" ? r.output_tokens : 0,
+        costUsd: typeof r.cost_usd === "number" ? r.cost_usd : null,
+        costState: String(r.cost_state ?? ""),
+        status: typeof r.status === "number" ? r.status : 0,
+      })),
+      nextCursor: body.next_cursor ?? null,
+      unavailableDays: body.unavailable_days ?? [],
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The upstream fetch for API-key mode — the counterpart of the x402 payFetch.
  *
  * Two jobs, and the second is the one that matters. It attaches the bearer

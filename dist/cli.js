@@ -60202,6 +60202,40 @@ function formatCreditBalance(b) {
   const mode = b.billingMode === "ungated" ? "no prepaid limit" : b.billingMode ?? "unknown";
   return `${spent ? `spent ${spent}` : "unknown"} \u2014 ${mode}`;
 }
+async function fetchUsagePage(apiKey, opts = {}) {
+  const params = new URLSearchParams();
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  const query = params.toString();
+  try {
+    const res = await fetch(`${BLOCKRUN_API_KEY_API}/v1/usage${query ? `?${query}` : ""}`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(3e4)
+    });
+    if (!res.ok) return void 0;
+    const body = await res.json();
+    return {
+      rows: (body.data ?? []).map((r2) => ({
+        requestId: String(r2.request_id ?? ""),
+        timestamp: String(r2.timestamp ?? ""),
+        endpoint: String(r2.endpoint ?? ""),
+        model: typeof r2.model === "string" ? r2.model : null,
+        kind: String(r2.kind ?? ""),
+        inputTokens: typeof r2.input_tokens === "number" ? r2.input_tokens : 0,
+        outputTokens: typeof r2.output_tokens === "number" ? r2.output_tokens : 0,
+        costUsd: typeof r2.cost_usd === "number" ? r2.cost_usd : null,
+        costState: String(r2.cost_state ?? ""),
+        status: typeof r2.status === "number" ? r2.status : 0
+      })),
+      nextCursor: body.next_cursor ?? null,
+      unavailableDays: body.unavailable_days ?? []
+    };
+  } catch {
+    return void 0;
+  }
+}
 function normalizeApiKeyBase(raw) {
   const base4 = raw.replace(/\/+$/, "").replace(/\/v1$/, "");
   const url2 = new URL(base4);
@@ -76447,7 +76481,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile4, readFile: readFile3, mkdir: mkdir6 } = __require("fs/promises");
+    var { writeFile: writeFile4, readFile: readFile4, mkdir: mkdir6 } = __require("fs/promises");
     var { dirname: dirname4, resolve } = __require("path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("timers");
     var { InvalidArgumentError, UndiciError } = require_errors();
@@ -76664,7 +76698,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         try {
-          const data = await readFile3(resolve(path5), "utf8");
+          const data = await readFile4(resolve(path5), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -96655,13 +96689,13 @@ ${USAGE}`
 ${USAGE}`);
     }
     if (raw === "clear") return { kind: "limit", window: target, usd: void 0 };
-    const usd = Number(raw);
-    if (!USD.test(raw) || !Number.isFinite(usd) || usd <= 0) {
+    const usd2 = Number(raw);
+    if (!USD.test(raw) || !Number.isFinite(usd2) || usd2 <= 0) {
       return fail(
         `Rejected amount "${raw}": must be a positive decimal USD value such as 0.10 or 5`
       );
     }
-    return { kind: "limit", window: target, usd };
+    return { kind: "limit", window: target, usd: usd2 };
   }
   if (!isListAction(action)) return fail(`Unknown subcommand "${sub}"
 ${USAGE}`);
@@ -96803,6 +96837,194 @@ var init_policy = __esm({
     ].join("\n");
     RESTART_REQUIRED = "NOT applied to a running proxy \u2014 it reads spending.json once at startup. Restart the proxy (or the OpenClaw gateway) for this to take effect.";
     APPLIED_LIVE = "Applied to the running proxy and saved to spending.json.";
+  }
+});
+
+// src/reconcile.ts
+var reconcile_exports = {};
+__export(reconcile_exports, {
+  formatReconcile: () => formatReconcile,
+  joinRows: () => joinRows,
+  loadGatewayRows: () => loadGatewayRows,
+  loadLocalRows: () => loadLocalRows,
+  reconcile: () => reconcile
+});
+import { readFile as readFile3, readdir as readdir3 } from "fs/promises";
+import { join as join12 } from "path";
+import { homedir as homedir9 } from "os";
+async function loadLocalRows(since) {
+  let files;
+  try {
+    files = (await readdir3(LOG_DIR3)).filter((f) => f.endsWith(".jsonl"));
+  } catch {
+    return { rows: [], unkeyed: 0 };
+  }
+  const rows = [];
+  let unkeyed = 0;
+  for (const file of files) {
+    let text;
+    try {
+      text = await readFile3(join12(LOG_DIR3, file), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!entry.timestamp || new Date(entry.timestamp) < since) continue;
+      if (!entry.requestId) {
+        unkeyed++;
+        continue;
+      }
+      rows.push({
+        requestId: entry.requestId,
+        model: entry.model,
+        cost: typeof entry.cost === "number" ? entry.cost : 0,
+        timestamp: entry.timestamp
+      });
+    }
+  }
+  return { rows, unkeyed };
+}
+async function loadGatewayRows(apiKey, from15, maxPages = 40) {
+  const rows = [];
+  const unavailableDays = /* @__PURE__ */ new Set();
+  let cursor;
+  for (let page = 0; page < maxPages; page++) {
+    const result = await fetchUsagePage(apiKey, { from: from15, limit: 500, cursor });
+    if (!result) return page === 0 ? void 0 : { rows, unavailableDays: [...unavailableDays] };
+    rows.push(...result.rows);
+    result.unavailableDays.forEach((d) => unavailableDays.add(d));
+    if (!result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return { rows, unavailableDays: [...unavailableDays] };
+}
+function joinRows(localRows, gatewayRows, unkeyed = 0, unavailableDays = []) {
+  const localById = new Map(localRows.map((r2) => [r2.requestId, r2]));
+  const seen = /* @__PURE__ */ new Set();
+  const matched = [];
+  const chargedNotRecorded = [];
+  const pending = [];
+  let gatewayTotalUsd = 0;
+  for (const remote of gatewayRows) {
+    if (remote.costState === "pending") {
+      pending.push(remote);
+      continue;
+    }
+    gatewayTotalUsd += remote.costUsd ?? 0;
+    const local = localById.get(remote.requestId);
+    if (!local) {
+      chargedNotRecorded.push(remote);
+      continue;
+    }
+    seen.add(remote.requestId);
+    matched.push({ local, remote, deltaUsd: local.cost - (remote.costUsd ?? 0) });
+  }
+  const recordedNotCharged = localRows.filter((r2) => !seen.has(r2.requestId));
+  const localTotalUsd = localRows.reduce((sum, r2) => sum + r2.cost, 0);
+  return {
+    matched,
+    chargedNotRecorded,
+    recordedNotCharged,
+    pending,
+    localTotalUsd,
+    gatewayTotalUsd,
+    unavailableDays,
+    unkeyedLocalCount: unkeyed
+  };
+}
+async function reconcile(apiKey, days) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1e3);
+  const [{ rows: localRows, unkeyed }, gateway] = await Promise.all([
+    loadLocalRows(since),
+    loadGatewayRows(apiKey, since.toISOString())
+  ]);
+  if (!gateway) throw new Error("Could not read the BlockRun usage ledger (GET /v1/usage).");
+  return joinRows(localRows, gateway.rows, unkeyed, gateway.unavailableDays);
+}
+function formatReconcile(r2, days) {
+  const out = [];
+  const mismatched = r2.matched.filter((m) => Math.abs(m.deltaUsd) > CENT_EPSILON);
+  out.push(`
+BlockRun reconciliation \u2014 last ${days} day${days === 1 ? "" : "s"}
+`);
+  out.push(
+    `  Gateway charged:  ${usd(r2.gatewayTotalUsd)}   (${r2.matched.length + r2.chargedNotRecorded.length} settled calls)`
+  );
+  out.push(`  Journal recorded: ${usd(r2.localTotalUsd)}`);
+  out.push(
+    `  Matched:          ${r2.matched.length}, of which ${mismatched.length} disagree on amount`
+  );
+  if (mismatched.length > 0) {
+    out.push(`
+  Amount mismatches (journal vs gateway):`);
+    for (const m of mismatched.slice(0, 10)) {
+      out.push(
+        `    ${m.remote.requestId.slice(0, 8)}  ${(m.local.model || m.remote.endpoint).padEnd(28)} journal ${usd(m.local.cost)}  gateway ${usd(m.remote.costUsd ?? 0)}`
+      );
+    }
+    if (mismatched.length > 10) out.push(`    \u2026and ${mismatched.length - 10} more`);
+  }
+  if (r2.chargedNotRecorded.length > 0) {
+    const total = r2.chargedNotRecorded.reduce((s3, x) => s3 + (x.costUsd ?? 0), 0);
+    out.push(
+      `
+  \u26A0 Charged but NOT in this machine's journal: ${r2.chargedNotRecorded.length} call(s), ${usd(total)}`
+    );
+    out.push(
+      `    Expected if the same key is used elsewhere \u2014 another machine, another BlockRun product,`
+    );
+    out.push(`    or a call made before this proxy started recording request ids.`);
+    for (const x of r2.chargedNotRecorded.slice(0, 10)) {
+      out.push(
+        `    ${x.requestId.slice(0, 8)}  ${x.timestamp.slice(0, 19)}  ${x.endpoint.padEnd(26)} ${usd(x.costUsd ?? 0)}`
+      );
+    }
+    if (r2.chargedNotRecorded.length > 10) {
+      out.push(`    \u2026and ${r2.chargedNotRecorded.length - 10} more`);
+    }
+  }
+  if (r2.recordedNotCharged.length > 0) {
+    out.push(
+      `
+  Recorded locally with no settled ledger row: ${r2.recordedNotCharged.length} call(s)`
+    );
+    out.push(`    Usually benign \u2014 free models, cache hits, and calls still pending pricing.`);
+  }
+  if (r2.pending.length > 0) {
+    out.push(`
+  Pending pricing (excluded from totals): ${r2.pending.length} call(s)`);
+    out.push(`    Usage recorded, charge not final. These can still be repriced.`);
+  }
+  if (r2.unkeyedLocalCount > 0) {
+    out.push(`
+  Journal entries with no request id: ${r2.unkeyedLocalCount} (not reconcilable)`);
+  }
+  if (r2.unavailableDays.length > 0) {
+    out.push(`
+  \u26A0 Gateway could not list these days: ${r2.unavailableDays.join(", ")}`);
+    out.push(`    Totals above are incomplete for that period.`);
+  }
+  out.push(`
+  Note: the top-up fee (5.5% + $0.30) is charged at purchase, not per call,`);
+  out.push(`  so the sum above is less than your card was charged by exactly those fees.
+`);
+  return out.join("\n");
+}
+var LOG_DIR3, CENT_EPSILON, usd;
+var init_reconcile = __esm({
+  "src/reconcile.ts"() {
+    "use strict";
+    init_api_key();
+    LOG_DIR3 = join12(homedir9(), ".openclaw", "blockrun", "logs");
+    CENT_EPSILON = 1e-9;
+    usd = (n) => Math.abs(n) < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`;
   }
 });
 
@@ -117792,8 +118014,8 @@ var init_constants3 = __esm({
 
 // src/polymarket/wallet-adapter.ts
 import fs2 from "fs";
-import { homedir as homedir9 } from "os";
-import { join as join12 } from "path";
+import { homedir as homedir10 } from "os";
+import { join as join13 } from "path";
 function getOrCreateWalletKey() {
   const envKey = process.env.BLOCKRUN_WALLET_KEY?.trim();
   if (envKey && /^0x[0-9a-fA-F]{64}$/.test(envKey)) return envKey;
@@ -117841,7 +118063,7 @@ var init_wallet_adapter = __esm({
     init_esm();
     init_chains();
     init_constants3();
-    WALLET_FILE2 = join12(homedir9(), ".openclaw", "blockrun", "wallet.key");
+    WALLET_FILE2 = join13(homedir10(), ".openclaw", "blockrun", "wallet.key");
     BASE_RPC_URLS = [
       "https://mainnet.base.org",
       "https://base.llamarpc.com",
@@ -118245,8 +118467,8 @@ var init_client5 = __esm({
 function resolveSpendControl(deps) {
   return deps?.spendControl ?? getSharedSpendControl();
 }
-function usdToMicros(usd) {
-  return String(Math.ceil(usd * 1e6));
+function usdToMicros(usd2) {
+  return String(Math.ceil(usd2 * 1e6));
 }
 async function signUnderSpendPolicy(deps, quote, action, sign4) {
   const control = resolveSpendControl(deps);
@@ -118275,13 +118497,13 @@ function getSessionLedger() {
     perAgent: Object.fromEntries(ledger.perAgent)
   };
 }
-function reserveBet(usd, agentId) {
-  ledger.totalUsd += usd;
-  if (agentId) ledger.perAgent.set(agentId, (ledger.perAgent.get(agentId) ?? 0) + usd);
+function reserveBet(usd2, agentId) {
+  ledger.totalUsd += usd2;
+  if (agentId) ledger.perAgent.set(agentId, (ledger.perAgent.get(agentId) ?? 0) + usd2);
 }
-function releaseBet(usd, agentId) {
-  ledger.totalUsd -= usd;
-  if (agentId) ledger.perAgent.set(agentId, (ledger.perAgent.get(agentId) ?? 0) - usd);
+function releaseBet(usd2, agentId) {
+  ledger.totalUsd -= usd2;
+  if (agentId) ledger.perAgent.set(agentId, (ledger.perAgent.get(agentId) ?? 0) - usd2);
 }
 function commitBet() {
   ledger.count += 1;
@@ -228243,9 +228465,9 @@ import {
   unlinkSync
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
-import { homedir as homedir14 } from "os";
+import { homedir as homedir15 } from "os";
 import { randomUUID } from "crypto";
-import { join as join17 } from "path";
+import { join as join18 } from "path";
 async function waitForProxyHealth(port, timeoutMs = 3e3) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -228287,8 +228509,8 @@ function isBlockrunWebSearchDisabled(config) {
   return cfg.tools?.web?.search?.enabled === false;
 }
 function injectModelsConfig(logger48, options = {}) {
-  const configDir = join17(homedir14(), ".openclaw");
-  const configPath = join17(configDir, "openclaw.json");
+  const configDir = join18(homedir15(), ".openclaw");
+  const configPath = join18(configDir, "openclaw.json");
   let config = {};
   let needsWrite = false;
   if (!existsSync4(configDir)) {
@@ -228509,7 +228731,7 @@ function injectModelsConfig(logger48, options = {}) {
 }
 function syncAgentModelCache(logger48, options = {}) {
   if (!isGatewayMode() && !options.forceWrite) return;
-  const agentsDir = join17(homedir14(), ".openclaw", "agents");
+  const agentsDir = join18(homedir15(), ".openclaw", "agents");
   if (!existsSync4(agentsDir)) return;
   let agentDirs;
   try {
@@ -228519,7 +228741,7 @@ function syncAgentModelCache(logger48, options = {}) {
   }
   const expectedIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
   for (const agent of agentDirs) {
-    const cachePath = join17(agentsDir, agent, "agent", "models.json");
+    const cachePath = join18(agentsDir, agent, "agent", "models.json");
     if (!existsSync4(cachePath)) continue;
     try {
       const raw = readTextFileSync(cachePath).trim();
@@ -228548,7 +228770,7 @@ function syncAgentModelCache(logger48, options = {}) {
   }
 }
 function injectAuthProfile(logger48) {
-  const agentsDir = join17(homedir14(), ".openclaw", "agents");
+  const agentsDir = join18(homedir15(), ".openclaw", "agents");
   if (!existsSync4(agentsDir)) {
     try {
       mkdirSync3(agentsDir, { recursive: true });
@@ -228565,9 +228787,9 @@ function injectAuthProfile(logger48) {
       agents = ["main", ...agents];
     }
     for (const agentId of agents) {
-      const authDir = join17(agentsDir, agentId, "agent");
-      const authPath = join17(authDir, "auth-profiles.json");
-      const sqlitePath = join17(authDir, "openclaw-agent.sqlite");
+      const authDir = join18(agentsDir, agentId, "agent");
+      const authPath = join18(authDir, "auth-profiles.json");
+      const sqlitePath = join18(authDir, "openclaw-agent.sqlite");
       if (existsSync4(sqlitePath)) {
         removeInjectedAuthPlaceholder(authPath, logger48, agentId);
         continue;
@@ -229070,7 +229292,7 @@ function buildImageGenerationProvider() {
         (result.data ?? []).map(async (img) => {
           const filename = img.url?.split("/images/").pop();
           if (!filename) throw new Error(`Unexpected image URL format: ${img.url}`);
-          const filePath = join17(IMAGE_DIR2, filename);
+          const filePath = join18(IMAGE_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
           const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
@@ -229122,7 +229344,7 @@ function buildMusicGenerationProvider() {
         (result.data ?? []).map(async (track) => {
           const filename = track.url?.split("/audio/").pop();
           if (!filename) throw new Error(`Unexpected audio URL format: ${track.url}`);
-          const filePath = join17(AUDIO_DIR2, filename);
+          const filePath = join18(AUDIO_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "mp3";
           const mimeType = ext === "wav" ? "audio/wav" : "audio/mpeg";
@@ -229198,7 +229420,7 @@ function buildVideoGenerationProvider() {
         (result.data ?? []).map(async (clip) => {
           const filename = clip.url?.split("/videos/").pop();
           if (!filename) throw new Error(`Unexpected video URL format: ${clip.url}`);
-          const filePath = join17(VIDEO_DIR2, filename);
+          const filePath = join18(VIDEO_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
           const mimeType = ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
@@ -229563,9 +229785,9 @@ var init_index = __esm({
     init_partners();
     activeProxyHandle = null;
     pendingConfiguredStartupApi = null;
-    IMAGE_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "images");
-    AUDIO_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "audio");
-    VIDEO_DIR2 = join17(homedir14(), ".openclaw", "blockrun", "videos");
+    IMAGE_DIR2 = join18(homedir15(), ".openclaw", "blockrun", "images");
+    AUDIO_DIR2 = join18(homedir15(), ".openclaw", "blockrun", "audio");
+    VIDEO_DIR2 = join18(homedir15(), ".openclaw", "blockrun", "videos");
     plugin = {
       // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
       // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
@@ -230001,7 +230223,7 @@ ${errText}`
         }
         resetProxyStartupState();
         try {
-          const configPath = join17(homedir14(), ".openclaw", "openclaw.json");
+          const configPath = join18(homedir15(), ".openclaw", "openclaw.json");
           if (existsSync4(configPath)) {
             const config = JSON.parse(readTextFileSync(configPath));
             if (config.models?.providers?.blockrun) {
@@ -230043,11 +230265,11 @@ ${errText}`
           api.logger.warn(`Config cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         try {
-          const agentsDir = join17(homedir14(), ".openclaw", "agents");
+          const agentsDir = join18(homedir15(), ".openclaw", "agents");
           if (existsSync4(agentsDir)) {
             for (const entry of readdirSync(agentsDir, { withFileTypes: true })) {
               if (!entry.isDirectory()) continue;
-              const authPath = join17(agentsDir, entry.name, "agent", "auth-profiles.json");
+              const authPath = join18(agentsDir, entry.name, "agent", "auth-profiles.json");
               if (!existsSync4(authPath)) continue;
               try {
                 const store = JSON.parse(readTextFileSync(authPath));
@@ -230863,6 +231085,27 @@ Use: clawrouter share <id> --as=<feishu|slack|discord|telegram|whatsapp|plain>
     process.exit(1);
   }
 }
+async function cmdReconcile(days) {
+  const resolved = await resolveApiKey().catch((error) => {
+    console.error(`\u2717 ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+  if (!resolved) {
+    console.error(`\u2717 Reconciliation needs a BlockRun API key \u2014 it compares against your account`);
+    console.error(`  ledger. Wallet spend settles on-chain instead; see "clawrouter stats".`);
+    console.error(`  Sign in at ${PORTAL_URL} and run: clawrouter login brk_live_...`);
+    process.exit(1);
+  }
+  try {
+    const { reconcile: reconcile2, formatReconcile: formatReconcile2 } = await Promise.resolve().then(() => (init_reconcile(), reconcile_exports));
+    const result = await reconcile2(resolved.key, days);
+    console.log(formatReconcile2(result, days));
+    process.exitCode = result.chargedNotRecorded.length > 0 ? 2 : 0;
+  } catch (error) {
+    console.error(`\u2717 ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}
 async function cmdStatus(port) {
   try {
     const data = await queryProxy("/health?full=true", port);
@@ -231140,8 +231383,8 @@ async function cmdSetup() {
     unlinkSync: unlinkSync2,
     writeFileSync: writeFileSync4
   } = await import("fs");
-  const { dirname: dirname4, join: join18 } = await import("path");
-  const { homedir: homedir15 } = await import("os");
+  const { dirname: dirname4, join: join19 } = await import("path");
+  const { homedir: homedir16 } = await import("os");
   const { injectModelsConfig: injectModelsConfig2, injectAuthProfile: injectAuthProfile2, syncAgentModelCache: syncAgentModelCache2, VISIBLE_OPENCLAW_MODELS: VISIBLE_OPENCLAW_MODELS2 } = await Promise.resolve().then(() => (init_index(), index_exports));
   const { BLOCKRUN_PLUGIN_ID: BLOCKRUN_PLUGIN_ID2, prepareBlockRunPluginConfig: prepareBlockRunPluginConfig2 } = await Promise.resolve().then(() => (init_openclaw_plugin_config(), openclaw_plugin_config_exports));
   console.log("\u{1F99E} ClawRouter setup\n");
@@ -231156,19 +231399,19 @@ async function cmdSetup() {
     } catch {
     }
     if (process.env.npm_config_prefix) {
-      candidates.push(join18(process.env.npm_config_prefix, "bin", "openclaw"));
+      candidates.push(join19(process.env.npm_config_prefix, "bin", "openclaw"));
     }
     try {
       const npmRoot = execSync("npm root -g", {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "ignore"]
       }).trim();
-      if (npmRoot) candidates.push(join18(dirname4(dirname4(npmRoot)), "bin", "openclaw"));
+      if (npmRoot) candidates.push(join19(dirname4(dirname4(npmRoot)), "bin", "openclaw"));
     } catch {
     }
     candidates.push(
-      join18(homedir15(), ".npm-global", "bin", "openclaw"),
-      join18(homedir15(), ".local", "bin", "openclaw"),
+      join19(homedir16(), ".npm-global", "bin", "openclaw"),
+      join19(homedir16(), ".local", "bin", "openclaw"),
       "/usr/local/bin/openclaw"
     );
     return candidates.find((candidate) => existsSync5(candidate)) ?? "";
@@ -231180,7 +231423,7 @@ async function cmdSetup() {
     process.exit(1);
   }
   console.log(`  \u2713 Found openclaw at ${openclawPath}`);
-  const configPath = join18(homedir15(), ".openclaw", "openclaw.json");
+  const configPath = join19(homedir16(), ".openclaw", "openclaw.json");
   const configInitiallyExisted = existsSync5(configPath);
   const configRollbackBackup = configInitiallyExisted ? `${configPath}.before-${BLOCKRUN_PLUGIN_ID2}.${Date.now()}` : void 0;
   if (configRollbackBackup) copyFileSync2(configPath, configRollbackBackup);
@@ -231188,23 +231431,23 @@ async function cmdSetup() {
     return configRollbackBackup;
   };
   let installAttempted = false;
-  const openclawRoot = join18(homedir15(), ".openclaw");
+  const openclawRoot = join19(homedir16(), ".openclaw");
   const findManagedBlockRunInstalls = () => {
     const candidates = [
-      join18(openclawRoot, "extensions", BLOCKRUN_PLUGIN_ID2),
-      join18(openclawRoot, "extensions", "clawrouter"),
-      join18(openclawRoot, "npm", "node_modules", "@blockrun", "clawrouter")
+      join19(openclawRoot, "extensions", BLOCKRUN_PLUGIN_ID2),
+      join19(openclawRoot, "extensions", "clawrouter"),
+      join19(openclawRoot, "npm", "node_modules", "@blockrun", "clawrouter")
     ];
-    const projectsDir = join18(openclawRoot, "npm", "projects");
+    const projectsDir = join19(openclawRoot, "npm", "projects");
     try {
       for (const project of readdirSync2(projectsDir)) {
-        candidates.push(join18(projectsDir, project, "node_modules", "@blockrun", "clawrouter"));
+        candidates.push(join19(projectsDir, project, "node_modules", "@blockrun", "clawrouter"));
       }
     } catch {
     }
     return [...new Set(candidates)].filter((candidate) => {
       try {
-        const metadata = JSON.parse(readFileSync4(join18(candidate, "package.json"), "utf8"));
+        const metadata = JSON.parse(readFileSync4(join19(candidate, "package.json"), "utf8"));
         return metadata.name === "@blockrun/clawrouter";
       } catch {
         return false;
@@ -231212,7 +231455,7 @@ async function cmdSetup() {
     });
   };
   const initialPluginDirs = findManagedBlockRunInstalls();
-  const setupRollbackRoot = join18(
+  const setupRollbackRoot = join19(
     openclawRoot,
     "blockrun",
     "setup-rollbacks",
@@ -231222,7 +231465,7 @@ async function cmdSetup() {
   if (initialPluginDirs.length > 0) {
     mkdirSync4(setupRollbackRoot, { recursive: true, mode: 448 });
     for (const [index2, pluginDir] of initialPluginDirs.entries()) {
-      const backup = join18(setupRollbackRoot, String(index2));
+      const backup = join19(setupRollbackRoot, String(index2));
       cpSync(pluginDir, backup, { recursive: true });
       pluginRollbackBackups.set(pluginDir, backup);
     }
@@ -231267,8 +231510,8 @@ async function cmdSetup() {
   if (existsSync5(configPath)) {
     try {
       const config = JSON.parse(readFileSync4(configPath, "utf8"));
-      const legacyPackagePath = join18(
-        homedir15(),
+      const legacyPackagePath = join19(
+        homedir16(),
         ".openclaw",
         "extensions",
         "clawrouter",
@@ -231439,6 +231682,8 @@ function parseArgs(args) {
     queryModels: false,
     queryStats: false,
     queryStatsDays: 7,
+    reconcile: false,
+    reconcileDays: 7,
     queryCache: false,
     setup: false,
     share: false,
@@ -231471,6 +231716,12 @@ function parseArgs(args) {
       result.queryStats = true;
       if (args[i + 1] === "--days" && args[i + 2]) {
         result.queryStatsDays = Math.min(parseInt(args[i + 2], 10) || 7, 30);
+        i += 2;
+      }
+    } else if (arg === "reconcile") {
+      result.reconcile = true;
+      if (args[i + 1] === "--days" && args[i + 2]) {
+        result.reconcileDays = Math.min(parseInt(args[i + 2], 10) || 7, 90);
         i += 2;
       }
     } else if (arg === "cache") {
@@ -231696,6 +231947,10 @@ async function main() {
   }
   if (args.queryStats) {
     await cmdStats(queryPort, args.queryStatsDays);
+    process.exit(0);
+  }
+  if (args.reconcile) {
+    await cmdReconcile(args.reconcileDays);
     process.exit(0);
   }
   if (args.queryCache) {

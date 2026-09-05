@@ -289,6 +289,37 @@ async function cmdShare(
   }
 }
 
+/**
+ * Diff the local usage journal against BlockRun's billing ledger.
+ *
+ * API-key only: the ledger is per account, and a wallet's spend is on-chain
+ * rather than in an account ledger, so there is nothing to reconcile against.
+ * Needs no running proxy — it reads the journal on disk and the gateway.
+ */
+async function cmdReconcile(days: number): Promise<void> {
+  const resolved = await resolveApiKey().catch((error: unknown) => {
+    console.error(`✗ ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+  if (!resolved) {
+    console.error(`✗ Reconciliation needs a BlockRun API key — it compares against your account`);
+    console.error(`  ledger. Wallet spend settles on-chain instead; see "clawrouter stats".`);
+    console.error(`  Sign in at ${PORTAL_URL} and run: clawrouter login brk_live_...`);
+    process.exit(1);
+  }
+  try {
+    const { reconcile, formatReconcile } = await import("./reconcile.js");
+    const result = await reconcile(resolved.key, days);
+    console.log(formatReconcile(result, days));
+    // Money charged that this machine cannot account for is the one outcome
+    // worth a non-zero exit, so a scheduled check can alert on it.
+    process.exitCode = result.chargedNotRecorded.length > 0 ? 2 : 0;
+  } catch (error) {
+    console.error(`✗ ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}
+
 async function cmdStatus(port: number): Promise<void> {
   try {
     const data = (await queryProxy("/health?full=true", port)) as Record<string, unknown>;
@@ -962,6 +993,8 @@ function parseArgs(args: string[]): {
   queryModels: boolean;
   queryStats: boolean;
   queryStatsDays: number;
+  reconcile: boolean;
+  reconcileDays: number;
   queryCache: boolean;
   setup: boolean;
   // Share commands
@@ -1002,6 +1035,8 @@ function parseArgs(args: string[]): {
     queryModels: false,
     queryStats: false,
     queryStatsDays: 7,
+    reconcile: false,
+    reconcileDays: 7,
     queryCache: false,
     setup: false,
     share: false,
@@ -1035,6 +1070,12 @@ function parseArgs(args: string[]): {
       result.queryStats = true;
       if (args[i + 1] === "--days" && args[i + 2]) {
         result.queryStatsDays = Math.min(parseInt(args[i + 2], 10) || 7, 30);
+        i += 2;
+      }
+    } else if (arg === "reconcile") {
+      result.reconcile = true;
+      if (args[i + 1] === "--days" && args[i + 2]) {
+        result.reconcileDays = Math.min(parseInt(args[i + 2], 10) || 7, 90);
         i += 2;
       }
     } else if (arg === "cache") {
@@ -1308,6 +1349,11 @@ async function main(): Promise<void> {
     await cmdStats(queryPort, args.queryStatsDays);
     process.exit(0);
   }
+  if (args.reconcile) {
+    await cmdReconcile(args.reconcileDays);
+    process.exit(0);
+  }
+
   if (args.queryCache) {
     await cmdCache(queryPort);
     process.exit(0);
