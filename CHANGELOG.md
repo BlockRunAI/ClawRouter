@@ -6,6 +6,16 @@ All notable changes to ClawRouter.
 
 ## Unreleased
 
+### Fixed — image, video and audio calls were journaled at $0 on the API-key rail
+
+The media branches computed their cost as `paymentStore.getStore()?.amountUsd ?? <estimate>`, and `??` does not catch **0**. On the API-key rail no x402 payment happens, the store reports `0`, and `0 ?? estimate` is `0` — so every image, img2img, audio and video call landed in the journal at zero and `/stats` showed `IMAGE: {count: 4, cost: 0}` while the account was really charged $0.0525 per image.
+
+The same shape as the 152x chat overstatement fixed in v0.12.271, in the other direction: spend that silently is not there. Found by the ClawRouter-Hermes session live-testing 0.12.271, not by a test — `??` versus `||` on a legitimately-zero value is invisible to typecheck and to every test that only exercises the wallet rail.
+
+These routes are luckier than the rest: the gateway puts the settled amount in the response body as `price.amount`, so the true figure is recoverable even where the cost header is absent. All six media sites now resolve cost in order — the `x-blockrun-cost-usd` header, then `price.amount`, then a **non-zero** x402 payment, then the local estimate as a last resort — and record the gateway request id so these calls are reconcilable too.
+
+Verified live: one `google/nano-banana` image now journals `cost: 0.0525` with a request id, against `0` before.
+
 ### Added — `clawrouter reconcile`, so a bill can be checked without a dashboard
 
 Two records of the same spend exist and they are not the same thing: the local journal is what ClawRouter _believed_ each call cost, and BlockRun's ledger is what it actually _charged_. Until now the only way to see the second was to log into the portal.

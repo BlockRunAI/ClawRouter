@@ -2145,6 +2145,42 @@ function gatewayRemainingCreditUsd(response: Response | undefined): number | und
   return value;
 }
 
+/**
+ * What a MEDIA call actually cost, in priority order.
+ *
+ * The media branches used `paymentStore.getStore()?.amountUsd ?? <estimate>`,
+ * and `??` does not catch 0. On the API-key rail no x402 payment happens, the
+ * store reports 0, and `0 ?? estimate` is 0 — so every image, img2img, audio and
+ * video call was journaled at $0 and `/stats` showed `IMAGE: {count: 4, cost: 0}`
+ * while the account was really charged $0.0525 each. Same shape as the 152x
+ * chat bug in the other direction: spend that silently is not there.
+ *
+ * These routes are luckier than the rest: the gateway puts the settled amount in
+ * the response body as `price.amount`, so the true figure is available even
+ * where the cost header is not.
+ *
+ *   1. `x-blockrun-cost-usd` — the gateway's settled charge
+ *   2. `price.amount` in the response body — same number, media routes carry it
+ *   3. a non-zero x402 payment — the wallet rail's real amount
+ *   4. the local estimate — last resort, and the only one that can be wrong
+ */
+function settledMediaCostUsd(
+  upstream: Response | undefined,
+  body: unknown,
+  x402AmountUsd: number | undefined,
+  estimate: number,
+): number {
+  const header = gatewaySettledCostUsd(upstream);
+  if (header !== undefined) return header;
+  const price = (body as { price?: { amount?: unknown } } | undefined)?.price?.amount;
+  if (typeof price === "string" || typeof price === "number") {
+    const parsed = Number(price);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  if (typeof x402AmountUsd === "number" && x402AmountUsd > 0) return x402AmountUsd;
+  return estimate;
+}
+
 /** $1.00, matching the wallet rail's low-balance threshold. */
 const LOW_CREDIT_USD = 1.0;
 /** Warn on a threshold crossing, not per call; re-arms when credit goes back up. */
@@ -3371,9 +3407,15 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           // Log image generation usage with actual x402 payment (previously missing entirely)
-          const imgActualCost = paymentStore.getStore()?.amountUsd ?? imgCost;
+          const imgActualCost = settledMediaCostUsd(
+            upstream,
+            result,
+            paymentStore.getStore()?.amountUsd,
+            imgCost,
+          );
           logUsage({
             timestamp: new Date().toISOString(),
+            ...(blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {}),
             model: imgModel,
             tier: "IMAGE",
             cost: imgActualCost,
@@ -3524,9 +3566,15 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             }
           }
           // Log image editing usage with actual x402 payment (previously missing entirely)
-          const img2imgActualCost = paymentStore.getStore()?.amountUsd ?? img2imgCost;
+          const img2imgActualCost = settledMediaCostUsd(
+            upstream,
+            result,
+            paymentStore.getStore()?.amountUsd,
+            img2imgCost,
+          );
           logUsage({
             timestamp: new Date().toISOString(),
+            ...(blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {}),
             model: img2imgModel,
             tier: "IMAGE",
             cost: img2imgActualCost,
@@ -3625,9 +3673,15 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
             }
           }
-          const audioActualCost = paymentStore.getStore()?.amountUsd ?? 0.15;
+          const audioActualCost = settledMediaCostUsd(
+            upstream,
+            result,
+            paymentStore.getStore()?.amountUsd,
+            0.15,
+          );
           logUsage({
             timestamp: new Date().toISOString(),
+            ...(blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {}),
             model: audioModel,
             tier: "AUDIO",
             cost: audioActualCost,
@@ -3828,9 +3882,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               }
             }
           }
-          const videoActualCost =
-            paymentStore.getStore()?.amountUsd ??
-            estimateVideoCost(videoModel, videoDuration, videoHasImageInput);
+          const videoActualCost = settledMediaCostUsd(
+            undefined,
+            submitResult,
+            paymentStore.getStore()?.amountUsd,
+            estimateVideoCost(videoModel, videoDuration, videoHasImageInput),
+          );
           logUsage({
             timestamp: new Date().toISOString(),
             model: videoModel,
@@ -4985,10 +5042,17 @@ async function proxyRequest(
             }
             console.log(`[ClawRouter] /imagegen success: ${images.length} image(s) generated`);
             // Log /imagegen usage with actual x402 payment
-            const imagegenActualCost =
-              paymentStore.getStore()?.amountUsd ?? estimateImageCost(imageModel, imageSize, 1);
+            const imagegenActualCost = settledMediaCostUsd(
+              imageResponse,
+              imageResult,
+              paymentStore.getStore()?.amountUsd,
+              estimateImageCost(imageModel, imageSize, 1),
+            );
             logUsage({
               timestamp: new Date().toISOString(),
+              ...(blockrunRequestId(imageResponse)
+                ? { requestId: blockrunRequestId(imageResponse) }
+                : {}),
               model: imageModel,
               tier: "IMAGE",
               cost: imagegenActualCost,
@@ -5232,10 +5296,17 @@ async function proxyRequest(
             }
             console.log(`[ClawRouter] /img2img success: ${images.length} image(s)`);
             // Log /img2img usage with actual x402 payment
-            const img2imgActualCost2 =
-              paymentStore.getStore()?.amountUsd ?? estimateImageCost(img2imgModel, img2imgSize, 1);
+            const img2imgActualCost2 = settledMediaCostUsd(
+              img2imgResponse,
+              img2imgResult,
+              paymentStore.getStore()?.amountUsd,
+              estimateImageCost(img2imgModel, img2imgSize, 1),
+            );
             logUsage({
               timestamp: new Date().toISOString(),
+              ...(blockrunRequestId(img2imgResponse)
+                ? { requestId: blockrunRequestId(img2imgResponse) }
+                : {}),
               model: img2imgModel,
               tier: "IMAGE",
               cost: img2imgActualCost2,
