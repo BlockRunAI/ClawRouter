@@ -737,7 +737,7 @@ For basic usage, no configuration needed. For advanced options:
 | `BLOCKRUN_PROXY_PORT`       | `8402`                                | Local proxy port                                                                                                            |
 | `CLAWROUTER_DISABLED`       | `false`                               | Disable smart routing                                                                                                       |
 | `CLAWROUTER_DEBUG_HEADERS`  | `on`                                  | Set to `off` to suppress `x-clawrouter-*` debug response headers                                                            |
-| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint                                                                                                         |
+| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint — balance checks and payment signing                                                                    |
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 

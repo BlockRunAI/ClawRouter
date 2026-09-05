@@ -209,7 +209,8 @@ Per-request alternative: send `x-clawrouter-debug: false` on the request.
 
 ### CLAWROUTER_SOLANA_RPC_URL
 
-Override the Solana RPC endpoint used for USDC balance checks (Solana chain only):
+Override the Solana RPC endpoint used for USDC balance checks **and for signing
+payments** (Solana chain only):
 
 ```bash
 export CLAWROUTER_SOLANA_RPC_URL=https://your-rpc-provider.com
@@ -217,6 +218,21 @@ openclaw gateway restart
 ```
 
 Public RPC may rate-limit on heavy usage. Use a dedicated RPC for production.
+
+Unlike Base, where the EIP-3009 signature is produced entirely offline, signing
+a Solana payment reads the payment asset's mint account over RPC. A host that
+cannot reach `api.mainnet-beta.solana.com` therefore fails **every** paid Solana
+call with `fetch failed` while `sol.blockrun.ai` itself answers normally. Check
+egress before blaming the gateway:
+
+```bash
+curl -s -m 10 -X POST https://api.mainnet-beta.solana.com \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"getAccountInfo","params":["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",{"encoding":"base64"}]}'
+```
+
+If that hangs or is refused, point this variable at an endpoint the host can
+reach.
 
 ---
 

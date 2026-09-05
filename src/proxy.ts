@@ -96,9 +96,10 @@ import {
   SpendPolicyError,
 } from "./spend-control.js";
 import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
-// Error classes available for programmatic use but not used in proxy
-// (universal free fallback means we don't throw balance errors anymore)
+// Balance error classes are available for programmatic use but not used in the
+// proxy (universal free fallback means we don't throw balance errors anymore):
 // import { InsufficientFundsError, EmptyWalletError } from "./errors.js";
+import { describeFetchError } from "./errors.js";
 import { USER_AGENT, VERSION } from "./version.js";
 import {
   SessionStore,
@@ -2575,8 +2576,32 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
     const solanaSigner = await createKeyPairSignerFromPrivateKeyBytes(solanaPrivateKeyBytes);
     solanaAddress = solanaSigner.address;
+    // Unlike EIP-3009 on Base, signing a Solana payment is NOT purely local:
+    // the exact-SVM client reads the payment asset's mint account over RPC
+    // before it can build the transfer, and with no `rpcUrl` it uses the
+    // library default (api.mainnet-beta.solana.com). A host that cannot reach
+    // that endpoint — blocked egress, or the public node refusing its IP —
+    // fails EVERY paid Solana call with a bare "fetch failed" while the gateway
+    // itself answers fine (ClawRouter-Hermes#38). Honour the same override the
+    // balance monitor takes, so such a host can sign against its own RPC.
+    const solanaRpcUrl = process["env"].CLAWROUTER_SOLANA_RPC_URL;
     registerExactSvmScheme(x402, { signer: solanaSigner });
+    if (solanaRpcUrl) {
+      // registerExactSvmScheme builds its schemes from the signer alone and
+      // takes no RPC, so the override has to be applied by re-registering the
+      // same keys with rpc-aware instances — a later register wins for a given
+      // version+network+scheme. Everything else the helper set up stays.
+      const { ExactSvmScheme } = await import("@x402/svm/exact/client");
+      const { ExactSvmSchemeV1, NETWORKS: SVM_V1_NETWORKS } = await import("@x402/svm/v1");
+      x402.register("solana:*", new ExactSvmScheme(solanaSigner, { rpcUrl: solanaRpcUrl }));
+      for (const network of SVM_V1_NETWORKS) {
+        x402.registerV1(network, new ExactSvmSchemeV1(solanaSigner, { rpcUrl: solanaRpcUrl }));
+      }
+    }
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
+    if (solanaRpcUrl) {
+      console.log(`[ClawRouter] Solana RPC (payment signing + balance): ${solanaRpcUrl}`);
+    }
   }
 
   // Stamp BlockRun's builder-code service code (`s`) onto every signed EVM
@@ -4231,9 +4256,20 @@ async function tryModelRequest(
         errorCategory: "payment_error",
       };
     }
+    // Name the connection that broke. undici collapses every network failure
+    // into "fetch failed", and on the Solana rail two very different faults
+    // wear that same string: the gateway being unreachable, and the Solana RPC
+    // that signs the payment being unreachable. Callers see only the body, so
+    // the distinction has to travel in it (ClawRouter-Hermes#38).
+    const networkMsg = describeFetchError(err);
+    const solanaSigningHint =
+      upstreamUrl.startsWith(BLOCKRUN_SOLANA_API) && networkMsg.startsWith("fetch failed")
+        ? " — on the Solana rail this may be the RPC that signs the payment rather than the gateway; if api.mainnet-beta.solana.com is unreachable from this host, set CLAWROUTER_SOLANA_RPC_URL to your own endpoint"
+        : "";
+    console.error(`[ClawRouter] ${modelId} network error: ${networkMsg}${solanaSigningHint}`);
     return {
       success: false,
-      errorBody: errorMsg,
+      errorBody: `${networkMsg}${solanaSigningHint}`,
       errorStatus: 500,
       isProviderError: true, // Network errors are retryable
     };

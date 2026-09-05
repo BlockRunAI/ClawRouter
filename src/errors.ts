@@ -92,3 +92,35 @@ export class RpcError extends Error {
 export function isRpcError(error: unknown): error is RpcError {
   return error instanceof Error && (error as RpcError).code === "RPC_ERROR";
 }
+
+/**
+ * Flatten a thrown fetch error into something diagnosable.
+ *
+ * undici gives every connection-level failure the same three words — "fetch
+ * failed" — and hides the part that identifies it (errno, host, port) on
+ * `cause`. That ambiguity is expensive on the Solana rail: signing an x402
+ * payment fetches the asset's mint account from a Solana RPC, so a host that
+ * cannot reach `api.mainnet-beta.solana.com` fails every paid call with a
+ * message indistinguishable from a gateway outage (ClawRouter-Hermes#38).
+ *
+ * Returns e.g. `fetch failed (ENOTFOUND api.mainnet-beta.solana.com)`, or the
+ * bare message when the error carries nothing more.
+ */
+export function describeFetchError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  if (!(cause instanceof Error)) return message;
+
+  const detail = cause as Error & {
+    code?: string;
+    hostname?: string;
+    address?: string;
+    port?: number;
+  };
+  const host = detail.hostname || detail.address;
+  const where = host && detail.port ? `${host}:${detail.port}` : host;
+  const parts = [detail.code, where, detail.code ? undefined : detail.message].filter(
+    (part): part is string => typeof part === "string" && part !== "",
+  );
+  return parts.length > 0 ? `${message} (${parts.join(" ")})` : message;
+}
