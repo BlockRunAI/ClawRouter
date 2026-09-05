@@ -388,7 +388,7 @@ Edit existing images with `/img2img`:
 
 ## Phone & Voice Calls
 
-Verify phone numbers and place AI-powered outbound voice calls directly from chat. Phone intelligence runs on Twilio; voice calls use Bland.ai. Payment is automatic via x402 from the wallet.
+Verify phone numbers and place AI-powered outbound voice calls directly from chat. Phone intelligence runs on Twilio; voice calls use Bland.ai. Payment uses the selected API account credit or x402 wallet.
 
 ```
 /cr-call +14155552671 "Hi, this is calling to confirm tomorrow's 3pm meeting"
@@ -442,7 +442,7 @@ LLM agents discover all eight operations as `blockrun_phone_*` / `blockrun_voice
 
 Surf is BlockRun's unified crypto data API — **84 endpoints across 13 domains**: CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT mindshare, news, project/DeFi metrics, token analytics, unified search, VC fund intelligence. The killer feature is ad-hoc `POST /surf/onchain/sql` — agents query the warehouse directly without running an indexer.
 
-ClawRouter ships Surf as a **skill, not as typed wrappers**. The proxy whitelists `/v1/surf/*` so any call through the local proxy is paid x402 from the same wallet; the agent reads `skills/surf/SKILL.md` for the endpoint catalog and crafts the HTTP call. No `blockrun_surf_*` tool definitions to maintain; a new Surf endpoint requires zero ClawRouter release.
+ClawRouter ships Surf as a **skill, not as typed wrappers**. The proxy whitelists `/v1/surf/*` so calls through the local proxy use the selected API account credit or x402 wallet; the agent reads `skills/surf/SKILL.md` for the endpoint catalog and crafts the HTTP call. No `blockrun_surf_*` tool definitions to maintain; a new Surf endpoint requires zero ClawRouter release.
 
 **Flat per-call pricing** — every Surf endpoint costs the same. The old
 $0.001/$0.005/$0.020 tiers no longer apply; upstream prices all three tiers
@@ -481,7 +481,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 <!-- br:models.chatVisible -->76<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->7<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
-> **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
+> **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid **wallet** requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it. API-key requests use account credit without this on-chain settlement fee.
 
 ### Budget Models (under $0.001/request)
 
@@ -954,3 +954,17 @@ ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls r
 ⭐ If ClawRouter powers your agents, consider starring the repo!
 
 </div>
+
+### Changing the active account or wallet
+
+API keys are available at [user.blockrun.ai](https://user.blockrun.ai); use
+[Credits](https://user.blockrun.ai/dashboard/credits) to fund the account and
+[API keys](https://user.blockrun.ai/dashboard/keys) to create a key. The dashboard
+shows account activity and charges.
+
+After changing an API key, gateway, wallet, or payment chain, stop the existing
+proxy and restart it (or select another port). ClawRouter refuses to attach to a
+proxy using a different payment identity. An older API proxy that cannot identify
+its key also needs a restart. Empty, invalid, or unreadable configured keys are
+errors; correct or remove them before switching to wallet mode. Unset
+`BLOCKRUN_API_KEY` as well as removing saved keys when returning to a wallet.

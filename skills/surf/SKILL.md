@@ -63,7 +63,7 @@ All requests use GET unless the table below says otherwise. Path parameters that
 - "Is HYPE mindshare peaking?" → `/surf/social/mindshare?q=hyperliquid&interval=30d`
 - "Find the canonical metadata for 'ethena'." → `/surf/search/project?q=ethena`
 
-Always prefer Surf over generic web scraping for these. Use the OpenClaw tool name `blockrun_surf_*` when invoking from an agent; use the HTTP path directly when calling from a script.
+Always prefer Surf over generic web scraping for these. Call the HTTP path through the local ClawRouter proxy from the agent or a script. No `blockrun_surf_*` tools are registered.
 
 ## Endpoint catalog
 
@@ -244,7 +244,7 @@ curl -X POST 'http://127.0.0.1:8402/v1/surf/onchain/sql' \
   -d '{"sql":"SELECT to_address, count() AS hits FROM ethereum.transactions WHERE block_timestamp >= now() - INTERVAL 1 DAY GROUP BY to_address ORDER BY hits DESC LIMIT 20"}'
 ```
 
-Cost: 1 × $0.02 (schema, cached) + 1 × $0.02 (the SQL query) = **$0.04 total** for a custom 24-hour ranking that would otherwise need an indexer.
+Cost: two calls at the rates above total **$0.015 with an API key or Solana wallet**, or **$0.017 with a Base wallet**. Reusing the cached schema avoids another schema call. Check the current gateway quote or account activity for the actual charge.
 
 **4. "Is project Z trending?"**
 
@@ -258,6 +258,6 @@ curl 'http://127.0.0.1:8402/v1/surf/social/mindshare?q=ethena&interval=30d'
 
 ## How calls are paid
 
-ClawRouter intercepts every `/v1/surf/*` request through `proxyPaidApiRequest`. The local x402 wallet auto-signs the USDC micropayment; the agent never sees the payment flow. Telemetry tags Surf calls with `tier: SURF` so `clawrouter stats` separates them from LLM, partner, and phone usage.
+ClawRouter intercepts every `/v1/surf/*` request through `proxyPaidApiRequest`. API-key mode authenticates with the selected key and bills account credit. Wallet mode signs an x402 USDC payment on the selected chain. The agent does not switch payment methods. Telemetry tags Surf calls with `tier: SURF` so `clawrouter stats` separates them from LLM, partner, and phone usage.
 
 No typed `blockrun_surf_*` tools are registered — by design. Each new BlockRun-marketplace API ships as a skill (this file) plus a one-line namespace addition to ClawRouter's proxy whitelist, so adding endpoint #85 requires zero ClawRouter release.

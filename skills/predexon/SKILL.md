@@ -35,7 +35,7 @@ metadata: { "openclaw": { "emoji": "📊", "requires": { "config": ["models.prov
 
 Real-time prediction market data (Polymarket, Kalshi, Limitless, Opinion, Predict.Fun, dFlow, Binance, UMA oracle) via BlockRun's gateway. Payment is automatic — an x402 USDC micropayment from the user's wallet, or a draw on BlockRun account credit if an API key is configured (both verified 2026-09-05).
 
-**All responses are wrapped:** `{ "data": { ... } }` — always read from `response.data`.
+**Read the actual response shape:** HTTP responses preserve the upstream payload. Tool results expose that payload in `details`, with its JSON also in `content`. Only read `.data` when the payload itself contains a `data` field.
 
 **Pricing:** GET $0.001 · Wallet analytics / smart money / Binance / matching $0.005
 
@@ -338,8 +338,8 @@ All endpoints are GET unless marked **POST**. Query params go in the URL; POST t
 
 ## Notes
 
-- Payment is automatic via x402 — deducted from the user's BlockRun wallet
+- Payment uses the configured API account credit or x402 wallet
 - If payment fails, tell the user to fund their wallet at [blockrun.ai](https://blockrun.ai)
 - Retry once on 502 — Predexon can occasionally be slow
-- Always read from `response.data` — every response is wrapped `{ data: ... }`
+- Inspect the payload: tool results use `details` / JSON `content`; HTTP responses retain their upstream shape.
 - Synthesize data into plain-language analysis — never dump raw JSON
