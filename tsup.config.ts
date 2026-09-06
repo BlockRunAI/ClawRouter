@@ -1,6 +1,23 @@
+import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "tsup";
+
+const stripSolanaRpcContentLength = {
+  name: "strip-solana-rpc-content-length",
+  setup(build) {
+    build.onLoad(
+      { filter: /[\\/]@solana[\\/]rpc-transport-http[\\/]dist[\\/]index\.node\.mjs$/ },
+      (args) => {
+        const source = readFileSync(args.path, "utf8");
+        return {
+          contents: source.replace(/\n\s+"content-length": body\.length\.toString\(\),/, ""),
+          loader: "js",
+        };
+      },
+    );
+  },
+};
 
 export default defineConfig({
   entry: ["src/index.ts", "src/cli.ts", "src/router/index.ts"],
@@ -12,6 +29,7 @@ export default defineConfig({
   splitting: false,
   noExternal: [/.*/],
   external: [...builtinModules.flatMap((m) => [m, `node:${m}`])],
+  esbuildPlugins: [stripSolanaRpcContentLength],
   esbuildOptions(options) {
     // We and @blockrun/llm depend on each other, and `noExternal` inlines it. Its
     // `import { route, ... } from "@blockrun/clawrouter"` therefore resolves through

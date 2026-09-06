@@ -50,6 +50,13 @@ for (const entry of ["index.js", "cli.js", "router/index.js"]) {
         `the @blockrun/llm back-import is missing or broken.`,
     );
   }
+  if (source.includes('"content-length": body.length.toString()')) {
+    failures.push(
+      `dist/${entry} contains @solana/rpc-transport-http's manual content-length header — ` +
+        `Node/undici can reject that header during Solana x402 payment signing in ` +
+        `OpenClaw-managed runtime paths.`,
+    );
+  }
   if (source.length > MAX_BUNDLE_BYTES) {
     failures.push(
       `dist/${entry} is ${(source.length / 1024 / 1024).toFixed(1)}MB, over the ` +
