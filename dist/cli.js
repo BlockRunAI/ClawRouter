@@ -52766,7 +52766,6 @@ function createHttpTransport(config) {
         ...customHeaders,
         // Keep these headers lowercase so they will override any user-supplied headers above.
         accept: "application/json",
-        "content-length": body.length.toString(),
         "content-type": "application/json; charset=utf-8"
       },
       method: "POST",
