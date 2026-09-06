@@ -10,8 +10,15 @@ const stripSolanaRpcContentLength = {
       { filter: /[\\/]@solana[\\/]rpc-transport-http[\\/]dist[\\/]index\.node\.mjs$/ },
       (args) => {
         const source = readFileSync(args.path, "utf8");
+        const contents = source.replace(/\n\s+"content-length": body\.length\.toString\(\),/, "");
+        if (contents === source) {
+          throw new Error(
+            `strip-solana-rpc-content-length matched nothing in ${args.path} — ` +
+              `@solana/rpc-transport-http changed shape. Update the pattern; do not ship.`,
+          );
+        }
         return {
-          contents: source.replace(/\n\s+"content-length": body\.length\.toString\(\),/, ""),
+          contents,
           loader: "js",
         };
       },
