@@ -781,9 +781,9 @@ To also run TWZRD wash/preflight on the same `onBeforePaymentCreation` chain —
 export TWZRD_AUTO_GATE=1
 ```
 
-Equivalent flag: `TWZRD_GATE_ENABLED=true`. Requires optional dependency `twzrd-x402-gate@0.9.3` (forks that omit it still install). A refuse stamps `X-Twzrd-Caller: clawrouter/<version>` so it is attributable. Unset the flag to go back to SpendControl only.
+Equivalent flag: `TWZRD_GATE_ENABLED=true`. Requires optional dependency `twzrd-x402-gate@0.10.1` (forks that omit it still install). A refuse stamps `X-Twzrd-Caller: clawrouter/<version>` so it is attributable. Unset the flag to go back to SpendControl only.
 
-**It gates Solana, not Base.** The gate scores Solana recipients; Base/EVM classifies as `network_not_scored` and is waved through without a lookup. On Solana it POSTs the resource URL, `payTo`, price and chain to `intel.twzrd.xyz` before each signature — payment metadata leaves your machine when this is on. We bound that call at `TWZRD_GATE_TIMEOUT_MS` (default 2000) and proceed if it does not answer, because SpendControl is the guarantee and a third party must not be able to stop your payments; set `TWZRD_FAIL_OPEN=false` to refuse instead.
+**Reputation is Solana-only; wash still runs on Base.** The gate does not invent a Solana reputation score for Base/EVM (`network_not_scored` / observe / verdict `unknown`). As of `0.10.1`, observe is not a wash bypass: a wash-flagged `payTo` on Base still aborts before sign. On Solana it POSTs the resource URL, `payTo`, price and chain to `intel.twzrd.xyz` before each signature; on Base it GETs `merchant_card/{payTo}`. Payment metadata leaves your machine when this is on. We bound that call at `TWZRD_GATE_TIMEOUT_MS` (default 2000) and proceed if it does not answer, because SpendControl is the guarantee and a third party must not be able to stop your payments; set `TWZRD_FAIL_OPEN=false` to refuse instead.
 
 ### Model Exclusion
 

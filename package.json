@@ -107,7 +107,7 @@
     "viem": "^2.39.3"
   },
   "optionalDependencies": {
-    "twzrd-x402-gate": "0.9.3"
+    "twzrd-x402-gate": "0.10.1"
   },
   "peerDependencies": {
     "openclaw": ">=2025.1.0"

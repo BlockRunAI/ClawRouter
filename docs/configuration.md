@@ -753,19 +753,25 @@ still run first. A wash `payTo` is refused before `signTransaction`.
 
 ### What it actually covers
 
-**Solana, not Base.** The gate's reputation corpus is Solana. `classifyNetwork`
-returns `network_not_scored` for `base` / `eip155:*`, and under our
-`unsupportedNetworkMode: "observe"` those are waved through with verdict
-`unknown` and no network call. The x402 client is shared between both chains, so
-the hook is registered once and applies to Solana payments; `refuseWashFlagged`
-can only ever fire there.
+**Reputation is Solana-only; wash still runs on Base** (`twzrd-x402-gate@0.10.1`).
+The gate's reputation corpus is Solana. `classifyNetwork` returns
+`network_not_scored` for `base` / `eip155:*`, and under our
+`unsupportedNetworkMode: "observe"` those never get a fabricated Solana
+`allow` — verdict stays `unknown`. Observe is not a wash bypass: with
+`refuseWashFlagged` (our default) the same wallet-keyed `merchant_card`
+tighten used on Solana still runs on Base. A wash-flagged `payTo` aborts
+before sign; a clean Base payTo still observe-allows. The x402 client is
+shared between both chains, so the hook is registered once.
+
+On `0.9.3` (the previous pin) Base wash was skipped. That is no longer true.
 
 ### What leaves your machine
 
 On a Solana payment the gate POSTs the resource URL, `payTo`, price and chain to
 `https://intel.twzrd.xyz/v1/intel/preflight`, stamped with
-`X-TWZRD-Integration: clawrouter/<version>` and a per-process run id. Nothing is
-sent when the flag is unset, and nothing is sent for Base.
+`X-TWZRD-Integration: clawrouter/<version>` and a per-process run id. On Base
+it GETs `https://intel.twzrd.xyz/v1/intel/merchant_card/{payTo}` for the wash
+tighten. Nothing is sent when the flag is unset.
 
 ### Availability
 
@@ -783,7 +789,7 @@ Solana payment fail with a bare `fetch failed`. So:
 
 ### Other notes
 
-- Optional dependency: `twzrd-x402-gate@0.9.3`. Forks that omit it still install.
+- Optional dependency: `twzrd-x402-gate@0.10.1`. Forks that omit it still install.
 - Missing gate package (`MODULE_NOT_FOUND` for `twzrd-x402-gate` itself): fail
   open — proxy boots, payments unguarded by TWZRD. Any other load/install error
   fails closed.

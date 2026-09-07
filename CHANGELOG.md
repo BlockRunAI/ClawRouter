@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Changed — pin TWZRD AutoGate to `twzrd-x402-gate@0.10.1`
+
+`0.10.1` is on npm (`latest`) with `gitHead` and provenance. The previous
+`0.9.3` pin was accurate for v0.12.277's "Base is waved" docs; under `0.10.1`
+observe still does not claim Solana reputation for Base, but
+`refuseWashFlagged` still runs `merchant_card` and a wash `payTo` on Base
+aborts. README and `docs/configuration.md` now say so.
+
+---
+
 ## v0.12.277 — September 6, 2026
 
 ### Added — opt-in TWZRD AutoGate on the x402 pre-sign hook

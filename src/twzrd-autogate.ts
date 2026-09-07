@@ -12,15 +12,17 @@
  * Fail closed on a real module error; fail open only when twzrd-x402-gate itself
  * is missing (optionalDependency — forks may omit it). That is LOAD time.
  *
- * PAYMENT time is the opposite default, deliberately. The gate scores Solana
- * only (Base/EVM classifies as `network_not_scored` and returns `unknown` under
- * `unsupportedNetworkMode: "observe"`), and its preflight is a synchronous POST
- * to intel.twzrd.xyz with NO timeout of its own. The package defaults to
- * `failOpen: false`, so an outage there would refuse every paid Solana call —
- * the exact shape of the v0.12.271 outage, where an unreachable third party made
- * every Solana payment fail with a bare `fetch failed`. This gate is ADDITIONAL
- * cover on top of SpendControl, which is unaffected by it, so an outage in it
- * must not stop payments. We pass `failOpen: true` and bound the hook with a
+ * PAYMENT time is the opposite default, deliberately. Reputation scoring is
+ * Solana-only (Base/EVM classifies as `network_not_scored` / `unknown` under
+ * `unsupportedNetworkMode: "observe"`). As of twzrd-x402-gate@0.10.1, observe
+ * is not a wash bypass: refuseWashFlagged still GETs merchant_card on Base.
+ * The Solana preflight is a synchronous POST to intel.twzrd.xyz with NO
+ * timeout of its own. The package defaults to `failOpen: false`, so an
+ * outage there would refuse every paid Solana call — the exact shape of the
+ * v0.12.271 outage, where an unreachable third party made every Solana
+ * payment fail with a bare `fetch failed`. This gate is ADDITIONAL cover on
+ * top of SpendControl, which is unaffected by it, so an outage in it must
+ * not stop payments. We pass `failOpen: true` and bound the hook with a
  * timeout. `TWZRD_FAIL_OPEN=false` opts back into refusing.
  */
 
@@ -226,7 +228,7 @@ export async function maybeComposeTwzrdAutoGate(
     if (isMissingTwzrdGateModule(err)) {
       const reason = `${TWZRD_GATE_PACKAGE} is not installed`;
       log.warn(
-        `[ClawRouter] TWZRD AutoGate opted in but ${reason} — skipping. npm i ${TWZRD_GATE_PACKAGE}@0.9.3`,
+        `[ClawRouter] TWZRD AutoGate opted in but ${reason} — skipping. npm i ${TWZRD_GATE_PACKAGE}@0.10.1`,
       );
       return { status: "unavailable", reason };
     }
