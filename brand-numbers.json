@@ -11,8 +11,8 @@
     "music": 1,
     "speech": 5,
     "soundfx": 1,
-    "withFallback": 48,
-    "withFallbackAllEntries": 89
+    "withFallback": 34,
+    "withFallbackAllEntries": 73
   },
   "clawrouter": {
     "dimensions": 15,
@@ -21,7 +21,10 @@
     "aliases": 259
   },
   "mcp": {
-    "tools": 20
+    "tools": 19,
+    "contextTokens": 12900,
+    "contextTokensTrading": 5554,
+    "contextCutPct": 57
   },
   "chains": {
     "rpc": 40
