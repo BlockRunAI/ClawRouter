@@ -753,7 +753,7 @@ still run first. A wash `payTo` is refused before `signTransaction`.
 
 ### What it actually covers
 
-**Reputation is Solana-only; wash still runs on Base** (`twzrd-x402-gate@0.10.1`).
+**Reputation is Solana-only; wash still runs on Base** (`twzrd-x402-gate@0.9.4`).
 The gate's reputation corpus is Solana. `classifyNetwork` returns
 `network_not_scored` for `base` / `eip155:*`, and under our
 `unsupportedNetworkMode: "observe"` those never get a fabricated Solana
@@ -789,7 +789,7 @@ Solana payment fail with a bare `fetch failed`. So:
 
 ### Other notes
 
-- Optional dependency: `twzrd-x402-gate@0.10.1`. Forks that omit it still install.
+- Optional dependency: `twzrd-x402-gate@0.9.4`. Forks that omit it still install.
 - Missing gate package (`MODULE_NOT_FOUND` for `twzrd-x402-gate` itself): fail
   open — proxy boots, payments unguarded by TWZRD. Any other load/install error
   fails closed.

@@ -6,12 +6,12 @@ All notable changes to ClawRouter.
 
 ## Unreleased
 
-### Changed — pin TWZRD AutoGate to `twzrd-x402-gate@0.10.1`
+### Changed — pin TWZRD AutoGate to `twzrd-x402-gate@0.9.4`
 
-`0.10.1` is on npm (`latest`) with `gitHead` and provenance. The previous
-`0.9.3` pin was accurate for v0.12.277's "Base is waved" docs; under `0.10.1`
-observe still does not claim Solana reputation for Base, but
-`refuseWashFlagged` still runs `merchant_card` and a wash `payTo` on Base
+`0.9.4` is npm `latest` (wzrd-final). `0.10.0` / `0.10.1` are deprecated
+(`./unsafe`). The previous `0.9.3` pin made v0.12.277's "Base is waved" docs
+true; under `0.9.4` observe still does not claim Solana reputation for Base,
+but `refuseWashFlagged` still runs `merchant_card` and a wash `payTo` on Base
 aborts. README and `docs/configuration.md` now say so.
 
 ---

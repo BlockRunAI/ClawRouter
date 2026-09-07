@@ -14,7 +14,7 @@
  *
  * PAYMENT time is the opposite default, deliberately. Reputation scoring is
  * Solana-only (Base/EVM classifies as `network_not_scored` / `unknown` under
- * `unsupportedNetworkMode: "observe"`). As of twzrd-x402-gate@0.10.1, observe
+ * `unsupportedNetworkMode: "observe"`). As of twzrd-x402-gate@0.9.4, observe
  * is not a wash bypass: refuseWashFlagged still GETs merchant_card on Base.
  * The Solana preflight is a synchronous POST to intel.twzrd.xyz with NO
  * timeout of its own. The package defaults to `failOpen: false`, so an
@@ -228,7 +228,7 @@ export async function maybeComposeTwzrdAutoGate(
     if (isMissingTwzrdGateModule(err)) {
       const reason = `${TWZRD_GATE_PACKAGE} is not installed`;
       log.warn(
-        `[ClawRouter] TWZRD AutoGate opted in but ${reason} — skipping. npm i ${TWZRD_GATE_PACKAGE}@0.10.1`,
+        `[ClawRouter] TWZRD AutoGate opted in but ${reason} — skipping. npm i ${TWZRD_GATE_PACKAGE}@0.9.4`,
       );
       return { status: "unavailable", reason };
     }
