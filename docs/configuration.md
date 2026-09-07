@@ -726,6 +726,23 @@ A refusal reaches the caller as HTTP 403 with
 `{"error": {"type": "spend_policy_denied", ...}}`. It is deliberately **not**
 retried against other models: a policy denial is a decision, not an outage.
 
+### TWZRD AutoGate (opt-in)
+
+Default **off**. SpendControl above is the always-available pre-sign hook.
+TWZRD AutoGate is an optional second check on the same
+`onBeforePaymentCreation` chain (wash/preflight against intel.twzrd.xyz).
+
+```bash
+# enable for this process; kill by unsetting
+export TWZRD_AUTO_GATE=1
+npm i twzrd-x402-gate@0.9.3   # optionalDependency; forks may omit it
+```
+
+If the env is set and the package is missing, ClawRouter warns and continues
+(payments unguarded). Any other load error fails closed so the proxy does not
+boot after you asked for a gate that could not install. Identity header:
+`X-Twzrd-Caller: clawrouter@<gate-version>`.
+
 **Scope:** this governs payments made by the proxy. Local tools that sign with
 the same wallet outside the proxy's x402 client (Polymarket funding and order
 placement, `clawrouter doctor`'s probe) are not covered.

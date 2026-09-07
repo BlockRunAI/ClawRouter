@@ -32,6 +32,7 @@ import { getSolanaAddress } from "./wallet.js";
 import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
 import { getSharedSpendControl, registerSpendPolicyHook, SpendControl } from "./spend-control.js";
+import { maybeInstallTwzrdAutoGate } from "./twzrd-autogate.js";
 import { VERSION } from "./version.js";
 
 // Types
@@ -508,16 +509,17 @@ const DOCTOR_MODELS: Record<DoctorModel, { id: string; name: string; cost: strin
  * lists. This is the only place doctor constructs an x402Client, so the test
  * that drives it pins the wiring, not just the helper.
  */
-export function createDoctorX402Client(opts: {
+export async function createDoctorX402Client(opts: {
   walletKey: string;
   /** Default: the same on-disk policy the proxy reads. Inject in tests. */
   spendControl?: SpendControl;
-}): x402Client {
+}): Promise<x402Client> {
   const account = privateKeyToAccount(opts.walletKey as `0x${string}`);
   const publicClient = createPublicClient({ chain: base, transport: http() });
   const evmSigner = toClientEvmSigner(account, publicClient);
   const x402 = new x402Client();
   registerSpendPolicyHook(x402, opts.spendControl ?? getSharedSpendControl());
+  await maybeInstallTwzrdAutoGate(x402);
   registerExactEvmScheme(x402, { signer: evmSigner });
   return x402;
 }
@@ -554,7 +556,7 @@ async function analyzeWithAI(
 
   try {
     const { key } = await resolveOrGenerateWalletKey();
-    const x402 = createDoctorX402Client({ walletKey: key });
+    const x402 = await createDoctorX402Client({ walletKey: key });
 
     // Register Solana scheme if user is on Solana chain
     const paymentChain = diagnostics.wallet.paymentChain;

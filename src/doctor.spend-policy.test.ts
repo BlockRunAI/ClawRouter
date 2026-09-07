@@ -67,7 +67,7 @@ describe("doctor's x402 client enforces spend policy before signing", () => {
   it("refuses a blocked payee and never attaches a payment", async () => {
     const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
     control.setPolicy("blockedPayees", [blockedPayee]);
-    const x402 = createDoctorX402Client({ walletKey: generatePrivateKey(), spendControl: control });
+    const x402 = await createDoctorX402Client({ walletKey: generatePrivateKey(), spendControl: control });
     const paymentFetch = wrapFetchWithPayment(fetch, x402);
 
     await expect(

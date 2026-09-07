@@ -106,6 +106,9 @@
     "undici": "^8.10.0",
     "viem": "^2.39.3"
   },
+  "optionalDependencies": {
+    "twzrd-x402-gate": "0.9.3"
+  },
   "peerDependencies": {
     "openclaw": ">=2025.1.0"
   },

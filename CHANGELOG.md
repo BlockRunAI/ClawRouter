@@ -4,6 +4,15 @@ All notable changes to ClawRouter.
 
 ---
 
+## Unreleased
+
+### Added — opt-in TWZRD AutoGate on the existing x402 pre-sign hook
+
+Default off. `TWZRD_AUTO_GATE=1` composes `twzrd-x402-gate@0.9.3` (optional
+dependency) into `onBeforePaymentCreation` **after** SpendControl. Missing
+package with the env set is a warn-and-continue; any other load error fails
+closed. Not a re-open of default-on #218. From [#355](https://github.com/BlockRunAI/ClawRouter/issues/355).
+
 ## v0.12.276 — September 6, 2026
 
 ### Fixed — Gemini 3.8 Flash was routable but uncatalogued, which is a cost-cap hole
