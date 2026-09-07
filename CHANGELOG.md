@@ -6,13 +6,18 @@ All notable changes to ClawRouter.
 
 ## Unreleased
 
-### Changed — pin TWZRD AutoGate to `twzrd-x402-gate@0.9.4`
+### Changed — pin TWZRD AutoGate to exactly `twzrd-x402-gate@0.9.4`
 
-`0.9.4` is npm `latest` (wzrd-final). `0.10.0` / `0.10.1` are deprecated
-(`./unsafe`). The previous `0.9.3` pin made v0.12.277's "Base is waved" docs
-true; under `0.9.4` observe still does not claim Solana reputation for Base,
-but `refuseWashFlagged` still runs `merchant_card` and a wash `payTo` on Base
-aborts. README and `docs/configuration.md` now say so.
+`0.9.4` is npm `latest`; the pin is exact (`0.9.4`, not `^0.9.4`). `0.10.0` / `0.10.1` are deprecated on npm as unreproducible — do not use them. The lockfile entry now carries `0.9.4`'s published peer ranges (`@solana/kit >=5.1.0 <6`, `@solana-program/token >=0.9.0 <0.10`, `x402-solana >=2.1.0`); the previous entry had inherited `0.9.3`'s. From [#360](https://github.com/BlockRunAI/ClawRouter/pull/360) by [@twzrd-sol](https://github.com/twzrd-sol).
+
+Under `0.9.4`, `createTwzrdBeforePaymentHook` defaults to a wash-only engine, which changes what the v0.12.277 notes below describe:
+
+- **Request path.** One `GET merchant_card/{payTo}` per payment, on Solana and Base alike. ClawRouter does not select the full preflight engine — no `POST /v1/intel/preflight`, no reputation score, no Solana/Base split. Only the `payTo` leaves the machine.
+- **Refusal is broader than a wash boolean.** `wash_flagged: true` aborts (`twzrd_wash_flagged`); a clean `payTo` with full coverage is allowed; `wash_flagged: false` with missing, partial or stale coverage aborts too (`twzrd_wash_unknown`). `0.9.3` refused only a measured `wash_flagged: true`.
+- **Attribution.** Each lookup carries `X-Twzrd-Caller: clawrouter/<version>@0.9.4` and `X-TWZRD-Integration: clawrouter/<version>`.
+- **The outage promise is narrower than we said.** `TWZRD_FAIL_OPEN=false` governs only our 2 s wrapper: a hang past `TWZRD_GATE_TIMEOUT_MS`, or a thrown hook, refuses. The package itself turns a fast lookup failure — a quick `503`, a `fetch failed`, invalid JSON, its own 3 s timeout — into allow and ignores the `failOpen` option, so refuse-on-outage is not fully enforced. That needs a package fix.
+
+Tests: the suite now loads the real `twzrd-x402-gate@0.9.4` through the adapter's own import and mocks only HTTP, covering the six cases above (wash flagged → abort, signer never called; clean + full coverage → allow; partial coverage → `twzrd_wash_unknown`; fast 503 under `TWZRD_FAIL_OPEN=false` → allow; our timeout under `TWZRD_FAIL_OPEN=false` → abort; our timeout by default → allow), plus the request path and headers on both networks. 23 → 41. README and `docs/configuration.md` say the same.
 
 ---
 

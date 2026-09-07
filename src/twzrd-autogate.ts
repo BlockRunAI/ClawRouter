@@ -5,25 +5,32 @@
  * This is not a re-open of withdrawn #218 (default-on vendor lock).
  *
  * When TWZRD_AUTO_GATE=1 (or TWZRD_GATE_ENABLED=true), compose
- * installTwzrdAutoGate / createTwzrdBeforePaymentHook AFTER registerSpendPolicyHook
- * so a wash payTo is refused before sign. Identity header:
- *   X-Twzrd-Caller: clawrouter/<version>
+ * createTwzrdBeforePaymentHook AFTER registerSpendPolicyHook so a wash payTo is
+ * refused before sign. The package stamps every lookup with
+ *   X-Twzrd-Caller: clawrouter/<version>@0.9.4
+ *   X-TWZRD-Integration: clawrouter/<version>
  *
  * Fail closed on a real module error; fail open only when twzrd-x402-gate itself
  * is missing (optionalDependency — forks may omit it). That is LOAD time.
  *
- * PAYMENT time is the opposite default, deliberately. Reputation scoring is
- * Solana-only (Base/EVM classifies as `network_not_scored` / `unknown` under
- * `unsupportedNetworkMode: "observe"`). As of twzrd-x402-gate@0.9.4, observe
- * is not a wash bypass: refuseWashFlagged still GETs merchant_card on Base.
- * The Solana preflight is a synchronous POST to intel.twzrd.xyz with NO
- * timeout of its own. The package defaults to `failOpen: false`, so an
- * outage there would refuse every paid Solana call — the exact shape of the
- * v0.12.271 outage, where an unreachable third party made every Solana
- * payment fail with a bare `fetch failed`. This gate is ADDITIONAL cover on
- * top of SpendControl, which is unaffected by it, so an outage in it must
- * not stop payments. We pass `failOpen: true` and bound the hook with a
- * timeout. `TWZRD_FAIL_OPEN=false` opts back into refusing.
+ * PAYMENT time, under twzrd-x402-gate@0.9.4 (pinned exactly):
+ * createTwzrdBeforePaymentHook defaults to the package's wash-only engine — one
+ * GET merchant_card/{payTo} per payment, on Solana and Base alike. We do not
+ * select the full preflight engine (no POST /v1/intel/preflight, no reputation
+ * score), so of the options below only `refuseWashFlagged` and `attribution`
+ * reach the engine. The card decides: wash_flagged=true aborts
+ * (twzrd_wash_flagged); clean with full coverage allows; clean with missing,
+ * partial or stale coverage also aborts (twzrd_wash_unknown). No card at all —
+ * non-2xx, network error, invalid JSON, or the package's own 3s timeout — is
+ * converted to ALLOW inside the package.
+ *
+ * This gate is ADDITIONAL cover on top of SpendControl, which is unaffected by
+ * it, so an outage in it must not stop payments — the v0.12.271 shape, where an
+ * unreachable third party made every Solana payment fail with a bare `fetch
+ * failed`. We bound the hook with a timeout and proceed on expiry or throw.
+ * `TWZRD_FAIL_OPEN=false` flips only THAT wrapper: a hang past the budget, or a
+ * thrown hook, then refuses. It cannot reach the package's internal fail-open,
+ * so refuse-on-outage is only partly enforced until the package changes.
  */
 
 import { randomUUID } from "node:crypto";
@@ -102,7 +109,11 @@ export function isMissingTwzrdGateModule(err: unknown): boolean {
   return missingModule && new RegExp(String.raw`['"]${TWZRD_GATE_PACKAGE}['"]`).test(msg);
 }
 
-/** Budget for the gate's answer. Its preflight sets no timeout of its own. */
+/**
+ * Budget for the gate's answer. Kept below the package's own merchant_card
+ * timeout (3000ms, TWZRD_WASH_TIMEOUT_MS), which resolves to allow — past it,
+ * TWZRD_FAIL_OPEN=false would never see the hang.
+ */
 export const TWZRD_GATE_TIMEOUT_MS = 2_000;
 
 /** Operator override for the answer budget; falls back to the default. */
@@ -115,7 +126,9 @@ export function twzrdGateTimeoutMs(env: NodeJS.ProcessEnv = process.env): number
 
 /**
  * Default true — see the note at the top of this file. `TWZRD_FAIL_OPEN=false`
- * (or 0/no/off) restores the package's own refuse-on-outage behaviour.
+ * (or 0/no/off) makes runTwzrdGateWithTimeout refuse on timeout or throw. It
+ * does not make the package refuse a fast lookup failure, which 0.9.4's wash
+ * engine converts to allow on its own.
  */
 export function twzrdGateFailOpen(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = normalizeFlag(env.TWZRD_FAIL_OPEN);
@@ -128,8 +141,12 @@ export function twzrdAutoGateInstallOptions(
 ): TwzrdGateInstallOptions {
   return {
     refuseWashFlagged: true,
+    // gateOnCanSpend / unsupportedNetworkMode belong to the package's full
+    // preflight engine, which createTwzrdBeforePaymentHook does not select by
+    // default; 0.9.4's wash engine ignores them. Kept so the intent is explicit.
     gateOnCanSpend: false,
     unsupportedNetworkMode: "observe",
+    // Read by our own runTwzrdGateWithTimeout wrapper. The wash engine ignores it.
     failOpen: twzrdGateFailOpen(env),
     attribution: {
       integration: `clawrouter/${VERSION}`,

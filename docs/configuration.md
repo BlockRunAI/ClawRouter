@@ -35,7 +35,7 @@ Complete reference for ClawRouter configuration options.
 | `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.                                                                                    |
 | `TWZRD_AUTO_GATE`           | unset (off)                           | Set to `1` to compose TWZRD AutoGate after SpendControl on the x402 pre-sign hook. Also `TWZRD_GATE_ENABLED=true`.                                          |
 | `TWZRD_GATE_TIMEOUT_MS`     | `2000`                                | How long the gate may take to answer before the payment proceeds on its own. Only meaningful with the gate on.                                              |
-| `TWZRD_FAIL_OPEN`           | `true`                                | Set to `false` to refuse payments when the gate is unreachable instead of proceeding. Only meaningful with the gate on.                                     |
+| `TWZRD_FAIL_OPEN`           | `true`                                | Set to `false` to refuse when the gate exceeds `TWZRD_GATE_TIMEOUT_MS` or throws. A fast lookup failure still allows — see AutoGate › Availability.         |
 
 ---
 
@@ -753,51 +753,77 @@ still run first. A wash `payTo` is refused before `signTransaction`.
 
 ### What it actually covers
 
-**Reputation is Solana-only; wash still runs on Base** (`twzrd-x402-gate@0.9.4`).
-The gate's reputation corpus is Solana. `classifyNetwork` returns
-`network_not_scored` for `base` / `eip155:*`, and under our
-`unsupportedNetworkMode: "observe"` those never get a fabricated Solana
-`allow` — verdict stays `unknown`. Observe is not a wash bypass: with
-`refuseWashFlagged` (our default) the same wallet-keyed `merchant_card`
-tighten used on Solana still runs on Base. A wash-flagged `payTo` aborts
-before sign; a clean Base payTo still observe-allows. The x402 client is
-shared between both chains, so the hook is registered once.
+**Wash-only, on Solana and Base alike** (`twzrd-x402-gate@0.9.4`, pinned
+exactly). `createTwzrdBeforePaymentHook` defaults to the package's wash engine,
+so the hook does one thing before sign: `GET merchant_card/{payTo}`, whatever
+the network. ClawRouter does not select the full preflight engine — no
+`POST /v1/intel/preflight`, no Solana reputation score, no `classifyNetwork`.
+The `unsupportedNetworkMode: "observe"` and `gateOnCanSpend` options we pass
+belong to that engine and are inert here. The x402 client is shared between
+both chains, so the hook is registered once and runs for both.
 
-On `0.9.3` (the previous pin) Base wash was skipped. That is no longer true.
+What the returned card decides, with `refuseWashFlagged` (our default):
+
+- `wash_flagged: true` → abort before sign, reason `twzrd_wash_flagged`.
+- `wash_flagged: false` with full coverage (`wash_confidence: "full"`, ring
+  evaluated, not stale) → allow.
+- `wash_flagged: false` with missing, partial or stale coverage, or a card with
+  no wash data at all → abort, reason `twzrd_wash_unknown`. Unknown is not
+  clean. This is broader than `0.9.3`, which refused only a measured
+  `wash_flagged: true`.
+- No card (non-2xx, network error, invalid JSON, or the package's own 3 s
+  timeout) → allow. That is the package's fail-open and ClawRouter cannot turn
+  it off — see Availability.
+
+On `0.9.3` (the previous pin) the same factory ran the full preflight engine:
+`POST /v1/intel/preflight`, Solana-only scoring, boolean wash refusal. None of
+that describes `0.9.4`.
 
 ### What leaves your machine
 
-On a Solana payment the gate POSTs the resource URL, `payTo`, price and chain to
-`https://intel.twzrd.xyz/v1/intel/preflight`, stamped with
-`X-TWZRD-Integration: clawrouter/<version>` and a per-process run id. On Base
-it GETs `https://intel.twzrd.xyz/v1/intel/merchant_card/{payTo}` for the wash
-tighten. Nothing is sent when the flag is unset.
+On every payment, Solana or Base, the gate GETs
+`https://intel.twzrd.xyz/v1/intel/merchant_card/{payTo}` (`TWZRD_INTEL_BASE`
+overrides the host). Only the `payTo` is in the request — no resource URL,
+price or chain — stamped with `X-Twzrd-Caller: clawrouter/<version>@0.9.4`,
+`X-TWZRD-Integration: clawrouter/<version>`, `X-TWZRD-Run-Id` (a per-process
+run id) and `X-TWZRD-Client: twzrd-x402-gate/0.9.4`. Nothing is sent when the
+flag is unset.
 
 ### Availability
 
-The gate's own preflight sets no timeout, and the package defaults to
-`failOpen: false` — an outage there would refuse every paid Solana call. That is
-the shape of the v0.12.271 outage, where an unreachable third party made every
-Solana payment fail with a bare `fetch failed`. So:
+The gate is additional cover on top of SpendControl, so an outage in it must not
+stop payments. That is the shape of the v0.12.271 outage, where an unreachable
+third party made every Solana payment fail with a bare `fetch failed`. So:
 
-- We bound the answer at `TWZRD_GATE_TIMEOUT_MS` (default `2000`).
-- We pass `failOpen: true`. On timeout, rejection, or outage the payment
-  proceeds and a warning names the reason. SpendControl still applies — it is
-  the vendor-neutral guarantee and is untouched by any of this.
-- `TWZRD_FAIL_OPEN=false` restores refuse-on-outage if you would rather stop
-  paying than pay unscored.
+- We bound the answer at `TWZRD_GATE_TIMEOUT_MS` (default `2000`). On timeout,
+  or if the hook throws, the payment proceeds and a warning names the reason.
+  SpendControl still applies — it is the vendor-neutral guarantee and is
+  untouched by any of this.
+- `TWZRD_FAIL_OPEN=false` flips only that wrapper: a hang past the budget, or a
+  thrown hook, then refuses (`twzrd gate did not answer within 2000ms`).
+- It does **not** give you refuse-on-outage. `0.9.4`'s wash engine turns a fast
+  lookup failure — a quick `503`, a `404`, a `fetch failed`, invalid JSON, or
+  its own `merchant_card` timeout (3 s, `TWZRD_WASH_TIMEOUT_MS`) — into allow
+  before our wrapper sees anything, and ignores the `failOpen` option we pass.
+  Only a lookup that hangs past our budget is refused, and only while
+  `TWZRD_GATE_TIMEOUT_MS` stays below the package's own timeout. Fully
+  enforcing refuse-on-outage needs a package change; until then read
+  `TWZRD_FAIL_OPEN=false` as "refuse on hang", not "refuse on outage".
 
 ### Other notes
 
-- Optional dependency: `twzrd-x402-gate@0.9.4`. Forks that omit it still install.
+- Optional dependency: `twzrd-x402-gate@0.9.4`, pinned exactly. It is npm
+  `latest`; `0.10.0` / `0.10.1` are deprecated as unreproducible — do not
+  install them. Forks that omit it still install.
 - Missing gate package (`MODULE_NOT_FOUND` for `twzrd-x402-gate` itself): fail
   open — proxy boots, payments unguarded by TWZRD. Any other load/install error
   fails closed.
 - We register the hook ourselves rather than calling `installTwzrdAutoGate`,
   which replaces `onBeforePaymentCreation` on the client — that would make every
   hook registered afterwards skippable via `TWZRD_AUTO_GATE=0`, including ours.
-- Identity: preflight stamps `X-Twzrd-Caller: clawrouter/<version>` so a refuse
-  is attributable.
+- Identity: every `merchant_card` GET stamps
+  `X-Twzrd-Caller: clawrouter/<version>@0.9.4` and
+  `X-TWZRD-Integration: clawrouter/<version>` so a refuse is attributable.
 - Unset the flag to return to SpendControl only.
 
 ---
