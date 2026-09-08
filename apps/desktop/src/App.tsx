@@ -322,6 +322,10 @@ function Overview({
   const total = agents.length || 5;
   const modelCount = dashboard?.models.length ?? 0;
   const chain = dashboard?.proxy.configuredChain === "solana" ? "Solana" : "Base";
+  // A proxy authenticating with a BlockRun API key settles nothing on-chain, so
+  // name the account instead of claiming a chain that is not there.
+  const settlement =
+    dashboard?.proxy.authMode === "api-key" ? "paid with account credit" : `settling on ${chain}`;
   return (
     <>
       <section className="hero" aria-label="Routing status">
@@ -340,7 +344,7 @@ function Overview({
             </h2>
             <p>
               {online
-                ? `${modelCount ? compact(modelCount) : "—"} models available · settling on ${chain}`
+                ? `${modelCount ? compact(modelCount) : "—"} models available · ${settlement}`
                 : "Models, payment, and local agent connections stay in one place."}
             </p>
           </div>
@@ -1252,6 +1256,8 @@ function FundingDialog({
         <div className="funding-tabs" role="tablist" aria-label="Funding method">
           <button
             role="tab"
+            id="funding-tab-buy"
+            aria-controls="funding-pane"
             aria-selected={tab === "buy"}
             className={tab === "buy" ? "active" : ""}
             onClick={() => setTab("buy")}
@@ -1260,6 +1266,8 @@ function FundingDialog({
           </button>
           <button
             role="tab"
+            id="funding-tab-deposit"
+            aria-controls="funding-pane"
             aria-selected={tab === "deposit"}
             className={tab === "deposit" ? "active" : ""}
             onClick={() => setTab("deposit")}
@@ -1268,7 +1276,13 @@ function FundingDialog({
           </button>
         </div>
         {tab === "deposit" ? (
-          <div className="funding-pane" key="deposit">
+          <div
+            className="funding-pane"
+            key="deposit"
+            id="funding-pane"
+            role="tabpanel"
+            aria-labelledby="funding-tab-deposit"
+          >
             <div className="deposit-list">
               {depositRows.map((row) => (
                 <div className="deposit-row" key={row.chain}>
@@ -1322,7 +1336,13 @@ function FundingDialog({
             </p>
           </div>
         ) : (
-          <div className="funding-pane" key="buy">
+          <div
+            className="funding-pane"
+            key="buy"
+            id="funding-pane"
+            role="tabpanel"
+            aria-labelledby="funding-tab-buy"
+          >
             <div className="funding-amount">
               <label htmlFor="funding-usd">You pay</label>
               <div className="amount-input">

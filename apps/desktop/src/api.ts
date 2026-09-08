@@ -111,6 +111,15 @@ const demoDailyBreakdown = [42, 68, 53, 82, 64, 91, 74].map((requests, index) =>
   };
 });
 
+// The Usage page shows these totals beside the daily chart, so derive them from
+// the same series instead of typing numbers that can drift apart. The demo
+// router saves roughly 84.7% against an all-frontier baseline.
+const round2 = (value: number) => Number(value.toFixed(2));
+const demoRequests = demoDailyBreakdown.reduce((sum, day) => sum + day.totalRequests, 0);
+const demoCost = round2(demoDailyBreakdown.reduce((sum, day) => sum + day.totalCost, 0));
+const demoBaselineCost = round2(demoCost / (1 - 0.847));
+const demoSavings = round2(demoBaselineCost - demoCost);
+
 const demoDashboard: DashboardData = {
   proxy: {
     reachable: true,
@@ -124,19 +133,20 @@ const demoDashboard: DashboardData = {
     balances: { base: 18.42, solana: 7.08 },
   },
   stats: {
-    requests: 284,
-    totalCost: 3.82,
-    totalBaselineCost: 24.96,
-    totalSavings: 21.14,
-    savingsPercentage: 84.7,
-    inputTokens: 812400,
+    requests: demoRequests,
+    totalCost: demoCost,
+    totalBaselineCost: demoBaselineCost,
+    totalSavings: demoSavings,
+    savingsPercentage: Number(((demoSavings / demoBaselineCost) * 100).toFixed(1)),
+    inputTokens: 1356000,
     dailyBreakdown: demoDailyBreakdown,
+    // Counts and costs add up to demoRequests (474) and demoCost (6.35).
     byModel: {
-      "anthropic/claude-sonnet-4.6": { count: 96, cost: 1.94 },
-      "openai/gpt-5.4": { count: 61, cost: 1.12 },
-      "google/gemini-3.1-pro": { count: 44, cost: 0.51 },
-      "deepseek/deepseek-v4-pro": { count: 52, cost: 0.25 },
-      "free/gpt-oss-120b": { count: 31, cost: 0 },
+      "anthropic/claude-sonnet-4.6": { count: 160, cost: 3.22 },
+      "openai/gpt-5.4": { count: 102, cost: 1.86 },
+      "google/gemini-3.1-pro": { count: 73, cost: 0.85 },
+      "deepseek/deepseek-v4-pro": { count: 87, cost: 0.42 },
+      "free/gpt-oss-120b": { count: 52, cost: 0 },
     },
   },
   models: [

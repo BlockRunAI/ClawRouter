@@ -576,7 +576,7 @@ main {
 }
 .notice button {
   border: 0;
-  color: currentColor;
+  color: currentcolor;
   background: none;
   cursor: pointer;
 }
@@ -612,8 +612,8 @@ main {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+  background: currentcolor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentcolor 12%, transparent);
 }
 .hero h2 {
   margin: 11px 0 5px;
@@ -908,7 +908,7 @@ main {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
 }
 .health.ready {
   color: var(--success);
@@ -957,7 +957,7 @@ main {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
   flex: none;
 }
 .agent-meta .restart {
@@ -1028,7 +1028,7 @@ main {
   width: 8px;
   height: 8px;
   margin-right: 4px;
-  border: 1px solid currentColor;
+  border: 1px solid currentcolor;
   border-right-color: transparent;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -1080,7 +1080,7 @@ main {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
 }
 .catalog-stats {
   display: flex;
@@ -1258,7 +1258,7 @@ main {
 .provider-mark svg {
   width: 17px;
   height: 17px;
-  fill: currentColor;
+  fill: currentcolor;
 }
 .provider-mark img {
   width: 19px;
@@ -2553,8 +2553,10 @@ main {
     padding-left: 25px;
     padding-right: 25px;
   }
-  .hero {
-    grid-template-columns: 0.8fr 1.2fr;
+  /* Drop the fixed column minimums so the hero keeps two columns down to the
+     920px minimum window instead of overflowing the card. */
+  .hero-top {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   }
   .filters {
     grid-template-columns: minmax(190px, 1fr) repeat(3, 115px);
