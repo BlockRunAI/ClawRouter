@@ -96,6 +96,21 @@ const demoAgents: AgentStatus[] = [
   },
 ];
 
+/**
+ * Demo daily breakdown, anchored to today so the browser fallback always shows a
+ * current-looking week. Shape matches the router's /stats dailyBreakdown.
+ */
+const demoDailyBreakdown = [42, 68, 53, 82, 64, 91, 74].map((requests, index) => {
+  const day = new Date();
+  day.setDate(day.getDate() - (6 - index));
+  return {
+    // UTC day, matching how the router keys its daily logs.
+    date: day.toISOString().slice(0, 10),
+    totalRequests: requests,
+    totalCost: Number((requests * 0.0134).toFixed(4)),
+  };
+});
+
 const demoDashboard: DashboardData = {
   proxy: {
     reachable: true,
@@ -108,7 +123,22 @@ const demoDashboard: DashboardData = {
     balance: 18.42,
     balances: { base: 18.42, solana: 7.08 },
   },
-  stats: { requests: 284, totalCost: 3.82, savings: 21.14, inputTokens: 812400 },
+  stats: {
+    requests: 284,
+    totalCost: 3.82,
+    totalBaselineCost: 24.96,
+    totalSavings: 21.14,
+    savingsPercentage: 84.7,
+    inputTokens: 812400,
+    dailyBreakdown: demoDailyBreakdown,
+    byModel: {
+      "anthropic/claude-sonnet-4.6": { count: 96, cost: 1.94 },
+      "openai/gpt-5.4": { count: 61, cost: 1.12 },
+      "google/gemini-3.1-pro": { count: 44, cost: 0.51 },
+      "deepseek/deepseek-v4-pro": { count: 52, cost: 0.25 },
+      "free/gpt-oss-120b": { count: 31, cost: 0 },
+    },
+  },
   models: [
     {
       id: "auto",
