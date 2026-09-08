@@ -1,0 +1,34 @@
+/* Only the window chrome is draggable. Never make the page body draggable. */
+.topbar,
+.brand {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+/* Keep a drag handle available after scrolling, clear of traffic lights and
+   the vertical scrollbar. It does not participate in document layout. */
+.shell::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 80px;
+  right: 16px;
+  height: 28px;
+  z-index: 10;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+/* Electron drag regions swallow pointer events unless controls opt out. */
+.topbar-actions,
+.topbar button,
+.topbar a,
+.topbar input,
+.topbar select,
+.brand button,
+.brand a {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
