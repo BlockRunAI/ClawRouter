@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
 const css = readFileSync(new URL('../src/window-drag.css', import.meta.url), 'utf8');
