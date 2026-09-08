@@ -1,6 +1,6 @@
 {
   "name": "@blockrun/clawrouter-desktop",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "private": true,
   "description": "One-click ClawRouter control plane for OpenClaw, Codex, Hermes, DeepSeek Harness, and Pi",
   "author": "BlockRun <hello@blockrun.ai>",
