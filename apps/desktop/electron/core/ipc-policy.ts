@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { AgentId, InstallOptions, PaymentChain } from "./types.js";
 
 const AGENT_IDS = new Set<AgentId>(["openclaw", "codex", "hermes", "dsh", "pi"]);
-const EXTERNAL_HOSTS = new Set(["github.com", "pay.coinbase.com"]);
+const EXTERNAL_HOSTS = new Set(["github.com", "pay.coinbase.com", "user.blockrun.ai"]);
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,199}$/;
 
 export function parseAgentId(value: unknown): AgentId {

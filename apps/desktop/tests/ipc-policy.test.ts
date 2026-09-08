@@ -60,4 +60,13 @@ describe("desktop IPC policy", () => {
     expect(isTrustedRendererUrl("https://github.com/BlockRunAI/ClawRouter", expected)).toBe(false);
     expect(isTrustedRendererUrl(pathToFileURL("/tmp/other.html").href, expected)).toBe(false);
   });
+
+  it("opens the account dashboard but rejects lookalike hosts", () => {
+    expect(parseExternalUrl("https://user.blockrun.ai/dashboard/credits")).toBe(
+      "https://user.blockrun.ai/dashboard/credits",
+    );
+    expect(() => parseExternalUrl("https://user.blockrun.ai.evil.test/dashboard")).toThrow();
+    expect(() => parseExternalUrl("http://user.blockrun.ai/dashboard")).toThrow();
+    expect(() => parseExternalUrl("https://secret@user.blockrun.ai/dashboard")).toThrow();
+  });
 });

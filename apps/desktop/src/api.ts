@@ -100,14 +100,14 @@ const demoAgents: AgentStatus[] = [
  * Demo daily breakdown, anchored to today so the browser fallback always shows a
  * current-looking week. Shape matches the router's /stats dailyBreakdown.
  */
-const demoDailyBreakdown = [42, 68, 53, 82, 64, 91, 74].map((requests, index) => {
+const demoDailyBreakdown = [42, 38, 33, 52, 44, 41, 34].map((requests, index) => {
   const day = new Date();
-  day.setDate(day.getDate() - (6 - index));
+  day.setUTCDate(day.getUTCDate() - (6 - index));
   return {
     // UTC day, matching how the router keys its daily logs.
     date: day.toISOString().slice(0, 10),
     totalRequests: requests,
-    totalCost: Number((requests * 0.0134).toFixed(4)),
+    totalCost: [0.56, 0.51, 0.44, 0.7, 0.59, 0.55, 0.47][index],
   };
 });
 

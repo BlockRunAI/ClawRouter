@@ -8,6 +8,7 @@ import type {
   PaymentChain,
 } from "../electron/core/types";
 import { api } from "./api";
+import { healthLabel, paymentSummary, walletActivity } from "./connection-state";
 import { AGENT_ICON_DATA } from "./agent-icons";
 import BLOCKRUN_ICON from "./blockrun-icon.svg";
 import OPENCLAW_ICON from "./openclaw-x-avatar.jpg";
@@ -91,39 +92,50 @@ export function App() {
   }, [theme]);
 
   async function toggleAgent(agent: AgentStatus) {
+    if (busy) return;
     setBusy(agent.id);
     setNotice(null);
-    const result = agent.configured
-      ? await api.uninstall(agent.id)
-      : await api.install(agent.id, {
-          setDefault: true,
-          model: agent.id === "dsh" || agent.id === "pi" ? "auto" : "blockrun/auto",
-        });
-    setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
-    await refresh();
-    setBusy(null);
+    try {
+      const result = agent.configured
+        ? await api.uninstall(agent.id)
+        : await api.install(agent.id, {
+            setDefault: true,
+            model: agent.id === "dsh" || agent.id === "pi" ? "auto" : "blockrun/auto",
+          });
+      setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
+      await refresh();
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function switchChain(chain: PaymentChain) {
     if (chainBusy || dashboard?.proxy.configuredChain === chain) return;
     setChainBusy(chain);
     setNotice(null);
-    const result = await api.switchPaymentChain(chain);
-    setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
-    await refresh();
-    setChainBusy(null);
+    try {
+      const result = await api.switchPaymentChain(chain);
+      setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
+      await refresh();
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setChainBusy(null);
+    }
   }
 
   async function startOnramp() {
     setFundingBusy(true);
     setNotice(null);
-    const result = await api.createOnramp(fundingAmount);
-    if (!result.ok || !result.url) {
-      setNotice({ kind: "error", text: result.message });
-      setFundingBusy(false);
-      return;
-    }
     try {
+      const result = await api.createOnramp(fundingAmount);
+      if (!result.ok || !result.url) {
+        setNotice({ kind: "error", text: result.message });
+        setFundingBusy(false);
+        return;
+      }
       await api.openExternal(result.url);
       setNotice({
         kind: "ok",
@@ -140,10 +152,15 @@ export function App() {
   async function createWallet(chain: PaymentChain) {
     setWalletBusy(chain);
     setNotice(null);
-    const result = await api.createWallet(chain);
-    setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
-    await refresh();
-    setWalletBusy(null);
+    try {
+      const result = await api.createWallet(chain);
+      setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
+      await refresh();
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWalletBusy(null);
+    }
   }
 
   async function adoptLegacyWallet(chain: PaymentChain, address: string) {
@@ -153,10 +170,15 @@ export function App() {
     if (!confirmed) return;
     setWalletBusy(chain);
     setNotice(null);
-    const result = await api.adoptLegacyWallet(chain);
-    setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
-    await refresh();
-    setWalletBusy(null);
+    try {
+      const result = await api.adoptLegacyWallet(chain);
+      setNotice({ kind: result.ok ? "ok" : "error", text: result.message });
+      await refresh();
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWalletBusy(null);
+    }
   }
 
   const configured = agents.filter((agent) => agent.configured).length;
@@ -243,9 +265,10 @@ export function App() {
               className={`icon-button refresh-button ${refreshSpin ? "spinning" : ""}`}
               onClick={() => {
                 setRefreshSpin(true);
-                void refresh();
+                void refresh().finally(() => setRefreshSpin(false));
               }}
-              onAnimationEnd={() => setRefreshSpin(false)}
+              disabled={refreshSpin}
+              aria-busy={refreshSpin}
               aria-label="Refresh"
               title="Refresh status"
             >
@@ -293,6 +316,7 @@ export function App() {
         <FundingDialog
           amount={fundingAmount}
           busy={fundingBusy}
+          error={notice?.kind === "error" ? notice.text : undefined}
           wallet={dashboard?.proxy.configuredWallet ?? dashboard?.proxy.wallet}
           solana={dashboard?.proxy.configuredSolana ?? dashboard?.proxy.solana}
           onAmount={setFundingAmount}
@@ -321,7 +345,6 @@ function Overview({
   const online = dashboard?.proxy.reachable ?? false;
   const total = agents.length || 5;
   const modelCount = dashboard?.models.length ?? 0;
-  const chain = dashboard?.proxy.configuredChain === "solana" ? "Solana" : "Base";
   return (
     <>
       <section className="hero" aria-label="Routing status">
@@ -334,25 +357,29 @@ function Overview({
             <h2>
               {online
                 ? configured === 0
-                  ? "No agents connected yet"
-                  : `${configured} of ${total} agents routing`
+                  ? "No agents configured yet"
+                  : `${configured} of ${total} agents configured`
                 : "Getting ClawRouter ready"}
             </h2>
             <p>
               {online
-                ? `${modelCount ? compact(modelCount) : "—"} models available · settling on ${chain}`
+                ? `${modelCount ? compact(modelCount) : "—"} models available · ${paymentSummary(dashboard?.proxy)}`
                 : "Models, payment, and local agent connections stay in one place."}
             </p>
           </div>
           <RoutingMap agents={total} models={modelCount} />
         </div>
         <div className="hero-metrics">
-          <Metric label="Connected agents" value={`${configured}/${total}`} />
+          <Metric label="Configured agents" value={`${configured}/${total}`} />
           <Metric label="7-day requests" value={compact(stats.requests)} />
           <Metric
-            label="Wallet balance"
+            label={dashboard?.proxy.authMode === "api-key" ? "Payment method" : "Wallet balance"}
             value={
-              dashboard?.proxy.balance == null ? "—" : `$${dashboard.proxy.balance.toFixed(2)}`
+              dashboard?.proxy.authMode === "api-key"
+                ? "API key"
+                : dashboard?.proxy.balance == null
+                  ? "—"
+                  : `$${dashboard.proxy.balance.toFixed(2)}`
             }
           />
         </div>
@@ -363,7 +390,7 @@ function Overview({
           <h3>Agents</h3>
           <p>Connect a tool, restore its backup, or remove only ClawRouter settings.</p>
         </div>
-        <span>{configured} connected</span>
+        <span>{configured} configured</span>
       </div>
       <section className="agent-grid">
         {agents.map((agent) => (
@@ -373,7 +400,7 @@ function Overview({
               <div>
                 <div className="agent-name">
                   <h4>{agent.name}</h4>
-                  <div className={`health ${agent.health}`}>
+                  <div className={`health ${agent.configured && agent.restartRequired ? "needs-attention" : agent.health}`}>
                     <i />
                     {healthLabel(agent)}
                   </div>
@@ -400,7 +427,7 @@ function Overview({
               <button
                 className={agent.configured ? "secondary" : "primary"}
                 disabled={
-                  busy === agent.id || (agent.configured && agent.removalMode === "unavailable")
+                  busy !== null || (agent.configured && agent.removalMode === "unavailable")
                 }
                 onClick={() => toggle(agent)}
               >
@@ -704,6 +731,26 @@ function WalletCenter({
   const proxy = dashboard?.proxy;
   const selected = proxy?.configuredChain ?? "base";
   const { copied, copy } = useCopy(onError);
+  if (proxy?.authMode === "api-key") {
+    return (
+      <section className="panel setting-block">
+        <h2>API key account</h2>
+        <p>The running router uses account credit, not your local Base or Solana wallet.</p>
+        <button
+          className="primary"
+          onClick={() =>
+            void api
+              .openExternal("https://user.blockrun.ai/dashboard/credits")
+              .catch(() =>
+                onError("Couldn't open account credits. Visit user.blockrun.ai in your browser."),
+              )
+          }
+        >
+          Manage account credit
+        </button>
+      </section>
+    );
+  }
   return (
     <section className="wallet-center">
       <div className="wallet-center-intro">
@@ -749,6 +796,7 @@ function WalletCenter({
           const activeAddress = chain === "base" ? proxy?.activeWallet : proxy?.activeSolana;
           const restart = proxy?.walletRestartChains?.includes(chain) ?? false;
           const issue = proxy?.walletIssues?.[chain];
+          const activity = walletActivity(proxy, chain);
           const name = chain === "base" ? "Base" : "Solana";
           return (
             <article
@@ -792,9 +840,9 @@ function WalletCenter({
               <footer>
                 {address ? (
                   selected === chain ? (
-                    <p className="wallet-active-note">
-                      <i aria-hidden="true" />
-                      Active — all agents pay from this wallet
+                    <p className={activity.active ? "wallet-active-note" : "wallet-card-warning"}>
+                      {activity.active && <i aria-hidden="true" />}
+                      {activity.text}
                     </p>
                   ) : (
                     <button
@@ -1115,14 +1163,28 @@ function WalletSummary({
         <strong>Account credit</strong>
         <button
           className="wallet-address"
-          onClick={() => void window.open?.("https://user.blockrun.ai/dashboard", "_blank")}
+          onClick={() =>
+            void api
+              .openExternal("https://user.blockrun.ai/dashboard")
+              .catch(() =>
+                window.alert("Couldn't open the account. Visit user.blockrun.ai in your browser."),
+              )
+          }
         >
           {proxy.apiKey ?? "API key"}
           <Icon name="external" />
         </button>
         <button
           className="wallet-fund-button"
-          onClick={() => void window.open?.("https://user.blockrun.ai/dashboard/credits", "_blank")}
+          onClick={() =>
+            void api
+              .openExternal("https://user.blockrun.ai/dashboard/credits")
+              .catch(() =>
+                window.alert(
+                  "Couldn't open account credits. Visit user.blockrun.ai in your browser.",
+                ),
+              )
+          }
         >
           <span>＋</span>
           Add credit
@@ -1197,6 +1259,7 @@ function WalletSummary({
 function FundingDialog({
   amount,
   busy,
+  error,
   wallet,
   solana,
   onAmount,
@@ -1205,6 +1268,7 @@ function FundingDialog({
 }: {
   amount: number;
   busy: boolean;
+  error?: string;
   wallet: string | undefined;
   solana: string | undefined;
   onAmount(value: number): void;
@@ -1267,6 +1331,7 @@ function FundingDialog({
             Deposit
           </button>
         </div>
+        {error && <p className="funding-error" role="alert">{error}</p>}
         {tab === "deposit" ? (
           <div className="funding-pane" key="deposit">
             <div className="deposit-list">
@@ -1626,11 +1691,6 @@ function Icon({ name }: { name: IconName }) {
     </svg>
   );
 }
-function healthLabel(agent: AgentStatus) {
-  if (agent.health === "ready") return "Connected";
-  if (!agent.installed) return agent.configured ? "Configured · CLI missing" : "Not detected";
-  return agent.configured ? "Needs proxy" : "Available";
-}
 function activationLabel(agent: AgentStatus) {
   return agent.activation === "immediate"
     ? "Live update"
@@ -1779,7 +1839,8 @@ function useCopy(onError: (message: string) => void) {
 function normalizeStats(stats: Record<string, unknown> | null | undefined) {
   const pick = (...keys: string[]) =>
     keys.map((key) => stats?.[key]).find((value) => typeof value === "number") as
-      number | undefined;
+      | number
+      | undefined;
 
   const num = (row: Record<string, unknown>, key: string) =>
     typeof row[key] === "number" && Number.isFinite(row[key]) ? (row[key] as number) : 0;

@@ -5,15 +5,15 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@blockrun/clawrouter': 0.12.267
+  '@blockrun/clawrouter': 0.12.278
 
 importers:
 
   .:
     dependencies:
       '@blockrun/clawrouter':
-        specifier: 0.12.267
-        version: 0.12.267(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
+        specifier: 0.12.278
+        version: 0.12.278(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
       '@blockrun/clawrouter-codex':
         specifier: 0.4.0
         version: 0.4.0(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
@@ -155,8 +155,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@blockrun/clawrouter@0.12.267':
-    resolution: {integrity: sha512-ZEF7i3eOYdz0lL6skn5BJB+nHe/e8fznGpM1NYjhQPRMRiNkWYTJsfWVWW/jESDPbMG1IxjN5rVcroB+psYKVw==}
+  '@blockrun/clawrouter@0.12.278':
+    resolution: {integrity: sha512-DzDf1nbuoHM6Hc5zphGUBkAgSHbIWS0UTTqFRC+UQQitJIDCvn7g0nGAxLr9poIwdsv7OQo/dMFrekIWTYlfBg==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -2955,6 +2955,7 @@ packages:
   '@smithy/node-http-handler@4.12.0':
     resolution: {integrity: sha512-0mq1pHadfyXCYCqm2cNpbjNIT+fbaUpNxewZb/YNr2L0IrEVMOb8gM/Fl4K6XvHCW3uSNDFwPl/+iKm0bx9jYg==}
     engines: {node: '>=18.0.0'}
+    deprecated: Depreacted due to a memory leak issue https://github.com/smithy-lang/smithy-typescript/issues/2258
 
   '@smithy/node-http-handler@4.7.3':
     resolution: {integrity: sha512-/jPhevcTFPMVl6KNjbaI47iOg1zxC7IsnX4PQDGVZKMFceOXtB8IEYaB7a9VvkP/3oC60WzTeKocvSI7vLT0vA==}
@@ -4806,7 +4807,7 @@ snapshots:
 
   '@blockrun/clawrouter-codex@0.4.0(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)':
     dependencies:
-      '@blockrun/clawrouter': 0.12.267(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
+      '@blockrun/clawrouter': 0.12.278(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.5.4)
       viem: 2.56.2(typescript@5.9.3)(zod@4.5.4)
     transitivePeerDependencies:
@@ -4824,7 +4825,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@blockrun/clawrouter@0.12.267(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)':
+  '@blockrun/clawrouter@0.12.278(@solana/sysvars@5.5.1(typescript@5.9.3))(typescript@5.9.3)(zod@4.5.4)':
     dependencies:
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.5.4)
       '@noble/hashes': 2.4.0

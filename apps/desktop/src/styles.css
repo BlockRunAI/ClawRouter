@@ -504,7 +504,7 @@ main {
   display: grid;
   place-items: center;
 }
-/* One full turn per click — feedback that the poll actually ran. The icon
+/* Spin while the refresh is pending. The icon
    also nudges a few degrees on hover so the control hints at its action. */
 .refresh-button svg {
   transition: transform 200ms var(--ease-out);
@@ -513,7 +513,7 @@ main {
   transform: rotate(35deg);
 }
 .refresh-button.spinning svg {
-  animation: refresh-turn 650ms var(--ease-in-out);
+  animation: refresh-turn 650ms linear infinite;
 }
 @keyframes refresh-turn {
   from {
@@ -2553,8 +2553,8 @@ main {
     padding-left: 25px;
     padding-right: 25px;
   }
-  .hero {
-    grid-template-columns: 0.8fr 1.2fr;
+  .hero-top {
+    grid-template-columns: minmax(0, 1fr);
   }
   .filters {
     grid-template-columns: minmax(190px, 1fr) repeat(3, 115px);

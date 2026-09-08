@@ -2,6 +2,36 @@
 
 Date: 2026-09-08. Local only; no push, merge to main, or release.
 
+## Follow-up fixes (current status)
+
+- Fixed pending-restart Agent labels and warning color; aggregate counters now
+  say configured rather than claiming verified live routing.
+- Payment summary uses the running payment chain and distinguishes API-key mode.
+- Wallet activity requires a reachable router, matching configured/running
+  addresses and chain, and no pending restart. API-key wallet view shows account
+  credit instead of inactive wallet controls.
+- Account links use approved external IPC rather than blocked window.open;
+  approved HTTPS hostname validation has regression coverage.
+- Pending operation state clears on rejected Agent, network, wallet and onramp
+  IPC. Agent buttons block overlapping operations; refresh tracks its promise.
+- Onramp failures are also visible inside the funding dialog.
+- Fixed the narrow hero grid. Browser check at 920px: card right edge 895,
+  routing graphic right edge 872; no document horizontal overflow. Model pricing
+  and context remained visible.
+- Demo daily request/cost totals now agree with headline totals; UTC dates used.
+- Runtime manifest and lock now pin published 0.12.278. Packaging version guard
+  passes; lock regeneration used --ignore-scripts and changed no other versions.
+- Typecheck, renderer/main/preload build, and 67 tests pass; 1 test skipped.
+- Three original state reproduction fixtures now pass. No production wallet,
+  Agent configuration, installed app, or financial transaction was touched.
+- Native drag remains unconfirmed: the automation did not produce a changed
+  sampled window position. Source drag-contract tests pass, but are not proof
+  of physical dragging. Final packaged-app/DMG acceptance testing remains pending.
+- Dependency resolution still reports existing peer/deprecation warnings; this
+  check is not a full dependency audit or fresh staged-runtime installation.
+
+The sections below preserve the earlier, pre-fix integration results.
+
 ## Inputs and conflict resolution
 
 - PR 367: `e39eb8e34aba6655ea550c94254c1459e60bcf91`.
