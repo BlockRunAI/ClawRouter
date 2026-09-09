@@ -49,7 +49,7 @@ Not a seat, not a subscription, not a monthly minimum you keep paying while the 
 |                           |                                                                                                                                                                                                                                                                                                                                                               |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Every LLM**             | <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> chat models across 9 providers, behind one endpoint and one balance                                                                                                                                                                                                                           |
-| **Every tool**            | <!-- br:models.image -->9<!-- /br:models.image --> image models, <!-- br:models.video -->8<!-- /br:models.video --> video models, music, <!-- br:models.speech -->5<!-- /br:models.speech --> voices, img2img editing, and outbound phone calls that come back as transcripts                                                                                 |
+| **Every tool**            | <!-- br:models.image -->10<!-- /br:models.image --> image models, <!-- br:models.video -->8<!-- /br:models.video --> video models, music, <!-- br:models.speech -->5<!-- /br:models.speech --> voices, img2img editing, and outbound phone calls that come back as transcripts                                                                                |
 | **Every data source**     | web, news and neural search; prediction markets; live crypto and equity quotes; on-chain SQL over 100M+ labeled wallets; DEX routing; RPC across <!-- br:chains.rpc -->40<!-- /br:chains.rpc --> chains                                                                                                                                                       |
 | **Best value per dollar** | <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension local routing sends each request to the cheapest model that can actually do it — <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% below pinning Claude Opus 5 on the same traffic, computed from a published workload mix rather than estimated |
 
@@ -912,15 +912,15 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:m
 
 ## More Resources
 
-| Resource                                               | Description                                                             |
-| ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| [Documentation](https://blockrun.ai/docs)              | Full docs                                                               |
-| [Model Pricing](https://blockrun.ai/models)            | All models & prices                                                     |
-| [Image Generation & Editing](docs/image-generation.md) | API examples, <!-- br:models.image -->9<!-- /br:models.image --> models |
-| [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM/AGENTIC tiers, fallback chains, ranking weights        |
-| [Architecture](docs/architecture.md)                   | Technical deep dive                                                     |
-| [Configuration](docs/configuration.md)                 | Environment variables                                                   |
-| [Troubleshooting](docs/troubleshooting.md)             | Common issues                                                           |
+| Resource                                               | Description                                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| [Documentation](https://blockrun.ai/docs)              | Full docs                                                                |
+| [Model Pricing](https://blockrun.ai/models)            | All models & prices                                                      |
+| [Image Generation & Editing](docs/image-generation.md) | API examples, <!-- br:models.image -->10<!-- /br:models.image --> models |
+| [Routing Profiles](docs/routing-profiles.md)           | ECO/AUTO/PREMIUM/AGENTIC tiers, fallback chains, ranking weights         |
+| [Architecture](docs/architecture.md)                   | Technical deep dive                                                      |
+| [Configuration](docs/configuration.md)                 | Environment variables                                                    |
+| [Troubleshooting](docs/troubleshooting.md)             | Common issues                                                            |
 
 ### Blog
 

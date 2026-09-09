@@ -3,10 +3,10 @@
   "version": 1,
   "models": {
     "chatVisible": 78,
-    "totalVisible": 102,
+    "totalVisible": 103,
     "free": 6,
     "freeWithheld": 27,
-    "image": 9,
+    "image": 10,
     "video": 8,
     "music": 1,
     "speech": 5,
@@ -22,9 +22,9 @@
   },
   "mcp": {
     "tools": 19,
-    "contextTokens": 12900,
-    "contextTokensTrading": 5554,
-    "contextCutPct": 57
+    "contextTokens": 12767,
+    "contextTokensTrading": 5270,
+    "contextCutPct": 59
   },
   "chains": {
     "rpc": 40
