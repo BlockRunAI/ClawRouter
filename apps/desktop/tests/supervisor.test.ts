@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -50,6 +51,37 @@ describe("ServiceSupervisor ownership", () => {
     );
 
     await expect(supervisor.ensureProxy()).rejects.toThrow("unverified or outdated");
+  });
+
+  it("refuses to restart a proxy Desktop did not launch", async () => {
+    const supervisor = new ServiceSupervisor(
+      await context(async () => response({ status: "ok", wallet: "0xabc" })),
+      async () => true,
+    );
+
+    await expect(supervisor.restartProxy()).resolves.toBe(false);
+  });
+
+  it("stops the proxy it launched and brings a fresh one up", async () => {
+    const supervisor = new ServiceSupervisor(
+      await context(async () => response({ status: "ok", wallet: "0xabc" })),
+      async () => false,
+    );
+    // A real child standing in for the proxy: idles until it is signalled.
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+    (supervisor as unknown as { children: Map<string, ChildProcess> }).children.set("proxy", child);
+    let relaunched = 0;
+    supervisor.ensureProxy = async () => {
+      relaunched += 1;
+      expect(child.exitCode ?? child.signalCode).not.toBeNull();
+    };
+
+    await expect(supervisor.restartProxy()).resolves.toBe(true);
+
+    expect(relaunched).toBe(1);
+    expect(child.signalCode).toBe("SIGTERM");
   });
 
   it("rejects a shape-compatible Codex bridge that Desktop did not start", async () => {

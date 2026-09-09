@@ -10,7 +10,11 @@ export class HermesAdapter implements AgentAdapter {
   readonly id = "hermes" as const;
   readonly name = "Hermes";
   readonly description = "Hermes model-provider plugin backed by the local ClawRouter proxy.";
-  readonly activation = "restart-agent" as const;
+  // Hermes re-reads config.yaml whenever it changes and looks the provider key
+  // up in ~/.hermes/.env at call time, and Hermes Desktop starts a fresh
+  // `hermes --tui` process per chat. Nothing here needs the Hermes process
+  // restarted; only an already-open session keeps its model until /model.
+  readonly activation = "immediate" as const;
 
   managedPaths(context: AdapterContext): string[] {
     return [
@@ -30,10 +34,10 @@ export class HermesAdapter implements AgentAdapter {
       installed: Boolean(hermes),
       configured: hasHermesConfig(config),
       activation: this.activation,
-      restartRequired: hasHermesConfig(config),
+      restartRequired: false,
       details: hermes
         ? hasHermesConfig(config)
-          ? ["Restart the current Hermes process after changing this connection."]
+          ? ["New Hermes chats use ClawRouter; an open session switches with /model."]
           : []
         : ["Install Hermes before enabling the provider."],
     });

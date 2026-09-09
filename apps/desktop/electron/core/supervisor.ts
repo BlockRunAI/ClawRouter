@@ -8,6 +8,9 @@ import type { AdapterContext, CommandRunner } from "./types.js";
 
 type ServiceName = "proxy" | "codex-bridge";
 
+/** How long a managed proxy gets to exit on SIGTERM before it is SIGKILLed. */
+const STOP_GRACE_MS = 5_000;
+
 export class ServiceSupervisor {
   private readonly children = new Map<ServiceName, ChildProcess>();
 
@@ -96,6 +99,23 @@ export class ServiceSupervisor {
       child,
       () => this.childOwnsPort(child, 8403),
     );
+  }
+
+  /**
+   * Restart the proxy Desktop itself launched so it re-reads the payment chain
+   * in ~/.blockrun/.chain. Resolves false when the proxy on 8402 is not one of
+   * Desktop's children (an OpenClaw gateway, a terminal instance): Desktop must
+   * not kill a process it does not own, so that one still needs its own restart.
+   * The Codex bridge keeps running; it reaches the proxy by URL and only sees a
+   * brief outage.
+   */
+  async restartProxy(): Promise<boolean> {
+    const current = this.liveChild("proxy");
+    if (!current) return false;
+    await stopChild(current, STOP_GRACE_MS);
+    this.children.delete("proxy");
+    await this.ensureProxy();
+    return true;
   }
 
   async stopAll(): Promise<void> {
@@ -197,6 +217,17 @@ async function waitForOwned(
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   throw new Error(`Service did not become healthy: ${url}`);
+}
+
+async function stopChild(child: ChildProcess, graceMs: number): Promise<void> {
+  if (child.exitCode !== null) return;
+  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  child.kill("SIGTERM");
+  const escalate = setTimeout(() => {
+    if (child.exitCode === null) child.kill("SIGKILL");
+  }, graceMs);
+  await exited;
+  clearTimeout(escalate);
 }
 
 async function isPortOpen(port: number): Promise<boolean> {
