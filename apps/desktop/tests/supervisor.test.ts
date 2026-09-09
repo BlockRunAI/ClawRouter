@@ -84,6 +84,64 @@ describe("ServiceSupervisor ownership", () => {
     expect(child.signalCode).toBe("SIGTERM");
   });
 
+  it("also stops a listener a wrapper child left behind before relaunching", async () => {
+    // A wrapper that spawns the real "proxy" as a grandchild, reports its pid,
+    // and idles. SIGTERM on the wrapper alone would orphan the grandchild.
+    const wrapper = spawn(
+      process.execPath,
+      [
+        "-e",
+        'const c = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); process.stdout.write(c.pid + "\\n"); setInterval(() => {}, 1000);',
+      ],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const grandchild = Number(
+      await new Promise<string>((resolve) =>
+        wrapper.stdout!.once("data", (chunk) => resolve(String(chunk).trim())),
+      ),
+    );
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const base = await context(async () => response({ status: "ok", wallet: "0xabc" }));
+    const supervisor = new ServiceSupervisor(
+      {
+        ...base,
+        // Fake lsof/ps: the grandchild holds the port and its parent is the wrapper.
+        runCommand: async (command, args) => {
+          if (command === "lsof")
+            return { code: 0, stdout: alive(grandchild) ? `${grandchild}\n` : "", stderr: "" };
+          if (command === "ps") {
+            const pid = Number(args.at(-1));
+            return { code: 0, stdout: pid === grandchild ? `${wrapper.pid}\n` : "1\n", stderr: "" };
+          }
+          return { code: 1, stdout: "", stderr: "unexpected command" };
+        },
+      },
+      async () => alive(grandchild),
+    );
+    (supervisor as unknown as { children: Map<string, ChildProcess> }).children.set(
+      "proxy",
+      wrapper,
+    );
+    let relaunched = 0;
+    supervisor.ensureProxy = async () => {
+      relaunched += 1;
+      expect(alive(grandchild)).toBe(false);
+    };
+
+    await expect(supervisor.restartProxy()).resolves.toBe(true);
+
+    expect(relaunched).toBe(1);
+    expect(wrapper.signalCode).toBe("SIGTERM");
+    expect(alive(grandchild)).toBe(false);
+  });
+
   it("rejects a shape-compatible Codex bridge that Desktop did not start", async () => {
     const supervisor = new ServiceSupervisor(
       await context(async () => response({ data: [] })),

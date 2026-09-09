@@ -10,6 +10,7 @@ type ServiceName = "proxy" | "codex-bridge";
 
 /** How long a managed proxy gets to exit on SIGTERM before it is SIGKILLed. */
 const STOP_GRACE_MS = 5_000;
+const PROXY_PORT = 8402;
 
 export class ServiceSupervisor {
   private readonly children = new Map<ServiceName, ChildProcess>();
@@ -112,9 +113,40 @@ export class ServiceSupervisor {
   async restartProxy(): Promise<boolean> {
     const current = this.liveChild("proxy");
     if (!current) return false;
-    await stopChild(current, STOP_GRACE_MS);
+    await this.stopProxy(current);
     this.children.delete("proxy");
     await this.ensureProxy();
+    return true;
+  }
+
+  /**
+   * Stop the proxy child and anything of its that still listens on the proxy
+   * port. The child is normally the listener itself, but were it a wrapper the
+   * listener would be a descendant that outlives it, and ensureProxy() would
+   * then adopt the stale proxy (it still proves the Desktop token) instead of
+   * starting one on the new chain. So the port must be closed before relaunch.
+   */
+  private async stopProxy(child: ChildProcess): Promise<void> {
+    const owned = child.pid
+      ? await listenersOwnedBy(child.pid, PROXY_PORT, this.context.runCommand)
+      : [];
+    const descendants = owned.filter((pid) => pid !== child.pid);
+    await stopChild(child, STOP_GRACE_MS);
+    for (const pid of descendants) signal(pid, "SIGTERM");
+    if (await this.waitForPortClosed(PROXY_PORT, STOP_GRACE_MS)) return;
+    for (const pid of descendants) signal(pid, "SIGKILL");
+    if (await this.waitForPortClosed(PROXY_PORT, 1_000)) return;
+    throw new Error(
+      `The previous proxy is still listening on port ${PROXY_PORT}. Restart ClawRouter Desktop to apply the change.`,
+    );
+  }
+
+  private async waitForPortClosed(port: number, timeoutMs: number): Promise<boolean> {
+    const started = Date.now();
+    while (await this.portOpen(port)) {
+      if (Date.now() - started >= timeoutMs) return false;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
     return true;
   }
 
@@ -160,14 +192,28 @@ export async function listenerBelongsToProcess(
   port: number,
   runCommand: CommandRunner,
 ): Promise<boolean> {
+  return (await listenersOwnedBy(ownerPid, port, runCommand)).length > 0;
+}
+
+/** PIDs listening on `port` that are `ownerPid` itself or descend from it. */
+export async function listenersOwnedBy(
+  ownerPid: number,
+  port: number,
+  runCommand: CommandRunner,
+): Promise<number[]> {
   const listeners = await runCommand("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
     timeoutMs: 3_000,
   });
-  if (listeners.code !== 0) return false;
+  if (listeners.code !== 0) return [];
+  const owned: number[] = [];
   for (const line of listeners.stdout.split(/\r?\n/)) {
-    let pid = Number.parseInt(line.trim(), 10);
+    const listener = Number.parseInt(line.trim(), 10);
+    let pid = listener;
     for (let depth = 0; Number.isInteger(pid) && pid > 1 && depth < 12; depth += 1) {
-      if (pid === ownerPid) return true;
+      if (pid === ownerPid) {
+        owned.push(listener);
+        break;
+      }
       const parent = await runCommand("ps", ["-o", "ppid=", "-p", String(pid)], {
         timeoutMs: 3_000,
       });
@@ -177,7 +223,15 @@ export async function listenerBelongsToProcess(
       pid = next;
     }
   }
-  return false;
+  return owned;
+}
+
+function signal(pid: number, name: "SIGTERM" | "SIGKILL"): void {
+  try {
+    process.kill(pid, name);
+  } catch {
+    // Already gone, or not ours to signal; the port check decides what happens next.
+  }
 }
 
 async function isModelService(url: string, fetcher: typeof fetch): Promise<boolean> {
