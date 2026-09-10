@@ -34,6 +34,73 @@ const failures = [];
 // have confirmed the growth is real.
 const MAX_BUNDLE_BYTES = 12 * 1024 * 1024;
 
+/**
+ * The @solana/* packages that must never appear twice in a bundle.
+ *
+ * Not a size concern — the stateless ones (errors, codecs-*, addresses) duplicate
+ * harmlessly, and a kit 8 tree duplicates them ~20x with no ill effect. These three
+ * are different: `transaction-messages` keys its address map off a module-private
+ * `Symbol("AddressMapTypeProperty")`, and `signers`/`transactions` hold the state a
+ * signature is assembled from. Two copies read each other's objects as foreign and
+ * produce malformed signatures — which is what shipped on 2026-03-06 when
+ * `@solana/kit` and `@x402/svm` resolved to different major versions.
+ *
+ * The real invariant is this single-copy rule, NOT a pin on any one kit version.
+ */
+const SINGLE_COPY_SOLANA_PACKAGES = [
+  "@solana/signers",
+  "@solana/transactions",
+  "@solana/transaction-messages",
+];
+
+/**
+ * How many distinct installed copies of each guarded package esbuild inlined.
+ *
+ * Counting marker lines is wrong twice over: one copy emits a marker per dist
+ * entry it pulls in, and "@solana/signers/node_modules/@solana/errors/..." is a
+ * copy of errors, not of signers. Both are counted by resolving each marker to the
+ * package it actually names — everything after the LAST node_modules/ segment —
+ * and then counting distinct install paths, not lines.
+ */
+function countSolanaCopies(source) {
+  const paths = new Map(SINGLE_COPY_SOLANA_PACKAGES.map((pkg) => [pkg, new Set()]));
+  for (const line of source.split("\n")) {
+    if (!line.startsWith("// node_modules/")) continue;
+    const marker = line.slice("// ".length).trim();
+    const owner = marker.slice(marker.lastIndexOf("node_modules/") + "node_modules/".length);
+    for (const pkg of SINGLE_COPY_SOLANA_PACKAGES) {
+      if (!owner.startsWith(`${pkg}/`)) continue;
+      // The install path is everything up to and including the package name, so two
+      // different nestings of the same package count as two copies and its several
+      // dist entries count as one.
+      paths.get(pkg).add(marker.slice(0, marker.length - (owner.length - pkg.length)));
+    }
+  }
+  return [...paths].map(([pkg, seen]) => [pkg, seen.size]);
+}
+
+// A guard that has never fired is a guard nobody has tested. Prove the matcher
+// still recognises the 2026-03-06 shape — two installs of @solana/signers — before
+// trusting it to say a real bundle is clean. It must also NOT be fooled by the two
+// things that look like copies and are not: a second dist entry of the same install,
+// and a different package nested underneath this one.
+{
+  const probe = [
+    "// node_modules/@solana/signers/dist/index.node.mjs",
+    "// node_modules/@solana/signers/dist/program-client-core.node.mjs",
+    "// node_modules/@solana/signers/node_modules/@solana/errors/dist/index.node.mjs",
+    "// node_modules/@x402/svm/node_modules/@solana/signers/dist/index.node.mjs",
+  ].join("\n");
+  const seen = new Map(countSolanaCopies(probe));
+  if (seen.get("@solana/signers") !== 2) {
+    failures.push(
+      `smoke-dist's own duplicate detector is broken: it counted ` +
+        `${seen.get("@solana/signers")} copies of @solana/signers in a fixture that has ` +
+        `exactly 2. Fix countSolanaCopies — until then this check proves nothing.`,
+    );
+  }
+}
+
 for (const entry of ["index.js", "cli.js", "router/index.js"]) {
   const path = resolve(root, "dist", entry);
   let source;
@@ -55,6 +122,18 @@ for (const entry of ["index.js", "cli.js", "router/index.js"]) {
       `dist/${entry} is ${(source.length / 1024 / 1024).toFixed(1)}MB, over the ` +
         `${MAX_BUNDLE_BYTES / 1024 / 1024}MB ceiling — likely a dependency inlined twice.`,
     );
+  }
+  for (const [pkg, count] of countSolanaCopies(source)) {
+    if (count > 1) {
+      failures.push(
+        `dist/${entry} bundles ${count} copies of ${pkg}. That package carries module ` +
+          `identity — a module-private Symbol, or the signer/transaction state a ` +
+          `signature is built from — so two copies do not agree, and the transactions ` +
+          `this signs go out malformed (see the 2026-03-06 transaction_simulation_failed ` +
+          `incident, a v6-vs-v5 split of exactly these packages). Make them resolve to ` +
+          `one copy; do NOT relax this guard.`,
+      );
+    }
   }
 }
 
