@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { niceCeiling, normalizeStats, windowLabel, type UsageDay } from "./usage-stats.js";
 
 import type {
   AgentId,
@@ -28,10 +29,6 @@ type IconName =
   | "plus"
   | "check";
 type CatalogModel = ModelInfo & { aliases: string[] };
-type UsageDay = { date: string; label: string; short: string; requests: number; cost: number };
-
-/** Widest calendar window the activity chart pads out to. */
-const MAX_CHART_DAYS = 14;
 
 const CLAWROUTER_REPO = "https://github.com/BlockRunAI/ClawRouter";
 const AGENT_REPOS: Record<AgentId, string> = {
@@ -320,7 +317,12 @@ function Overview({
   const stats = normalizeStats(dashboard?.stats);
   const online = dashboard?.proxy.reachable ?? false;
   const total = agents.length || 5;
-  const modelCount = dashboard?.models.length ?? 0;
+  // /v1/models emits an alias row per shorthand, so the raw length is not a
+  // model count: the Models page collapses them and would disagree with the hero.
+  const modelCount = useMemo(
+    () => collapseModelAliases(dashboard?.models ?? []).length,
+    [dashboard?.models],
+  );
   const chain = dashboard?.proxy.configuredChain === "solana" ? "Solana" : "Base";
   // A proxy authenticating with a BlockRun API key settles nothing on-chain, so
   // name the account instead of claiming a chain that is not there.
@@ -618,10 +620,11 @@ function Models({ models }: { models: ModelInfo[] }) {
 function Usage({ dashboard }: { dashboard: DashboardData | null }) {
   const stats = normalizeStats(dashboard?.stats);
   const days = stats.daily;
-  const peak = Math.max(1, ...days.map((day) => day.requests));
+  const peak = Math.max(0, ...days.map((day) => day.requests));
   // Round the axis up to a readable ceiling so ticks land on 25/50/75/100
-  // rather than 23/46/68/91.
-  const axisMax = niceCeiling(peak);
+  // rather than 23/46/68/91. The floor of 1 belongs to the divisor only —
+  // printing "peak 1 / day" over a window nobody routed in is a fabrication.
+  const axisMax = niceCeiling(Math.max(1, peak));
 
   return (
     <>
@@ -632,7 +635,11 @@ function Usage({ dashboard }: { dashboard: DashboardData | null }) {
           value={`$${stats.cost.toFixed(2)}`}
           delta="wallet settled"
         />
-        <MetricCard label="Tokens routed" value={compact(stats.tokens)} delta="across all agents" />
+        <MetricCard
+          label="Saved vs. baseline"
+          value={`$${stats.savings.toFixed(2)}`}
+          delta={stats.savings > 0 ? `${Math.round(stats.savingsPct)}% cheaper` : "no baseline yet"}
+        />
       </section>
 
       <section className="panel usage-chart">
@@ -641,7 +648,7 @@ function Usage({ dashboard }: { dashboard: DashboardData | null }) {
             <h3>Routing activity</h3>
             <p>Requests handled by the local proxy</p>
           </div>
-          {days.length > 0 && <span className="chart-note">peak {compact(peak)} / day</span>}
+          {peak > 0 && <span className="chart-note">peak {compact(peak)} / day</span>}
         </div>
         {days.length === 0 ? (
           <p className="chart-empty">
@@ -1647,6 +1654,11 @@ function Icon({ name }: { name: IconName }) {
   );
 }
 function healthLabel(agent: AgentStatus) {
+  // Deliberately NOT branching on `restartRequired`. Codex and OpenClaw set it to
+  // `configured`, so it is permanently true once connected — it means "this kind of
+  // agent needs a restart when you change it", not "a change is pending". Reading it
+  // here would pin them to "Restart pending" forever. `activationLabel`, rendered
+  // beside this one, already says "Restart gateway/app after changes".
   if (agent.health === "ready") return "Connected";
   if (!agent.installed) return agent.configured ? "Configured · CLI missing" : "Not detected";
   return agent.configured ? "Needs proxy" : "Available";
@@ -1794,113 +1806,6 @@ function useCopy(onError: (message: string) => void) {
     );
   };
   return { copied, copy };
-}
-
-function normalizeStats(stats: Record<string, unknown> | null | undefined) {
-  const pick = (...keys: string[]) =>
-    keys.map((key) => stats?.[key]).find((value) => typeof value === "number") as
-      number | undefined;
-
-  const num = (row: Record<string, unknown>, key: string) =>
-    typeof row[key] === "number" && Number.isFinite(row[key]) ? (row[key] as number) : 0;
-
-  // The router only reports days that had traffic, so pad the series into a
-  // continuous calendar window: the last 7 days at minimum, stretched back to
-  // cover any older day the router still included (it takes the 7 most recent
-  // log files, which need not be consecutive). Quiet days render as zero bars
-  // instead of vanishing, and the window label stays truthful. Days are UTC
-  // throughout because that is how the router buckets its logs; building the
-  // window in local time would surface an evening's traffic as a phantom
-  // "tomorrow" bar west of Greenwich.
-  const byDate = new Map<string, { requests: number; cost: number }>();
-  const rawDaily = stats?.dailyBreakdown ?? stats?.daily_breakdown;
-  if (Array.isArray(rawDaily)) {
-    for (const entry of rawDaily) {
-      if (!entry || typeof entry !== "object") continue;
-      const row = entry as Record<string, unknown>;
-      const date = typeof row.date === "string" ? row.date : "";
-      if (!date || Number.isNaN(parseDay(date).getTime())) continue;
-      const prev = byDate.get(date) ?? { requests: 0, cost: 0 };
-      byDate.set(date, {
-        requests: prev.requests + num(row, "totalRequests"),
-        cost: prev.cost + num(row, "totalCost"),
-      });
-    }
-  }
-
-  const daily: UsageDay[] = [];
-  if (byDate.size > 0) {
-    const dates = [...byDate.keys()].sort();
-    const today = parseDay(formatDay(new Date()));
-    const end = latest(parseDay(dates[dates.length - 1]), today);
-    // Anything older than the cap is dropped rather than stretching the window.
-    const floor = shiftDays(end, -(MAX_CHART_DAYS - 1));
-    const firstKept = dates.map(parseDay).find((day) => day >= floor) ?? end;
-    const start = earliest(firstKept, shiftDays(end, -6));
-    for (let cursor = start; cursor <= end; cursor = shiftDays(cursor, 1)) {
-      const date = formatDay(cursor);
-      const entry = byDate.get(date) ?? { requests: 0, cost: 0 };
-      daily.push({
-        date,
-        label: cursor.toLocaleDateString(undefined, {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        }),
-        short: cursor
-          .toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" })
-          .slice(0, 2),
-        requests: entry.requests,
-        cost: entry.cost,
-      });
-    }
-  }
-
-  return {
-    requests: pick("requests", "totalRequests", "total_requests") ?? 0,
-    cost: pick("totalCost", "totalCostUSD", "total_cost") ?? 0,
-    tokens: pick("tokens", "totalTokens", "inputTokens", "total_tokens") ?? 0,
-    daily,
-  };
-}
-
-/** UTC-midnight Date for a YYYY-MM-DD string. */
-function parseDay(date: string) {
-  return new Date(`${date}T00:00:00Z`);
-}
-
-/** YYYY-MM-DD of the UTC day, the key the router names its daily logs by. */
-function formatDay(day: Date) {
-  return day.toISOString().slice(0, 10);
-}
-
-function shiftDays(day: Date, delta: number) {
-  const next = new Date(day);
-  next.setUTCDate(next.getUTCDate() + delta);
-  return next;
-}
-
-function earliest(a: Date, b: Date) {
-  return a < b ? a : b;
-}
-
-function latest(a: Date, b: Date) {
-  return a > b ? a : b;
-}
-
-/** Round a chart maximum up to the nearest readable tick value. */
-function niceCeiling(value: number) {
-  if (value <= 4) return 4;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  for (const step of [1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10]) {
-    const candidate = step * magnitude;
-    if (candidate >= value) return candidate;
-  }
-  return 10 * magnitude;
-}
-
-function windowLabel(days: UsageDay[]) {
-  return days.length === 0 ? "no data yet" : `last ${days.length} days`;
 }
 
 function collapseModelAliases(models: ModelInfo[]): CatalogModel[] {

@@ -138,7 +138,6 @@ const demoDashboard: DashboardData = {
     totalBaselineCost: demoBaselineCost,
     totalSavings: demoSavings,
     savingsPercentage: Number(((demoSavings / demoBaselineCost) * 100).toFixed(1)),
-    inputTokens: 1356000,
     dailyBreakdown: demoDailyBreakdown,
     // Counts and costs add up to demoRequests (474) and demoCost (6.35).
     byModel: {
