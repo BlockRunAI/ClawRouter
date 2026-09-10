@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@blockrun/clawrouter': 0.12.267
+  axios: ^1.19.0
 
 importers:
 
@@ -2955,6 +2956,7 @@ packages:
   '@smithy/node-http-handler@4.12.0':
     resolution: {integrity: sha512-0mq1pHadfyXCYCqm2cNpbjNIT+fbaUpNxewZb/YNr2L0IrEVMOb8gM/Fl4K6XvHCW3uSNDFwPl/+iKm0bx9jYg==}
     engines: {node: '>=18.0.0'}
+    deprecated: Depreacted due to a memory leak issue https://github.com/smithy-lang/smithy-typescript/issues/2258
 
   '@smithy/node-http-handler@4.7.3':
     resolution: {integrity: sha512-/jPhevcTFPMVl6KNjbaI47iOg1zxC7IsnX4PQDGVZKMFceOXtB8IEYaB7a9VvkP/3oC60WzTeKocvSI7vLT0vA==}
@@ -3505,9 +3507,6 @@ packages:
 
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
-
-  axios@0.27.2:
-    resolution: {integrity: sha512-t+yRIyySRTp/wua5xEr+z1q60QmLq8ABsS5O9Me1AsE5dfKqgnCFzwiCZZ/cGNd1lq4/7akDWMxdhVlucjmnOQ==}
 
   axios@1.20.0:
     resolution: {integrity: sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==}
@@ -8030,7 +8029,7 @@ snapshots:
       '@ethersproject/wallet': 5.8.0
       '@polymarket/builder-abstract-signer': 0.0.1(zod@4.5.4)
       '@polymarket/builder-signing-sdk': 0.0.8
-      axios: 0.27.2
+      axios: 1.20.0
       browser-or-node: 3.0.0
       ethers: 5.8.0
       tsx: 4.23.13
@@ -8759,13 +8758,6 @@ snapshots:
   argparse@2.0.1: {}
 
   asynckit@0.4.0: {}
-
-  axios@0.27.2:
-    dependencies:
-      follow-redirects: 1.16.0
-      form-data: 4.0.6
-    transitivePeerDependencies:
-      - debug
 
   axios@1.20.0:
     dependencies:
