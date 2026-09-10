@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { niceCeiling, normalizeStats, windowLabel, type UsageDay } from "./usage-stats.js";
 
 import type {
   AgentId,
@@ -15,7 +16,18 @@ import OPENCLAW_ICON from "./openclaw-x-avatar.jpg";
 type Page = "overview" | "models" | "usage" | "wallet" | "settings";
 type Theme = "dark" | "light";
 type IconName =
-  "home" | "models" | "usage" | "settings" | "refresh" | "sun" | "moon" | "external" | "wallet";
+  | "home"
+  | "models"
+  | "usage"
+  | "settings"
+  | "refresh"
+  | "sun"
+  | "moon"
+  | "external"
+  | "wallet"
+  | "copy"
+  | "plus"
+  | "check";
 type CatalogModel = ModelInfo & { aliases: string[] };
 
 const CLAWROUTER_REPO = "https://github.com/BlockRunAI/ClawRouter";
@@ -38,11 +50,14 @@ export function App() {
   const [fundingAmount, setFundingAmount] = useState(50);
   const [fundingBusy, setFundingBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [refreshSpin, setRefreshSpin] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = window.localStorage.getItem("clawrouter-theme");
     if (saved === "light" || saved === "dark") return saved;
     return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   });
+
+  const reportError = (text: string) => setNotice({ kind: "error", text });
 
   async function refresh() {
     await Promise.allSettled([
@@ -155,6 +170,7 @@ export function App() {
           </div>
         </div>
         <nav>
+          <p className="nav-label">Control</p>
           <NavButton active={page === "overview"} onClick={() => setPage("overview")} icon="home">
             Overview
           </NavButton>
@@ -164,6 +180,7 @@ export function App() {
           <NavButton active={page === "usage"} onClick={() => setPage("usage")} icon="usage">
             Usage
           </NavButton>
+          <p className="nav-label">Account</p>
           <NavButton active={page === "wallet"} onClick={() => setPage("wallet")} icon="wallet">
             Wallet
           </NavButton>
@@ -220,8 +237,12 @@ export function App() {
               <span>GitHub</span>
             </button>
             <button
-              className="icon-button"
-              onClick={() => void refresh()}
+              className={`icon-button refresh-button ${refreshSpin ? "spinning" : ""}`}
+              onClick={() => {
+                setRefreshSpin(true);
+                void refresh();
+              }}
+              onAnimationEnd={() => setRefreshSpin(false)}
               aria-label="Refresh"
               title="Refresh status"
             >
@@ -258,15 +279,19 @@ export function App() {
             onCreate={createWallet}
             onAdopt={adoptLegacyWallet}
             onFund={() => setFundingOpen(true)}
+            onError={reportError}
           />
         )}
-        {page === "settings" && <Settings />}
+        {page === "settings" && (
+          <Settings theme={theme} onTheme={setTheme} dashboard={dashboard} onError={reportError} />
+        )}
       </main>
       {fundingOpen && (
         <FundingDialog
           amount={fundingAmount}
           busy={fundingBusy}
           wallet={dashboard?.proxy.configuredWallet ?? dashboard?.proxy.wallet}
+          solana={dashboard?.proxy.configuredSolana ?? dashboard?.proxy.solana}
           onAmount={setFundingAmount}
           onClose={() => !fundingBusy && setFundingOpen(false)}
           onContinue={() => void startOnramp()}
@@ -290,22 +315,45 @@ function Overview({
   toggle(agent: AgentStatus): void;
 }) {
   const stats = normalizeStats(dashboard?.stats);
+  const online = dashboard?.proxy.reachable ?? false;
+  const total = agents.length || 5;
+  // /v1/models emits an alias row per shorthand, so the raw length is not a
+  // model count: the Models page collapses them and would disagree with the hero.
+  const modelCount = useMemo(
+    () => collapseModelAliases(dashboard?.models ?? []).length,
+    [dashboard?.models],
+  );
+  const chain = dashboard?.proxy.configuredChain === "solana" ? "Solana" : "Base";
+  // A proxy authenticating with a BlockRun API key settles nothing on-chain, so
+  // name the account instead of claiming a chain that is not there.
+  const settlement =
+    dashboard?.proxy.authMode === "api-key" ? "paid with account credit" : `settling on ${chain}`;
   return (
     <>
       <section className="hero" aria-label="Routing status">
-        <div className="hero-copy">
-          <div className="live-pill">
-            <span />
-            {dashboard?.proxy.reachable ? "Router online" : "Starting router…"}
+        <div className="hero-top">
+          <div className="hero-copy">
+            <div className="live-pill">
+              <span />
+              {online ? "Router online" : "Starting router…"}
+            </div>
+            <h2>
+              {online
+                ? configured === 0
+                  ? "No agents connected yet"
+                  : `${configured} of ${total} agents routing`
+                : "Getting ClawRouter ready"}
+            </h2>
+            <p>
+              {online
+                ? `${modelCount ? compact(modelCount) : "—"} models available · ${settlement}`
+                : "Models, payment, and local agent connections stay in one place."}
+            </p>
           </div>
-          <h2>
-            {dashboard?.proxy.reachable ? "Every agent, one route." : "Getting ClawRouter ready."}
-          </h2>
-          <p>Models, payment, and local agent connections stay in one place.</p>
+          <RoutingMap agents={total} models={modelCount} />
         </div>
-        <RoutingMap />
         <div className="hero-metrics">
-          <Metric label="Connected agents" value={`${configured}/${agents.length || 5}`} />
+          <Metric label="Connected agents" value={`${configured}/${total}`} />
           <Metric label="7-day requests" value={compact(stats.requests)} />
           <Metric
             label="Wallet balance"
@@ -547,10 +595,10 @@ function Models({ models }: { models: ModelInfo[] }) {
               <PriceCell model={model} kind="input" />
               <PriceCell model={model} kind="output" />
               <span className="chips">
-                {model.reasoning && <i>Reasoning</i>}
-                {model.vision && <i>Vision</i>}
-                {model.agentic && <i>Agentic</i>}
-                {model.toolCalling && <i>Tools</i>}
+                {model.reasoning && <i className="cap-reasoning">Reasoning</i>}
+                {model.vision && <i className="cap-vision">Vision</i>}
+                {model.agentic && <i className="cap-agentic">Agentic</i>}
+                {model.toolCalling && <i className="cap-tools">Tools</i>}
                 {!model.reasoning && !model.vision && !model.agentic && !model.toolCalling && (
                   <i>Chat</i>
                 )}
@@ -571,30 +619,75 @@ function Models({ models }: { models: ModelInfo[] }) {
 
 function Usage({ dashboard }: { dashboard: DashboardData | null }) {
   const stats = normalizeStats(dashboard?.stats);
-  const values = [42, 68, 53, 82, 64, 91, 74];
+  const days = stats.daily;
+  const peak = Math.max(0, ...days.map((day) => day.requests));
+  // Round the axis up to a readable ceiling so ticks land on 25/50/75/100
+  // rather than 23/46/68/91. The floor of 1 belongs to the divisor only —
+  // printing "peak 1 / day" over a window nobody routed in is a fabrication.
+  const axisMax = niceCeiling(Math.max(1, peak));
+
   return (
     <>
       <section className="stat-grid">
-        <MetricCard label="Requests" value={compact(stats.requests)} delta="last 7 days" />
+        <MetricCard label="Requests" value={compact(stats.requests)} delta={windowLabel(days)} />
         <MetricCard
           label="Estimated spend"
           value={`$${stats.cost.toFixed(2)}`}
           delta="wallet settled"
         />
-        <MetricCard label="Tokens routed" value={compact(stats.tokens)} delta="across all agents" />
+        <MetricCard
+          label="Saved vs. baseline"
+          value={`$${stats.savings.toFixed(2)}`}
+          delta={stats.savings > 0 ? `${Math.round(stats.savingsPct)}% cheaper` : "no baseline yet"}
+        />
       </section>
+
       <section className="panel usage-chart">
-        <div>
-          <h3>Routing activity</h3>
-          <p>Requests handled by the local proxy</p>
+        <div className="chart-head">
+          <div>
+            <h3>Routing activity</h3>
+            <p>Requests handled by the local proxy</p>
+          </div>
+          {peak > 0 && <span className="chart-note">peak {compact(peak)} / day</span>}
         </div>
-        <div className="bars">
-          {values.map((value, index) => (
-            <div key={index} style={{ height: `${value}%` }}>
-              <span>{["M", "T", "W", "T", "F", "S", "S"][index]}</span>
+        {days.length === 0 ? (
+          <p className="chart-empty">
+            No routed requests yet. Connect an agent and activity will appear here.
+          </p>
+        ) : (
+          <div className="chart">
+            <div className="chart-axis" aria-hidden="true">
+              {[1, 0.75, 0.5, 0.25, 0].map((step) => (
+                <span key={step}>{compact(Math.round(axisMax * step))}</span>
+              ))}
             </div>
-          ))}
-        </div>
+            <div className="chart-plot">
+              <div className="chart-grid" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((line) => (
+                  <i key={line} />
+                ))}
+              </div>
+              <ol className="chart-bars">
+                {days.map((day) => (
+                  <li
+                    key={day.date}
+                    // --bar sizes the bar and clamps the tooltip; see .chart-tip.
+                    style={{ "--bar": `${(day.requests / axisMax) * 100}%` } as React.CSSProperties}
+                  >
+                    <div className="chart-bar" />
+                    <span className="chart-tip">
+                      <strong>{day.requests.toLocaleString()} requests</strong>
+                      <small>
+                        {day.label} · ${day.cost.toFixed(2)}
+                      </small>
+                    </span>
+                    <span className="chart-label">{day.short}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        )}
       </section>
     </>
   );
@@ -608,6 +701,7 @@ function WalletCenter({
   onCreate,
   onAdopt,
   onFund,
+  onError,
 }: {
   dashboard: DashboardData | null;
   chainBusy: PaymentChain | null;
@@ -616,9 +710,11 @@ function WalletCenter({
   onCreate(chain: PaymentChain): void;
   onAdopt(chain: PaymentChain, address: string): void;
   onFund(): void;
+  onError(message: string): void;
 }) {
   const proxy = dashboard?.proxy;
   const selected = proxy?.configuredChain ?? "base";
+  const { copied, copy } = useCopy(onError);
   return (
     <section className="wallet-center">
       <div className="wallet-center-intro">
@@ -628,9 +724,13 @@ function WalletCenter({
           <p>One current wallet per network, shared by every connected agent.</p>
         </div>
         <button className="coinbase-fund-button" onClick={onFund}>
-          <span>＋</span>
-          <b>Buy USDC</b>
-          <small>on Base</small>
+          <i aria-hidden="true">
+            <Icon name="plus" />
+          </i>
+          <span>
+            <b>Add funds</b>
+            <small>Buy or deposit USDC</small>
+          </span>
         </button>
       </div>
 
@@ -660,6 +760,7 @@ function WalletCenter({
           const activeAddress = chain === "base" ? proxy?.activeWallet : proxy?.activeSolana;
           const restart = proxy?.walletRestartChains?.includes(chain) ?? false;
           const issue = proxy?.walletIssues?.[chain];
+          const name = chain === "base" ? "Base" : "Solana";
           return (
             <article
               className={`wallet-network-card ${selected === chain ? "selected" : ""}`}
@@ -667,11 +768,11 @@ function WalletCenter({
             >
               <header>
                 <span className="wallet-network-name">
-                  <i className={chain === "base" ? "base-coin" : "solana-coin"}>
-                    {chain === "base" ? "B" : "S"}
+                  <i className="chain-mark">
+                    <ChainLogo chain={chain} />
                   </i>
                   <span>
-                    <b>{chain === "base" ? "Base" : "Solana"}</b>
+                    <b>{name}</b>
                     <small>USDC</small>
                   </span>
                 </span>
@@ -680,7 +781,19 @@ function WalletCenter({
               <strong>
                 {formatWalletBalance(proxy?.balances?.[chain], false, dashboard === null)}
               </strong>
-              <code>{address ? shortAddress(address) : "No Core wallet"}</code>
+              {address ? (
+                <button
+                  className={`wallet-copy ${copied === chain ? "copied" : ""}`}
+                  onClick={() => copy(chain, address)}
+                  title="Copy address"
+                  aria-label={copied === chain ? `${name} address copied` : `Copy ${name} address`}
+                >
+                  <code>{shortAddress(address)}</code>
+                  <Icon name={copied === chain ? "check" : "copy"} />
+                </button>
+              ) : (
+                <code className="wallet-copy-empty">No Core wallet</code>
+              )}
               {issue && <p className="wallet-card-warning">{issue}</p>}
               {restart && activeAddress && (
                 <p className="wallet-card-warning">
@@ -689,17 +802,20 @@ function WalletCenter({
               )}
               <footer>
                 {address ? (
-                  <button
-                    className={selected === chain ? "secondary" : "primary"}
-                    disabled={chainBusy !== null || selected === chain}
-                    onClick={() => onSwitch(chain)}
-                  >
-                    {chainBusy === chain
-                      ? "Switching…"
-                      : selected === chain
-                        ? "Current default"
-                        : "Use this network"}
-                  </button>
+                  selected === chain ? (
+                    <p className="wallet-active-note">
+                      <i aria-hidden="true" />
+                      Active — all agents pay from this wallet
+                    </p>
+                  ) : (
+                    <button
+                      className="primary"
+                      disabled={chainBusy !== null}
+                      onClick={() => onSwitch(chain)}
+                    >
+                      {chainBusy === chain ? "Switching…" : "Use this network"}
+                    </button>
+                  )
                 ) : (
                   <button
                     className="primary"
@@ -770,41 +886,181 @@ function WalletCenter({
   );
 }
 
-function Settings() {
+function Settings({
+  theme,
+  onTheme,
+  dashboard,
+  onError,
+}: {
+  theme: Theme;
+  onTheme(next: Theme): void;
+  dashboard: DashboardData | null;
+  onError(message: string): void;
+}) {
+  const endpoints = [
+    { label: "OpenAI-compatible chat", url: "http://127.0.0.1:8402/v1" },
+    { label: "Codex Responses bridge", url: "http://127.0.0.1:8403/v1" },
+    { label: "Model catalog", url: "http://127.0.0.1:8402/v1/models" },
+  ];
+  const { copied: copiedUrl, copy } = useCopy(onError);
   return (
-    <section className="settings-grid">
-      <div className="panel setting-card">
-        <span className="setting-icon">↔</span>
-        <div>
+    <>
+      <section className="panel setting-block">
+        <div className="setting-block-head">
+          <h3>Appearance</h3>
+          <p>Applies immediately and is remembered on this machine.</p>
+        </div>
+        <div className="theme-choice" role="radiogroup" aria-label="Theme">
+          {(["light", "dark"] as Theme[]).map((option) => (
+            <button
+              key={option}
+              role="radio"
+              aria-checked={theme === option}
+              className={theme === option ? "active" : ""}
+              onClick={() => onTheme(option)}
+            >
+              <Icon name={option === "dark" ? "moon" : "sun"} />
+              {option === "dark" ? "Dark" : "Light"}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel setting-block">
+        <div className="setting-block-head">
           <h3>Local endpoints</h3>
-          <p>Chat: http://127.0.0.1:8402/v1</p>
-          <p>Codex Responses: http://127.0.0.1:8403/v1</p>
+          <p>
+            Both services bind to loopback only.{" "}
+            {dashboard?.proxy.reachable ? "Router is responding." : "Router is not responding."}
+          </p>
         </div>
-      </div>
-      <div className="panel setting-card source-card">
-        <span className="setting-icon">
-          <GitHubIcon />
-        </span>
-        <div>
-          <h3>Open source</h3>
-          <p>Inspect releases, report issues, or contribute to ClawRouter.</p>
-          <button onClick={() => void api.openExternal(CLAWROUTER_REPO)}>
-            Open GitHub <Icon name="external" />
-          </button>
+        <ul className="endpoint-list">
+          {endpoints.map((endpoint) => (
+            <li key={endpoint.url}>
+              <span>{endpoint.label}</span>
+              <code>{endpoint.url}</code>
+              <button
+                className={copiedUrl === endpoint.url ? "copied" : ""}
+                onClick={() => copy(endpoint.url, endpoint.url)}
+                aria-label={`Copy ${endpoint.label} URL`}
+                title="Copy URL"
+              >
+                {copiedUrl === endpoint.url ? (
+                  <span key="check">
+                    <Icon name="check" />
+                  </span>
+                ) : (
+                  <span key="copy">
+                    <Icon name="copy" />
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="settings-grid">
+        <div className="panel setting-card source-card">
+          <span className="setting-icon">
+            <GitHubIcon />
+          </span>
+          <div>
+            <h3>Open source</h3>
+            <p>Inspect releases, report issues, or contribute to ClawRouter.</p>
+            <button onClick={() => void api.openExternal(CLAWROUTER_REPO)}>
+              Open GitHub <Icon name="external" />
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="panel setting-card warning">
-        <span className="setting-icon">!</span>
-        <div>
-          <h3>Secrets stay local</h3>
-          <p>The wallet mnemonic is never shown in the UI or copied into launch configuration.</p>
+        <div className="panel setting-card warning">
+          <span className="setting-icon">!</span>
+          <div>
+            <h3>Secrets stay local</h3>
+            <p>The wallet mnemonic is never shown in the UI or copied into launch configuration.</p>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 
-function RoutingMap() {
+/** Official network marks: Base roundel and Solana bars (per brand assets). */
+function ChainLogo({ chain }: { chain: PaymentChain }) {
+  // Gradient ids must be unique per instance: the Solana mark can render twice
+  // at once (wallet card plus the deposit sheet), and duplicate ids are invalid.
+  const gradient = `sol-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  if (chain === "base") {
+    return (
+      <svg viewBox="0 0 146 146" aria-hidden="true">
+        <circle cx="73" cy="73" r="73" fill="#0052FF" />
+        <path
+          fill="#fff"
+          d="M73.323 123.729c28.294 0 51.23-22.897 51.23-51.141 0-28.245-22.936-51.142-51.23-51.142-26.843 0-48.865 20.61-51.052 46.843h67.715v8.597H22.27c2.187 26.233 24.209 46.843 51.052 46.843Z"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 28 28" aria-hidden="true">
+      <defs>
+        <linearGradient
+          id={`${gradient}-g1`}
+          gradientUnits="userSpaceOnUse"
+          x1="360.879"
+          y1="351.455"
+          x2="141.213"
+          y2="-69.294"
+          gradientTransform="matrix(1 0 0 -1 0 314)"
+        >
+          <stop offset="0" stopColor="#00FFA3" />
+          <stop offset="1" stopColor="#DC1FFF" />
+        </linearGradient>
+        <linearGradient
+          id={`${gradient}-g2`}
+          gradientUnits="userSpaceOnUse"
+          x1="264.829"
+          y1="401.601"
+          x2="45.163"
+          y2="-19.148"
+          gradientTransform="matrix(1 0 0 -1 0 314)"
+        >
+          <stop offset="0" stopColor="#00FFA3" />
+          <stop offset="1" stopColor="#DC1FFF" />
+        </linearGradient>
+        <linearGradient
+          id={`${gradient}-g3`}
+          gradientUnits="userSpaceOnUse"
+          x1="312.548"
+          y1="376.688"
+          x2="92.882"
+          y2="-44.061"
+          gradientTransform="matrix(1 0 0 -1 0 314)"
+        >
+          <stop offset="0" stopColor="#00FFA3" />
+          <stop offset="1" stopColor="#DC1FFF" />
+        </linearGradient>
+      </defs>
+      <circle cx="14" cy="14" r="14" fill="#101014" />
+      <g transform="translate(6.8, 8.36) scale(0.0362)">
+        <path
+          fill={`url(#${gradient}-g1)`}
+          d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z"
+        />
+        <path
+          fill={`url(#${gradient}-g2)`}
+          d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+        />
+        <path
+          fill={`url(#${gradient}-g3)`}
+          d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+        />
+      </g>
+    </svg>
+  );
+}
+
+function RoutingMap({ agents, models }: { agents: number; models: number }) {
   return (
     <div
       className="routing-map"
@@ -816,7 +1072,7 @@ function RoutingMap() {
             <AgentLogo id={id} key={id} compact />
           ))}
         </div>
-        <span>5 agents</span>
+        <span>{agents} agents</span>
       </div>
       <div className="route-line">
         <i />
@@ -832,7 +1088,7 @@ function RoutingMap() {
         <b>→</b>
       </div>
       <div className="route-destination">
-        <strong>55+</strong>
+        <strong>{models > 0 ? compact(models) : "—"}</strong>
         <span>models</span>
       </div>
     </div>
@@ -934,8 +1190,8 @@ function WalletSummary({
         <Icon name="external" />
       </button>
       <button className="wallet-fund-button" onClick={onFund}>
-        <span>＋</span>
-        {selected === "base" ? "Add funds" : "Buy USDC on Base"}
+        <Icon name="plus" />
+        Add funds
       </button>
       {proxy?.chainRestartRequired && (
         <small className="wallet-restart">
@@ -953,6 +1209,7 @@ function FundingDialog({
   amount,
   busy,
   wallet,
+  solana,
   onAmount,
   onClose,
   onContinue,
@@ -960,10 +1217,15 @@ function FundingDialog({
   amount: number;
   busy: boolean;
   wallet: string | undefined;
+  solana: string | undefined;
   onAmount(value: number): void;
   onClose(): void;
   onContinue(): void;
 }) {
+  const [tab, setTab] = useState<"buy" | "deposit">("buy");
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const { copied, copy } = useCopy(setCopyError);
+
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -972,6 +1234,10 @@ function FundingDialog({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
   const valid = Number.isFinite(amount) && amount >= 1 && amount <= 2_500;
+  const depositRows: { chain: PaymentChain; label: string; address?: string }[] = [
+    { chain: "base", label: "Base", address: wallet },
+    { chain: "solana", label: "Solana", address: solana },
+  ];
   return (
     <div className="funding-backdrop" onMouseDown={onClose} role="presentation">
       <section
@@ -983,76 +1249,171 @@ function FundingDialog({
       >
         <header>
           <div>
-            <span className="coinbase-wordmark">Coinbase Onramp</span>
             <h2 id="funding-title">Add funds</h2>
-            <p>Buy USDC for your shared Base wallet.</p>
+            <p>
+              {tab === "buy"
+                ? "Buy USDC with Coinbase Onramp."
+                : "Send USDC from another wallet or exchange."}
+            </p>
           </div>
           <button className="funding-close" onClick={onClose} disabled={busy} aria-label="Close">
             ×
           </button>
         </header>
-        <div className="funding-amount">
-          <label htmlFor="funding-usd">You pay</label>
-          <div className="amount-input">
-            <span>$</span>
-            <input
-              id="funding-usd"
-              type="number"
-              min="1"
-              max="2500"
-              step="1"
-              value={Number.isFinite(amount) ? amount : ""}
-              onChange={(event) => onAmount(Number(event.target.value))}
-              autoFocus
-            />
-            <b>USD</b>
-          </div>
-          <div className="amount-presets">
-            {[25, 50, 100, 250].map((value) => (
-              <button
-                key={value}
-                className={amount === value ? "active" : ""}
-                onClick={() => onAmount(value)}
-              >
-                ${value}
-              </button>
-            ))}
-          </div>
+        <div className="funding-tabs" role="tablist" aria-label="Funding method">
+          <button
+            role="tab"
+            id="funding-tab-buy"
+            aria-controls="funding-pane"
+            aria-selected={tab === "buy"}
+            className={tab === "buy" ? "active" : ""}
+            onClick={() => setTab("buy")}
+          >
+            Buy
+          </button>
+          <button
+            role="tab"
+            id="funding-tab-deposit"
+            aria-controls="funding-pane"
+            aria-selected={tab === "deposit"}
+            className={tab === "deposit" ? "active" : ""}
+            onClick={() => setTab("deposit")}
+          >
+            Deposit
+          </button>
         </div>
-        <div className="funding-route">
-          <div>
-            <span className="route-token">USDC</span>
-            <p>
-              <b>USDC on Base</b>
-              <small>Delivered after Coinbase fees</small>
+        {tab === "deposit" ? (
+          <div
+            className="funding-pane"
+            key="deposit"
+            id="funding-pane"
+            role="tabpanel"
+            aria-labelledby="funding-tab-deposit"
+          >
+            <div className="deposit-list">
+              {depositRows.map((row) => (
+                <div className="deposit-row" key={row.chain}>
+                  <i className="chain-mark">
+                    <ChainLogo chain={row.chain} />
+                  </i>
+                  <div className="deposit-row-name">
+                    <b>{row.label}</b>
+                    <small>USDC · {row.label} network</small>
+                  </div>
+                  {row.address ? (
+                    <>
+                      <code>{shortAddress(row.address)}</code>
+                      <button
+                        className={`deposit-copy ${copied === row.chain ? "copied" : ""}`}
+                        onClick={() => {
+                          setCopyError(null);
+                          copy(row.chain, row.address!);
+                        }}
+                        aria-label={
+                          copied === row.chain
+                            ? `${row.label} address copied`
+                            : `Copy ${row.label} address`
+                        }
+                      >
+                        {copied === row.chain ? (
+                          <span key="copied">
+                            <Icon name="check" /> Copied
+                          </span>
+                        ) : (
+                          <span key="copy">
+                            <Icon name="copy" /> Copy
+                          </span>
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <code className="deposit-missing">No wallet yet</code>
+                  )}
+                </div>
+              ))}
+            </div>
+            {copyError && (
+              <p className="funding-error" role="alert">
+                {copyError}
+              </p>
+            )}
+            <p className="funding-legal">
+              Send only USDC, on the matching network. Deposits from another wallet or exchange
+              usually arrive within a minute.
             </p>
           </div>
-          <i>→</i>
-          <div className="funding-destination">
-            <span>To your wallet</span>
-            <code>{wallet ? shortAddress(wallet) : "Wallet unavailable"}</code>
+        ) : (
+          <div
+            className="funding-pane"
+            key="buy"
+            id="funding-pane"
+            role="tabpanel"
+            aria-labelledby="funding-tab-buy"
+          >
+            <div className="funding-amount">
+              <label htmlFor="funding-usd">You pay</label>
+              <div className="amount-input">
+                <span>$</span>
+                <input
+                  id="funding-usd"
+                  type="number"
+                  min="1"
+                  max="2500"
+                  step="1"
+                  value={Number.isFinite(amount) ? amount : ""}
+                  onChange={(event) => onAmount(Number(event.target.value))}
+                  autoFocus
+                />
+                <b>USD</b>
+              </div>
+              <div className="amount-presets">
+                {[25, 50, 100, 250].map((value) => (
+                  <button
+                    key={value}
+                    className={amount === value ? "active" : ""}
+                    onClick={() => onAmount(value)}
+                  >
+                    ${value}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="funding-route">
+              <div>
+                <span className="route-token">USDC</span>
+                <p>
+                  <b>USDC on Base</b>
+                  <small>Delivered after Coinbase fees</small>
+                </p>
+              </div>
+              <i>→</i>
+              <div className="funding-destination">
+                <span>To your wallet</span>
+                <code>{wallet ? shortAddress(wallet) : "Wallet unavailable"}</code>
+              </div>
+            </div>
+            <button
+              className="funding-continue"
+              disabled={busy || !valid || !wallet}
+              onClick={onContinue}
+            >
+              {busy ? (
+                <>
+                  <b className="spinner" />
+                  Creating secure session…
+                </>
+              ) : (
+                <>
+                  Continue to Coinbase <Icon name="external" />
+                </>
+              )}
+            </button>
+            <p className="funding-legal">
+              Coinbase shows the final quote, fees, and payment methods available in your region.
+              The one-time checkout opens in your browser.
+            </p>
           </div>
-        </div>
-        <button
-          className="funding-continue"
-          disabled={busy || !valid || !wallet}
-          onClick={onContinue}
-        >
-          {busy ? (
-            <>
-              <b className="spinner" />
-              Creating secure session…
-            </>
-          ) : (
-            <>
-              Continue to Coinbase <Icon name="external" />
-            </>
-          )}
-        </button>
-        <p className="funding-legal">
-          Coinbase shows the final quote, fees, and payment methods available in your region. The
-          one-time checkout opens in your browser.
-        </p>
+        )}
       </section>
     </div>
   );
@@ -1151,7 +1512,7 @@ function NavButton({
   children: React.ReactNode;
 }) {
   return (
-    <button className={active ? "active" : ""} onClick={onClick}>
+    <button className={active ? "active" : ""} onClick={onClick} aria-current={active && "page"}>
       <span>
         <Icon name={icon} />
       </span>
@@ -1230,6 +1591,22 @@ function Icon({ name }: { name: IconName }) {
         <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
       </>
     ),
+    copy: (
+      <>
+        <rect x="9" y="9" width="11" height="11" rx="2" />
+        <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+      </>
+    ),
+    plus: (
+      <>
+        <path d="M12 5v14M5 12h14" />
+      </>
+    ),
+    check: (
+      <>
+        <path d="m5 12.5 4.5 4.5L19 7" />
+      </>
+    ),
     settings: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -1277,8 +1654,12 @@ function Icon({ name }: { name: IconName }) {
   );
 }
 function healthLabel(agent: AgentStatus) {
-  if (agent.health === "ready")
-    return agent.activation === "immediate" ? "Connected" : "Configured";
+  // Deliberately NOT branching on `restartRequired`. Codex and OpenClaw set it to
+  // `configured`, so it is permanently true once connected — it means "this kind of
+  // agent needs a restart when you change it", not "a change is pending". Reading it
+  // here would pin them to "Restart pending" forever. `activationLabel`, rendered
+  // beside this one, already says "Restart gateway/app after changes".
+  if (agent.health === "ready") return "Connected";
   if (!agent.installed) return agent.configured ? "Configured · CLI missing" : "Not detected";
   return agent.configured ? "Needs proxy" : "Available";
 }
@@ -1398,15 +1779,33 @@ function shortAddress(address: string) {
 function prettyModel(id: string) {
   return id.split("/").at(-1)?.replaceAll("-", " ") ?? id;
 }
-function normalizeStats(stats: Record<string, unknown> | null | undefined) {
-  const pick = (...keys: string[]) =>
-    keys.map((key) => stats?.[key]).find((value) => typeof value === "number") as
-      number | undefined;
-  return {
-    requests: pick("requests", "totalRequests", "total_requests") ?? 0,
-    cost: pick("totalCost", "totalCostUSD", "total_cost") ?? 0,
-    tokens: pick("tokens", "totalTokens", "inputTokens", "total_tokens") ?? 0,
+/**
+ * Clipboard copy with a short "copied" state, keyed so one hook can serve a
+ * list of targets. The state only flips once the write resolves; a denied or
+ * unavailable clipboard reports through onError instead of a false "Copied".
+ */
+function useCopy(onError: (message: string) => void) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const timer = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    };
+  }, []);
+  const copy = (key: string, text: string) => {
+    const write = navigator.clipboard
+      ? navigator.clipboard.writeText(text)
+      : Promise.reject(new Error("Clipboard unavailable"));
+    write.then(
+      () => {
+        setCopied(key);
+        if (timer.current) window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => setCopied(null), 1600);
+      },
+      () => onError("Couldn't copy to the clipboard. Select the text and copy it manually."),
+    );
   };
+  return { copied, copy };
 }
 
 function collapseModelAliases(models: ModelInfo[]): CatalogModel[] {
