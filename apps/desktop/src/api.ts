@@ -63,7 +63,7 @@ const demoAgents: AgentStatus[] = [
     configured: false,
     proxyReachable: true,
     health: "needs-attention",
-    activation: "restart-agent",
+    activation: "immediate",
     restartRequired: false,
     removalMode: "disconnect",
     details: [],

@@ -100,7 +100,7 @@ describe("ClawRouterManager adapter flow", () => {
     const expectations = {
       openclaw: "Restart the OpenClaw gateway",
       codex: "Restart Codex",
-      hermes: "Restart Hermes",
+      hermes: "no restart is needed",
       dsh: "no restart is needed",
       pi: "no restart is needed",
     } as const;
@@ -153,6 +153,99 @@ describe("ClawRouterManager adapter flow", () => {
       expect(restored, restored.message).toMatchObject({ ok: true, status: { configured: false } });
       expect(restored.message).toContain(guidance);
     }
+  });
+
+  it("applies a chain switch by restarting the proxy Desktop owns", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-chain-owned-"));
+    await stagePinnedClawRouter(home);
+    const commands: string[][] = [];
+    const manager = fixtureManager(
+      home,
+      async () => false,
+      async (_command, args) => {
+        commands.push(args);
+        return { code: 0, stdout: "", stderr: "" };
+      },
+      { paymentChain: "solana" },
+    );
+    const restarts: number[] = [];
+    manager.supervisor.restartProxy = async () => {
+      restarts.push(Date.now());
+      return true;
+    };
+
+    const result = await manager.switchPaymentChain("solana");
+
+    expect(result).toMatchObject({ ok: true, chain: "solana", restartRequired: false });
+    expect(result.message).toContain("Solana is active");
+    expect(restarts).toHaveLength(1);
+    expect(commands.some((args) => args.join(" ").endsWith("chain solana"))).toBe(true);
+  });
+
+  it("still asks for a gateway restart when the proxy is not Desktop's to restart", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-chain-foreign-"));
+    await stagePinnedClawRouter(home);
+    const manager = fixtureManager(home, async () => false);
+    manager.supervisor.restartProxy = async () => false;
+
+    const result = await manager.switchPaymentChain("solana");
+
+    expect(result).toMatchObject({ ok: true, chain: "solana", restartRequired: true });
+    expect(result.message).toContain("Restart the ClawRouter/OpenClaw gateway");
+  });
+
+  it("reports a proxy that failed to come back after the chain switch", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-chain-failed-"));
+    await stagePinnedClawRouter(home);
+    const manager = fixtureManager(home, async () => false);
+    manager.supervisor.restartProxy = async () => {
+      throw new Error("Service did not become healthy");
+    };
+
+    const result = await manager.switchPaymentChain("base");
+
+    expect(result).toMatchObject({ ok: false, chain: "base", restartRequired: true });
+    expect(result.message).toContain("Service did not become healthy");
+  });
+
+  it("does not claim the new chain is active when the restarted proxy reports another", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-chain-mismatch-"));
+    await stagePinnedClawRouter(home);
+    const manager = fixtureManager(home, async () => false, undefined, { paymentChain: "base" });
+    manager.supervisor.restartProxy = async () => true;
+
+    const result = await manager.switchPaymentChain("solana");
+
+    expect(result).toMatchObject({ ok: false, chain: "solana", restartRequired: true });
+    expect(result.message).toContain("reports base");
+  });
+
+  it("does not switch or restart anything when the chain command fails", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-chain-cli-failed-"));
+    await stagePinnedClawRouter(home);
+    const manager = fixtureManager(
+      home,
+      async () => false,
+      async () => ({
+        code: 1,
+        stdout: "",
+        stderr: "no Solana wallet",
+      }),
+    );
+    let restarted = false;
+    manager.supervisor.restartProxy = async () => {
+      restarted = true;
+      return true;
+    };
+
+    const result = await manager.switchPaymentChain("solana");
+
+    expect(result).toMatchObject({
+      ok: false,
+      restartRequired: false,
+      message: "no Solana wallet",
+    });
+    expect(restarted).toBe(false);
   });
 
   it("keeps a reported zero wallet balance available instead of treating it as missing", async () => {
@@ -581,6 +674,18 @@ describe("ClawRouterManager adapter flow", () => {
     await expect(rejected.createOnramp(50)).resolves.toMatchObject({ ok: false });
   });
 });
+
+/** Stage the pinned ClawRouter CLI where ensureNpmPackage looks for it. */
+async function stagePinnedClawRouter(home: string): Promise<string> {
+  const runtime = join(home, ".clawrouter-desktop", "runtime", "node_modules");
+  const binary = join(runtime, ".bin", "clawrouter");
+  const manifest = join(runtime, "@blockrun", "clawrouter", "package.json");
+  await mkdir(dirname(binary), { recursive: true });
+  await mkdir(dirname(manifest), { recursive: true });
+  await writeFile(binary, "#!/bin/sh\n", { mode: 0o755 });
+  await writeFile(manifest, JSON.stringify({ version: CLAWROUTER_PACKAGE_VERSION }));
+  return binary;
+}
 
 function fixtureManager(
   homeDir: string,

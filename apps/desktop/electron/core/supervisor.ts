@@ -8,6 +8,10 @@ import type { AdapterContext, CommandRunner } from "./types.js";
 
 type ServiceName = "proxy" | "codex-bridge";
 
+/** How long a managed proxy gets to exit on SIGTERM before it is SIGKILLed. */
+const STOP_GRACE_MS = 5_000;
+const PROXY_PORT = 8402;
+
 export class ServiceSupervisor {
   private readonly children = new Map<ServiceName, ChildProcess>();
 
@@ -98,6 +102,65 @@ export class ServiceSupervisor {
     );
   }
 
+  /**
+   * Restart the proxy Desktop itself launched so it re-reads the payment chain
+   * in ~/.blockrun/.chain. Resolves false when the proxy on 8402 is not one of
+   * Desktop's children (an OpenClaw gateway, a terminal instance): Desktop must
+   * not kill a process it does not own, so that one still needs its own restart.
+   * The Codex bridge keeps running; it reaches the proxy by URL and only sees a
+   * brief outage.
+   */
+  async restartProxy(): Promise<boolean> {
+    const current = this.liveChild("proxy");
+    if (!current) return false;
+    try {
+      await this.stopProxy(current);
+    } finally {
+      // stopProxy throws when the port stays open, but the child is already
+      // signalled by then. Keeping it in the map makes the next restartProxy()
+      // resolve false and tell the user Desktop does not own a proxy it started.
+      this.children.delete("proxy");
+    }
+    await this.ensureProxy();
+    return true;
+  }
+
+  /**
+   * Stop the proxy child and anything of its that still listens on the proxy
+   * port. The child is normally the listener itself, but were it a wrapper the
+   * listener would be a descendant that outlives it, and ensureProxy() would
+   * then adopt the stale proxy (it still proves the Desktop token) instead of
+   * starting one on the new chain. So the port must be closed before relaunch.
+   */
+  private async stopProxy(child: ChildProcess): Promise<void> {
+    const owned = child.pid
+      ? await listenersOwnedBy(child.pid, PROXY_PORT, this.context.runCommand)
+      : [];
+    const descendants = owned.filter((pid) => pid !== child.pid);
+    await stopChild(child, STOP_GRACE_MS);
+    for (const pid of descendants) signal(pid, "SIGTERM");
+    if (await this.waitForPortClosed(PROXY_PORT, STOP_GRACE_MS)) return;
+    // Re-read the port before escalating. `descendants` was captured before the
+    // parent died; a descendant that exited on SIGTERM can have had its pid
+    // recycled inside the grace window, and SIGKILL is not a signal to send at a
+    // pid we have not just re-confirmed is the thing holding the port.
+    const holding = await listenersOnPort(PROXY_PORT, this.context.runCommand);
+    for (const pid of descendants) if (holding.includes(pid)) signal(pid, "SIGKILL");
+    if (await this.waitForPortClosed(PROXY_PORT, 1_000)) return;
+    throw new Error(
+      `The previous proxy is still listening on port ${PROXY_PORT}. Restart ClawRouter Desktop to apply the change.`,
+    );
+  }
+
+  private async waitForPortClosed(port: number, timeoutMs: number): Promise<boolean> {
+    const started = Date.now();
+    while (await this.portOpen(port)) {
+      if (Date.now() - started >= timeoutMs) return false;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return true;
+  }
+
   async stopAll(): Promise<void> {
     for (const child of this.children.values()) {
       if (!child.killed) child.kill("SIGTERM");
@@ -112,7 +175,7 @@ export class ServiceSupervisor {
     env: NodeJS.ProcessEnv,
   ): Promise<ChildProcess> {
     const current = this.children.get(name);
-    if (current && current.exitCode === null && !current.killed) return current;
+    if (current && !hasExited(current) && !current.killed) return current;
     const child = spawn(command, args, {
       env: await withEmbeddedNode(this.context.stateDir, env),
       stdio: ["ignore", "pipe", "pipe"],
@@ -126,11 +189,11 @@ export class ServiceSupervisor {
 
   private liveChild(name: ServiceName): ChildProcess | undefined {
     const child = this.children.get(name);
-    return child && child.exitCode === null && !child.killed ? child : undefined;
+    return child && !hasExited(child) && !child.killed ? child : undefined;
   }
 
   private async childOwnsPort(child: ChildProcess, port: number): Promise<boolean> {
-    if (!child.pid || child.exitCode !== null || child.killed) return false;
+    if (!child.pid || hasExited(child) || child.killed) return false;
     return listenerBelongsToProcess(child.pid, port, this.context.runCommand);
   }
 }
@@ -140,14 +203,23 @@ export async function listenerBelongsToProcess(
   port: number,
   runCommand: CommandRunner,
 ): Promise<boolean> {
-  const listeners = await runCommand("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
-    timeoutMs: 3_000,
-  });
-  if (listeners.code !== 0) return false;
-  for (const line of listeners.stdout.split(/\r?\n/)) {
-    let pid = Number.parseInt(line.trim(), 10);
+  return (await listenersOwnedBy(ownerPid, port, runCommand)).length > 0;
+}
+
+/** PIDs listening on `port` that are `ownerPid` itself or descend from it. */
+export async function listenersOwnedBy(
+  ownerPid: number,
+  port: number,
+  runCommand: CommandRunner,
+): Promise<number[]> {
+  const owned: number[] = [];
+  for (const listener of await listenersOnPort(port, runCommand)) {
+    let pid = listener;
     for (let depth = 0; Number.isInteger(pid) && pid > 1 && depth < 12; depth += 1) {
-      if (pid === ownerPid) return true;
+      if (pid === ownerPid) {
+        owned.push(listener);
+        break;
+      }
       const parent = await runCommand("ps", ["-o", "ppid=", "-p", String(pid)], {
         timeoutMs: 3_000,
       });
@@ -157,7 +229,36 @@ export async function listenerBelongsToProcess(
       pid = next;
     }
   }
-  return false;
+  return owned;
+}
+
+/** PIDs currently listening on `port`, whoever owns them. */
+export async function listenersOnPort(port: number, runCommand: CommandRunner): Promise<number[]> {
+  const listeners = await runCommand("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
+    timeoutMs: 3_000,
+  });
+  if (listeners.code !== 0) return [];
+  return listeners.stdout
+    .split(/\r?\n/)
+    .map((line) => Number.parseInt(line.trim(), 10))
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+}
+
+/**
+ * Whether the child has actually exited. `exitCode` alone is not the test: it
+ * stays null for a process killed by a signal, which is exactly how this file
+ * stops things, so `exitCode === null` reads a dead child as still running.
+ */
+function hasExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+function signal(pid: number, name: "SIGTERM" | "SIGKILL"): void {
+  try {
+    process.kill(pid, name);
+  } catch {
+    // Already gone, or not ours to signal; the port check decides what happens next.
+  }
 }
 
 async function isModelService(url: string, fetcher: typeof fetch): Promise<boolean> {
@@ -197,6 +298,28 @@ async function waitForOwned(
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   throw new Error(`Service did not become healthy: ${url}`);
+}
+
+async function stopChild(child: ChildProcess, graceMs: number): Promise<void> {
+  if (hasExited(child)) return;
+  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  child.kill("SIGTERM");
+  const escalate = setTimeout(() => {
+    if (!hasExited(child)) child.kill("SIGKILL");
+  }, graceMs);
+  // A child that outlives SIGKILL (uninterruptible I/O, a stopped process) must
+  // not hang the chain switch with no way back: stop waiting and let stopProxy's
+  // port check decide, which is the same evidence it uses for the descendants.
+  let bail: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<void>((resolve) => {
+    bail = setTimeout(resolve, graceMs * 2);
+  });
+  try {
+    await Promise.race([exited, timedOut]);
+  } finally {
+    clearTimeout(escalate);
+    if (bail) clearTimeout(bail);
+  }
 }
 
 async function isPortOpen(port: number): Promise<boolean> {

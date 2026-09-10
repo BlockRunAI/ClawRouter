@@ -169,11 +169,48 @@ export class ClawRouterManager {
           message: (result.stderr || result.stdout).trim() || `Could not switch to ${chain}.`,
         };
       }
+      const label = chain === "solana" ? "Solana" : "Base";
+      // The proxy reads the chain once at startup, so apply the switch by
+      // restarting the proxy Desktop launched instead of asking the user to
+      // restart something they never started. A proxy Desktop does not own is
+      // left alone and still needs its own restart.
+      let restarted = false;
+      try {
+        restarted = await this.supervisor.restartProxy();
+      } catch (error) {
+        return {
+          ok: false,
+          chain,
+          restartRequired: true,
+          message: `${label} selected, but the local proxy did not come back: ${
+            error instanceof Error ? error.message : String(error)
+          }. Restart ClawRouter Desktop to apply it.`,
+        };
+      }
+      if (!restarted) {
+        return {
+          ok: true,
+          chain,
+          restartRequired: true,
+          message: `${label} selected. Restart the ClawRouter/OpenClaw gateway to apply it.`,
+        };
+      }
+      const active = await this.activePaymentChain();
+      if (active !== chain) {
+        return {
+          ok: false,
+          chain,
+          restartRequired: true,
+          message: `${label} selected, but the restarted proxy reports ${
+            active ?? "no payment chain"
+          }. Check the proxy log in ClawRouter Desktop.`,
+        };
+      }
       return {
         ok: true,
         chain,
-        restartRequired: true,
-        message: `${chain === "solana" ? "Solana" : "Base"} selected. Restart the ClawRouter/OpenClaw gateway to apply it.`,
+        restartRequired: false,
+        message: `${label} is active. ClawRouter restarted its local proxy on the new chain.`,
       };
     } catch (error) {
       return {
@@ -183,6 +220,16 @@ export class ClawRouterManager {
         message: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  /** The chain the running proxy signs on, from its own /health report. */
+  private async activePaymentChain(): Promise<PaymentChain | undefined> {
+    const root = this.context.proxyBaseUrl.replace(/\/v1\/?$/, "");
+    const health = await fetchJson<Record<string, unknown>>(
+      `${root}/health?full=true`,
+      this.context.fetch,
+    );
+    return paymentChainOrUndefined(health.value?.paymentChain);
   }
 
   async createOnramp(amount: number): Promise<OnrampResult> {
@@ -619,6 +666,9 @@ function activationMessage(
   if (adapter.activation === "immediate") {
     if (adapter.id === "pi" && action === "connect") {
       return `${changed} Open /model (or press Ctrl+L) in a running Pi session to refresh it now; no restart is needed.`;
+    }
+    if (adapter.id === "hermes") {
+      return `${changed} New Hermes chats pick it up right away; run /model in an open session to switch it; no restart is needed.`;
     }
     return `${changed} The change is active now; no restart is needed.`;
   }
