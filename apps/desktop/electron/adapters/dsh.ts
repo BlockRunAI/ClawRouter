@@ -31,7 +31,6 @@ export class DshAdapter implements AgentAdapter {
       installed,
       configured,
       activation: this.activation,
-      restartRequired: false,
       details: ["DSH settings are hot-reloaded.", "DSH is currently a developer preview."],
     });
   }

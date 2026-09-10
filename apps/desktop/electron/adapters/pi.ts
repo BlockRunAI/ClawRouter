@@ -29,7 +29,6 @@ export class PiAdapter implements AgentAdapter {
       installed: Boolean(await findCommand(context, "pi")),
       configured,
       activation: this.activation,
-      restartRequired: false,
       details: configured
         ? [
             "Open /model (or press Ctrl+L) in Pi to use or refresh ClawRouter models; no restart is needed.",

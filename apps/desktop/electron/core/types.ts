@@ -14,8 +14,14 @@ export type AgentStatus = {
   configured: boolean;
   proxyReachable: boolean;
   health: AgentHealth;
+  // No `restartRequired` here on purpose. Nothing can observe whether an agent
+  // process has picked a config change up, so a status field claiming it would be
+  // a guess — and the two adapters that had one set it to a constant function of
+  // `configured`, making it permanently true. `activation` carries the category
+  // ("this kind of agent needs a restart when you change it"), which is the only
+  // part that is knowable. WalletMutationResult and PaymentChainSwitchResult below
+  // DO carry it, and there it is real: Desktop has just written the config itself.
   activation: ActivationMode;
-  restartRequired: boolean;
   removalMode: "restore" | "disconnect" | "unavailable";
   details: string[];
 };
