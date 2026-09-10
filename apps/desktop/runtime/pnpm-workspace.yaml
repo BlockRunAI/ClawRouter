@@ -9,5 +9,10 @@ packages:
   - "."
 overrides:
   "@blockrun/clawrouter": 0.12.267
+  # Mirrors the root package.json security pins. This runtime is a SEPARATE pnpm
+  # install that electron-builder packages into the app, so the root `overrides`
+  # never reach it — @polymarket/builder-relayer-client was still dragging
+  # axios 0.27.2 in here long after v0.12.238 fixed it at the root.
+  axios: ^1.19.0
 minimumReleaseAgeExclude:
   - "@blockrun/clawrouter@0.12.267"
