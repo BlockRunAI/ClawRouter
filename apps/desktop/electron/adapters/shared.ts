@@ -15,7 +15,6 @@ export async function statusShape(input: {
   installed: boolean;
   configured: boolean;
   activation: ActivationMode;
-  restartRequired?: boolean;
   details?: string[];
 }): Promise<AgentStatus> {
   const proxyReachable = await proxyHealth(input.context);
@@ -31,7 +30,6 @@ export async function statusShape(input: {
     proxyReachable,
     health,
     activation: input.activation,
-    restartRequired: input.restartRequired ?? false,
     removalMode: "unavailable",
     details: input.details ?? [],
   };

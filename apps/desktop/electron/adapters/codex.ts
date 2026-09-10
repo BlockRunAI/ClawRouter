@@ -28,7 +28,6 @@ export class CodexAdapter implements AgentAdapter {
       installed: Boolean(await findCommand(context, "codex")),
       configured,
       activation: this.activation,
-      restartRequired: configured,
       details: configured
         ? ["Restart Codex CLI or Codex Desktop after changing this connection."]
         : [],

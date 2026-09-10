@@ -34,7 +34,6 @@ export class HermesAdapter implements AgentAdapter {
       installed: Boolean(hermes),
       configured: hasHermesConfig(config),
       activation: this.activation,
-      restartRequired: false,
       details: hermes
         ? hasHermesConfig(config)
           ? ["New Hermes chats use ClawRouter; an open session switches with /model."]

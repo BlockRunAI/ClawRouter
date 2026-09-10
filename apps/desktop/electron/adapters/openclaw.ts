@@ -30,7 +30,6 @@ export class OpenClawAdapter implements AgentAdapter {
       installed,
       configured: hasOpenClawConfig(config),
       activation: this.activation,
-      restartRequired: hasOpenClawConfig(config),
       details: installed
         ? hasOpenClawConfig(config)
           ? ["Restart the OpenClaw gateway after changing this connection."]
