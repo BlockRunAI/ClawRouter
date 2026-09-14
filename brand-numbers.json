@@ -3,10 +3,10 @@
   "version": 1,
   "models": {
     "chatVisible": 78,
-    "totalVisible": 103,
+    "totalVisible": 105,
     "free": 6,
     "freeWithheld": 27,
-    "image": 10,
+    "image": 12,
     "video": 8,
     "music": 1,
     "speech": 5,
