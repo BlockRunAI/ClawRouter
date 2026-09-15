@@ -18,6 +18,19 @@
  * Markers look like:  <!-- br:models.chatVisible -->66<!-- /br:models.chatVisible -->
  * and wrap the WHOLE token, so a badge URL, its alt text and the prose number
  * can all regenerate from one key.
+ *
+ * THIS COPY IS AHEAD OF THE SOURCE. blockrun's `brand-script-sync` CI job
+ * diffs every consumer against brand/sync-brand-numbers.mjs and its printed
+ * remediation is "copy the source over the consumer" — twice that overwrote a
+ * fix made here (#84, #128). What this copy carries that the source does not,
+ * as of 2026-09-13: assertRenderable + escAttr (a value from the mirror is
+ * refused, and attribute-escaped, before it is written into a README that the
+ * brand-sync bot then pushes unattended with contents:write), keyOf() on the
+ * keys-in-use count, and the --check summary that does not say "up to date"
+ * under a list of stale fenced markers. Resync source <- consumer: land THIS
+ * file in blockrun/brand and fan it out; do not copy the source over it.
+ * test/brand-sync-script.test.ts fails on a copy without the guard, so a
+ * consumer <- source resync cannot pass this repo's required `test` check.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
@@ -101,15 +114,58 @@ function flatten(obj, prefix = "") {
  * Renderers are registered under the FULL marker name so a badge's label is
  * written out rather than guessed from the key.
  */
+/**
+ * What a brand value is allowed to be, checked at the moment it is USED.
+ *
+ * These values arrive over the network from blockrun.ai (or the
+ * awesome-blockrun mirror) and are written verbatim into README.md,
+ * CONTRIBUTING.md and skills/*\/SKILL.md, which `.github/workflows/brand-sync.yml`
+ * then commits and pushes to the default branch weekly, unattended, with
+ * `contents: write`. Rendering was `String(value)` and the badge renderer
+ * interpolated straight into `src="..."` and `alt="..."`, so a value carrying
+ * a quote or an angle bracket closed the attribute and injected markup into
+ * every consuming repo's README. Write access to one mirror repo was enough.
+ *
+ * Checked here rather than over the whole artifact on purpose: the payload
+ * legitimately carries prose fields we never render (`savings.baselineModel`
+ * is a string), and refusing those would break the sync on an unrelated
+ * addition upstream.
+ */
+const SAFE_TEXT = /^[\p{L}\p{N} .,%+/·—–-]{1,64}$/u;
+
+function assertRenderable(marker, value) {
+  const what = () => `${marker} = ${JSON.stringify(value)}`;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) fail(`brand-numbers: refusing to render ${what()} — not a finite number`);
+    return value;
+  }
+  if (typeof value === "string") {
+    if (!SAFE_TEXT.test(value)) {
+      fail(
+        `brand-numbers: refusing to render ${what()} — a rendered value must be ` +
+        `a number or a short plain label. This value would be written verbatim ` +
+        `into README/CONTRIBUTING/SKILL.md and pushed by the brand-sync bot.`,
+      );
+    }
+    return value;
+  }
+  fail(`brand-numbers: refusing to render ${what()} — expected a number or a string, got ${Array.isArray(value) ? "an array" : typeof value}`);
+}
+
+/** Escape for an HTML attribute. Belt to assertRenderable's braces. */
+const escAttr = (v) =>
+  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
 const badge = (label) => (n) =>
-  `<img src="https://img.shields.io/badge/${label}-${n}-5B9BF6?style=flat-square&labelColor=0B0A0F" alt="${n} ${label}">`;
+  `<img src="https://img.shields.io/badge/${label}-${escAttr(n)}-5B9BF6?style=flat-square&labelColor=0B0A0F" alt="${escAttr(n)} ${label}">`;
 
 const RENDER = {
   "mcp.tools@badge": badge("tools"),
   "models.totalVisible@badge": badge("models"),
   "models.chatVisible@badge": badge("models"),
 };
-const render = (marker, value) => (RENDER[marker] ?? String)(value);
+const render = (marker, value) => (RENDER[marker] ?? String)(assertRenderable(marker, value));
 
 /** `mcp.tools@badge` looks up `mcp.tools`. Unmodified markers are unaffected. */
 const keyOf = (marker) => marker.split("@")[0];
@@ -308,7 +364,8 @@ const everUsed = new Set();
 
 for (const file of walk(ROOT)) {
   const { before, after, changed, used } = syncFile(file, numbers, problems, skipped);
-  used.forEach((k) => everUsed.add(k));
+  // keyOf: mcp.tools and mcp.tools@badge are ONE key in use, not two.
+  used.forEach((k) => everUsed.add(keyOf(k)));
   if (!changed) continue;
   drifted.push({ file: relative(ROOT, file), before, after });
   if (!check) writeFileSync(file, after);
@@ -332,7 +389,16 @@ if (problems.length) {
 
 if (check) {
   if (drifted.length === 0) {
-    console.log(`brand-numbers: up to date (${everUsed.size} keys in use)`);
+    // Do not say "up to date" straight after listing markers known to be
+    // stale. The skip stays non-fatal for the reason above, but a CI log that
+    // prints the stale ones and then declares everything current is a log
+    // nobody reads twice.
+    console.log(
+      skipped.length
+        ? `brand-numbers: no drift outside code fences (${everUsed.size} keys in use), ` +
+          `but ${skipped.length} fenced marker(s) listed above are stale — add @live to sync them`
+        : `brand-numbers: up to date (${everUsed.size} keys in use)`,
+    );
     process.exit(0);
   }
   console.error("brand-numbers: these files disagree with brand-numbers.json\n");
