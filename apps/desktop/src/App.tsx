@@ -1654,11 +1654,11 @@ function Icon({ name }: { name: IconName }) {
   );
 }
 function healthLabel(agent: AgentStatus) {
-  // Deliberately NOT branching on `restartRequired`. Codex and OpenClaw set it to
-  // `configured`, so it is permanently true once connected — it means "this kind of
-  // agent needs a restart when you change it", not "a change is pending". Reading it
-  // here would pin them to "Restart pending" forever. `activationLabel`, rendered
-  // beside this one, already says "Restart gateway/app after changes".
+  // "Connected" is the honest ceiling. Nothing observes whether the agent process
+  // has picked up its config, so a "Restart pending" state cannot be derived here
+  // (the static `restartRequired` flag that once tempted it was deleted in #379 for
+  // exactly that reason). `activationLabel`, rendered beside this one, already says
+  // "Restart gateway/app after changes".
   if (agent.health === "ready") return "Connected";
   if (!agent.installed) return agent.configured ? "Configured · CLI missing" : "Not detected";
   return agent.configured ? "Needs proxy" : "Available";
