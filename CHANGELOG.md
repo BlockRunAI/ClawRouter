@@ -4,6 +4,119 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.279 — September 15, 2026
+
+### Desktop — visual refresh of the control plane
+
+The sidebar is grouped into Control / Account with the wallet card anchored
+to the bottom of the rail; the hero is data-driven (connected agents, model
+count, settlement chain); the model catalog carries tinted capability chips
+(Reasoning / Vision / Agentic / Tools); Usage renders a live daily chart from
+the router's `/stats` with axis, gridlines and per-day tooltips; Settings
+gains a theme picker and copyable local endpoints; Wallet shows the official
+Base and Solana marks with copyable addresses; the funding dialog has Buy /
+Deposit tabs, and Deposit exposes both wallet addresses.
+
+Three numbers on the refreshed screens were corrected before landing
+([#367](https://github.com/BlockRunAI/ClawRouter/pull/367)):
+
+- **The hero counted alias rows as models.** `/v1/models` deliberately emits
+  a row per shorthand, so the hero and routing map advertised the raw length
+  while the Models page next to them collapsed the same array. Both now count
+  the collapsed catalog.
+- **A window with no recent traffic drew a week that never happened.** When
+  every day the router reported was older than the chart cap, the padding
+  snapped to today and rendered seven zero bars labelled "last 7 days" beside
+  a Requests card showing the full total. There is no window to draw there,
+  so the chart shows its empty state instead.
+- **The Requests card and the bars counted different days.** `totalRequests`
+  spans the 7 most recent log _files_, which for an intermittent user reach
+  back further than the chart. The card now sums the same days the bars do
+  and carries the chart's own window label. The window math moved out of
+  `App.tsx` into `usage-stats.ts` with tests.
+
+The Desktop 0.1.3 preview already shipped this refresh from an integration
+branch; this entry records it landing on `main`.
+
+### Desktop — chain switches apply without a restart; Hermes needs none
+
+Switching the payment chain wrote `~/.blockrun/.chain` and then asked the
+user to "restart the gateway", but the proxy that needed restarting is the
+child process Desktop itself launched, which the user cannot restart short of
+quitting the app. Desktop now restarts the proxy it owns after the CLI
+succeeds, stops any listener the child left behind (a wrapper's grandchild on
+8402 would otherwise be re-adopted as a stale proxy), waits for the port to
+close, and confirms through `/health` that the new proxy signs on the
+requested chain before reporting it active. A proxy Desktop did not launch is
+left alone. The Hermes adapter no longer demands a restart after every
+change: Hermes re-reads `config.yaml` on mtime change and looks its provider
+key up at call time
+([#371](https://github.com/BlockRunAI/ClawRouter/pull/371)).
+
+`AgentStatus.restartRequired` was deleted: five adapters wrote it and nothing
+read it, and it could not be read honestly, since nothing observes whether an
+agent process has picked a config change up. Reading it as a state would have
+pinned Codex and OpenClaw to a permanent "Restart pending"
+([#379](https://github.com/BlockRunAI/ClawRouter/pull/379), closes #377).
+
+### Fixed — the Desktop staged runtime was still shipping axios 0.27.2
+
+v0.12.238 pinned axios forward at the root, but the Desktop staged runtime is
+a separate pnpm install with its own overrides, so
+`@polymarket/builder-relayer-client` kept dragging axios 0.27.2 into the tree
+electron-builder packages — 26 of the repo's 35 open Dependabot alerts. The
+root pin is mirrored into `runtime/pnpm-workspace.yaml`; the relock drops
+0.27.2 and its transitives and touches nothing else
+([#376](https://github.com/BlockRunAI/ClawRouter/pull/376)).
+
+### Dependencies — hono patched; two overrides that pinned nothing removed
+
+All 13 root `overrides` were audited against what the lockfile resolves.
+`hono` was pinned `^4.13.0` and resolving to 4.13.1, inside the advisory
+range for the `toSSG()` write and query-parser issues; it is now `^4.13.5`
+(resolves 4.13.7). `basic-ftp` and `jayson > uuid` matched no package in the
+tree at all — leftovers from removed dependencies that read as protection —
+and are gone. The other nine resolve to exactly one copy each
+([#380](https://github.com/BlockRunAI/ClawRouter/pull/380)).
+
+### Build — `smoke-dist` guards the single-copy Solana signer invariant
+
+The 2026-03-06 malformed-transaction incident was recorded as "pin
+`@solana/kit` to `^5.0.0`", and nothing enforced it. The property that
+actually broke was two runtime copies of `@solana/signers` and
+`@solana/transactions` disagreeing about the state a signature is assembled
+from. `scripts/smoke-dist.mjs` now asserts that `@solana/signers`,
+`@solana/transactions` and `@solana/transaction-messages` are each inlined
+exactly once (counted by install path, not marker line), and runs a
+synthetic two-copy fixture through itself first so a matcher that rots
+fails the build instead of reporting a clean bundle
+([#375](https://github.com/BlockRunAI/ClawRouter/pull/375)).
+
+### Brand numbers — catalog markers refreshed; sync script hardened
+
+`brand-numbers.json` is resynced to the published catalog: 78 chat models
+(6 free), 12 image models, 105 visible in total. The `package.json`
+description, README badge and SKILL frontmatter literals that markers cannot
+reach were moved by hand to match. `scripts/sync-brand-numbers.mjs` is
+vendored verbatim from blockrun-mcp with `assertRenderable` / `escAttr`, so
+a value fetched from the mirror is refused, and attribute-escaped, before
+the unattended brand-sync bot writes it into markdown
+([#359](https://github.com/BlockRunAI/ClawRouter/pull/359),
+[#374](https://github.com/BlockRunAI/ClawRouter/pull/374),
+[#383](https://github.com/BlockRunAI/ClawRouter/pull/383),
+[#388](https://github.com/BlockRunAI/ClawRouter/pull/388)).
+
+Known gap carried into this release: blockrun now serves three image models
+(`openai/gpt-image-2.5-flare`, `openai/gpt-image-2.5-sunburst`,
+`xai/grok-imagine-image-2.0`) that the image picker, shorthands and
+`docs/image-generation.md` do not list yet. They are reachable by full id
+through `/v1/images/generations`; the picker sync is the next release.
+
+Thanks to [@ramioca](https://github.com/ramioca) for the Desktop control
+plane refresh (#367) and the restart-free chain switch (#371).
+
+---
+
 ## v0.12.278 — September 7, 2026
 
 ### Removed — TWZRD AutoGate, and the optional dependency behind it
