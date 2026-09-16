@@ -24,6 +24,11 @@
   --coinbase: #0052ff;
   --coinbase-hover: #0047df;
   --shadow: 0 8px 24px rgba(25, 30, 38, 0.06);
+  /* Built-in CSS easings are too weak for UI work; these carry the punch.
+     ease-out for enter/press feedback, ease-in-out for on-screen movement. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root[data-theme="dark"] {
@@ -87,16 +92,44 @@ svg {
   display: block;
 }
 
+/* Pressables scale down on :active so the interface visibly hears the press.
+   Subtle (0.97) and fast (160ms) per the press-feedback rule; excludes
+   high-frequency targets like nav, where animation would read as lag. */
+.agent-actions > .primary,
+.agent-actions > .secondary,
+.wallet-fund-button,
+.coinbase-fund-button,
+.funding-continue,
+.theme-choice button,
+.amount-presets button,
+.icon-button,
+.github-button {
+  transition: transform 160ms var(--ease-out);
+}
+.agent-actions > .primary:active,
+.agent-actions > .secondary:active,
+.wallet-fund-button:active,
+.funding-continue:active,
+.theme-choice button:active,
+.amount-presets button:active,
+.icon-button:active,
+.github-button:active {
+  transform: scale(0.97);
+}
+.coinbase-fund-button:active {
+  transform: scale(0.98);
+}
+
 .shell {
   display: grid;
-  grid-template-columns: 206px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100vh;
 }
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 206px;
-  padding: 34px 12px 14px;
+  width: 232px;
+  padding: 26px 14px 14px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
@@ -107,7 +140,9 @@ svg {
   display: flex;
   gap: 10px;
   align-items: center;
-  padding: 0 9px 25px;
+  padding: 0 8px 22px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 .brand-mark {
   width: 32px;
@@ -143,10 +178,23 @@ svg {
 
 nav {
   display: grid;
-  gap: 3px;
+  gap: 2px;
+}
+.nav-label {
+  margin: 0;
+  padding: 14px 10px 6px;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.nav-label:first-child {
+  padding-top: 0;
 }
 nav button {
-  min-height: 38px;
+  position: relative;
+  min-height: 34px;
   padding: 0 10px;
   display: flex;
   align-items: center;
@@ -157,7 +205,7 @@ nav button {
   background: transparent;
   cursor: pointer;
   text-align: left;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 560;
   transition:
     color 0.14s ease,
@@ -168,6 +216,8 @@ nav button > span {
   height: 18px;
   display: grid;
   place-items: center;
+  color: var(--faint);
+  transition: color 0.14s ease;
 }
 nav button svg {
   width: 16px;
@@ -177,21 +227,30 @@ nav button:hover {
   color: var(--text);
   background: var(--surface-hover);
 }
+nav button:hover > span {
+  color: var(--muted);
+}
 nav button.active {
   color: var(--accent-text);
   background: var(--accent-soft);
 }
-
+nav button.active > span {
+  color: var(--accent-text);
+}
+/* Anchored to the bottom of the rail, above the source/status pair. */
 .sidebar-wallet {
-  margin: 19px 4px 0;
-  padding: 11px;
+  margin: auto 2px 0;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--text);
-  background: var(--surface);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 62%),
+    var(--surface);
+  box-shadow: var(--shadow);
   text-align: left;
 }
 .wallet-heading {
@@ -315,18 +374,15 @@ nav button.active {
   box-shadow: 0 1px 2px rgba(0, 40, 120, 0.16);
   transition:
     background-color 0.14s ease,
-    transform 0.08s ease;
+    transform 160ms var(--ease-out);
 }
 .wallet-fund-button:hover {
   background: var(--coinbase-hover);
 }
-.wallet-fund-button:active {
-  transform: translateY(1px);
-}
-.wallet-fund-button span {
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1;
+.wallet-fund-button svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
 }
 .wallet-restart {
   padding-top: 7px;
@@ -368,7 +424,7 @@ nav button.active {
   height: 11px;
 }
 .sidebar-foot {
-  margin-top: auto;
+  margin-top: 10px;
   padding: 13px 9px 3px;
   display: flex;
   gap: 9px;
@@ -400,7 +456,7 @@ nav button.active {
 main {
   grid-column: 2;
   width: 100%;
-  max-width: 1320px;
+  max-width: 1140px;
   margin: 0 auto;
   padding: 30px 34px 48px;
 }
@@ -440,12 +496,32 @@ main {
   transition:
     color 0.14s ease,
     border-color 0.14s ease,
-    background-color 0.14s ease;
+    background-color 0.14s ease,
+    transform 160ms var(--ease-out);
 }
 .icon-button {
   width: 32px;
   display: grid;
   place-items: center;
+}
+/* One full turn per click — feedback that the poll actually ran. The icon
+   also nudges a few degrees on hover so the control hints at its action. */
+.refresh-button svg {
+  transition: transform 200ms var(--ease-out);
+}
+.refresh-button:hover svg {
+  transform: rotate(35deg);
+}
+.refresh-button.spinning svg {
+  animation: refresh-turn 650ms var(--ease-in-out);
+}
+@keyframes refresh-turn {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .icon-button svg {
   width: 14px;
@@ -478,6 +554,15 @@ main {
   border: 1px solid;
   border-radius: 8px;
   font-size: 11px;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 .notice.ok {
   color: var(--success);
@@ -491,22 +576,26 @@ main {
 }
 .notice button {
   border: 0;
-  color: currentColor;
+  color: currentcolor;
   background: none;
   cursor: pointer;
 }
 
 .hero {
-  min-height: 164px;
   padding: 22px;
-  display: grid;
-  grid-template-columns: minmax(230px, 0.9fr) minmax(370px, 1.15fr);
-  grid-template-rows: 1fr auto;
-  gap: 18px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+.hero-top {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.9fr) minmax(370px, 1.15fr);
+  gap: 26px;
+  align-items: center;
 }
 .hero-copy {
   align-self: center;
@@ -523,8 +612,8 @@ main {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+  background: currentcolor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentcolor 12%, transparent);
 }
 .hero h2 {
   margin: 11px 0 5px;
@@ -542,27 +631,36 @@ main {
   font-size: 11px;
   line-height: 1.5;
 }
+/* The numbers are the point of this panel, so give them real weight and
+   separate them with rules rather than whitespace alone. */
 .hero-metrics {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 30px;
-  padding-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding-top: 18px;
   border-top: 1px solid var(--border);
+}
+.metric {
+  padding: 0 20px;
+  border-left: 1px solid var(--border);
+}
+.metric:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
 .metric strong,
 .metric span {
   display: block;
 }
 .metric strong {
-  font-size: 15px;
+  font-size: 22px;
   font-weight: 660;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.6px;
   font-variant-numeric: tabular-nums;
 }
 .metric span {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--faint);
-  font-size: 9px;
+  font-size: 9.5px;
 }
 
 .routing-map {
@@ -666,18 +764,28 @@ main {
   justify-content: space-between;
   align-items: end;
 }
+/* Title and description share one baseline instead of stacking, which keeps
+   headers to a single line and buys back vertical space on every page. */
+.section-title > div,
+.chart-head > div,
+.setting-block-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .section-title h3,
 .panel h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: -0.25px;
 }
 .section-title p,
 .panel p {
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 10.5px;
   line-height: 1.45;
 }
 .section-title > span {
@@ -706,9 +814,6 @@ main {
 }
 .agent-card:hover {
   background: var(--surface-raised);
-}
-.agent-card.connected {
-  box-shadow: inset 2px 0 var(--accent);
 }
 .agent-summary {
   min-width: 0;
@@ -803,7 +908,7 @@ main {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
 }
 .health.ready {
   color: var(--success);
@@ -823,18 +928,37 @@ main {
 }
 .agent-meta {
   display: flex;
-  gap: 5px;
+  gap: 10px;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 .agent-meta span {
-  padding: 3px 5px;
+  padding: 3px 8px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 5px;
   color: var(--faint);
-  font-size: 7px;
-  text-transform: uppercase;
-  letter-spacing: 0.45px;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+/* Activation is a status note, not a category label. Drop the box so it stops
+   competing with the API chip beside it at identical visual weight. */
+.agent-meta .restart,
+.agent-meta .instant {
+  padding: 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.agent-meta .restart::before,
+.agent-meta .instant::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentcolor;
+  flex: none;
 }
 .agent-meta .restart {
   color: var(--warning);
@@ -904,7 +1028,7 @@ main {
   width: 8px;
   height: 8px;
   margin-right: 4px;
-  border: 1px solid currentColor;
+  border: 1px solid currentcolor;
   border-right-color: transparent;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -956,7 +1080,7 @@ main {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
 }
 .catalog-stats {
   display: flex;
@@ -994,13 +1118,13 @@ main {
 }
 .filters input,
 .filters select {
-  height: 32px;
-  padding: 0 9px;
+  height: 34px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--text);
   background: var(--surface);
-  font-size: 9px;
+  font-size: 11px;
 }
 .filters select {
   min-width: 124px;
@@ -1044,14 +1168,14 @@ main {
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
   color: var(--faint);
-  font-size: 8px;
+  font-size: 9.5px;
 }
 .model-result-meta b {
   color: var(--muted);
   font-weight: 600;
 }
 .model-row {
-  min-height: 61px;
+  min-height: 64px;
   padding: 9px 13px;
   display: grid;
   grid-template-columns:
@@ -1061,9 +1185,9 @@ main {
   align-items: center;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10.5px;
   content-visibility: auto;
-  contain-intrinsic-size: 61px;
+  contain-intrinsic-size: 64px;
 }
 .model-row:last-child {
   border-bottom: 0;
@@ -1075,9 +1199,9 @@ main {
   min-height: 32px;
   color: var(--faint);
   background: var(--surface-raised);
-  font-size: 7px;
+  font-size: 8.5px;
   text-transform: uppercase;
-  letter-spacing: 0.65px;
+  letter-spacing: 0.6px;
   content-visibility: visible;
 }
 .model-identity {
@@ -1100,20 +1224,20 @@ main {
 }
 .model-identity strong {
   color: var(--text);
-  font-size: 11px;
-  font-weight: 640;
+  font-size: 12px;
+  font-weight: 650;
 }
 .model-identity small {
   grid-column: 1 / -1;
   margin-top: 2px;
   color: var(--faint);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 8px;
+  font-size: 9.5px;
 }
 .model-identity em {
   align-self: center;
   color: var(--faint);
-  font-size: 7px;
+  font-size: 8px;
   font-style: normal;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -1134,7 +1258,7 @@ main {
 .provider-mark svg {
   width: 17px;
   height: 17px;
-  fill: currentColor;
+  fill: currentcolor;
 }
 .provider-mark img {
   width: 19px;
@@ -1189,15 +1313,15 @@ main {
 .context-cell strong,
 .price-cell strong {
   color: var(--text);
-  font-size: 11px;
-  font-weight: 640;
+  font-size: 12px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 .context-cell small,
 .price-cell small {
   margin-top: 2px;
   color: var(--faint);
-  font-size: 7px;
+  font-size: 9px;
   white-space: nowrap;
 }
 .price-cell.free strong {
@@ -1205,17 +1329,54 @@ main {
 }
 .chips {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   flex-wrap: wrap;
 }
+/* Tinted per capability so a row can be scanned by colour instead of read.
+   The tint keeps a light hue; the text is a darker step of the same hue so
+   9px labels clear 4.5:1 on the light surface, with brighter text for dark. */
 .chips i {
-  padding: 3px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
   color: var(--muted);
-  background: transparent;
-  font-size: 7px;
+  background: var(--surface-raised);
+  font-size: 9px;
   font-style: normal;
+  font-weight: 560;
+  white-space: nowrap;
+}
+.chips .cap-reasoning {
+  color: #714fcf;
+  background: color-mix(in srgb, #8b6fd8 14%, transparent);
+  border-color: color-mix(in srgb, #8b6fd8 26%, transparent);
+}
+.chips .cap-vision {
+  color: #257096;
+  background: color-mix(in srgb, #2f8fbf 14%, transparent);
+  border-color: color-mix(in srgb, #2f8fbf 26%, transparent);
+}
+.chips .cap-agentic {
+  color: #925f20;
+  background: color-mix(in srgb, #c07d2a 14%, transparent);
+  border-color: color-mix(in srgb, #c07d2a 26%, transparent);
+}
+.chips .cap-tools {
+  color: #337356;
+  background: color-mix(in srgb, #3f8f6b 14%, transparent);
+  border-color: color-mix(in srgb, #3f8f6b 26%, transparent);
+}
+:root[data-theme="dark"] .chips .cap-reasoning {
+  color: #b39bf0;
+}
+:root[data-theme="dark"] .chips .cap-vision {
+  color: #6fc0e8;
+}
+:root[data-theme="dark"] .chips .cap-agentic {
+  color: #e0a961;
+}
+:root[data-theme="dark"] .chips .cap-tools {
+  color: #6fc79c;
 }
 .model-empty {
   padding: 40px 20px;
@@ -1265,33 +1426,282 @@ main {
   font-size: 9px;
 }
 .usage-chart {
-  min-height: 330px;
   padding: 18px;
+  margin-bottom: 11px;
 }
-.bars {
-  height: 235px;
-  padding: 24px 25px 20px;
+.chart-head {
   display: flex;
-  align-items: end;
-  gap: 14px;
-  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
-.bars div {
-  min-height: 10px;
-  flex: 1;
+.chart-note {
+  color: var(--faint);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.chart-empty {
+  margin: 0;
+  padding: 40px 0;
+  color: var(--faint);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Bar chart: fixed axis gutter beside a plot that owns the gridlines. */
+.chart {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px;
+}
+.chart-axis {
+  height: 210px;
+  /* Mirror the gutter the bar list keeps for weekday labels, so the axis
+     spans exactly the gridline range rather than the whole plot height. */
+  padding-bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  color: var(--faint);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+/* Zero-height boxes centre each label's text on its gridline. */
+.chart-axis span {
+  line-height: 0;
+}
+.chart-plot {
   position: relative;
-  border-radius: 3px 3px 1px 1px;
-  background: var(--accent);
-  opacity: 0.78;
 }
-.bars span {
+.chart-grid {
   position: absolute;
-  bottom: -20px;
+  inset: 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.chart-grid i {
+  height: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
+.chart-grid i:last-child {
+  opacity: 1;
+}
+.chart-bars {
+  position: relative;
+  height: 210px;
+  margin: 0;
+  padding: 0 2px 22px;
+  list-style: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.chart-bars > li {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.chart-bar {
+  position: relative;
+  height: var(--bar, 0%);
+  min-height: 3px;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(
+    180deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 74%, transparent) 100%
+  );
+  /* Height morphs when a refresh changes the data, so bars glide to their
+     new value rather than jumping. ease-in-out: on-screen movement. */
+  transition:
+    filter 0.14s ease,
+    opacity 0.14s ease,
+    height 300ms var(--ease-in-out);
+}
+.chart-bars:hover .chart-bar {
+  opacity: 0.42;
+}
+.chart-bars > li:hover .chart-bar {
+  opacity: 1;
+  filter: brightness(1.12);
+}
+/* Sits in the padding the bar list reserves below the plot, clear of the bars. */
+.chart-label {
+  position: absolute;
+  bottom: -17px;
   left: 50%;
   transform: translateX(-50%);
   color: var(--faint);
-  font-size: 8px;
+  font-size: 9px;
+  white-space: nowrap;
 }
+/* Rides 8px above its bar, but never above the plot: on a full-height bar it
+   settles just inside the top gridline instead of colliding with the header. */
+.chart-tip {
+  position: absolute;
+  bottom: min(calc(var(--bar, 0%) + 8px), calc(100% - 44px));
+  left: 50%;
+  transform: translateX(-50%) translateY(3px);
+  padding: 6px 9px;
+  display: grid;
+  gap: 1px;
+  justify-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+  z-index: 2;
+}
+.chart-bars > li:hover .chart-tip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.chart-tip strong {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-tip small {
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.setting-block {
+  padding: 18px;
+  margin-bottom: 11px;
+}
+.setting-block-head {
+  margin-bottom: 14px;
+}
+.theme-choice {
+  display: flex;
+  gap: 8px;
+}
+.theme-choice button {
+  min-height: 38px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 560;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background-color 0.14s ease;
+}
+.theme-choice button svg {
+  width: 15px;
+  height: 15px;
+}
+.theme-choice button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.theme-choice button.active {
+  color: var(--accent-text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.endpoint-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+.endpoint-list > li {
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr) 30px;
+  align-items: center;
+  gap: 14px;
+  border-radius: 8px;
+  transition: background-color 0.14s ease;
+}
+.endpoint-list > li:hover {
+  background: var(--surface-hover);
+}
+.endpoint-list span {
+  font-size: 11px;
+  font-weight: 560;
+}
+.endpoint-list code {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.endpoint-list button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--faint);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background-color 0.14s ease;
+}
+.endpoint-list > li:hover button {
+  border-color: var(--border);
+  background: var(--surface);
+}
+.endpoint-list button:hover {
+  color: var(--text);
+}
+.endpoint-list button svg {
+  width: 13px;
+  height: 13px;
+}
+/* Copied feedback: icon crossfades to a green check, same pattern as the
+   deposit rows, and the button holds a success tint while it lasts. */
+.endpoint-list button > span {
+  display: grid;
+  place-items: center;
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+.endpoint-list button.copied {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  opacity: 1;
+}
+.endpoint-list > li .copied {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1338,7 +1748,7 @@ main {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .payment-rail > span svg {
   width: 15px;
@@ -1348,7 +1758,7 @@ main {
 .payment-rail small {
   display: block;
   color: var(--faint);
-  font-size: 8px;
+  font-size: 9.5px;
 }
 .payment-rail > i {
   color: var(--faint);
@@ -1361,7 +1771,7 @@ main {
   gap: 12px;
 }
 .wallet-network-card {
-  min-height: 222px;
+  min-height: 178px;
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -1369,10 +1779,7 @@ main {
   border-radius: 12px;
   background: var(--surface);
 }
-.wallet-network-card.selected {
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
-  box-shadow: inset 0 3px 0 var(--accent);
-}
+/* The default network is marked by its chip and status line, not an outline. */
 .wallet-network-card header {
   display: flex;
   align-items: center;
@@ -1390,10 +1797,7 @@ main {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #fff;
-  font-size: 9px;
   font-style: normal;
-  font-weight: 760;
 }
 .wallet-network-name b,
 .wallet-network-name small {
@@ -1408,29 +1812,93 @@ main {
   font-size: 8px;
 }
 .wallet-network-card header > em {
-  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--accent-text);
-  background: var(--accent-soft);
-  font-size: 8px;
+  color: var(--muted);
+  background: var(--surface-raised);
+  font-size: 8.5px;
   font-style: normal;
-  font-weight: 680;
+  font-weight: 650;
+}
+.wallet-network-card header > em::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--success);
 }
 .wallet-network-card > strong {
-  margin-top: 25px;
+  margin-top: 16px;
   font-size: 25px;
   letter-spacing: -0.8px;
   font-variant-numeric: tabular-nums;
 }
-.wallet-network-card > code {
-  margin-top: 5px;
+/* Address doubles as a copy control; the icon surfaces on hover. */
+.wallet-copy {
+  margin-top: 6px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: 0;
+  color: var(--faint);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+.wallet-copy code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+.wallet-copy svg {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+.wallet-copy:hover {
+  color: var(--text);
+}
+.wallet-copy:hover svg {
+  opacity: 1;
+}
+.wallet-copy.copied {
+  color: var(--success);
+}
+.wallet-copy.copied svg {
+  opacity: 1;
+}
+.wallet-copy-empty {
+  margin-top: 6px;
   color: var(--faint);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
+  font-size: 10px;
+}
+.wallet-active-note {
+  margin: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 560;
+}
+.wallet-active-note i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
 }
 .wallet-network-card footer {
   margin-top: auto;
-  padding-top: 17px;
+  padding-top: 14px;
 }
 .wallet-network-card footer button {
   width: 100%;
@@ -1456,7 +1924,7 @@ main {
 .wallet-card-warning {
   margin: 10px 0 0;
   color: var(--warning);
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1.45;
 }
 .legacy-wallet-panel {
@@ -1475,7 +1943,7 @@ main {
 .legacy-wallet-panel p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10.5px;
   line-height: 1.5;
 }
 .legacy-wallet-list {
@@ -1530,12 +1998,14 @@ main {
   background: var(--surface);
 }
 .wallet-notes b {
-  font-size: 10px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
 }
 .wallet-notes p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10.5px;
   line-height: 1.55;
 }
 .setting-card {
@@ -1543,9 +2013,6 @@ main {
   padding: 16px;
   display: flex;
   gap: 12px;
-}
-.setting-card.warning {
-  grid-column: 1 / -1;
 }
 .setting-icon {
   width: 32px;
@@ -1584,43 +2051,58 @@ main {
   margin-top: 5px;
 }
 .coinbase-fund-button {
-  min-width: 146px;
-  min-height: 48px;
-  padding: 0 13px;
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  grid-template-rows: 1fr 1fr;
+  min-height: 46px;
+  padding: 0 17px 0 11px;
+  display: inline-flex;
   align-items: center;
+  gap: 11px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 11px;
   color: #fff;
   background: var(--coinbase);
   cursor: pointer;
   text-align: left;
-  box-shadow: 0 4px 14px rgba(0, 82, 255, 0.2);
+  box-shadow: 0 2px 9px rgba(0, 82, 255, 0.2);
   transition:
     background-color 0.14s ease,
-    transform 0.08s ease;
+    box-shadow 0.14s ease,
+    transform 160ms var(--ease-out);
 }
 .coinbase-fund-button:hover {
   background: var(--coinbase-hover);
+  box-shadow: 0 5px 16px rgba(0, 82, 255, 0.3);
 }
 .coinbase-fund-button:active {
-  transform: translateY(1px);
+  box-shadow: 0 1px 5px rgba(0, 82, 255, 0.24);
+}
+/* Tinted plate so the glyph reads as an affordance rather than loose
+   punctuation sitting on the fill. */
+.coinbase-fund-button > i {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.coinbase-fund-button > i svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
 }
 .coinbase-fund-button > span {
-  grid-row: 1 / 3;
-  font-size: 21px;
-  font-weight: 300;
+  display: grid;
+  gap: 1px;
 }
 .coinbase-fund-button b {
-  align-self: end;
-  font-size: 10px;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
 }
 .coinbase-fund-button small {
-  align-self: start;
-  opacity: 0.76;
-  font-size: 8px;
+  opacity: 0.8;
+  font-size: 9.5px;
 }
 .wallet-ledger {
   margin-top: 17px;
@@ -1657,11 +2139,9 @@ main {
   font-style: normal;
   font-weight: 750;
 }
-.base-coin {
-  background: #0052ff;
-}
-.solana-coin {
-  background: linear-gradient(135deg, #7b61ff, #18c89b);
+.chain-mark svg {
+  width: 100%;
+  height: 100%;
 }
 .wallet-ledger strong {
   font-size: 14px;
@@ -1714,18 +2194,12 @@ main {
   color: var(--text);
   background: var(--surface);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
-  animation: funding-rise 0.18s ease-out;
+  animation: funding-rise 220ms var(--ease-drawer);
 }
 .funding-dialog header {
   display: flex;
   justify-content: space-between;
   gap: 20px;
-}
-.coinbase-wordmark {
-  color: var(--coinbase);
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.25px;
 }
 .funding-dialog h2 {
   margin: 6px 0 0;
@@ -1755,8 +2229,146 @@ main {
   color: var(--text);
   background: var(--surface-hover);
 }
+/* Segmented method switch. Occasional-use control: subtle 140ms color moves,
+   no thumb animation to wait on. */
+.funding-tabs {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+.funding-tabs button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  transition:
+    color 0.14s ease,
+    background-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.funding-tabs button:hover {
+  color: var(--text);
+}
+.funding-tabs button.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(20, 24, 30, 0.14);
+}
+
+/* Pane content enters on each tab switch: fade + small rise + blur that
+   resolves, so the swap reads as one surface changing, not two swapping. */
+.funding-pane {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out),
+    filter 200ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(2px);
+  }
+}
+
+.deposit-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+.deposit-row {
+  padding: 13px 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+.deposit-row > i {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-style: normal;
+}
+.deposit-row-name b {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+}
+.deposit-row-name small {
+  display: block;
+  margin-top: 1px;
+  color: var(--faint);
+  font-size: 9.5px;
+}
+.deposit-row > code {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+}
+.deposit-missing {
+  color: var(--faint);
+}
+.deposit-copy {
+  min-width: 76px;
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 620;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background-color 0.14s ease,
+    transform 160ms var(--ease-out);
+}
+.deposit-copy:hover {
+  background: var(--surface-hover);
+}
+.deposit-copy:active {
+  transform: scale(0.97);
+}
+.deposit-copy.copied {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+.deposit-copy > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+.deposit-copy svg {
+  width: 12px;
+  height: 12px;
+}
+
 .funding-amount {
-  margin-top: 20px;
+  margin-top: 14px;
   padding: 15px;
   border: 1px solid var(--border);
   border-radius: 11px;
@@ -1910,6 +2522,13 @@ main {
   width: 12px;
   height: 12px;
 }
+.funding-error {
+  margin: 10px 4px 0;
+  color: var(--danger);
+  font-size: 9.5px;
+  line-height: 1.5;
+  text-align: center;
+}
 .funding-legal {
   margin: 10px 4px 0;
   color: var(--faint);
@@ -1934,8 +2553,10 @@ main {
     padding-left: 25px;
     padding-right: 25px;
   }
-  .hero {
-    grid-template-columns: 0.8fr 1.2fr;
+  /* Drop the fixed column minimums so the hero keeps two columns down to the
+     920px minimum window instead of overflowing the card. */
+  .hero-top {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   }
   .filters {
     grid-template-columns: minmax(190px, 1fr) repeat(3, 115px);
