@@ -36,7 +36,7 @@ Or neither — <!-- br:models.free -->6<!-- /br:models.free --> models are free,
 
 </div>
 
-> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. It is the only LLM router that an autonomous agent can pay for by itself — a wallet signature is the account, and USDC micropayments over the x402 protocol are the billing — and it takes an ordinary credit card too: sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, and run the same router on an API key. <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
+> **ClawRouter** is an open-source smart LLM router that reduces AI API costs by up to <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->%. It analyzes each request across <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions --> dimensions and routes to the cheapest capable model in under 1ms, entirely locally. It is the only LLM router that an autonomous agent can pay for by itself — a wallet signature is the account, and USDC micropayments over the x402 protocol are the billing — and it takes an ordinary credit card too: sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, and run the same router on an API key. <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models from OpenAI, Anthropic, Google, xAI, DeepSeek, and more. MIT licensed.
 
 ---
 
@@ -48,7 +48,7 @@ Not a seat, not a subscription, not a monthly minimum you keep paying while the 
 
 |                           |                                                                                                                                                                                                                                                                                                                                                               |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Every LLM**             | <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> chat models across 9 providers, behind one endpoint and one balance                                                                                                                                                                                                                           |
+| **Every LLM**             | <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> chat models across 9 providers, behind one endpoint and one balance                                                                                                                                                                                                                           |
 | **Every tool**            | <!-- br:models.image -->12<!-- /br:models.image --> image models, <!-- br:models.video -->8<!-- /br:models.video --> video models, music, <!-- br:models.speech -->5<!-- /br:models.speech --> voices, img2img editing, and outbound phone calls that come back as transcripts                                                                                |
 | **Every data source**     | web, news and neural search; prediction markets; live crypto and equity quotes; on-chain SQL over 100M+ labeled wallets; DEX routing; RPC across <!-- br:chains.rpc -->40<!-- /br:chains.rpc --> chains                                                                                                                                                       |
 | **Best value per dollar** | <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension local routing sends each request to the cheapest model that can actually do it — <!-- br:savings.autoVsBaselinePct -->84<!-- /br:savings.autoVsBaselinePct -->% below pinning Claude Opus 5 on the same traffic, computed from a published workload mix rather than estimated |
@@ -76,7 +76,7 @@ This is the stack that lets agents operate autonomously: **x402 + USDC + local r
 
 ### …and if you are a human, not an agent
 
-Every "no X needed" above is a capability, not a restriction. **ClawRouter takes a credit card too.** Sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, top up, mint an API key, and run `clawrouter login brk_live_…`. Same router, same <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models, same local routing — calls go to `api.blockrun.ai` on a bearer token and bill your account credit. No crypto, no gas, no seed phrase.
+Every "no X needed" above is a capability, not a restriction. **ClawRouter takes a credit card too.** Sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, top up, mint an API key, and run `clawrouter login brk_live_…`. Same router, same <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models, same local routing — calls go to `api.blockrun.ai` on a bearer token and bill your account credit. No crypto, no gas, no seed phrase.
 
 | You are             | Pay with                                | Setup                                                                                       |
 | ------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -92,7 +92,7 @@ Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key
 
 |                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**                                                         |
 | ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ---------------------------------------------------------------------- |
-| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->78<!-- /br:models.chatVisible -->**    |
+| **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->77<!-- /br:models.chatVisible -->**    |
 | **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->6<!-- /br:models.free --> models, no signup** |
 | **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
 | **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature _or_ API key**                                      |
@@ -127,7 +127,7 @@ is all it takes to switch and `clawrouter logout` is all it takes to switch back
 
 > **Where do I sign up?** [**user.blockrun.ai**](https://user.blockrun.ai) — sign in with
 > Google, add credit with a card under **Credits**, mint a key under **API Keys**. That
-> one key covers all <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> chat models
+> one key covers all <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> chat models
 > plus images, video, speech and the live-data APIs. No wallet, no crypto, no seed phrase.
 
 ### Desktop control plane (macOS)
@@ -171,7 +171,7 @@ openclaw gateway restart
 
 > **Using Claude Code?** Check out [BRCC](https://github.com/BlockRunAI/brcc) — it's purpose-built for Claude Code with the same smart routing and x402 payments.
 >
-> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Solana & Base.
+> **Using NousResearch Hermes?** See [ClawRouter-Hermes](https://github.com/BlockRunAI/ClawRouter-Hermes) — a Python plugin that wires Hermes into the ClawRouter proxy. Same wallet, same <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models, same x402 USDC settlement on Solana & Base.
 
 No OpenClaw required. ClawRouter runs as a local proxy on port 8402.
 
@@ -482,7 +482,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 
 ## Models & Pricing
 
-<!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->6<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->6<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
 > **💡 "Cost per request"** = estimated cost for a typical chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
@@ -871,7 +871,7 @@ npm test
 
 **The LLM router built for autonomous agents**
 
-You're here. <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models, local smart routing, and two ways to pay — a credit-card-funded API key, or x402 USDC from a wallet, which is what lets an agent operate independently.
+You're here. <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models, local smart routing, and two ways to pay — a credit-card-funded API key, or x402 USDC from a wallet, which is what lets an agent operate independently.
 
 `curl -fsSL https://blockrun.ai/ClawRouter-update | bash`
 
@@ -882,7 +882,7 @@ You're here. <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> mod
 
 **BlockRun for Claude Code**
 
-Run Claude Code with <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
+Run Claude Code with <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models, no rate limits, no Anthropic account, no phone verification. Pay per request with USDC — your wallet is your identity.
 
 `curl -fsSL https://blockrun.ai/brcc-install | bash`
 
@@ -895,7 +895,7 @@ Run Claude Code with <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible
 
 **ClawRouter for NousResearch Hermes**
 
-Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models, same x402 USDC payments on Solana & Base, native Hermes ergonomics.
+Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models, same x402 USDC payments on Solana & Base, native Hermes ergonomics.
 
 `pip install hermes-plugin-clawrouter`
 
@@ -939,7 +939,7 @@ Python plugin that wraps the ClawRouter proxy for `hermes-agent`. Same <!-- br:m
 
 ### What is BlockRun?
 
-BlockRun lets agents pay for the outcome — every LLM, tool and data source, best value per dollar. One endpoint and one balance covering <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> chat models plus image, video, music and speech generation, search, market data and multi-chain RPC, billed per call with USDC over [x402](https://x402.org) or a credit-card-funded API key — no seat, no subscription, no minimum. ClawRouter is the open-source local router agents use to reach it.
+BlockRun lets agents pay for the outcome — every LLM, tool and data source, best value per dollar. One endpoint and one balance covering <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> chat models plus image, video, music and speech generation, search, market data and multi-chain RPC, billed per call with USDC over [x402](https://x402.org) or a credit-card-funded API key — no seat, no subscription, no minimum. ClawRouter is the open-source local router agents use to reach it.
 
 ### What is ClawRouter?
 

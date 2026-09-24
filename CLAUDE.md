@@ -1,6 +1,6 @@
 # ClawRouter
 
-Smart LLM router for autonomous agents. <!-- br:models.chatVisible -->78<!-- /br:models.chatVisible --> models. Two ways to pay:
+Smart LLM router for autonomous agents. <!-- br:models.chatVisible -->77<!-- /br:models.chatVisible --> models. Two ways to pay:
 
 - **Wallet (default)** — x402 USDC micropayments signed per call, against `blockrun.ai/api` (Base) or `sol.blockrun.ai/api` (Solana). New installs default to Solana.
 - **API key** — `brk_live_…` from [user.blockrun.ai](https://user.blockrun.ai), billed against card-funded account credit, against `api.blockrun.ai`. `src/api-key.ts` resolves it (env → `~/.blockrun/.api-key` → `~/.openclaw/blockrun/api-key`); a key present anywhere wins over a wallet, and no wallet is generated or read in that mode.
