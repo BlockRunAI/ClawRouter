@@ -2,8 +2,8 @@
   "$schema": "https://blockrun.ai/brand/numbers.schema.json",
   "version": 1,
   "models": {
-    "chatVisible": 77,
-    "totalVisible": 104,
+    "chatVisible": 79,
+    "totalVisible": 106,
     "free": 6,
     "freeWithheld": 27,
     "image": 12,
