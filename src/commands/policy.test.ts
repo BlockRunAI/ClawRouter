@@ -10,6 +10,7 @@ import { x402Client } from "@x402/fetch";
 import { createPolicyCommand, runPolicyCommand } from "./policy.js";
 import {
   CAIP2_BASE,
+  CAIP2_NANO_MAINNET,
   CAIP2_SOLANA_MAINNET,
   InMemorySpendControlStorage,
   SpendControl,
@@ -171,6 +172,25 @@ describe("runPolicyCommand (in-memory store)", () => {
     [["set", "blockedPayees", "0xdead"], /exactly 40 hex/],
     [["set", "blockedPayees", "not-an-address"], /is not an address/],
     [["set", "allowedPayees", "AQqn0OIl"], /is not an address/], // 0, O, I, l are not base58
+    [
+      ["set", "allowedPayees", "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5p"],
+      /not a valid Nano account/,
+    ], // wrong length (prefix present, so the nano-specific path reports it)
+    [
+      // wrong first prefix character (must be 1 or 3)
+      ["set", "allowedPayees", "nano_2yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx7"],
+      /not a valid Nano account/,
+    ],
+    [
+      // well-formed length but bad trailing checksum — a typo that would never match
+      ["set", "allowedPayees", "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx8"],
+      /checksum/,
+    ],
+    [
+      // xrb_ prefix with bad checksum is also rejected
+      ["set", "allowedPayees", "xrb_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx8"],
+      /checksum/,
+    ],
     [["set", "allowedAssets", "usdc"], /is not an address/],
     [["set", "allowedAssets", `0X${"c".repeat(40)}`], /exactly 40 hex/],
     [["limit", "daily", "5abc"], /Rejected amount "5abc"/],
@@ -186,6 +206,18 @@ describe("runPolicyCommand (in-memory store)", () => {
     expect(res.isError).toBe(true);
     expect(res.text).toMatch(message);
     expect(storage.load()).toBeNull();
+  });
+
+  it("accepts a Nano payee but refuses nano:mainnet network (no Nano signer registered)", () => {
+    const nanoPayee = "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx7";
+    const { run, openControl } = memory();
+    expect(run(["set", "allowedPayees", nanoPayee]).isError).toBeFalsy();
+    const netResult = run(["set", "allowedNetworks", CAIP2_NANO_MAINNET]);
+    expect(netResult.isError).toBe(true);
+    expect(netResult.text).toMatch(/not a network the proxy can pay/);
+    const limits = openControl().getLimits();
+    expect(limits.allowedPayees).toEqual([nanoPayee]);
+    expect(limits.allowedNetworks).toBeUndefined();
   });
 
   it("reports a write that did not land instead of claiming success", () => {
