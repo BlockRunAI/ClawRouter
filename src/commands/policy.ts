@@ -179,7 +179,14 @@ function isListAction(v: string): v is ListAction {
   return (LIST_ACTIONS as readonly string[]).includes(v);
 }
 
-/** Why `value` must not enter `list`, or undefined when it may. */
+/**
+ * Why `value` must not enter `list`, or `undefined` when it may. A network must
+ * be one of `PAYABLE_NETWORKS`; a payee is an EVM 0x+40-hex address, a Solana
+ * base58 id, or a `nano_` account that passes `nanoAddressValid`. An entry that
+ * can never match a real quote is either an allow-list that blocks everything
+ * or deny-list dead weight, so the reason is returned rather than the value
+ * persisted.
+ */
 function rejectValue(list: PolicyList, value: string): string | undefined {
   if (list === "allowedNetworks") {
     return PAYABLE_NETWORKS.includes(value)
