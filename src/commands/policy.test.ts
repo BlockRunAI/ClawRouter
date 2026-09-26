@@ -174,8 +174,20 @@ describe("runPolicyCommand (in-memory store)", () => {
     [["set", "allowedPayees", "AQqn0OIl"], /is not an address/], // 0, O, I, l are not base58
     [
       ["set", "allowedPayees", "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5p"],
-      /is not an address/,
-    ], // wrong length
+      /not a valid Nano account/,
+    ], // wrong length (prefix present, so the nano-specific path reports it)
+    [ // wrong first prefix character (must be 1 or 3)
+      ["set", "allowedPayees", "nano_2yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx7"],
+      /not a valid Nano account/,
+    ],
+    [ // well-formed length but bad trailing checksum — a typo that would never match
+      ["set", "allowedPayees", "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx8"],
+      /checksum/,
+    ],
+    [ // xrb_ prefix with bad checksum is also rejected
+      ["set", "allowedPayees", "xrb_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx8"],
+      /checksum/,
+    ],
     [["set", "allowedAssets", "usdc"], /is not an address/],
     [["set", "allowedAssets", `0X${"c".repeat(40)}`], /exactly 40 hex/],
     [["limit", "daily", "5abc"], /Rejected amount "5abc"/],

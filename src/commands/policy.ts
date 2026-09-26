@@ -11,6 +11,7 @@
  * This edits spending.json. The proxy reads limits once, in the SpendControl
  * constructor, so a change takes effect on its next start.
  */
+import { blake2b } from "@noble/hashes/blake2.js";
 import type {
   OpenClawPluginCommandDefinition,
   PluginCommandContext,
@@ -41,7 +42,67 @@ const BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
  * checksum, both base32 in Nano's alphabet (0, 2, l and v are not used).
  * Exactly 60 base32 chars after the prefix. A Nano x402 merchant's `payTo` is one of these.
  */
-const NANO_ADDRESS = /^(?:nano|xrb)_[13456789abcdefghijkmnopqrstuwxyz]{60}$/;
+const NANO_ADDRESS = /^(?:nano|xrb)_[13][13-9a-km-uw-z]{59}$/;
+
+/**
+ * Nano's alphabet, in Nanocurrency's order (`0`, `1`, `l` and `v` are absent:
+ * no `0`, and `1`/`l`/`o`/`v` are dropped so human transcribers cannot confuse
+ * them with other glyphs). The `1` here is the account-prefix char, not the
+ * value: `u(i)` maps the first char of the key to 1, matching Nanocurrency,
+ * which is what the chain and every wallet use.
+ */
+const NANO_BASE32 = [
+  "1", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "g",
+  "h", "i", "j", "k", "m", "n", "o", "p", "q", "r", "s", "t", "u", "w", "x",
+  "y", "z",
+];
+
+/**
+ * True when `addr` is a syntactically valid Nano account whose trailing 8-char
+ * checksum matches the address public key (the last 8 chars are a blake2b-40
+ * of the 52-char key). Ported and verified against the `nanocurrency`
+ * checkAddress reference with the three canonical addresses from nano-docs and
+ * this repo's own payee fixtures. A payee that is well-formed but has a bad
+ * checksum is a typo, and storing it as an exact-match allow/block entry would
+ * silently never match — so it is rejected here, not persisted.
+ */
+function nanoAddressValid(addr: string): boolean {
+  if (!NANO_ADDRESS.test(addr)) return false;
+  const keyPart = addr.slice(addr.startsWith("xrb_") ? 4 : 5, addr.startsWith("xrb_") ? 56 : 57);
+  const cksPart = addr.slice(addr.startsWith("xrb_") ? 56 : 57);
+  const publicKey = nanoBase32Decode(keyPart);
+  const checksum = nanoBase32Decode(cksPart);
+  const digest = blake2b(publicKey, { dkLen: 5 });
+  for (let i = 0; i < 5; i++) {
+    if (digest[4 - i] !== checksum[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Decode a Nano base32 string to bytes, matching Nanocurrency's `decodeBase32`
+ * exactly (bit layout of Nano's addresses: 52 key chars -> 32 bytes, 8 checksum
+ * chars -> 5 bytes). The leading zero byte produced for a non-byte-aligned
+ * length is dropped.
+ */
+function nanoBase32Decode(value: string): Uint8Array {
+  const len = value.length;
+  const mod = (5 * len) % 8;
+  const shift = mod === 0 ? 0 : 8 - mod;
+  let carry = 0;
+  let bits = 0;
+  const out: number[] = [];
+  for (let t = 0; t < len; t++) {
+    carry = (carry << 5) | NANO_BASE32.indexOf(value[t]);
+    bits += 5;
+    if (bits >= 8) {
+      out.push((carry >>> (bits + shift - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  if (bits > 0) out.push((carry << (bits + shift - 8)) & 0xff);
+  return new Uint8Array(mod === 0 ? out : out.slice(1));
+}
 const LIST_ACTIONS = ["set", "add", "remove", "clear"] as const;
 type ListAction = (typeof LIST_ACTIONS)[number];
 const ALLOW_LISTS: readonly PolicyList[] = ["allowedPayees", "allowedNetworks", "allowedAssets"];
@@ -130,8 +191,11 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
       ? undefined
       : `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
   }
-  if (NANO_ADDRESS.test(value)) {
+  if (nanoAddressValid(value)) {
     return undefined;
+  }
+  if (/^(?:nano|xrb)_/.test(value)) {
+    return `"${value}" is not a valid Nano account — the first character after the prefix must be 1 or 3, and the trailing 8-character checksum must match the address (a typo here stores an exact-match payee that can never match an x402 quote)`;
   }
   // Payees and assets are matched exactly against what the 402 quotes, so an
   // entry that is neither an EVM address nor a Solana base58 id can never
