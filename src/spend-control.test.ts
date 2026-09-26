@@ -20,6 +20,7 @@ import {
   SpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
+  CAIP2_NANO_MAINNET,
 } from "./spend-control.js";
 
 function createControl(nowMs = Date.now()) {
@@ -378,6 +379,24 @@ describe("counterparty policy", () => {
       const result = control.check(0.01);
       expect(result.allowed).toBe(false);
       expect(result.blockedByPolicy).toBe("allowedNetworks");
+    });
+
+    it("allows a Nano-settled merchant on nano:mainnet", () => {
+      const { control } = createControl();
+      control.setPolicy("allowedNetworks", [CAIP2_NANO_MAINNET]);
+      const result = control.check(0.01, { network: CAIP2_NANO_MAINNET });
+      expect(result.allowed).toBe(true);
+    });
+
+    it("allows a nano_ payee in an exact payee allowlist", () => {
+      const { control } = createControl();
+      const nanoPayee = "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx7";
+      control.setPolicy("allowedPayees", [nanoPayee]);
+      // A `nano_...` address is not EVM hex, so it is compared exactly
+      // (no case-fold), matching the payTo a Nano x402 merchant serves.
+      expect(control.check(0.01, { payTo: nanoPayee, network: CAIP2_NANO_MAINNET }).allowed).toBe(
+        true,
+      );
     });
   });
 

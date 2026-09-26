@@ -39,6 +39,9 @@ export type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" |
 export const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+/** Nano mainnet, as carried on the x402 `selectedRequirements.network` of a
+ *  Nano-settled merchant (e.g. a Vend x402 resource with `asset: "XNO"`). */
+export const CAIP2_NANO_MAINNET = "nano:mainnet";
 
 /**
  * Every network the proxy can pay on, as carried on x402
@@ -46,7 +49,11 @@ export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc1
  * validate `allowedNetworks` entries: an entry outside this set can never
  * match a quote and would only block payments.
  */
-export const PAYABLE_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
+export const PAYABLE_NETWORKS: readonly string[] = [
+  CAIP2_BASE,
+  CAIP2_SOLANA_MAINNET,
+  CAIP2_NANO_MAINNET,
+];
 
 export const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",
