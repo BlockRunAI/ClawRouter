@@ -18,6 +18,7 @@ import type {
 } from "../types.js";
 import {
   CAIP2_BASE,
+  CAIP2_NANO_MAINNET,
   CAIP2_SOLANA_MAINNET,
   PAYABLE_NETWORKS,
   POLICY_LISTS,
@@ -35,6 +36,12 @@ const USD = /^\d+(\.\d+)?$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 /** Solana account or mint: base58 alphabet, 32–44 chars. Exact-match at check time, so case matters. */
 const BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+/**
+ * Nano (XNO) account: `nano_`/`xrb_` prefix + a 52-char public key and an 8-char
+ * checksum, both base32 in Nano's alphabet (0, 2, l and v are not used).
+ * Exactly 60 base32 chars after the prefix. A Nano x402 merchant's `payTo` is one of these.
+ */
+const NANO_ADDRESS = /^(?:nano|xrb)_[13456789abcdefghijkmnopqrstuwxyz]{60}$/;
 const LIST_ACTIONS = ["set", "add", "remove", "clear"] as const;
 type ListAction = (typeof LIST_ACTIONS)[number];
 const ALLOW_LISTS: readonly PolicyList[] = ["allowedPayees", "allowedNetworks", "allowedAssets"];
@@ -66,7 +73,7 @@ const USAGE = [
   `  policy set|add|remove <list> <v>...    <list>: ${POLICY_LISTS.join(" | ")}`,
   "  policy clear <list>",
   `  policy limit <window> <usd>|clear      <window>: ${SPEND_WINDOWS.join(" | ")}`,
-  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet).`,
+  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base), ${CAIP2_SOLANA_MAINNET} (Solana mainnet) or ${CAIP2_NANO_MAINNET} (Nano mainnet).`,
 ].join("\n");
 /**
  * Without a handle on the running proxy's SpendControl this command can only
@@ -116,12 +123,15 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
   if (list === "allowedNetworks") {
     return PAYABLE_NETWORKS.includes(value)
       ? undefined
-      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
+      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base), ${CAIP2_SOLANA_MAINNET} (Solana mainnet) or ${CAIP2_NANO_MAINNET} (Nano), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
   }
   if (/^0x/i.test(value)) {
     return EVM_ADDRESS.test(value)
       ? undefined
       : `"${value}" starts with 0x but is not 0x followed by exactly 40 hex characters`;
+  }
+  if (NANO_ADDRESS.test(value)) {
+    return undefined;
   }
   // Payees and assets are matched exactly against what the 402 quotes, so an
   // entry that is neither an EVM address nor a Solana base58 id can never
@@ -129,7 +139,7 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
   // is dead weight that reads as protection.
   return BASE58_ADDRESS.test(value)
     ? undefined
-    : `"${value}" is not an address — expected 0x plus 40 hex characters (Base) or a 32–44 character base58 id (Solana)`;
+    : `"${value}" is not an address — expected 0x plus 40 hex characters (Base), a 32–44 character base58 id (Solana), or a nano_... account (Nano)`;
 }
 
 /** Turn argv into a plan or a rejection. Pure: nothing is read or written here. */
