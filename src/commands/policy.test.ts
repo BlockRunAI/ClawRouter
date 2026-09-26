@@ -176,15 +176,18 @@ describe("runPolicyCommand (in-memory store)", () => {
       ["set", "allowedPayees", "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5p"],
       /not a valid Nano account/,
     ], // wrong length (prefix present, so the nano-specific path reports it)
-    [ // wrong first prefix character (must be 1 or 3)
+    [
+      // wrong first prefix character (must be 1 or 3)
       ["set", "allowedPayees", "nano_2yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx7"],
       /not a valid Nano account/,
     ],
-    [ // well-formed length but bad trailing checksum — a typo that would never match
+    [
+      // well-formed length but bad trailing checksum — a typo that would never match
       ["set", "allowedPayees", "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx8"],
       /checksum/,
     ],
-    [ // xrb_ prefix with bad checksum is also rejected
+    [
+      // xrb_ prefix with bad checksum is also rejected
       ["set", "allowedPayees", "xrb_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx8"],
       /checksum/,
     ],
@@ -205,14 +208,16 @@ describe("runPolicyCommand (in-memory store)", () => {
     expect(storage.load()).toBeNull();
   });
 
-  it("accepts a Nano payee and network through the operator path", () => {
+  it("accepts a Nano payee but refuses nano:mainnet network (no Nano signer registered)", () => {
     const nanoPayee = "nano_1yo6c1t64ahfjdw1dxizmbbnpdmbrckwhw9phbg5pdkeubrizga4qhnjmnx7";
     const { run, openControl } = memory();
     expect(run(["set", "allowedPayees", nanoPayee]).isError).toBeFalsy();
-    expect(run(["set", "allowedNetworks", CAIP2_NANO_MAINNET]).isError).toBeFalsy();
+    const netResult = run(["set", "allowedNetworks", CAIP2_NANO_MAINNET]);
+    expect(netResult.isError).toBe(true);
+    expect(netResult.text).toMatch(/not a network the proxy can pay/);
     const limits = openControl().getLimits();
     expect(limits.allowedPayees).toEqual([nanoPayee]);
-    expect(limits.allowedNetworks).toEqual([CAIP2_NANO_MAINNET]);
+    expect(limits.allowedNetworks).toBeUndefined();
   });
 
   it("reports a write that did not land instead of claiming success", () => {

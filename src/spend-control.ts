@@ -40,7 +40,13 @@ export const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 /** Nano mainnet, as carried on the x402 `selectedRequirements.network` of a
- *  Nano-settled merchant (e.g. a Vend x402 resource with `asset: "XNO"`). */
+ *  Nano-settled merchant (e.g. a Vend x402 resource with `asset: "XNO"`).
+ *  Defined as a constant for the follow-up settlement PR (#393) that registers
+ *  a Nano-only `createPaymentPayload` scheme.  NOT in PAYABLE_NETWORKS: a
+ *  Nano scheme signer has not yet been registered in the wallet proxy
+ *  (src/wallet.ts), so a `nano:mainnet` quote cannot actually be paid today,
+ *  and allowing one past `check()` would fail — fail-closed at the signer — so
+ *  it is not claimed as payable until the scheme is registered. */
 export const CAIP2_NANO_MAINNET = "nano:mainnet";
 
 /**
@@ -49,11 +55,7 @@ export const CAIP2_NANO_MAINNET = "nano:mainnet";
  * validate `allowedNetworks` entries: an entry outside this set can never
  * match a quote and would only block payments.
  */
-export const PAYABLE_NETWORKS: readonly string[] = [
-  CAIP2_BASE,
-  CAIP2_SOLANA_MAINNET,
-  CAIP2_NANO_MAINNET,
-];
+export const PAYABLE_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
 
 export const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",
@@ -562,6 +564,26 @@ export class SpendControl {
           reason: `Network is not in the configured allowlist: ${counterparty.network}`,
         };
       }
+    }
+
+    // Fail-closed on networks the wallet proxy has no signer for.  When an
+    // allowedNetworks policy IS configured, a network outside PAYABLE_NETWORKS
+    // must be refused even if it happens to be in the list (an operator could
+    // craft a nano:mainnet entry by hand).  When no policy is configured, every
+    // network is permitted (the existing vacuous semantics) — adding a
+    // restriction here would silently break unconfigured operators who happen
+    // to get passed an unknown network in a quote.
+    if (
+      this.limits.allowedNetworks &&
+      this.limits.allowedNetworks.length > 0 &&
+      counterparty?.network !== undefined &&
+      !PAYABLE_NETWORKS.includes(counterparty.network)
+    ) {
+      return {
+        allowed: false,
+        blockedByPolicy: "allowedNetworks",
+        reason: `"${counterparty.network}" is not a payable network — the wallet proxy has no registered scheme for it (for Nano, see PR #393's settlement follow-up)`,
+      };
     }
 
     if (this.limits.allowedAssets && this.limits.allowedAssets.length > 0) {

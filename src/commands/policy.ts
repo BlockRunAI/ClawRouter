@@ -19,7 +19,6 @@ import type {
 } from "../types.js";
 import {
   CAIP2_BASE,
-  CAIP2_NANO_MAINNET,
   CAIP2_SOLANA_MAINNET,
   PAYABLE_NETWORKS,
   POLICY_LISTS,
@@ -52,9 +51,38 @@ const NANO_ADDRESS = /^(?:nano|xrb)_[13][13-9a-km-uw-z]{59}$/;
  * which is what the chain and every wallet use.
  */
 const NANO_BASE32 = [
-  "1", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "g",
-  "h", "i", "j", "k", "m", "n", "o", "p", "q", "r", "s", "t", "u", "w", "x",
-  "y", "z",
+  "1",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "w",
+  "x",
+  "y",
+  "z",
 ];
 
 /**
@@ -134,7 +162,7 @@ const USAGE = [
   `  policy set|add|remove <list> <v>...    <list>: ${POLICY_LISTS.join(" | ")}`,
   "  policy clear <list>",
   `  policy limit <window> <usd>|clear      <window>: ${SPEND_WINDOWS.join(" | ")}`,
-  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base), ${CAIP2_SOLANA_MAINNET} (Solana mainnet) or ${CAIP2_NANO_MAINNET} (Nano mainnet).`,
+  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet).`,
 ].join("\n");
 /**
  * Without a handle on the running proxy's SpendControl this command can only
@@ -191,7 +219,7 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
   if (list === "allowedNetworks") {
     return PAYABLE_NETWORKS.includes(value)
       ? undefined
-      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base), ${CAIP2_SOLANA_MAINNET} (Solana mainnet) or ${CAIP2_NANO_MAINNET} (Nano), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
+      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
   }
   if (/^0x/i.test(value)) {
     return EVM_ADDRESS.test(value)

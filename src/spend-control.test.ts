@@ -381,11 +381,15 @@ describe("counterparty policy", () => {
       expect(result.blockedByPolicy).toBe("allowedNetworks");
     });
 
-    it("allows a Nano-settled merchant on nano:mainnet", () => {
+    it("refuses a Nano-settled merchant even if nano:mainnet is hand-written into the allowlist", () => {
       const { control } = createControl();
+      // The CLI refuses nano:mainnet now, but a hand-edit to spending.json can
+      // still put it in — the guard must refuse it at check() regardless.
       control.setPolicy("allowedNetworks", [CAIP2_NANO_MAINNET]);
       const result = control.check(0.01, { network: CAIP2_NANO_MAINNET });
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
+      expect(result.blockedByPolicy).toBe("allowedNetworks");
+      expect(result.reason).toMatch(/not a payable network/);
     });
 
     it("allows a nano_ payee in an exact payee allowlist", () => {
@@ -394,9 +398,9 @@ describe("counterparty policy", () => {
       control.setPolicy("allowedPayees", [nanoPayee]);
       // A `nano_...` address is not EVM hex, so it is compared exactly
       // (no case-fold), matching the payTo a Nano x402 merchant serves.
-      expect(control.check(0.01, { payTo: nanoPayee, network: CAIP2_NANO_MAINNET }).allowed).toBe(
-        true,
-      );
+      // Omits `network` because no Nano scheme signer is registered yet —
+      // the payee comparison is tested independently of network signability.
+      expect(control.check(0.01, { payTo: nanoPayee }).allowed).toBe(true);
     });
   });
 
