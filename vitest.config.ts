@@ -13,6 +13,9 @@ import { configDefaults, defineConfig } from "vitest/config";
  * They keep their own config (`vitest.integration.config.ts`, 30s timeouts)
  * and run on demand via `npm run test:integration`.
  */
+// Unit tests must not fetch public picker policy from GitHub.
+process.env.BLOCKRUN_MODEL_CATALOG_URL ??= "";
+
 export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, "test/integration/**"],

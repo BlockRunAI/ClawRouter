@@ -87,7 +87,6 @@ import {
 } from "node:fs";
 import { readFile as readFileAsync } from "node:fs/promises";
 import { readTextFileSync } from "./fs-read.js";
-import { TOP_MODELS } from "./top-models.js";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -214,8 +213,10 @@ function legacyPackageIsBlockRun(): boolean {
 
 function injectModelsConfig(
   logger: { info: (msg: string) => void },
-  options: { forceWrite?: boolean } = {},
+  options: { forceWrite?: boolean; catalogModels?: typeof VISIBLE_OPENCLAW_MODELS } = {},
 ): void {
+  const visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
+  const visibleIds = visibleModels.map((model) => model.id);
   const configDir = join(homedir(), ".openclaw");
   const configPath = join(configDir, "openclaw.json");
 
@@ -294,7 +295,7 @@ function injectModelsConfig(
       // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
       // We use a placeholder since the proxy handles real x402 auth internally.
       apiKey: "x402-proxy-handles-auth",
-      models: VISIBLE_OPENCLAW_MODELS,
+      models: visibleModels,
     };
     logger.info("Injected BlockRun provider config");
     needsWrite = true;
@@ -328,19 +329,20 @@ function injectModelsConfig(
         ? currentModels.map((m) => m?.id).filter((id): id is string => typeof id === "string")
         : [],
     );
-    const expectedModelIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
+    const expectedModelIds = visibleModels.map((m) => m.id);
     const expectedSet = new Set(expectedModelIds);
     const needsModelUpdate =
+      JSON.stringify(currentModels) !== JSON.stringify(visibleModels) ||
       !currentModels ||
       !Array.isArray(currentModels) ||
-      currentModels.length !== VISIBLE_OPENCLAW_MODELS.length ||
+      currentModels.length !== visibleModels.length ||
       expectedModelIds.some((id) => !currentModelIds.has(id)) ||
       Array.from(currentModelIds).some((id) => !expectedSet.has(id));
 
     if (needsModelUpdate) {
-      blockrun.models = VISIBLE_OPENCLAW_MODELS;
+      blockrun.models = visibleModels;
       fixed = true;
-      logger.info(`Updated models list (${VISIBLE_OPENCLAW_MODELS.length} visible models)`);
+      logger.info(`Updated models list (${visibleModels.length} visible models)`);
     }
 
     if (fixed) {
@@ -404,7 +406,7 @@ function injectModelsConfig(
   // Active prune mirrors what scripts/update.sh / scripts/reinstall.sh do — needed
   // for users on path-based plugin installs where the install scripts never run
   // (otherwise the allowlist accumulates retired models forever).
-  const expectedBlockrunKeys = new Set(TOP_MODELS.map((id) => `blockrun/${id}`));
+  const expectedBlockrunKeys = new Set(visibleIds.map((id) => `blockrun/${id}`));
   let addedCount = 0;
   let prunedCount = 0;
   for (const key of Object.keys(allowlist)) {
@@ -413,7 +415,7 @@ function injectModelsConfig(
       prunedCount++;
     }
   }
-  for (const id of TOP_MODELS) {
+  for (const id of visibleIds) {
     const key = `blockrun/${id}`;
     if (!allowlist[key]) {
       allowlist[key] = {};
@@ -426,7 +428,7 @@ function injectModelsConfig(
       logger.info(`Pruned ${prunedCount} stale blockrun/* entries from allowlist`);
     }
     if (addedCount > 0) {
-      logger.info(`Added ${addedCount} models to allowlist (${TOP_MODELS.length} total)`);
+      logger.info(`Added ${addedCount} models to allowlist (${visibleIds.length} total)`);
     }
   }
 
@@ -584,7 +586,7 @@ function injectModelsConfig(
  */
 function syncAgentModelCache(
   logger: { info: (msg: string) => void },
-  options: { forceWrite?: boolean } = {},
+  options: { forceWrite?: boolean; catalogModels?: typeof VISIBLE_OPENCLAW_MODELS } = {},
 ): void {
   if (!isGatewayMode() && !options.forceWrite) return;
 
@@ -1027,6 +1029,10 @@ async function startProxyInBackground(
     // registered below use the same instance, so hourly/daily/session windows
     // cover every surface and a /policy write reaches the live signer.
     spendControl: sharedControl,
+    onCatalogUpdated: (catalogModels) => {
+      if (startupGeneration !== undefined && !isProxyStartupCurrent(startupGeneration)) return;
+      injectModelsConfig(api.logger, { catalogModels });
+    },
     onReady: (port) => {
       api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);
     },

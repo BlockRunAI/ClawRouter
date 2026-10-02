@@ -570,7 +570,7 @@ export function resolveModelAlias(model: string): string {
   return model;
 }
 
-type BlockRunModel = {
+export type BlockRunModel = {
   id: string;
   name: string;
   /** Model version (e.g., "4.6", "3.1", "5.2") for tracking updates */
@@ -2404,7 +2404,7 @@ export function getActivePromoPrice(
 /**
  * Convert BlockRun model definitions to OpenClaw ModelDefinitionConfig format.
  */
-function toOpenClawModel(m: BlockRunModel): ModelDefinitionConfig {
+export function toOpenClawModel(m: BlockRunModel): ModelDefinitionConfig {
   return {
     id: m.id,
     name: m.name,

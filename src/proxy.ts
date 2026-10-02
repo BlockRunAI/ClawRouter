@@ -1,3 +1,5 @@
+import { createClawCatalog, fallbackCatalog, type ModelCatalogView } from "./model-catalog.js";
+import type { BlockRunModel } from "./models.js";
 /**
  * Local x402 Proxy Server
  *
@@ -66,11 +68,8 @@ import { classifyByRules } from "./router/index.js";
 import {
   BLOCKRUN_MODELS,
   MODEL_ALIASES,
-  OPENCLAW_MODELS,
   resolveModelAlias,
   isReasoningModel,
-  supportsToolCalling,
-  supportsVision,
   getActivePromoPrice,
 } from "./models.js";
 import { DEFAULT_MAX_TOKENS, resolveMaxTokens } from "./max-tokens.js";
@@ -1556,6 +1555,7 @@ export type ProxyOptions = {
    * Loaded from ~/.openclaw/blockrun/exclude-models.json
    */
   excludeModels?: Set<string>;
+  onCatalogUpdated?: (models: ModelCatalogView["visible"]) => void;
   onReady?: (port: number) => void;
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
@@ -1588,6 +1588,8 @@ export type ProxyOptions = {
 };
 
 export type ProxyHandle = {
+  /** Current proxy-owned picker view; credentials are never exposed here. */
+  getCatalogModels?: () => ModelCatalogView["visible"];
   port: number;
   baseUrl: string;
   /** The x402 signer's address, or "" in API-key mode (there is no wallet). */
@@ -1604,9 +1606,9 @@ export type ProxyHandle = {
 /**
  * Build model pricing map from BLOCKRUN_MODELS.
  */
-function buildModelPricing(): Map<string, ModelPricing> {
+function buildModelPricing(models = BLOCKRUN_MODELS): Map<string, ModelPricing> {
   const map = new Map<string, ModelPricing>();
-  for (const m of BLOCKRUN_MODELS) {
+  for (const m of models) {
     if (m.id === AUTO_MODEL) continue; // skip meta-model
     const promoPrice = getActivePromoPrice(m);
     map.set(m.id, {
@@ -1618,9 +1620,9 @@ function buildModelPricing(): Map<string, ModelPricing> {
   return map;
 }
 
-function buildModelCapabilities(): Record<string, ModelCapabilities> {
+function buildModelCapabilities(models = BLOCKRUN_MODELS): Record<string, ModelCapabilities> {
   return Object.fromEntries(
-    BLOCKRUN_MODELS.map((model) => [
+    models.map((model) => [
       model.id,
       {
         contextWindow: model.contextWindow,
@@ -1656,31 +1658,34 @@ type ModelListEntry = {
  */
 export function buildProxyModelList(
   createdAt: number = Math.floor(Date.now() / 1000),
+  catalog: ModelCatalogView = fallbackCatalog(),
 ): ModelListEntry[] {
   const seen = new Set<string>();
-  return OPENCLAW_MODELS.filter((model) => {
-    if (seen.has(model.id)) return false;
-    seen.add(model.id);
-    return true;
-  }).map((model) => {
-    const targetId = MODEL_ALIASES[model.id] ?? model.id;
-    const canonical = BLOCKRUN_MODELS.find((entry) => entry.id === targetId);
-    return {
-      id: model.id,
-      object: "model",
-      created: createdAt,
-      owned_by: targetId.includes("/") ? (targetId.split("/")[0] ?? "blockrun") : "blockrun",
-      name: model.name,
-      context_window: model.contextWindow,
-      max_output: model.maxTokens,
-      input_price: model.cost.input,
-      output_price: model.cost.output,
-      reasoning: model.reasoning,
-      vision: model.input.includes("image"),
-      agentic: canonical?.agentic ?? false,
-      tool_calling: canonical?.toolCalling ?? false,
-    };
-  });
+  return catalog.openclaw
+    .filter((model) => {
+      if (seen.has(model.id)) return false;
+      seen.add(model.id);
+      return true;
+    })
+    .map((model) => {
+      const targetId = MODEL_ALIASES[model.id] ?? model.id;
+      const canonical = catalog.models.find((entry) => entry.id === targetId);
+      return {
+        id: model.id,
+        object: "model",
+        created: createdAt,
+        owned_by: targetId.includes("/") ? (targetId.split("/")[0] ?? "blockrun") : "blockrun",
+        name: model.name,
+        context_window: model.contextWindow,
+        max_output: model.maxTokens,
+        input_price: model.cost.input,
+        output_price: model.cost.output,
+        reasoning: model.reasoning,
+        vision: model.input.includes("image"),
+        agentic: canonical?.agentic ?? false,
+        tool_calling: canonical?.toolCalling ?? false,
+      };
+    });
 }
 
 /**
@@ -1815,8 +1820,9 @@ export function estimateAmount(
   modelId: string,
   bodyLength: number,
   maxTokens: number,
+  models: ReadonlyMap<string, BlockRunModel> = BLOCKRUN_MODEL_BY_ID,
 ): string | undefined {
-  const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
+  const model = models.get(modelId);
   if (!model) return undefined;
 
   let costUsd: number;
@@ -1850,6 +1856,7 @@ export function estimateBalancePreflightAmount(
   modelId: string,
   bodyLength: number,
   maxTokens: number,
+  models: ReadonlyMap<string, BlockRunModel> = BLOCKRUN_MODEL_BY_ID,
 ): string | undefined {
   // Clients like OpenClaw may send the model's huge default max output
   // (for example 128k) even when the user did not request that much output.
@@ -1859,7 +1866,7 @@ export function estimateBalancePreflightAmount(
     maxTokens || BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP,
     BALANCE_PREFLIGHT_OUTPUT_TOKEN_CAP,
   );
-  return estimateAmount(modelId, bodyLength, preflightMaxTokens);
+  return estimateAmount(modelId, bodyLength, preflightMaxTokens, models);
 }
 
 // Image pricing table (must match server's IMAGE_MODELS in blockrun/src/lib/models.ts)
@@ -2949,10 +2956,33 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Build router options (100% local — no external API calls for routing)
   const routingConfig = mergeRoutingConfig(options.routingConfig);
   const modelPricing = buildModelPricing();
-  const routerOpts: RouterOptions = {
+  let routerOpts: RouterOptions = {
     config: routingConfig,
     modelPricing,
     modelCapabilities: buildModelCapabilities(),
+  };
+
+  const catalog = createClawCatalog({
+    network: paymentChain === "solana" && (apiKey || solanaPrivateKeyBytes) ? "solana" : "base",
+    apiBase,
+    apiKey,
+  });
+  let catalogClosed = false;
+  const refreshCatalog = async () => {
+    const previous = catalog.current();
+    const view = await catalog.refresh();
+    if (catalogClosed || view === previous) return;
+    // Replace as a unit: requests already running retain their own pricing snapshot.
+    routerOpts = {
+      ...routerOpts,
+      modelPricing: buildModelPricing(view.models),
+      modelCapabilities: buildModelCapabilities(view.models),
+    };
+    try {
+      options.onCatalogUpdated?.(view.visible);
+    } catch {
+      /* A UI failure must not break serving. */
+    }
   };
 
   // Request deduplicator (shared across all requests)
@@ -3157,7 +3187,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
       // --- Handle /v1/models locally (no upstream call needed) ---
       if (req.url === "/v1/models" && req.method === "GET") {
-        const models = buildProxyModelList();
+        const models = buildProxyModelList(undefined, catalog.current());
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ object: "list", data: models }));
         return;
@@ -4201,6 +4231,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           sessionStore,
           responseCache,
           sessionJournal,
+          catalog.current(),
         );
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -4363,6 +4394,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     throw lastError;
   }
 
+  void refreshCatalog();
+  const catalogTimer = setInterval(() => {
+    void refreshCatalog();
+  }, 300000);
+  catalogTimer.unref();
+
   // Server is now listening - set up remaining handlers
   const addr = server.address() as AddressInfo;
   const port = addr.port;
@@ -4418,6 +4455,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   return {
     port,
     baseUrl,
+    getCatalogModels: () => catalog.current().visible,
     walletAddress: account?.address ?? "",
     solanaAddress,
     authMode,
@@ -4429,6 +4467,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           rej(new Error("[ClawRouter] Close timeout after 4s"));
         }, 4000);
 
+        catalogClosed = true;
+        clearInterval(catalogTimer);
         sessionStore.close();
         // Destroy all active connections before closing server
         for (const socket of connections) {
@@ -4673,8 +4713,14 @@ async function proxyRequest(
   sessionStore: SessionStore,
   responseCache: ResponseCache,
   sessionJournal: SessionJournal,
+  catalog: ModelCatalogView = fallbackCatalog(),
 ): Promise<void> {
   const startTime = Date.now();
+  const modelsById = new Map(catalog.models.map((m) => [m.id, m]));
+  const estimate = (id: string, length: number, tokens: number) =>
+    estimateAmount(id, length, tokens, modelsById);
+  const estimatePreflight = (id: string, length: number, tokens: number) =>
+    estimateBalancePreflightAmount(id, length, tokens, modelsById);
 
   // Build upstream URL: /v1/chat/completions → https://blockrun.ai/api/v1/chat/completions
   const upstreamUrl = `${apiBase}${req.url}`;
@@ -5996,11 +6042,11 @@ async function proxyRequest(
   // Skip if skipBalanceCheck is set (for testing) or if using free model
   let estimatedCostMicros: bigint | undefined;
   // Use `let` so the balance-fallback path can update this when modelId is switched to a free model.
-  let isFreeModel = FREE_MODELS.has(modelId ?? "");
+  let isFreeModel = catalog.freeIds.has(modelId ?? "");
 
   if (modelId && !options.skipBalanceCheck && !isFreeModel) {
-    const estimated = estimateAmount(modelId, body.length, maxTokens);
-    const preflightEstimated = estimateBalancePreflightAmount(modelId, body.length, maxTokens);
+    const estimated = estimate(modelId, body.length, maxTokens);
+    const preflightEstimated = estimatePreflight(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
     }
@@ -6102,7 +6148,7 @@ async function proxyRequest(
       estimatedCostMicros !== undefined
         ? estimatedCostMicros.toString()
         : modelId
-          ? estimateAmount(modelId, body.length, maxTokens)
+          ? estimate(modelId, body.length, maxTokens)
           : undefined;
     const thisReqEstUsd = thisReqEstStr ? Number(thisReqEstStr) / 1_000_000 : 0;
     const projectedCostUsd = runCostUsd + thisReqEstUsd;
@@ -6150,9 +6196,9 @@ async function proxyRequest(
     if (isComplexOrAgentic) {
       // Case A: tool/complex/agentic routing profile — check global model table
       // Intentionally exclude free models: they cannot handle complex/agentic tasks.
-      const canAffordAnyNonFreeModel = BLOCKRUN_MODELS.some((m) => {
-        if (FREE_MODELS.has(m.id)) return false;
-        const est = estimateAmount(m.id, body.length, maxTokens);
+      const canAffordAnyNonFreeModel = catalog.models.some((m) => {
+        if (catalog.freeIds.has(m.id)) return false;
+        const est = estimate(m.id, body.length, maxTokens);
         return est !== undefined && Number(est) / 1_000_000 <= remainingUsd;
       });
       if (!canAffordAnyNonFreeModel) {
@@ -6176,10 +6222,10 @@ async function proxyRequest(
         deduplicator.removeInflight(dedupKey);
         return;
       }
-    } else if (!routingDecision && modelId && !FREE_MODELS.has(modelId)) {
+    } else if (!routingDecision && modelId && !catalog.freeIds.has(modelId)) {
       // Case B: explicit model request (user chose a specific model, not a routing profile).
       // Silently substituting their choice with free model is deceptive — block instead.
-      const est = estimateAmount(modelId, body.length, maxTokens);
+      const est = estimate(modelId, body.length, maxTokens);
       const canAfford = !est || Number(est) / 1_000_000 <= remainingUsd;
       if (!canAfford) {
         console.log(
@@ -6354,7 +6400,7 @@ async function proxyRequest(
         estimatedInputTokens,
         maxTokens,
         (modelId) => {
-          const model = BLOCKRUN_MODEL_BY_ID.get(modelId);
+          const model = modelsById.get(modelId);
           return model
             ? { contextWindow: model.contextWindow, maxOutput: model.maxOutput }
             : undefined;
@@ -6407,7 +6453,11 @@ async function proxyRequest(
       // Filter to models that support tool calling when request has tools.
       // Prevents models like grok-code-fast-1 from outputting tool invocations
       // as plain text JSON (the "talking to itself" bug).
-      let toolFiltered = filterByToolCalling(excludeFiltered, hasTools, supportsToolCalling);
+      let toolFiltered = filterByToolCalling(
+        excludeFiltered,
+        hasTools,
+        (id) => modelsById.get(id)?.toolCalling === true,
+      );
       const toolExcluded = excludeFiltered.filter((m) => !toolFiltered.includes(m));
       if (toolExcluded.length > 0) {
         console.log(
@@ -6435,7 +6485,11 @@ async function proxyRequest(
       }
 
       // Filter to models that support vision when request has image_url content
-      const visionFiltered = filterByVision(toolFiltered, hasVision, supportsVision);
+      const visionFiltered = filterByVision(
+        toolFiltered,
+        hasVision,
+        (id) => modelsById.get(id)?.vision === true,
+      );
       const visionExcluded = toolFiltered.filter((m) => !visionFiltered.includes(m));
       if (visionExcluded.length > 0) {
         console.log(
@@ -6463,7 +6517,9 @@ async function proxyRequest(
     // Only ever swaps one free model for another free model, so nothing becomes
     // payable that was not, and a user who pinned a PAID model is untouched.
     if (modelsToTry.length > 0) {
-      const unservedFree = modelsToTry.filter((m) => FREE_MODELS.has(m) && !isServedByGateway(m));
+      const unservedFree = modelsToTry.filter(
+        (m) => catalog.freeIds.has(m) && !isServedByGateway(m),
+      );
       if (unservedFree.length > 0) {
         const servedFree = [...FREE_MODELS].filter(
           (m) => isServedByGateway(m) && !excludeList?.has(m),
@@ -6504,8 +6560,8 @@ async function proxyRequest(
 
       const beforeFilter = [...modelsToTry];
       modelsToTry = modelsToTry.filter((m) => {
-        if (FREE_MODELS.has(m)) return true; // free models always fit (no cost)
-        const est = estimateAmount(m, body.length, maxTokens);
+        if (catalog.freeIds.has(m)) return true; // free models always fit (no cost)
+        const est = estimate(m, body.length, maxTokens);
         if (!est) return true; // no pricing data → keep (permissive)
         return Number(est) / 1_000_000 <= remainingUsd;
       });
@@ -6525,7 +6581,7 @@ async function proxyRequest(
         routingDecision?.tier === "REASONING" ||
         routingDecision === undefined; // explicit model: no routing profile → user chose the model
       const filteredToFreeOnly =
-        modelsToTry.length > 0 && modelsToTry.every((m) => FREE_MODELS.has(m));
+        modelsToTry.length > 0 && modelsToTry.every((m) => catalog.freeIds.has(m));
 
       if (isComplexOrAgenticFilter && filteredToFreeOnly) {
         const budgetSummary = `$${Math.max(0, remainingUsd).toFixed(4)} remaining (limit: $${options.maxCostPerRunUsd})`;
@@ -6571,7 +6627,7 @@ async function proxyRequest(
 
         // A: Set visible warning notice — prepended to response so user sees the downgrade
         const fromModel = excluded[0];
-        const usingFree = modelsToTry.length === 1 && FREE_MODELS.has(modelsToTry[0]);
+        const usingFree = modelsToTry.length === 1 && catalog.freeIds.has(modelsToTry[0]);
         if (usingFree) {
           budgetDowngradeNotice = `> **⚠️ Budget cap reached** ($${runCostUsd.toFixed(4)}/$${options.maxCostPerRunUsd}) — downgraded to free model. Quality may be reduced. Increase \`maxCostPerRun\` to continue with ${fromModel}.\n\n`;
         } else {
@@ -6606,9 +6662,9 @@ async function proxyRequest(
       // re-checks policy against each attempt's own 402 quote. Free models
       // publish 0 rather than being skipped, so a previous attempt's estimate
       // cannot leak into a call that costs nothing.
-      const attemptEst = FREE_MODELS.has(tryModel)
+      const attemptEst = catalog.freeIds.has(tryModel)
         ? undefined
-        : estimateAmount(tryModel, body.length, maxTokens);
+        : estimate(tryModel, body.length, maxTokens);
       publishDispatchCost(attemptEst ? Number(attemptEst) / 1_000_000 : 0);
 
       // Per-model abort controller — each attempt gets its own window.
@@ -6675,8 +6731,8 @@ async function proxyRequest(
         actualModelUsed = tryModel;
         console.log(`[ClawRouter] Success with model: ${tryModel}`);
         // Accumulate estimated cost to session for maxCostPerRun tracking
-        if (options.maxCostPerRunUsd && effectiveSessionId && !FREE_MODELS.has(tryModel)) {
-          const costEst = estimateAmount(tryModel, body.length, maxTokens);
+        if (options.maxCostPerRunUsd && effectiveSessionId && !catalog.freeIds.has(tryModel)) {
+          const costEst = estimate(tryModel, body.length, maxTokens);
           if (costEst) {
             sessionStore.addSessionCost(effectiveSessionId, BigInt(costEst));
           }
@@ -6706,13 +6762,13 @@ async function proxyRequest(
         /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
           result.errorBody || "",
         );
-      if (isPaymentErr && !FREE_MODELS.has(tryModel) && !isLastAttempt) {
+      if (isPaymentErr && !catalog.freeIds.has(tryModel) && !isLastAttempt) {
         failedAttempts.push({
           ...failedAttempts[failedAttempts.length - 1],
           reason: "payment_error",
         });
         // Find a free model already in the chain
-        const freeInChain = modelsToTry.findIndex((m, idx) => idx > i && FREE_MODELS.has(m));
+        const freeInChain = modelsToTry.findIndex((m, idx) => idx > i && catalog.freeIds.has(m));
         if (freeInChain > i + 1) {
           console.log(
             `[ClawRouter] Payment error — skipping to free model: ${modelsToTry[freeInChain]}`,
@@ -6774,8 +6830,8 @@ async function proxyRequest(
             upstream = retryResult.response;
             actualModelUsed = tryModel;
             console.log(`[ClawRouter] Explicit-pin retry succeeded for: ${tryModel}`);
-            if (options.maxCostPerRunUsd && effectiveSessionId && !FREE_MODELS.has(tryModel)) {
-              const costEst = estimateAmount(tryModel, body.length, maxTokens);
+            if (options.maxCostPerRunUsd && effectiveSessionId && !catalog.freeIds.has(tryModel)) {
+              const costEst = estimate(tryModel, body.length, maxTokens);
               if (costEst) {
                 sessionStore.addSessionCost(effectiveSessionId, BigInt(costEst));
               }
@@ -6852,8 +6908,12 @@ async function proxyRequest(
                 upstream = retryResult.response;
                 actualModelUsed = tryModel;
                 console.log(`[ClawRouter] Rate-limit retry succeeded for: ${tryModel}`);
-                if (options.maxCostPerRunUsd && effectiveSessionId && !FREE_MODELS.has(tryModel)) {
-                  const costEst = estimateAmount(tryModel, body.length, maxTokens);
+                if (
+                  options.maxCostPerRunUsd &&
+                  effectiveSessionId &&
+                  !catalog.freeIds.has(tryModel)
+                ) {
+                  const costEst = estimate(tryModel, body.length, maxTokens);
                   if (costEst) {
                     sessionStore.addSessionCost(effectiveSessionId, BigInt(costEst));
                   }
@@ -7681,7 +7741,7 @@ async function proxyRequest(
       logCost = actualPayment;
       // Calculate baseline for savings comparison
       const chargedInputTokens = Math.ceil(body.length / 4);
-      const modelDef = BLOCKRUN_MODEL_BY_ID.get(logModel);
+      const modelDef = modelsById.get(logModel);
       const chargedOutputTokens = modelDef ? Math.min(maxTokens, modelDef.maxOutput) : maxTokens;
       const baseline = calculateModelCost(
         logModel,
@@ -7702,7 +7762,7 @@ async function proxyRequest(
         routingProfile ?? undefined,
       );
       const apiKeyPricing = options.apiKey ? routerOpts.modelPricing.get(logModel) : undefined;
-      if (FREE_MODELS.has(logModel)) {
+      if (catalog.freeIds.has(logModel)) {
         // Free models: actual cost is $0 (no x402 payment ever made).
         // MIN_PAYMENT_USD floor in calculateModelCost would falsely inflate stats.
         logCost = 0;

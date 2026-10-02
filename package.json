@@ -115,6 +115,7 @@
     }
   },
   "devDependencies": {
+    "@blockrun/model-catalog": "https://codeload.github.com/BlockRunAI/model-catalog/tar.gz/465c45941fb8ea9d6858fe8402abc8ba8934be90",
     "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/e38958bba9af0aaa788c5baafbdaff539638b7c9",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.2.0",
