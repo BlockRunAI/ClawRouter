@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createClawCatalog } from "./model-catalog.js";
 import { BLOCKRUN_MODELS, MODEL_ALIASES } from "./models.js";
 import { startProxy, estimateAmount } from "./proxy.js";
+import { InMemorySpendControlStorage, SpendControl } from "./spend-control.js";
 
 const snapshot = JSON.parse(
   readFileSync(createRequire(import.meta.url).resolve("@blockrun/model-catalog/snapshot"), "utf8"),
@@ -185,11 +186,14 @@ describe("shared catalog adapter", () => {
     let proxy: Awaited<ReturnType<typeof startProxy>> | undefined;
     try {
       proxy = await startProxy({
+        spendControl: new SpendControl({ storage: new InMemorySpendControlStorage() }),
         apiKey: key,
         apiBase: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
         port: 0,
         skipBalanceCheck: true,
         cacheConfig: { enabled: false },
+        maxCostPerRunUsd: 0.05,
+        maxCostPerRunMode: "strict",
       });
       await expect
         .poll(() => proxy!.getCatalogModels!().some((m) => m.id === "test/future"))
@@ -199,6 +203,17 @@ describe("shared catalog adapter", () => {
         input_price: 2,
         max_output: 8192,
       });
+      const blocked = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-session-id": "core-cap" },
+        body: JSON.stringify({
+          model: "test/future",
+          messages: [{ role: "user", content: "budget probe" }],
+          max_tokens: 8192,
+        }),
+      });
+      expect(blocked.status).toBe(429);
+      expect(seen).toEqual([]);
       const reply = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json" },

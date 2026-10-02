@@ -589,6 +589,7 @@ function syncAgentModelCache(
   options: { forceWrite?: boolean; catalogModels?: typeof VISIBLE_OPENCLAW_MODELS } = {},
 ): void {
   if (!isGatewayMode() && !options.forceWrite) return;
+  const visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
 
   const agentsDir = join(homedir(), ".openclaw", "agents");
   if (!existsSync(agentsDir)) return;
@@ -600,7 +601,7 @@ function syncAgentModelCache(
     return;
   }
 
-  const expectedIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
+  const expectedIds = visibleModels.map((m) => m.id);
 
   for (const agent of agentDirs) {
     const cachePath = join(agentsDir, agent, "agent", "models.json");
@@ -623,12 +624,13 @@ function syncAgentModelCache(
       // reordered list still needs the rewrite.
       const upToDate =
         Array.isArray(current) &&
+        JSON.stringify(current) === JSON.stringify(visibleModels) &&
         current.length === expectedIds.length &&
         current.every((m, i) => m?.id === expectedIds[i]);
       if (upToDate) continue;
 
       const staleCount = Array.isArray(current) ? current.length : 0;
-      entry.models = VISIBLE_OPENCLAW_MODELS;
+      entry.models = visibleModels;
 
       const tmpPath = `${cachePath}.tmp.${process.pid}`;
       writeFileSync(tmpPath, JSON.stringify(cache, null, 2), { mode: 0o600 });
@@ -1032,6 +1034,7 @@ async function startProxyInBackground(
     onCatalogUpdated: (catalogModels) => {
       if (startupGeneration !== undefined && !isProxyStartupCurrent(startupGeneration)) return;
       injectModelsConfig(api.logger, { catalogModels });
+      syncAgentModelCache(api.logger, { catalogModels });
     },
     onReady: (port) => {
       api.logger.info(`BlockRun ${apiKey ? "API-key" : "x402"} proxy listening on port ${port}`);

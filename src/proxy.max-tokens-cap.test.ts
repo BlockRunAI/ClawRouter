@@ -27,6 +27,11 @@ const upstreamCalls: string[] = [];
 
 beforeAll(async () => {
   upstream = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === "GET" && req.url?.startsWith("/v1/models")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
     const parsed = JSON.parse(Buffer.concat(chunks).toString() || "{}") as { model?: string };

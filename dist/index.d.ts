@@ -359,8 +359,119 @@ type OpenClawPluginDefinition = {
     };
 };
 
+/**
+ * BlockRun Model Definitions for OpenClaw
+ *
+ * Maps BlockRun's model catalog to OpenClaw's ModelDefinitionConfig format.
+ * All models use the "openai-completions" API since BlockRun is OpenAI-compatible.
+ *
+ * Pricing is in USD per 1M tokens. Operators pay these rates via x402;
+ * they set their own markup when reselling to end users (Phase 2).
+ */
+
+/**
+ * Model aliases for convenient shorthand access.
+ * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4-6`.
+ */
+declare const MODEL_ALIASES: Record<string, string>;
+/**
+ * Resolve a model alias to its full model ID.
+ * Also strips "blockrun/" prefix for direct model paths.
+ * Examples:
+ *   - "claude" -> "anthropic/claude-sonnet-4-6" (alias)
+ *   - "blockrun/claude" -> "anthropic/claude-sonnet-4-6" (alias with prefix)
+ *   - "blockrun/anthropic/claude-sonnet-4-6" -> "anthropic/claude-sonnet-4-6" (prefix stripped)
+ *   - "openai/gpt-4o" -> "openai/gpt-4o" (unchanged)
+ */
+declare function resolveModelAlias(model: string): string;
+type BlockRunModel = {
+    id: string;
+    name: string;
+    /** Model version (e.g., "4.6", "3.1", "5.2") for tracking updates */
+    version?: string;
+    inputPrice: number;
+    outputPrice: number;
+    contextWindow: number;
+    maxOutput: number;
+    reasoning?: boolean;
+    vision?: boolean;
+    /** Models optimized for agentic workflows (multi-step autonomous tasks) */
+    agentic?: boolean;
+    /**
+     * Model supports OpenAI-compatible structured function/tool calling.
+     * Models without this flag output tool invocations as plain text JSON,
+     * which leaks raw {"command":"..."} into visible chat messages.
+     * Default: false (must opt-in to prevent silent regressions on new models).
+     */
+    toolCalling?: boolean;
+    /** Model is deprecated — will be routed to fallbackModel if set */
+    deprecated?: boolean;
+    /** Model ID to route to when this model is deprecated */
+    fallbackModel?: string;
+    /** Time-limited promotional pricing — auto-expires after endDate */
+    promo?: {
+        /** Flat price per request in USD (replaces token-based pricing) */
+        flatPrice: number;
+        /** ISO date, promo starts (inclusive). e.g. "2026-04-01" */
+        startDate: string;
+        /** ISO date, promo ends (exclusive). e.g. "2026-04-15" */
+        endDate: string;
+    };
+    /**
+     * Permanent flat per-request price in USD (backend billingMode: "flat").
+     * Unlike promo, this never expires. Takes precedence over promo.
+     */
+    flatPrice?: number;
+};
+declare const BLOCKRUN_MODELS: BlockRunModel[];
+/**
+ * All BlockRun models in OpenClaw format (including aliases).
+ * Used for proxy-side resolution (alias → target ID), tool routing, etc.
+ *
+ * Catalog entries shadowed by an identically-keyed alias are excluded:
+ * resolveModelAlias checks MODEL_ALIASES first, so those catalog entries are
+ * unreachable and their metadata (name/pricing) would misadvertise what
+ * callers actually get. The alias-derived entry carries the redirect
+ * target's real metadata instead.
+ */
+declare const OPENCLAW_MODELS: ModelDefinitionConfig[];
+declare const VISIBLE_OPENCLAW_MODELS: ModelDefinitionConfig[];
+/**
+ * Build a ModelProviderConfig for BlockRun.
+ *
+ * Returns only the TOP_MODELS-listed subset so the OpenClaw picker stays
+ * focused. Hidden models are still resolvable through the proxy.
+ *
+ * @param baseUrl - The proxy's local base URL (e.g., "http://127.0.0.1:12345")
+ */
+declare function buildProviderModels(baseUrl: string): ModelProviderConfig;
+/**
+ * Check if a model is optimized for agentic workflows.
+ * Agentic models continue autonomously with multi-step tasks
+ * instead of stopping and waiting for user input.
+ */
+declare function isAgenticModel(modelId: string): boolean;
+/**
+ * Get all agentic-capable models.
+ */
+declare function getAgenticModels(): string[];
+/**
+ * Get context window size for a model.
+ * Returns undefined if model not found.
+ */
+declare function getModelContextWindow(modelId: string): number | undefined;
+
 /** OpenClaw's bundled router owns `clawrouter`; BlockRun must never claim it. */
 declare const BLOCKRUN_PLUGIN_ID = "blockrun-clawrouter";
+
+/** Model metadata only. This client has no wallet or payment-signing capability. */
+
+type ModelCatalogView = {
+    models: BlockRunModel[];
+    openclaw: ModelDefinitionConfig[];
+    visible: ModelDefinitionConfig[];
+    freeIds: ReadonlySet<string>;
+};
 
 /**
  * Response Cache for LLM Completions
@@ -1052,27 +1163,6 @@ declare function getSessionId(headers: Record<string, string | string[] | undefi
  */
 declare function hashRequestContent(lastUserContent: string, toolCallNames?: string[]): string;
 
-/**
- * Local x402 Proxy Server
- *
- * Sits between OpenClaw's pi-ai (which makes standard OpenAI-format requests)
- * and BlockRun's API (which requires x402 micropayments).
- *
- * Flow:
- *   pi-ai → http://localhost:{port}/v1/chat/completions
- *        → proxy forwards to https://blockrun.ai/api/v1/chat/completions
- *        → gets 402 → @x402/fetch signs payment → retries
- *        → streams response back to pi-ai
- *
- * Optimizations (v0.3.0):
- *   - SSE heartbeat: for streaming requests, sends headers + heartbeat immediately
- *     before the x402 flow, preventing OpenClaw's 10-15s timeout from firing.
- *   - Response dedup: hashes request bodies and caches responses for 30s,
- *     preventing double-charging when OpenClaw retries after timeout.
- *   - Smart routing: when model is "blockrun/auto", classify query and pick cheapest model.
- *   - Usage logging: log every request as JSON line to ~/.openclaw/blockrun/logs/
- */
-
 /** Union type for chain- and auth-agnostic balance monitoring */
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor | ApiKeyBalanceMonitor;
 
@@ -1187,6 +1277,7 @@ type ProxyOptions = {
      * Loaded from ~/.openclaw/blockrun/exclude-models.json
      */
     excludeModels?: Set<string>;
+    onCatalogUpdated?: (models: ModelCatalogView["visible"]) => void;
     onReady?: (port: number) => void;
     onError?: (error: Error) => void;
     onPayment?: (info: {
@@ -1222,6 +1313,8 @@ type ProxyOptions = {
     upstreamProxy?: string;
 };
 type ProxyHandle = {
+    /** Current proxy-owned picker view; credentials are never exposed here. */
+    getCatalogModels?: () => ModelCatalogView["visible"];
     port: number;
     baseUrl: string;
     /** The x402 signer's address, or "" in API-key mode (there is no wallet). */
@@ -1309,108 +1402,6 @@ declare function resolvePaymentChain(): Promise<"base" | "solana">;
  * BlockRun provider plugin definition.
  */
 declare const blockrunProvider: ProviderPlugin;
-
-/**
- * BlockRun Model Definitions for OpenClaw
- *
- * Maps BlockRun's model catalog to OpenClaw's ModelDefinitionConfig format.
- * All models use the "openai-completions" API since BlockRun is OpenAI-compatible.
- *
- * Pricing is in USD per 1M tokens. Operators pay these rates via x402;
- * they set their own markup when reselling to end users (Phase 2).
- */
-
-/**
- * Model aliases for convenient shorthand access.
- * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4-6`.
- */
-declare const MODEL_ALIASES: Record<string, string>;
-/**
- * Resolve a model alias to its full model ID.
- * Also strips "blockrun/" prefix for direct model paths.
- * Examples:
- *   - "claude" -> "anthropic/claude-sonnet-4-6" (alias)
- *   - "blockrun/claude" -> "anthropic/claude-sonnet-4-6" (alias with prefix)
- *   - "blockrun/anthropic/claude-sonnet-4-6" -> "anthropic/claude-sonnet-4-6" (prefix stripped)
- *   - "openai/gpt-4o" -> "openai/gpt-4o" (unchanged)
- */
-declare function resolveModelAlias(model: string): string;
-type BlockRunModel = {
-    id: string;
-    name: string;
-    /** Model version (e.g., "4.6", "3.1", "5.2") for tracking updates */
-    version?: string;
-    inputPrice: number;
-    outputPrice: number;
-    contextWindow: number;
-    maxOutput: number;
-    reasoning?: boolean;
-    vision?: boolean;
-    /** Models optimized for agentic workflows (multi-step autonomous tasks) */
-    agentic?: boolean;
-    /**
-     * Model supports OpenAI-compatible structured function/tool calling.
-     * Models without this flag output tool invocations as plain text JSON,
-     * which leaks raw {"command":"..."} into visible chat messages.
-     * Default: false (must opt-in to prevent silent regressions on new models).
-     */
-    toolCalling?: boolean;
-    /** Model is deprecated — will be routed to fallbackModel if set */
-    deprecated?: boolean;
-    /** Model ID to route to when this model is deprecated */
-    fallbackModel?: string;
-    /** Time-limited promotional pricing — auto-expires after endDate */
-    promo?: {
-        /** Flat price per request in USD (replaces token-based pricing) */
-        flatPrice: number;
-        /** ISO date, promo starts (inclusive). e.g. "2026-04-01" */
-        startDate: string;
-        /** ISO date, promo ends (exclusive). e.g. "2026-04-15" */
-        endDate: string;
-    };
-    /**
-     * Permanent flat per-request price in USD (backend billingMode: "flat").
-     * Unlike promo, this never expires. Takes precedence over promo.
-     */
-    flatPrice?: number;
-};
-declare const BLOCKRUN_MODELS: BlockRunModel[];
-/**
- * All BlockRun models in OpenClaw format (including aliases).
- * Used for proxy-side resolution (alias → target ID), tool routing, etc.
- *
- * Catalog entries shadowed by an identically-keyed alias are excluded:
- * resolveModelAlias checks MODEL_ALIASES first, so those catalog entries are
- * unreachable and their metadata (name/pricing) would misadvertise what
- * callers actually get. The alias-derived entry carries the redirect
- * target's real metadata instead.
- */
-declare const OPENCLAW_MODELS: ModelDefinitionConfig[];
-declare const VISIBLE_OPENCLAW_MODELS: ModelDefinitionConfig[];
-/**
- * Build a ModelProviderConfig for BlockRun.
- *
- * Returns only the TOP_MODELS-listed subset so the OpenClaw picker stays
- * focused. Hidden models are still resolvable through the proxy.
- *
- * @param baseUrl - The proxy's local base URL (e.g., "http://127.0.0.1:12345")
- */
-declare function buildProviderModels(baseUrl: string): ModelProviderConfig;
-/**
- * Check if a model is optimized for agentic workflows.
- * Agentic models continue autonomously with multi-step tasks
- * instead of stopping and waiting for user input.
- */
-declare function isAgenticModel(modelId: string): boolean;
-/**
- * Get all agentic-capable models.
- */
-declare function getAgenticModels(): string[];
-/**
- * Get context window size for a model.
- * Returns undefined if model not found.
- */
-declare function getModelContextWindow(modelId: string): number | undefined;
 
 /**
  * Usage Logger
@@ -1805,6 +1796,7 @@ declare function injectModelsConfig(logger: {
     info: (msg: string) => void;
 }, options?: {
     forceWrite?: boolean;
+    catalogModels?: typeof VISIBLE_OPENCLAW_MODELS;
 }): void;
 /**
  * Repair the per-agent model cache OpenClaw keeps at
@@ -1831,6 +1823,7 @@ declare function syncAgentModelCache(logger: {
     info: (msg: string) => void;
 }, options?: {
     forceWrite?: boolean;
+    catalogModels?: typeof VISIBLE_OPENCLAW_MODELS;
 }): void;
 /**
  * Inject dummy auth profile for BlockRun into agent auth stores.

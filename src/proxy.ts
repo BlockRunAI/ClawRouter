@@ -338,12 +338,8 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes (allows reasoning model
 const PER_MODEL_TIMEOUT_MS = 60_000; // 60s per non-reasoning model attempt (fallback to next on exceed)
 const REASONING_MODEL_TIMEOUT_MS = 180_000; // 3min per reasoning model attempt — first-token cold-start can take 60-120s on V4 Pro / Claude opus thinking / GPT-5 reasoning_effort=high
 
-const REASONING_MODEL_IDS: Set<string> = new Set(
-  BLOCKRUN_MODELS.filter((m) => m.reasoning).map((m) => m.id),
-);
-
-function timeoutForModel(modelId: string): number {
-  return REASONING_MODEL_IDS.has(modelId) ? REASONING_MODEL_TIMEOUT_MS : PER_MODEL_TIMEOUT_MS;
+function timeoutForModel(modelId: string, models: ReadonlyMap<string, BlockRunModel>): number {
+  return models.get(modelId)?.reasoning ? REASONING_MODEL_TIMEOUT_MS : PER_MODEL_TIMEOUT_MS;
 }
 const MAX_FALLBACK_ATTEMPTS = 5; // Maximum models to try in fallback chain (increased from 3 to ensure cheap models are tried)
 const HEALTH_CHECK_TIMEOUT_MS = 2_000; // Timeout for checking existing proxy
@@ -4556,6 +4552,7 @@ async function tryModelRequest(
   payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
   balanceMonitor: AnyBalanceMonitor,
   signal: AbortSignal,
+  catalogReasoning = false,
 ): Promise<ModelRequestResult> {
   // Update model in body and normalize messages
   let requestBody = body;
@@ -4595,6 +4592,7 @@ async function tryModelRequest(
     const hasThinkingEnabled = !!(
       parsed.thinking ||
       parsed.extended_thinking ||
+      catalogReasoning ||
       isReasoningModel(modelId)
     );
     if (hasThinkingEnabled && Array.isArray(parsed.messages)) {
@@ -6671,7 +6669,7 @@ async function proxyRequest(
       // Reasoning models (o-series, GPT-5 reasoning, Claude opus, V4 Pro, etc.)
       // get 3min for cold-start first-token; everything else 60s. When it fires,
       // the fallback loop moves to the next model rather than failing.
-      const perAttemptTimeoutMs = timeoutForModel(tryModel);
+      const perAttemptTimeoutMs = timeoutForModel(tryModel, modelsById);
       const modelController = new AbortController();
       const modelTimeoutId = setTimeout(() => modelController.abort(), perAttemptTimeoutMs);
       const combinedSignal = AbortSignal.any([globalController.signal, modelController.signal]);
@@ -6686,6 +6684,7 @@ async function proxyRequest(
         payFetch,
         balanceMonitor,
         combinedSignal,
+        modelsById.get(tryModel)?.reasoning,
       );
       clearTimeout(modelTimeoutId);
 
@@ -6811,7 +6810,7 @@ async function proxyRequest(
           const retryController = new AbortController();
           const retryTimeoutId = setTimeout(
             () => retryController.abort(),
-            timeoutForModel(tryModel),
+            timeoutForModel(tryModel, modelsById),
           );
           const retrySignal = AbortSignal.any([globalController.signal, retryController.signal]);
           const retryResult = await tryModelRequest(
@@ -6824,6 +6823,7 @@ async function proxyRequest(
             payFetch,
             balanceMonitor,
             retrySignal,
+            modelsById.get(tryModel)?.reasoning,
           );
           clearTimeout(retryTimeoutId);
           if (retryResult.success && retryResult.response) {
@@ -6886,7 +6886,7 @@ async function proxyRequest(
               const retryController = new AbortController();
               const retryTimeoutId = setTimeout(
                 () => retryController.abort(),
-                timeoutForModel(tryModel),
+                timeoutForModel(tryModel, modelsById),
               );
               const retrySignal = AbortSignal.any([
                 globalController.signal,
@@ -6902,6 +6902,7 @@ async function proxyRequest(
                 payFetch,
                 balanceMonitor,
                 retrySignal,
+                modelsById.get(tryModel)?.reasoning,
               );
               clearTimeout(retryTimeoutId);
               if (retryResult.success && retryResult.response) {

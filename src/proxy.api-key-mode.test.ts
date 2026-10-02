@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { startProxy, type ProxyHandle } from "./proxy.js";
+import { InMemorySpendControlStorage, SpendControl } from "./spend-control.js";
 
 /**
  * API-key mode, end to end through the real proxy.
@@ -57,6 +58,7 @@ describe("startProxy in API-key mode", () => {
 
     // No `wallet` at all: that is the point of the mode.
     proxy = await startProxy({
+      spendControl: new SpendControl({ storage: new InMemorySpendControlStorage() }),
       apiKey: KEY,
       apiBase: `http://127.0.0.1:${addr.port}`,
       port: 0,

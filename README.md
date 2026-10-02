@@ -1000,10 +1000,13 @@ ClawRouter refreshes model metadata through `@blockrun/model-catalog`, pinned to
 an immutable commit and bundled into the plugin. The active Base, Solana or
 API-key gateway supplies live chat model IDs, prices and limits. A background
 refresh at startup and every five minutes updates `/v1/models`, price estimates,
-and the plugin's OpenClaw provider/allowlist. Newly discovered chat models become
+and the plugin's OpenClaw provider/allowlist and per-agent model caches. Newly discovered chat models become
 explicit picker choices without rebuilding ClawRouter. OpenClaw must reload its
 provider configuration to display a changed list; the proxy serves the updated
 list immediately.
+
+Restart an already-running proxy once after installing this integration. Reusing
+an older external proxy cannot give that process the new refresh behavior.
 
 The public picker policy defaults to
 `https://raw.githubusercontent.com/BlockRunAI/model-catalog/main/dist/snapshot.v1.json`.
