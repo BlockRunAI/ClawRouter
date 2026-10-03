@@ -993,3 +993,38 @@ ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls r
 ⭐ If ClawRouter powers your agents, consider starring the repo!
 
 </div>
+
+### Shared model catalog
+
+ClawRouter refreshes model metadata through `@blockrun/model-catalog`, pinned to
+an immutable commit and bundled into the plugin. The active Base, Solana or
+API-key gateway supplies live chat model IDs, prices and limits. A background
+refresh at startup and every five minutes updates `/v1/models`, price estimates,
+and the plugin's OpenClaw provider/allowlist and per-agent model caches. Newly discovered chat models become
+explicit picker choices without rebuilding ClawRouter. OpenClaw must reload its
+provider configuration to display a changed list; the proxy serves the updated
+list immediately.
+
+Restart an already-running proxy once after installing this integration. Reusing
+an older external proxy cannot give that process the new refresh behavior.
+
+The public picker policy defaults to
+`https://raw.githubusercontent.com/BlockRunAI/model-catalog/main/dist/snapshot.v1.json`.
+Set `BLOCKRUN_MODEL_CATALOG_URL` to another policy URL, or an empty string to use
+the bundled policy with live gateway rows. Policy requests never receive the API
+key; catalog redirects are refused. Each proxy owns its cache. Network failures
+retain the last complete view, and offline startup retains the existing bundled
+ClawRouter catalog. Invalid policy keeps the last good policy while valid gateway
+rows can still refresh.
+
+Existing aliases, curated legacy entries, virtual routes, free fallback order,
+and Auto routing candidates remain product policy. Live rows update prices for
+known models and add new chat choices; they do not promote a new model into Auto
+or assume that a `coding` category proves structured tool support. Known
+capability overrides remain in place. A gateway update cannot reclassify a pinned
+`free/` choice as paid. Models absent from a later refresh lose newly discovered
+picker entries; legacy pinned IDs remain available for gateway redirects.
+
+This integrates metadata, not payment signing or upstream protocol support.
+New protocols still require gateway compatibility. Gateway payment quotes and
+account settlement remain authoritative; catalog prices are estimates.

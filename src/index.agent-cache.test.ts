@@ -101,6 +101,19 @@ describe("syncAgentModelCache", () => {
     expect(read(cachePath).providers.blockrun).toBeUndefined();
   });
 
+  it("propagates discovered models and later price-only updates to agent caches", async () => {
+    const { mod, cachePath } = await withCache({ providers: { blockrun: { models: [] } } });
+    const models = [
+      ...mod.VISIBLE_OPENCLAW_MODELS,
+      { ...mod.VISIBLE_OPENCLAW_MODELS[0], id: "test/future", name: "Future" },
+    ];
+    mod.syncAgentModelCache({ info: vi.fn() }, { forceWrite: true, catalogModels: models });
+    expect(read(cachePath).providers.blockrun.models.at(-1).id).toBe("test/future");
+    const repriced = models.map((m) => ({ ...m, cost: { ...m.cost, input: 7 } }));
+    mod.syncAgentModelCache({ info: vi.fn() }, { forceWrite: true, catalogModels: repriced });
+    expect(read(cachePath).providers.blockrun.models.at(-1).cost.input).toBe(7);
+  });
+
   it("is a no-op outside gateway mode unless forced (install-transaction safety)", async () => {
     const { mod, cachePath } = await withCache({
       providers: { blockrun: { models: [{ id: "openai/gpt-5.2" }] } },

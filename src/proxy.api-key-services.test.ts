@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { startProxy, type ProxyHandle } from "./proxy.js";
+import { InMemorySpendControlStorage, SpendControl } from "./spend-control.js";
 
 vi.mock("./logger.js", async (original) => ({
   ...(await original<typeof import("./logger.js")>()),
@@ -68,6 +69,7 @@ describe("account API service parity through the proxy", () => {
     });
     await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
     proxy = await startProxy({
+      spendControl: new SpendControl({ storage: new InMemorySpendControlStorage() }),
       apiKey: key,
       apiBase: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/v1/`,
       port: 0,
@@ -91,6 +93,7 @@ describe("account API service parity through the proxy", () => {
     expect(await first.json()).toEqual({ owner: `Bearer ${key}` });
     await proxy.close();
     proxy = await startProxy({
+      spendControl: new SpendControl({ storage: new InMemorySpendControlStorage() }),
       apiKey: "brk_live_second_account",
       apiBase: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
       port: Number(new URL(baseUrl).port),
@@ -103,6 +106,7 @@ describe("account API service parity through the proxy", () => {
     } finally {
       await proxy.close();
       proxy = await startProxy({
+        spendControl: new SpendControl({ storage: new InMemorySpendControlStorage() }),
         apiKey: key,
         apiBase: `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`,
         port: Number(new URL(baseUrl).port),

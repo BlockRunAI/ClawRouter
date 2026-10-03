@@ -42,7 +42,10 @@ export const blockrunProvider: ProviderPlugin = {
   // async config persistence writes the correct baseUrl to openclaw.json.
   get models() {
     if (activeProxy) {
-      return buildProviderModels(activeProxy.baseUrl);
+      return {
+        ...buildProviderModels(activeProxy.baseUrl),
+        models: activeProxy.getCatalogModels?.() ?? buildProviderModels(activeProxy.baseUrl).models,
+      };
     }
     // Proxy not started yet — use the configured port so OpenClaw persists
     // the correct local URL, not the remote blockrun.ai fallback.
