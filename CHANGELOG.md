@@ -4,6 +4,68 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.281 — October 3, 2026
+
+### Outcome memory: models that keep failing on a kind of request are tried last
+
+The 429/overload cooldowns forget a model after 15–60 seconds, and nothing
+remembered a model that answers with empty turns, loops, 5xxs or timeouts on
+tool-using requests — every such request paid a full failed attempt before
+falling back ([#414](https://github.com/BlockRunAI/ClawRouter/pull/414)).
+
+ClawRouter now keeps the last 10 outcomes per (model, tools|chat) for 30
+minutes. A model with at least 3 failures making up at least half of that
+window moves behind the reliable models in the fallback chain.
+
+- **A hint, not a filter.** Demoted models keep their relative order and are
+  still tried when the chain has room; entries expire, so a recovered model
+  gets its place back. A user-pinned model is never moved, and a chain where
+  every model is unreliable is left as is.
+- **Only model-attributable failures count:** 5xx, degraded 200s, degenerate
+  output and per-attempt timeouts — including on the last attempt and on
+  retries. Rate limits and overloads keep their own cooldowns; auth, payment
+  and bad-request errors are about the caller, and a payment failure never
+  counts even when it arrives as a 500 or a degraded 200.
+- **Ordering is applied to the whole eligible chain before the five-attempt
+  cap**, so five known-bad (or cooled-down) models can no longer crowd out an
+  available sixth. Models in rate-limit/overload cooldown stay behind every
+  available model.
+
+### Nine new chat models: GPT-6 Astra/Sol/Luna, GPT-5.1, Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5, Grok 4.6/4.7
+
+The gateway serves all nine on both chains and ClawRouter did not carry them,
+so pinning one skipped the balance pre-check and `maxCostPerRun`
+([#409](https://github.com/BlockRunAI/ClawRouter/pull/409)). Added to the
+registry, the picker and as explicit-pin aliases; bare `opus` / `sonnet` /
+`fable` / `grok` / `gpt5` are unchanged. `MODEL_ALIASES` 259 → 276, with
+`brand-numbers.json` in lockstep.
+
+Stale facts fixed against the live catalog: `claude-sonnet-5` is $2/$10,
+`deepseek-v4-flash-vision-exp` $0.30/$1.20, and `tencent/hy3` is retired (off
+the picker, deprecated → `qwen3.7-flash`).
+
+### 12 image models, as blockrun serves: GPT Image 2.5 Flare/Sunburst, Grok Imagine 2.0
+
+blockrun has served 12 image models since 2026-09-15; ClawRouter carried 9
+([#406](https://github.com/BlockRunAI/ClawRouter/pull/406)). The missing three
+were unreachable from the picker, `/cr-imagegen` and the agent tool, and
+were logged at the $0.042 fallback price.
+
+| Model                           | Price         | Sizes                       |
+| ------------------------------- | ------------- | --------------------------- |
+| `openai/gpt-image-2.5-flare`    | $0.28 / $0.56 | 1024², 1536x1024, 1024x1536 |
+| `openai/gpt-image-2.5-sunburst` | $0.28 / $0.56 | same; supports editing      |
+| `xai/grok-imagine-image-2.0`    | $0.04         | 1024² only                  |
+
+Shorthands `flare`, `sunburst`, `grok-imagine-2`; bare `grok-imagine` stays on
+the $0.02 model. Image editing caught up too: `/img2img` and the `image_edit`
+tool now accept every model blockrun's image2image route does (gpt-image-1/2,
+gpt-image-2.5-sunburst and the three nano-banana models), and `image_edit`
+gains a `model` parameter. A new test ties `IMAGE_MODEL_IDS` to
+`brand-numbers.json` `models.image`.
+
+---
+
 ## v0.12.280 — September 29, 2026
 
 ### Solana signing runs on `@solana/kit` 8.4 — for +2.3% bundle, not +26%

@@ -32,9 +32,9 @@ var __export = (target, all3) => {
 };
 var __copyProps = (to, from15, except, desc) => {
   if (from15 && typeof from15 === "object" || typeof from15 === "function") {
-    for (let key2 of __getOwnPropNames(from15))
-      if (!__hasOwnProp.call(to, key2) && key2 !== except)
-        __defProp(to, key2, { get: () => from15[key2], enumerable: !(desc = __getOwnPropDesc(from15, key2)) || desc.enumerable });
+    for (let key3 of __getOwnPropNames(from15))
+      if (!__hasOwnProp.call(to, key3) && key3 !== except)
+        __defProp(to, key3, { get: () => from15[key3], enumerable: !(desc = __getOwnPropDesc(from15, key3)) || desc.enumerable });
   }
   return to;
 };
@@ -8607,7 +8607,7 @@ function validateModels(rows) {
     if (row.billing_mode === "paid" && (!isNumber(row.pricing.input) || !isNumber(row.pricing.output))) throw new Error(`Invalid token price: ${row.id}`);
     if (row.billing_mode === "flat" && !isNumber(row.pricing.flat)) throw new Error(`Invalid flat price: ${row.id}`);
     if (row.billing_mode === "free" && ((row.pricing.input ?? 0) !== 0 || (row.pricing.output ?? 0) !== 0)) throw new Error(`Nonzero free price: ${row.id}`);
-    for (const key2 of ["context_window", "max_output"]) if (row[key2] !== void 0 && (!Number.isInteger(row[key2]) || row[key2] <= 0)) throw new Error(`Invalid ${key2}: ${row.id}`);
+    for (const key3 of ["context_window", "max_output"]) if (row[key3] !== void 0 && (!Number.isInteger(row[key3]) || row[key3] <= 0)) throw new Error(`Invalid ${key3}: ${row.id}`);
   }
   return rows;
 }
@@ -8788,8 +8788,8 @@ function isValidApiKey(value) {
   if (typeof value !== "string") return false;
   return /^brk_[A-Za-z0-9_-]{8,}$/.test(value.trim());
 }
-function maskApiKey(key2) {
-  const trimmed = key2.trim();
+function maskApiKey(key3) {
+  const trimmed = key3.trim();
   if (trimmed.length <= 18) return `${trimmed.slice(0, 8)}\u2026`;
   return `${trimmed.slice(0, 14)}\u2026${trimmed.slice(-4)}`;
 }
@@ -11344,18 +11344,18 @@ var init_lru = __esm({
         });
         this.maxSize = size5;
       }
-      get(key2) {
-        const value = super.get(key2);
-        if (super.has(key2)) {
-          super.delete(key2);
-          super.set(key2, value);
+      get(key3) {
+        const value = super.get(key3);
+        if (super.has(key3)) {
+          super.delete(key3);
+          super.set(key3, value);
         }
         return value;
       }
-      set(key2, value) {
-        if (super.has(key2))
-          super.delete(key2);
-        super.set(key2, value);
+      set(key3, value) {
+        if (super.has(key3))
+          super.delete(key3);
+        super.set(key3, value);
         if (this.maxSize && this.size > this.maxSize) {
           const firstKey = super.keys().next().value;
           if (firstKey !== void 0)
@@ -12605,9 +12605,9 @@ var stringify;
 var init_stringify = __esm({
   "node_modules/viem/_esm/utils/stringify.js"() {
     "use strict";
-    stringify = (value, replacer, space) => JSON.stringify(value, (key2, value_) => {
+    stringify = (value, replacer, space) => JSON.stringify(value, (key3, value_) => {
       const value2 = typeof value_ === "bigint" ? value_.toString() : value_;
-      return typeof replacer === "function" ? replacer(key2, value2) : value2;
+      return typeof replacer === "function" ? replacer(key3, value2) : value2;
     }, space);
   }
 });
@@ -12813,13 +12813,13 @@ var init_stateOverride = __esm({
 
 // node_modules/viem/_esm/errors/transaction.js
 function prettyPrint(args) {
-  const entries = Object.entries(args).map(([key2, value]) => {
+  const entries = Object.entries(args).map(([key3, value]) => {
     if (value === void 0 || value === false)
       return null;
-    return [key2, value];
+    return [key3, value];
   }).filter(Boolean);
-  const maxLength = entries.reduce((acc, [key2]) => Math.max(acc, key2.length), 0);
-  return entries.map(([key2, value]) => `  ${`${key2}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
+  const maxLength = entries.reduce((acc, [key3]) => Math.max(acc, key3.length), 0);
+  return entries.map(([key3, value]) => `  ${`${key3}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
 }
 var InvalidLegacyVError, InvalidSerializableTransactionError, InvalidStorageKeySizeError, TransactionExecutionError, TransactionNotFoundError, TransactionReceiptNotFoundError, TransactionReceiptRevertedError, WaitForTransactionReceiptTimeoutError;
 var init_transaction = __esm({
@@ -14150,7 +14150,7 @@ var init_hmac = __esm({
         this.finished = false;
         this.destroyed = false;
         ahash(hash5);
-        const key2 = toBytes2(_key);
+        const key3 = toBytes2(_key);
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -14158,7 +14158,7 @@ var init_hmac = __esm({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -14208,8 +14208,8 @@ var init_hmac = __esm({
         this.iHash.destroy();
       }
     };
-    hmac = (hash5, key2, message) => new HMAC(hash5, key2).update(message).digest();
-    hmac.create = (hash5, key2) => new HMAC(hash5, key2);
+    hmac = (hash5, key3, message) => new HMAC(hash5, key3).update(message).digest();
+    hmac.create = (hash5, key3) => new HMAC(hash5, key3);
   }
 });
 
@@ -14680,13 +14680,13 @@ function getMinHashLength(fieldOrder) {
   const length = getFieldBytesLength(fieldOrder);
   return length + Math.ceil(length / 2);
 }
-function mapHashToField(key2, fieldOrder, isLE3 = false) {
-  const len = key2.length;
+function mapHashToField(key3, fieldOrder, isLE3 = false) {
+  const len = key3.length;
   const fieldLen = getFieldBytesLength(fieldOrder);
   const minLen = getMinHashLength(fieldOrder);
   if (len < 16 || len < minLen || len > 1024)
     throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-  const num2 = isLE3 ? bytesToNumberLE(key2) : bytesToNumberBE(key2);
+  const num2 = isLE3 ? bytesToNumberLE(key3) : bytesToNumberBE(key3);
   const reduced = mod(num2, fieldOrder - _1n3) + _1n3;
   return isLE3 ? numberToBytesLE(reduced, fieldLen) : numberToBytesBE(reduced, fieldLen);
 }
@@ -15036,20 +15036,20 @@ function weierstrassPoints(opts) {
   function isWithinCurveOrder(num2) {
     return inRange(num2, _1n5, CURVE.n);
   }
-  function normPrivateKeyToScalar(key2) {
+  function normPrivateKeyToScalar(key3) {
     const { allowedPrivateKeyLengths: lengths, nByteLength, wrapPrivateKey, n: N2 } = CURVE;
-    if (lengths && typeof key2 !== "bigint") {
-      if (isBytes2(key2))
-        key2 = bytesToHex2(key2);
-      if (typeof key2 !== "string" || !lengths.includes(key2.length))
+    if (lengths && typeof key3 !== "bigint") {
+      if (isBytes2(key3))
+        key3 = bytesToHex2(key3);
+      if (typeof key3 !== "string" || !lengths.includes(key3.length))
         throw new Error("invalid private key");
-      key2 = key2.padStart(nByteLength * 2, "0");
+      key3 = key3.padStart(nByteLength * 2, "0");
     }
     let num2;
     try {
-      num2 = typeof key2 === "bigint" ? key2 : bytesToNumberBE(ensureBytes("private key", key2, nByteLength));
+      num2 = typeof key3 === "bigint" ? key3 : bytesToNumberBE(ensureBytes("private key", key3, nByteLength));
     } catch (error) {
-      throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key2);
+      throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key3);
     }
     if (wrapPrivateKey)
       num2 = mod(num2, N2);
@@ -15966,7 +15966,7 @@ var init_weierstrass = __esm({
 function getHash(hash5) {
   return {
     hash: hash5,
-    hmac: (key2, ...msgs) => hmac(hash5, key2, concatBytes(...msgs)),
+    hmac: (key3, ...msgs) => hmac(hash5, key3, concatBytes(...msgs)),
     randomBytes
   };
 }
@@ -16880,11 +16880,11 @@ function extract(value_, { format: format2 }) {
   const value = {};
   function extract_(formatted2) {
     const keys = Object.keys(formatted2);
-    for (const key2 of keys) {
-      if (key2 in value_)
-        value[key2] = value_[key2];
-      if (formatted2[key2] && typeof formatted2[key2] === "object" && !Array.isArray(formatted2[key2]))
-        extract_(formatted2[key2]);
+    for (const key3 of keys) {
+      if (key3 in value_)
+        value[key3] = value_[key3];
+      if (formatted2[key3] && typeof formatted2[key3] === "object" && !Array.isArray(formatted2[key3]))
+        extract_(formatted2[key3]);
     }
   }
   const formatted = format2(value_ || {});
@@ -16905,8 +16905,8 @@ function defineFormatter(type, format2) {
       format: (args, action) => {
         const formatted = format2(args, action);
         if (exclude) {
-          for (const key2 of exclude) {
-            delete formatted[key2];
+          for (const key3 of exclude) {
+            delete formatted[key3];
           }
         }
         return {
@@ -18566,14 +18566,14 @@ function includesArgs(parameters) {
     });
   }
   if (typeof args === "object" && !Array.isArray(args) && typeof matchArgs === "object" && !Array.isArray(matchArgs))
-    return Object.entries(matchArgs).every(([key2, value]) => {
+    return Object.entries(matchArgs).every(([key3, value]) => {
       if (value === null || value === void 0)
         return true;
-      const input = inputs.find((input2) => input2.name === key2);
+      const input = inputs.find((input2) => input2.name === key3);
       if (!input)
         return false;
       const value_ = Array.isArray(value) ? value : [value];
-      return value_.some((value2) => isEqual2(input, value2, args[key2]));
+      return value_.some((value2) => isEqual2(input, value2, args[key3]));
     });
   return false;
 }
@@ -19225,9 +19225,9 @@ var init_hex = __esm({
 
 // node_modules/ox/_esm/core/Json.js
 function stringify2(value, replacer, space) {
-  return JSON.stringify(value, (key2, value2) => {
+  return JSON.stringify(value, (key3, value2) => {
     if (typeof replacer === "function")
-      return replacer(key2, value2);
+      return replacer(key3, value2);
     if (typeof value2 === "bigint")
       return value2.toString() + bigIntSuffix;
     return value2;
@@ -21208,13 +21208,13 @@ function observe(observerId, callbacks, fn) {
   if (listeners && listeners.length > 0)
     return unwatch;
   const emit = {};
-  for (const key2 in callbacks) {
-    emit[key2] = ((...args) => {
+  for (const key3 in callbacks) {
+    emit[key3] = ((...args) => {
       const listeners2 = getListeners();
       if (listeners2.length === 0)
         return;
       for (const listener of listeners2)
-        listener.fns[key2]?.(...args);
+        listener.fns[key3]?.(...args);
     });
   }
   const cleanup = fn(emit);
@@ -22272,7 +22272,7 @@ var init_uid = __esm({
 
 // node_modules/viem/_esm/clients/createClient.js
 function createClient(parameters) {
-  const { batch, chain: chain3, ccipRead, dataSuffix, key: key2 = "base", name = "Base Client", tokens, type = "base" } = parameters;
+  const { batch, chain: chain3, ccipRead, dataSuffix, key: key3 = "base", name = "Base Client", tokens, type = "base" } = parameters;
   const experimental_blockTag = parameters.experimental_blockTag ?? (typeof chain3?.experimental_preconfirmationTime === "number" ? "pending" : void 0);
   const blockTime = chain3?.blockTime ?? 12e3;
   const defaultPollingInterval = Math.min(Math.max(Math.floor(blockTime / 2), 500), 4e3);
@@ -22292,7 +22292,7 @@ function createClient(parameters) {
     ccipRead,
     chain: chain3,
     dataSuffix,
-    key: key2,
+    key: key3,
     name,
     pollingInterval,
     request: request2,
@@ -22305,14 +22305,14 @@ function createClient(parameters) {
   function extend2(base4) {
     return (extendFn) => {
       const extended = extendFn(base4);
-      for (const key3 in client)
-        delete extended[key3];
+      for (const key4 in client)
+        delete extended[key4];
       const combined = { ...base4, ...extended };
-      for (const key3 in extended) {
-        const a = base4[key3];
-        const b = extended[key3];
+      for (const key4 in extended) {
+        const a = base4[key4];
+        const b = extended[key4];
         if (isPlainObject(a) && isPlainObject(b))
-          combined[key3] = { ...a, ...b };
+          combined[key4] = { ...a, ...b };
       }
       return Object.assign(combined, { extend: extend2(combined) });
     };
@@ -22327,7 +22327,7 @@ function isPlainObject(value) {
 }
 function bindActionDecorators(client, action) {
   const wrapped = (parameters = {}) => action(client, parameters);
-  for (const key2 of [
+  for (const key3 of [
     "call",
     "calls",
     "callWithPeriod",
@@ -22336,17 +22336,17 @@ function bindActionDecorators(client, action) {
     "prepareRecipient",
     "simulate"
   ])
-    if (Object.hasOwn(action, key2)) {
-      const helper = action[key2];
-      wrapped[key2] = (args = {}) => {
+    if (Object.hasOwn(action, key3)) {
+      const helper = action[key3];
+      wrapped[key3] = (args = {}) => {
         if (helper.length === 1)
           return helper(args);
         return helper(client, args);
       };
     }
-  for (const key2 of ["extractEvent", "extractEvents"])
-    if (Object.hasOwn(action, key2))
-      wrapped[key2] = action[key2];
+  for (const key3 of ["extractEvent", "extractEvents"])
+    if (Object.hasOwn(action, key3))
+      wrapped[key3] = action[key3];
   return wrapped;
 }
 var init_createClient = __esm({
@@ -22837,7 +22837,7 @@ var init_parseAvatarRecord = __esm({
 
 // node_modules/viem/_esm/actions/ens/getEnsText.js
 async function getEnsText(client, parameters) {
-  const { blockNumber, blockTag, key: key2, name, gatewayUrls, strict } = parameters;
+  const { blockNumber, blockTag, key: key3, name, gatewayUrls, strict } = parameters;
   const { chain: chain3 } = client;
   const universalResolverAddress = (() => {
     if (parameters.universalResolverAddress)
@@ -22862,7 +22862,7 @@ async function getEnsText(client, parameters) {
         encodeFunctionData({
           abi: textResolverAbi,
           functionName: "text",
-          args: [namehash(name), key2]
+          args: [namehash(name), key3]
         }),
         gatewayUrls ?? [localBatchGatewayUrl]
       ],
@@ -24643,16 +24643,16 @@ var init_lru2 = __esm({
         });
         this.maxSize = size5;
       }
-      get(key2) {
-        const value = super.get(key2);
-        if (super.has(key2) && value !== void 0) {
-          this.delete(key2);
-          super.set(key2, value);
+      get(key3) {
+        const value = super.get(key3);
+        if (super.has(key3) && value !== void 0) {
+          this.delete(key3);
+          super.set(key3, value);
         }
         return value;
       }
-      set(key2, value) {
-        super.set(key2, value);
+      set(key3, value) {
+        super.set(key3, value);
         if (this.maxSize && this.size > this.maxSize) {
           const firstKey = this.keys().next().value;
           if (firstKey)
@@ -24810,7 +24810,7 @@ var init_hmac2 = __esm({
         this.finished = false;
         this.destroyed = false;
         ahash2(hash5);
-        const key2 = toBytes3(_key);
+        const key3 = toBytes3(_key);
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -24818,7 +24818,7 @@ var init_hmac2 = __esm({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -24868,8 +24868,8 @@ var init_hmac2 = __esm({
         this.iHash.destroy();
       }
     };
-    hmac2 = (hash5, key2, message) => new HMAC2(hash5, key2).update(message).digest();
-    hmac2.create = (hash5, key2) => new HMAC2(hash5, key2);
+    hmac2 = (hash5, key3, message) => new HMAC2(hash5, key3).update(message).digest();
+    hmac2.create = (hash5, key3) => new HMAC2(hash5, key3);
   }
 });
 
@@ -26929,13 +26929,13 @@ function getMinHashLength2(fieldOrder) {
   const length = getFieldBytesLength2(fieldOrder);
   return length + Math.ceil(length / 2);
 }
-function mapHashToField2(key2, fieldOrder, isLE3 = false) {
-  const len = key2.length;
+function mapHashToField2(key3, fieldOrder, isLE3 = false) {
+  const len = key3.length;
   const fieldLen = getFieldBytesLength2(fieldOrder);
   const minLen = getMinHashLength2(fieldOrder);
   if (len < 16 || len < minLen || len > 1024)
     throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-  const num2 = isLE3 ? bytesToNumberLE2(key2) : bytesToNumberBE2(key2);
+  const num2 = isLE3 ? bytesToNumberLE2(key3) : bytesToNumberBE2(key3);
   const reduced = mod2(num2, fieldOrder - _1n9) + _1n9;
   return isLE3 ? numberToBytesLE2(reduced, fieldLen) : numberToBytesBE2(reduced, fieldLen);
 }
@@ -27285,20 +27285,20 @@ function weierstrassPoints2(opts) {
   function isWithinCurveOrder(num2) {
     return inRange2(num2, _1n11, CURVE.n);
   }
-  function normPrivateKeyToScalar(key2) {
+  function normPrivateKeyToScalar(key3) {
     const { allowedPrivateKeyLengths: lengths, nByteLength, wrapPrivateKey, n: N2 } = CURVE;
-    if (lengths && typeof key2 !== "bigint") {
-      if (isBytes3(key2))
-        key2 = bytesToHex3(key2);
-      if (typeof key2 !== "string" || !lengths.includes(key2.length))
+    if (lengths && typeof key3 !== "bigint") {
+      if (isBytes3(key3))
+        key3 = bytesToHex3(key3);
+      if (typeof key3 !== "string" || !lengths.includes(key3.length))
         throw new Error("invalid private key");
-      key2 = key2.padStart(nByteLength * 2, "0");
+      key3 = key3.padStart(nByteLength * 2, "0");
     }
     let num2;
     try {
-      num2 = typeof key2 === "bigint" ? key2 : bytesToNumberBE2(ensureBytes2("private key", key2, nByteLength));
+      num2 = typeof key3 === "bigint" ? key3 : bytesToNumberBE2(ensureBytes2("private key", key3, nByteLength));
     } catch (error) {
-      throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key2);
+      throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key3);
     }
     if (wrapPrivateKey)
       num2 = mod2(num2, N2);
@@ -28115,7 +28115,7 @@ var init_weierstrass2 = __esm({
 function getHash2(hash5) {
   return {
     hash: hash5,
-    hmac: (key2, ...msgs) => hmac2(hash5, key2, concatBytes5(...msgs)),
+    hmac: (key3, ...msgs) => hmac2(hash5, key3, concatBytes5(...msgs)),
     randomBytes: randomBytes2
   };
 }
@@ -31616,10 +31616,10 @@ var init_public = __esm({
 
 // node_modules/viem/_esm/clients/createPublicClient.js
 function createPublicClient(parameters) {
-  const { key: key2 = "public", name = "Public Client" } = parameters;
+  const { key: key3 = "public", name = "Public Client" } = parameters;
   const client = createClient({
     ...parameters,
-    key: key2,
+    key: key3,
     name,
     type: "publicClient"
   });
@@ -31700,10 +31700,10 @@ async function getCapabilities(client, parameters = {}) {
   const capabilities = {};
   for (const [chainId2, capabilities_] of Object.entries(capabilities_raw)) {
     capabilities[Number(chainId2)] = {};
-    for (let [key2, value] of Object.entries(capabilities_)) {
-      if (key2 === "addSubAccount")
-        key2 = "unstable_addSubAccount";
-      capabilities[Number(chainId2)][key2] = value;
+    for (let [key3, value] of Object.entries(capabilities_)) {
+      if (key3 === "addSubAccount")
+        key3 = "unstable_addSubAccount";
+      capabilities[Number(chainId2)][key3] = value;
     }
   }
   return typeof chainId === "number" ? capabilities[chainId] : capabilities;
@@ -32083,10 +32083,10 @@ var init_wallet = __esm({
 
 // node_modules/viem/_esm/clients/createWalletClient.js
 function createWalletClient(parameters) {
-  const { key: key2 = "wallet", name = "Wallet Client", transport } = parameters;
+  const { key: key3 = "wallet", name = "Wallet Client", transport } = parameters;
   const client = createClient({
     ...parameters,
-    key: key2,
+    key: key3,
     name,
     transport,
     type: "walletClient"
@@ -32102,11 +32102,11 @@ var init_createWalletClient = __esm({
 });
 
 // node_modules/viem/_esm/clients/transports/createTransport.js
-function createTransport({ key: key2, methods, name, request: request2, retryCount = 3, retryDelay = 150, timeout, type }, value) {
+function createTransport({ key: key3, methods, name, request: request2, retryCount = 3, retryDelay = 150, timeout, type }, value) {
   const uid2 = uid();
   return {
     config: {
-      key: key2,
+      key: key3,
       methods,
       name,
       request: request2,
@@ -32129,13 +32129,13 @@ var init_createTransport = __esm({
 
 // node_modules/viem/_esm/clients/transports/fallback.js
 function fallback(transports_, config = {}) {
-  const { key: key2 = "fallback", name = "Fallback", rank = false, shouldThrow: shouldThrow_ = shouldThrow, retryCount, retryDelay } = config;
+  const { key: key3 = "fallback", name = "Fallback", rank = false, shouldThrow: shouldThrow_ = shouldThrow, retryCount, retryDelay } = config;
   return (({ chain: chain3, pollingInterval = 4e3, timeout, ...rest }) => {
     let transports = transports_;
     let onResponse = () => {
     };
     const transport = createTransport({
-      key: key2,
+      key: key3,
       name,
       async request({ method, params }) {
         let includes;
@@ -32298,7 +32298,7 @@ function getSignalId(signal) {
   return nextId;
 }
 function http(url2, config = {}) {
-  const { batch, fetchFn, fetchOptions, key: key2 = "http", maxResponseBodySize, methods, name = "HTTP JSON-RPC", onFetchRequest, onFetchResponse, retryDelay, raw } = config;
+  const { batch, fetchFn, fetchOptions, key: key3 = "http", maxResponseBodySize, methods, name = "HTTP JSON-RPC", onFetchRequest, onFetchResponse, retryDelay, raw } = config;
   return ({ chain: chain3, retryCount: retryCount_, timeout: timeout_ }) => {
     const { batchSize = 1e3, wait: wait2 = 0 } = typeof batch === "object" ? batch : {};
     const retryCount = config.retryCount ?? retryCount_;
@@ -32315,7 +32315,7 @@ function http(url2, config = {}) {
       timeout
     });
     return createTransport({
-      key: key2,
+      key: key3,
       methods,
       name,
       async request({ method, params }, options) {
@@ -32773,7 +32773,7 @@ var init_hmac3 = __esm({
         this.finished = false;
         this.destroyed = false;
         ahash3(hash5);
-        const key2 = toBytes5(_key);
+        const key3 = toBytes5(_key);
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -32781,7 +32781,7 @@ var init_hmac3 = __esm({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -32831,8 +32831,8 @@ var init_hmac3 = __esm({
         this.iHash.destroy();
       }
     };
-    hmac3 = (hash5, key2, message) => new HMAC3(hash5, key2).update(message).digest();
-    hmac3.create = (hash5, key2) => new HMAC3(hash5, key2);
+    hmac3 = (hash5, key3, message) => new HMAC3(hash5, key3).update(message).digest();
+    hmac3.create = (hash5, key3) => new HMAC3(hash5, key3);
   }
 });
 
@@ -36071,9 +36071,9 @@ var init_util = __esm({
       };
       util5.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object) => {
         const keys = [];
-        for (const key2 in object) {
-          if (Object.prototype.hasOwnProperty.call(object, key2)) {
-            keys.push(key2);
+        for (const key3 in object) {
+          if (Object.prototype.hasOwnProperty.call(object, key3)) {
+            keys.push(key3);
           }
         }
         return keys;
@@ -36502,10 +36502,10 @@ var init_parseUtil = __esm({
       static async mergeObjectAsync(status, pairs) {
         const syncPairs = [];
         for (const pair of pairs) {
-          const key2 = await pair.key;
+          const key3 = await pair.key;
           const value = await pair.value;
           syncPairs.push({
-            key: key2,
+            key: key3,
             value
           });
         }
@@ -36514,17 +36514,17 @@ var init_parseUtil = __esm({
       static mergeObjectSync(status, pairs) {
         const finalObject = {};
         for (const pair of pairs) {
-          const { key: key2, value } = pair;
-          if (key2.status === "aborted")
+          const { key: key3, value } = pair;
+          if (key3.status === "aborted")
             return INVALID;
           if (value.status === "aborted")
             return INVALID;
-          if (key2.status === "dirty")
+          if (key3.status === "dirty")
             status.dirty();
           if (value.status === "dirty")
             status.dirty();
-          if (key2.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
-            finalObject[key2.value] = value.value;
+          if (key3.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
+            finalObject[key3.value] = value.value;
           }
         }
         return { status: status.value, value: finalObject };
@@ -36658,9 +36658,9 @@ function floatSafeRemainder(val, step) {
 function deepPartialify(schema) {
   if (schema instanceof ZodObject) {
     const newShape = {};
-    for (const key2 in schema.shape) {
-      const fieldSchema = schema.shape[key2];
-      newShape[key2] = ZodOptional.create(deepPartialify(fieldSchema));
+    for (const key3 in schema.shape) {
+      const fieldSchema = schema.shape[key3];
+      newShape[key3] = ZodOptional.create(deepPartialify(fieldSchema));
     }
     return new ZodObject({
       ...schema._def,
@@ -36688,14 +36688,14 @@ function mergeValues(a, b) {
     return { valid: true, data: a };
   } else if (aType === ZodParsedType.object && bType === ZodParsedType.object) {
     const bKeys = util.objectKeys(b);
-    const sharedKeys = util.objectKeys(a).filter((key2) => bKeys.indexOf(key2) !== -1);
+    const sharedKeys = util.objectKeys(a).filter((key3) => bKeys.indexOf(key3) !== -1);
     const newObj = { ...a, ...b };
-    for (const key2 of sharedKeys) {
-      const sharedValue = mergeValues(a[key2], b[key2]);
+    for (const key3 of sharedKeys) {
+      const sharedValue = mergeValues(a[key3], b[key3]);
       if (!sharedValue.valid) {
         return { valid: false };
       }
-      newObj[key2] = sharedValue.data;
+      newObj[key3] = sharedValue.data;
     }
     return { valid: true, data: newObj };
   } else if (aType === ZodParsedType.array && bType === ZodParsedType.array) {
@@ -36763,12 +36763,12 @@ var init_types = __esm({
     init_parseUtil();
     init_util();
     ParseInputLazyPath = class {
-      constructor(parent, value, path5, key2) {
+      constructor(parent, value, path5, key3) {
         this._cachedPath = [];
         this.parent = parent;
         this.data = value;
         this._path = path5;
-        this._key = key2;
+        this._key = key3;
       }
       get path() {
         if (!this._cachedPath.length) {
@@ -38446,29 +38446,29 @@ var init_types = __esm({
         const { shape, keys: shapeKeys } = this._getCached();
         const extraKeys = [];
         if (!(this._def.catchall instanceof ZodNever && this._def.unknownKeys === "strip")) {
-          for (const key2 in ctx.data) {
-            if (!shapeKeys.includes(key2)) {
-              extraKeys.push(key2);
+          for (const key3 in ctx.data) {
+            if (!shapeKeys.includes(key3)) {
+              extraKeys.push(key3);
             }
           }
         }
         const pairs = [];
-        for (const key2 of shapeKeys) {
-          const keyValidator = shape[key2];
-          const value = ctx.data[key2];
+        for (const key3 of shapeKeys) {
+          const keyValidator = shape[key3];
+          const value = ctx.data[key3];
           pairs.push({
-            key: { status: "valid", value: key2 },
-            value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key2)),
-            alwaysSet: key2 in ctx.data
+            key: { status: "valid", value: key3 },
+            value: keyValidator._parse(new ParseInputLazyPath(ctx, value, ctx.path, key3)),
+            alwaysSet: key3 in ctx.data
           });
         }
         if (this._def.catchall instanceof ZodNever) {
           const unknownKeys = this._def.unknownKeys;
           if (unknownKeys === "passthrough") {
-            for (const key2 of extraKeys) {
+            for (const key3 of extraKeys) {
               pairs.push({
-                key: { status: "valid", value: key2 },
-                value: { status: "valid", value: ctx.data[key2] }
+                key: { status: "valid", value: key3 },
+                value: { status: "valid", value: ctx.data[key3] }
               });
             }
           } else if (unknownKeys === "strict") {
@@ -38485,15 +38485,15 @@ var init_types = __esm({
           }
         } else {
           const catchall = this._def.catchall;
-          for (const key2 of extraKeys) {
-            const value = ctx.data[key2];
+          for (const key3 of extraKeys) {
+            const value = ctx.data[key3];
             pairs.push({
-              key: { status: "valid", value: key2 },
+              key: { status: "valid", value: key3 },
               value: catchall._parse(
-                new ParseInputLazyPath(ctx, value, ctx.path, key2)
+                new ParseInputLazyPath(ctx, value, ctx.path, key3)
                 //, ctx.child(key), value, getParsedType(value)
               ),
-              alwaysSet: key2 in ctx.data
+              alwaysSet: key3 in ctx.data
             });
           }
         }
@@ -38501,10 +38501,10 @@ var init_types = __esm({
           return Promise.resolve().then(async () => {
             const syncPairs = [];
             for (const pair of pairs) {
-              const key2 = await pair.key;
+              const key3 = await pair.key;
               const value = await pair.value;
               syncPairs.push({
-                key: key2,
+                key: key3,
                 value,
                 alwaysSet: pair.alwaysSet
               });
@@ -38629,8 +38629,8 @@ var init_types = __esm({
       //   }) as any;
       //   return merged;
       // }
-      setKey(key2, schema) {
-        return this.augment({ [key2]: schema });
+      setKey(key3, schema) {
+        return this.augment({ [key3]: schema });
       }
       // merge<Incoming extends AnyZodObject>(
       //   merging: Incoming
@@ -38661,9 +38661,9 @@ var init_types = __esm({
       }
       pick(mask) {
         const shape = {};
-        for (const key2 of util.objectKeys(mask)) {
-          if (mask[key2] && this.shape[key2]) {
-            shape[key2] = this.shape[key2];
+        for (const key3 of util.objectKeys(mask)) {
+          if (mask[key3] && this.shape[key3]) {
+            shape[key3] = this.shape[key3];
           }
         }
         return new _ZodObject({
@@ -38673,9 +38673,9 @@ var init_types = __esm({
       }
       omit(mask) {
         const shape = {};
-        for (const key2 of util.objectKeys(this.shape)) {
-          if (!mask[key2]) {
-            shape[key2] = this.shape[key2];
+        for (const key3 of util.objectKeys(this.shape)) {
+          if (!mask[key3]) {
+            shape[key3] = this.shape[key3];
           }
         }
         return new _ZodObject({
@@ -38691,12 +38691,12 @@ var init_types = __esm({
       }
       partial(mask) {
         const newShape = {};
-        for (const key2 of util.objectKeys(this.shape)) {
-          const fieldSchema = this.shape[key2];
-          if (mask && !mask[key2]) {
-            newShape[key2] = fieldSchema;
+        for (const key3 of util.objectKeys(this.shape)) {
+          const fieldSchema = this.shape[key3];
+          if (mask && !mask[key3]) {
+            newShape[key3] = fieldSchema;
           } else {
-            newShape[key2] = fieldSchema.optional();
+            newShape[key3] = fieldSchema.optional();
           }
         }
         return new _ZodObject({
@@ -38706,16 +38706,16 @@ var init_types = __esm({
       }
       required(mask) {
         const newShape = {};
-        for (const key2 of util.objectKeys(this.shape)) {
-          if (mask && !mask[key2]) {
-            newShape[key2] = this.shape[key2];
+        for (const key3 of util.objectKeys(this.shape)) {
+          if (mask && !mask[key3]) {
+            newShape[key3] = this.shape[key3];
           } else {
-            const fieldSchema = this.shape[key2];
+            const fieldSchema = this.shape[key3];
             let newField = fieldSchema;
             while (newField instanceof ZodOptional) {
               newField = newField._def.innerType;
             }
-            newShape[key2] = newField;
+            newShape[key3] = newField;
           }
         }
         return new _ZodObject({
@@ -39092,11 +39092,11 @@ var init_types = __esm({
         const pairs = [];
         const keyType = this._def.keyType;
         const valueType = this._def.valueType;
-        for (const key2 in ctx.data) {
+        for (const key3 in ctx.data) {
           pairs.push({
-            key: keyType._parse(new ParseInputLazyPath(ctx, key2, ctx.path, key2)),
-            value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key2], ctx.path, key2)),
-            alwaysSet: key2 in ctx.data
+            key: keyType._parse(new ParseInputLazyPath(ctx, key3, ctx.path, key3)),
+            value: valueType._parse(new ParseInputLazyPath(ctx, ctx.data[key3], ctx.path, key3)),
+            alwaysSet: key3 in ctx.data
           });
         }
         if (ctx.common.async) {
@@ -39144,9 +39144,9 @@ var init_types = __esm({
         }
         const keyType = this._def.keyType;
         const valueType = this._def.valueType;
-        const pairs = [...ctx.data.entries()].map(([key2, value], index2) => {
+        const pairs = [...ctx.data.entries()].map(([key3, value], index2) => {
           return {
-            key: keyType._parse(new ParseInputLazyPath(ctx, key2, ctx.path, [index2, "key"])),
+            key: keyType._parse(new ParseInputLazyPath(ctx, key3, ctx.path, [index2, "key"])),
             value: valueType._parse(new ParseInputLazyPath(ctx, value, ctx.path, [index2, "value"]))
           };
         });
@@ -39154,30 +39154,30 @@ var init_types = __esm({
           const finalMap = /* @__PURE__ */ new Map();
           return Promise.resolve().then(async () => {
             for (const pair of pairs) {
-              const key2 = await pair.key;
+              const key3 = await pair.key;
               const value = await pair.value;
-              if (key2.status === "aborted" || value.status === "aborted") {
+              if (key3.status === "aborted" || value.status === "aborted") {
                 return INVALID;
               }
-              if (key2.status === "dirty" || value.status === "dirty") {
+              if (key3.status === "dirty" || value.status === "dirty") {
                 status.dirty();
               }
-              finalMap.set(key2.value, value.value);
+              finalMap.set(key3.value, value.value);
             }
             return { status: status.value, value: finalMap };
           });
         } else {
           const finalMap = /* @__PURE__ */ new Map();
           for (const pair of pairs) {
-            const key2 = pair.key;
+            const key3 = pair.key;
             const value = pair.value;
-            if (key2.status === "aborted" || value.status === "aborted") {
+            if (key3.status === "aborted" || value.status === "aborted") {
               return INVALID;
             }
-            if (key2.status === "dirty" || value.status === "dirty") {
+            if (key3.status === "dirty" || value.status === "dirty") {
               status.dirty();
             }
-            finalMap.set(key2.value, value.value);
+            finalMap.set(key3.value, value.value);
           }
           return { status: status.value, value: finalMap };
         }
@@ -40286,9 +40286,9 @@ function deepEqual(obj1, obj2) {
       );
     }
     const sorted = {};
-    Object.keys(obj).sort().forEach((key2) => {
-      const value = obj[key2];
-      sorted[key2] = typeof value === "object" && value !== null ? JSON.parse(normalize3(value)) : value;
+    Object.keys(obj).sort().forEach((key3) => {
+      const value = obj[key3];
+      sorted[key3] = typeof value === "object" && value !== null ? JSON.parse(normalize3(value)) : value;
     });
     return JSON.stringify(sorted);
   };
@@ -40912,15 +40912,15 @@ var init_client = __esm({
         if (!clientExtensions) return serverExtensions;
         if (!serverExtensions) return clientExtensions;
         const merged = { ...serverExtensions };
-        for (const [key2, clientValue] of Object.entries(clientExtensions)) {
-          const serverValue = merged[key2];
+        for (const [key3, clientValue] of Object.entries(clientExtensions)) {
+          const serverValue = merged[key3];
           if (serverValue === null || typeof serverValue !== "object" || Array.isArray(serverValue) || clientValue === null || typeof clientValue !== "object" || Array.isArray(clientValue)) {
-            merged[key2] = clientValue;
+            merged[key3] = clientValue;
             continue;
           }
           const serverRecord = serverValue;
           const clientRecord = clientValue;
-          const additiveFields = ADDITIVE_ARRAY_INFO_FIELDS[key2];
+          const additiveFields = ADDITIVE_ARRAY_INFO_FIELDS[key3];
           const extensionValue = { ...serverRecord };
           const pending = [{ target: extensionValue, source: clientRecord }];
           for (const item of pending) {
@@ -40948,7 +40948,7 @@ var init_client = __esm({
               }
             }
           }
-          merged[key2] = extensionValue;
+          merged[key3] = extensionValue;
         }
         return merged;
       }
@@ -41197,10 +41197,10 @@ function isPolicyList(value) {
 }
 function cloneLimits(limits) {
   const clone = { ...limits };
-  for (const key2 of POLICY_LISTS) {
-    const val = limits[key2];
+  for (const key3 of POLICY_LISTS) {
+    const val = limits[key3];
     if (val !== void 0) {
-      clone[key2] = [...val];
+      clone[key3] = [...val];
     }
   }
   return clone;
@@ -41262,18 +41262,18 @@ function registerSpendPolicyHook(x402, control) {
     }
   });
   x402.onAfterPaymentCreation(async (ctx) => {
-    const key2 = ctx.selectedRequirements;
-    const id2 = reservations.get(key2);
+    const key3 = ctx.selectedRequirements;
+    const id2 = reservations.get(key3);
     if (id2 !== void 0) {
-      reservations.delete(key2);
+      reservations.delete(key3);
       control.settleReservation(id2, { action: "x402 payment" });
     }
   });
   x402.onPaymentCreationFailure(async (ctx) => {
-    const key2 = ctx.selectedRequirements;
-    const id2 = reservations.get(key2);
+    const key3 = ctx.selectedRequirements;
+    const id2 = reservations.get(key3);
     if (id2 !== void 0) {
-      reservations.delete(key2);
+      reservations.delete(key3);
       control.releaseReservation(id2);
     }
   });
@@ -41350,9 +41350,9 @@ var init_spend_control = __esm({
       }
     };
     MalformedSpendPolicyError = class extends Error {
-      constructor(key2) {
+      constructor(key3) {
         super(
-          `[ClawRouter] refusing to load spending.json: ${key2} is malformed; a corrupted policy file must not widen what the agent may pay`
+          `[ClawRouter] refusing to load spending.json: ${key3} is malformed; a corrupted policy file must not widen what the agent may pay`
         );
         this.name = "MalformedSpendPolicyError";
       }
@@ -41375,20 +41375,20 @@ var init_spend_control = __esm({
             const rawLimits = data.limits ?? {};
             const rawHistory = data.history ?? [];
             const limits = {};
-            for (const key2 of ["perRequest", "hourly", "daily", "session"]) {
-              const val = rawLimits[key2];
+            for (const key3 of ["perRequest", "hourly", "daily", "session"]) {
+              const val = rawLimits[key3];
               if (typeof val === "number" && val > 0 && Number.isFinite(val)) {
-                limits[key2] = val;
+                limits[key3] = val;
               }
             }
-            for (const key2 of POLICY_LISTS) {
-              if (!Object.prototype.hasOwnProperty.call(rawLimits, key2)) continue;
-              const val = rawLimits[key2];
+            for (const key3 of POLICY_LISTS) {
+              if (!Object.prototype.hasOwnProperty.call(rawLimits, key3)) continue;
+              const val = rawLimits[key3];
               if (!isValidPolicyValues(val)) {
-                throw new MalformedSpendPolicyError(key2);
+                throw new MalformedSpendPolicyError(key3);
               }
               if (val.length === 0) continue;
-              limits[key2] = normalizePolicyValues(key2, val);
+              limits[key3] = normalizePolicyValues(key3, val);
             }
             const history = [];
             if (Array.isArray(rawHistory)) {
@@ -41988,8 +41988,8 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
         const payload2 = await client.createPaymentPayload(cached.paymentRequired);
         const headers = httpClient.encodePaymentSignatureHeader(payload2);
         const preAuthRequest = request2.clone();
-        for (const [key2, value] of Object.entries(headers)) {
-          preAuthRequest.headers.set(key2, value);
+        for (const [key3, value] of Object.entries(headers)) {
+          preAuthRequest.headers.set(key3, value);
         }
         paymentInFlight = true;
         const response2 = await baseFetch(preAuthRequest);
@@ -42038,8 +42038,8 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
     }
     const payload = await client.createPaymentPayload(paymentRequired);
     const paymentHeaders = httpClient.encodePaymentSignatureHeader(payload);
-    for (const [key2, value] of Object.entries(paymentHeaders)) {
-      clonedRequest.headers.set(key2, value);
+    for (const [key3, value] of Object.entries(paymentHeaders)) {
+      clonedRequest.headers.set(key3, value);
     }
     const paidResponse = await baseFetch(clonedRequest);
     notifyAcceptedPayment(paidResponse, payload);
@@ -42291,7 +42291,7 @@ async function signErc20ApprovalTransaction(signer, tokenAddress, chainId) {
 }
 function isConfigByChainId(options) {
   const keys = Object.keys(options);
-  return keys.length > 0 && keys.every((key2) => /^\d+$/.test(key2));
+  return keys.length > 0 && keys.every((key3) => /^\d+$/.test(key3));
 }
 function getRpcClient(rpcUrl) {
   const existing = rpcClientCache.get(rpcUrl);
@@ -47060,8 +47060,8 @@ function canonicalize(obj) {
     return obj.map(canonicalize);
   }
   const sorted = {};
-  for (const key2 of Object.keys(obj).sort()) {
-    sorted[key2] = canonicalize(obj[key2]);
+  for (const key3 of Object.keys(obj).sort()) {
+    sorted[key3] = canonicalize(obj[key3]);
   }
   return sorted;
 }
@@ -47073,13 +47073,13 @@ function stripTimestamps(obj) {
     return obj.map(stripTimestamps);
   }
   const result = {};
-  for (const [key2, value] of Object.entries(obj)) {
-    if (key2 === "content" && typeof value === "string") {
-      result[key2] = value.replace(TIMESTAMP_PATTERN, "");
-    } else if (key2 === "content" && Array.isArray(value)) {
-      result[key2] = stripLeadingTextBlockTimestamp(value.map(stripTimestamps));
+  for (const [key3, value] of Object.entries(obj)) {
+    if (key3 === "content" && typeof value === "string") {
+      result[key3] = value.replace(TIMESTAMP_PATTERN, "");
+    } else if (key3 === "content" && Array.isArray(value)) {
+      result[key3] = stripLeadingTextBlockTimestamp(value.map(stripTimestamps));
     } else {
-      result[key2] = stripTimestamps(value);
+      result[key3] = stripTimestamps(value);
     }
   }
   return result;
@@ -47111,47 +47111,47 @@ var init_dedup = __esm({
         return createHash2("sha256").update(content).digest("hex").slice(0, 16);
       }
       /** Check if a response is cached for this key. */
-      getCached(key2) {
-        const entry = this.completed.get(key2);
+      getCached(key3) {
+        const entry = this.completed.get(key3);
         if (!entry) return void 0;
         if (Date.now() - entry.completedAt > this.ttlMs) {
-          this.completed.delete(key2);
+          this.completed.delete(key3);
           return void 0;
         }
         return entry;
       }
       /** Check if a request with this key is currently in-flight. Returns a promise to wait on. */
-      getInflight(key2) {
-        const entry = this.inflight.get(key2);
+      getInflight(key3) {
+        const entry = this.inflight.get(key3);
         if (!entry) return void 0;
         return new Promise((resolve) => {
           entry.resolvers.push(resolve);
         });
       }
       /** Mark a request as in-flight. */
-      markInflight(key2) {
-        this.inflight.set(key2, {
+      markInflight(key3) {
+        this.inflight.set(key3, {
           resolvers: []
         });
       }
       /** Complete an in-flight request — cache result and notify waiters. */
-      complete(key2, result) {
+      complete(key3, result) {
         if (result.body.length <= MAX_BODY_SIZE) {
-          this.completed.set(key2, result);
+          this.completed.set(key3, result);
         }
-        const entry = this.inflight.get(key2);
+        const entry = this.inflight.get(key3);
         if (entry) {
           for (const resolve of entry.resolvers) {
             resolve(result);
           }
-          this.inflight.delete(key2);
+          this.inflight.delete(key3);
         }
         this.prune();
       }
       /** Remove an in-flight entry on error (don't cache failures).
        *  Also rejects any waiters so they can retry independently. */
-      removeInflight(key2) {
-        const entry = this.inflight.get(key2);
+      removeInflight(key3) {
+        const entry = this.inflight.get(key3);
         if (entry) {
           const errorBody = Buffer.from(
             JSON.stringify({
@@ -47166,15 +47166,15 @@ var init_dedup = __esm({
               completedAt: Date.now()
             });
           }
-          this.inflight.delete(key2);
+          this.inflight.delete(key3);
         }
       }
       /** Prune expired completed entries. */
       prune() {
         const now2 = Date.now();
-        for (const [key2, entry] of this.completed) {
+        for (const [key3, entry] of this.completed) {
           if (now2 - entry.completedAt > this.ttlMs) {
-            this.completed.delete(key2);
+            this.completed.delete(key3);
           }
         }
       }
@@ -47192,19 +47192,19 @@ function canonicalize2(obj) {
     return obj.map(canonicalize2);
   }
   const sorted = {};
-  for (const key2 of Object.keys(obj).sort()) {
-    sorted[key2] = canonicalize2(obj[key2]);
+  for (const key3 of Object.keys(obj).sort()) {
+    sorted[key3] = canonicalize2(obj[key3]);
   }
   return sorted;
 }
 function normalizeForCache(obj) {
   const result = {};
-  for (const [key2, value] of Object.entries(obj)) {
-    if (["user", "request_id", "x-request-id"].includes(key2)) {
+  for (const [key3, value] of Object.entries(obj)) {
+    if (["user", "request_id", "x-request-id"].includes(key3)) {
       continue;
     }
-    if (key2 === "messages" && Array.isArray(value)) {
-      result[key2] = value.map((msg) => {
+    if (key3 === "messages" && Array.isArray(value)) {
+      result[key3] = value.map((msg) => {
         if (typeof msg === "object" && msg !== null) {
           const m = msg;
           if (typeof m.content === "string") {
@@ -47217,7 +47217,7 @@ function normalizeForCache(obj) {
         return msg;
       });
     } else {
-      result[key2] = value;
+      result[key3] = value;
     }
   }
   return result;
@@ -47287,14 +47287,14 @@ var init_response_cache = __esm({
       /**
        * Get cached response if available and not expired.
        */
-      get(key2) {
-        const entry = this.cache.get(key2);
+      get(key3) {
+        const entry = this.cache.get(key3);
         if (!entry) {
           this.stats.misses++;
           return void 0;
         }
         if (Date.now() > entry.expiresAt) {
-          this.cache.delete(key2);
+          this.cache.delete(key3);
           this.stats.misses++;
           return void 0;
         }
@@ -47304,7 +47304,7 @@ var init_response_cache = __esm({
       /**
        * Cache a response with optional custom TTL.
        */
-      set(key2, response, ttlSeconds) {
+      set(key3, response, ttlSeconds) {
         if (!this.config.enabled || this.config.maxSize <= 0) return;
         if (response.body.length > this.config.maxItemSize) {
           console.log(`[ResponseCache] Skipping cache - item too large: ${response.body.length} bytes`);
@@ -47324,8 +47324,8 @@ var init_response_cache = __esm({
           cachedAt: now2,
           expiresAt
         };
-        this.cache.set(key2, entry);
-        this.expirationHeap.push({ expiresAt, key: key2 });
+        this.cache.set(key3, entry);
+        this.expirationHeap.push({ expiresAt, key: key3 });
       }
       /**
        * Evict expired and oldest entries to make room.
@@ -48615,14 +48615,14 @@ function getMinHashLength3(fieldOrder) {
   const length = getFieldBytesLength3(fieldOrder);
   return length + Math.ceil(length / 2);
 }
-function mapHashToField3(key2, fieldOrder, isLE3 = false) {
-  abytes7(key2);
-  const len = key2.length;
+function mapHashToField3(key3, fieldOrder, isLE3 = false) {
+  abytes7(key3);
+  const len = key3.length;
   const fieldLen = getFieldBytesLength3(fieldOrder);
   const minLen = Math.max(getMinHashLength3(fieldOrder), 16);
   if (len < minLen || len > 1024)
     throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-  const num2 = isLE3 ? bytesToNumberLE3(key2) : bytesToNumberBE3(key2);
+  const num2 = isLE3 ? bytesToNumberLE3(key3) : bytesToNumberBE3(key3);
   const reduced = mod3(num2, fieldOrder - _1n14) + _1n14;
   return isLE3 ? numberToBytesLE3(reduced, fieldLen) : numberToBytesBE3(reduced, fieldLen);
 }
@@ -49055,9 +49055,9 @@ var init_hmac4 = __esm({
       canXOF = false;
       finished = false;
       destroyed = false;
-      constructor(hash5, key2) {
+      constructor(hash5, key3) {
         ahash4(hash5);
-        abytes6(key2, void 0, "key");
+        abytes6(key3, void 0, "key");
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -49065,7 +49065,7 @@ var init_hmac4 = __esm({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -49117,8 +49117,8 @@ var init_hmac4 = __esm({
       }
     };
     hmac4 = /* @__PURE__ */ (() => {
-      const hmac_ = ((hash5, key2, message) => new _HMAC(hash5, key2).update(message).digest());
-      hmac_.create = (hash5, key2) => new _HMAC(hash5, key2);
+      const hmac_ = ((hash5, key3, message) => new _HMAC(hash5, key3).update(message).digest());
+      hmac_.create = (hash5, key3) => new _HMAC(hash5, key3);
       return hmac_;
     })();
   }
@@ -49685,7 +49685,7 @@ function ecdsa(Point4, hash5, ecdsaOpts = {}) {
   });
   ecdsaOpts = Object.assign({}, ecdsaOpts);
   const randomBytes9 = ecdsaOpts.randomBytes === void 0 ? randomBytes5 : ecdsaOpts.randomBytes;
-  const hmac8 = ecdsaOpts.hmac === void 0 ? (key2, msg) => hmac4(hash_, key2, msg) : ecdsaOpts.hmac;
+  const hmac8 = ecdsaOpts.hmac === void 0 ? (key3, msg) => hmac4(hash_, key3, msg) : ecdsaOpts.hmac;
   const { Fp, Fn: Fn2 } = Point4;
   const { ORDER: CURVE_ORDER, BITS: fnBits } = Fn2;
   const { keygen, getPublicKey, getSharedSecret, utils: utils2, lengths } = ecdh(Point4, ecdsaOpts);
@@ -50216,9 +50216,9 @@ var init_hmac5 = __esm({
       canXOF = false;
       finished = false;
       destroyed = false;
-      constructor(hash5, key2) {
+      constructor(hash5, key3) {
         ahash5(hash5);
-        abytes8(key2, void 0, "key");
+        abytes8(key3, void 0, "key");
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -50226,7 +50226,7 @@ var init_hmac5 = __esm({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -50278,8 +50278,8 @@ var init_hmac5 = __esm({
       }
     };
     hmac5 = /* @__PURE__ */ (() => {
-      const hmac_ = ((hash5, key2, message) => new _HMAC2(hash5, key2).update(message).digest());
-      hmac_.create = (hash5, key2) => new _HMAC2(hash5, key2);
+      const hmac_ = ((hash5, key3, message) => new _HMAC2(hash5, key3).update(message).digest());
+      hmac_.create = (hash5, key3) => new _HMAC2(hash5, key3);
       return hmac_;
     })();
   }
@@ -51242,15 +51242,15 @@ var init_bip32 = __esm({
           index: keyView.getUint32(9, false),
           chainCode: keyBuffer.slice(13, 45)
         };
-        const key2 = keyBuffer.slice(45);
-        const isPriv = key2[0] === 0;
+        const key3 = keyBuffer.slice(45);
+        const isPriv = key3[0] === 0;
         if (version30 !== versions[isPriv ? "private" : "public"]) {
           throw new Error("Version mismatch");
         }
         if (isPriv) {
-          return new _HDKey({ ...opt, privateKey: key2.slice(1) });
+          return new _HDKey({ ...opt, privateKey: key3.slice(1) });
         } else {
-          return new _HDKey({ ...opt, publicKey: key2 });
+          return new _HDKey({ ...opt, publicKey: key3 });
         }
       }
       static fromJSON(json) {
@@ -51401,12 +51401,12 @@ var init_bip32 = __esm({
           xpub: this.publicExtendedKey
         };
       }
-      serialize(version30, key2) {
+      serialize(version30, key3) {
         if (!this.chainCode) {
           throw new Error("No chainCode set");
         }
-        abytes8(key2, 33);
-        return concatBytes8(toU32(version30), new Uint8Array([this.depth]), toU32(this.parentFingerprint), toU32(this.index), this.chainCode, key2);
+        abytes8(key3, 33);
+        return concatBytes8(toU32(version30), new Uint8Array([this.depth]), toU32(this.parentFingerprint), toU32(this.index), this.chainCode, key3);
       }
     };
   }
@@ -51516,9 +51516,9 @@ var init_hmac6 = __esm({
       canXOF = false;
       finished = false;
       destroyed = false;
-      constructor(hash5, key2) {
+      constructor(hash5, key3) {
         ahash6(hash5);
-        abytes9(key2, void 0, "key");
+        abytes9(key3, void 0, "key");
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("expected Hash instance");
@@ -51526,7 +51526,7 @@ var init_hmac6 = __esm({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -51579,8 +51579,8 @@ var init_hmac6 = __esm({
       }
     };
     hmac6 = /* @__PURE__ */ (() => {
-      const hmac_ = ((hash5, key2, message) => new _HMAC3(hash5, key2).update(message).digest());
-      hmac_.create = (hash5, key2) => new _HMAC3(hash5, key2);
+      const hmac_ = ((hash5, key3, message) => new _HMAC3(hash5, key3).update(message).digest());
+      hmac_.create = (hash5, key3) => new _HMAC3(hash5, key3);
       return hmac_;
     })();
   }
@@ -52005,21 +52005,21 @@ var init_sha26 = __esm({
 function deriveSolanaKeyBytes(mnemonic) {
   const seed = mnemonicToSeedSync(mnemonic);
   let digest = hmac6(sha5123, new TextEncoder().encode("ed25519 seed"), seed);
-  let key2 = digest.slice(0, 32);
+  let key3 = digest.slice(0, 32);
   let chainCode = digest.slice(32);
   for (const index2 of SOLANA_HARDENED_INDICES) {
     const data = new Uint8Array(37);
     data[0] = 0;
-    data.set(key2, 1);
+    data.set(key3, 1);
     data[33] = index2 >>> 24 & 255;
     data[34] = index2 >>> 16 & 255;
     data[35] = index2 >>> 8 & 255;
     data[36] = index2 & 255;
     digest = hmac6(sha5123, chainCode, data);
-    key2 = digest.slice(0, 32);
+    key3 = digest.slice(0, 32);
     chainCode = digest.slice(32);
   }
-  return new Uint8Array(key2);
+  return new Uint8Array(key3);
 }
 var SOLANA_HARDENED_INDICES;
 var init_solana_key = __esm({
@@ -52055,8 +52055,8 @@ function encodeValue(value) {
     );
   }
 }
-function encodeObjectContextEntry([key2, value]) {
-  return `${key2}=${encodeValue(value)}`;
+function encodeObjectContextEntry([key3, value]) {
+  return `${key3}=${encodeValue(value)}`;
 }
 function encodeContextObject(context) {
   const searchParamsString = Object.entries(context).map(encodeObjectContextEntry).join("&");
@@ -55192,11 +55192,11 @@ function getDiscriminatedUnionCodec(variants, config = {}) {
   );
 }
 function getVariantDiscriminator(variants, discriminatorValue) {
-  const discriminator = variants.findIndex(([key2]) => discriminatorValue === key2);
+  const discriminator = variants.findIndex(([key3]) => discriminatorValue === key3);
   if (discriminator < 0) {
     throw new SolanaError(SOLANA_ERROR__CODECS__INVALID_DISCRIMINATED_UNION_VARIANT, {
       value: discriminatorValue,
-      variants: variants.map(([key2]) => key2)
+      variants: variants.map(([key3]) => key3)
     });
   }
   return discriminator;
@@ -55218,7 +55218,7 @@ function getEnumIndexFromVariant({
 }) {
   const valueIndex = findLastIndex(enumValues, (value) => value === variant);
   if (valueIndex >= 0) return valueIndex;
-  return enumKeys.findIndex((key2) => key2 === variant);
+  return enumKeys.findIndex((key3) => key3 === variant);
 }
 function getEnumIndexFromDiscriminator({
   discriminator,
@@ -55366,20 +55366,20 @@ function getLiteralUnionDecoder(variants, config = {}) {
 function getLiteralUnionCodec(variants, config = {}) {
   return combineCodec(getLiteralUnionEncoder(variants, config), getLiteralUnionDecoder(variants, config));
 }
-function getMapEncoder(key2, value, config = {}) {
+function getMapEncoder(key3, value, config = {}) {
   return transformEncoder(
-    getArrayEncoder(getTupleEncoder([key2, value]), config),
+    getArrayEncoder(getTupleEncoder([key3, value]), config),
     (map) => [...map.entries()]
   );
 }
-function getMapDecoder(key2, value, config = {}) {
+function getMapDecoder(key3, value, config = {}) {
   return transformDecoder(
-    getArrayDecoder(getTupleDecoder([key2, value]), config),
+    getArrayDecoder(getTupleDecoder([key3, value]), config),
     (entries) => new Map(entries)
   );
 }
-function getMapCodec(key2, value, config = {}) {
-  return combineCodec(getMapEncoder(key2, value, config), getMapDecoder(key2, value, config));
+function getMapCodec(key3, value, config = {}) {
+  return combineCodec(getMapEncoder(key3, value, config), getMapDecoder(key3, value, config));
 }
 function getUnitEncoder() {
   return createEncoder({
@@ -55530,12 +55530,12 @@ function getStructEncoder(fields) {
   const maxSize = sumCodecSizes(fieldCodecs.map(getMaxSize)) ?? void 0;
   return createEncoder({
     ...fixedSize === null ? {
-      getSizeFromValue: (value) => fields.map(([key2, codec]) => getEncodedSize(value[key2], codec)).reduce((all3, one) => all3 + one, 0),
+      getSizeFromValue: (value) => fields.map(([key3, codec]) => getEncodedSize(value[key3], codec)).reduce((all3, one) => all3 + one, 0),
       maxSize
     } : { fixedSize },
     write: (struct, bytes, offset) => {
-      fields.forEach(([key2, codec]) => {
-        offset = codec.write(struct[key2], bytes, offset);
+      fields.forEach(([key3, codec]) => {
+        offset = codec.write(struct[key3], bytes, offset);
       });
       return offset;
     }
@@ -55549,10 +55549,10 @@ function getStructDecoder(fields) {
     ...fixedSize === null ? { maxSize } : { fixedSize },
     read: (bytes, offset) => {
       const struct = {};
-      fields.forEach(([key2, codec]) => {
+      fields.forEach(([key3, codec]) => {
         const [value, newOffset] = codec.read(bytes, offset);
         offset = newOffset;
-        struct[key2] = value;
+        struct[key3] = value;
       });
       return [struct, offset];
     }
@@ -58866,9 +58866,9 @@ function isSignature(putativeSignature) {
 function isSignatureBytes(putativeSignatureBytes) {
   return putativeSignatureBytes.byteLength === 64;
 }
-async function signBytes(key2, data) {
+async function signBytes(key3, data) {
   assertSigningCapabilityIsAvailable();
-  const signedData = await crypto.subtle.sign(ED25519_ALGORITHM_IDENTIFIER, key2, toArrayBuffer(data));
+  const signedData = await crypto.subtle.sign(ED25519_ALGORITHM_IDENTIFIER, key3, toArrayBuffer(data));
   return new Uint8Array(signedData);
 }
 function signature(putativeSignature) {
@@ -58879,9 +58879,9 @@ function signatureBytes(putativeSignatureBytes) {
   assertIsSignatureBytes(putativeSignatureBytes);
   return putativeSignatureBytes;
 }
-async function verifySignature(key2, signature22, data) {
+async function verifySignature(key3, signature22, data) {
   assertVerificationCapabilityIsAvailable();
-  return await crypto.subtle.verify(ED25519_ALGORITHM_IDENTIFIER, key2, toArrayBuffer(signature22), toArrayBuffer(data));
+  return await crypto.subtle.verify(ED25519_ALGORITHM_IDENTIFIER, key3, toArrayBuffer(signature22), toArrayBuffer(data));
 }
 async function generateKeyPair(extractable = false) {
   await assertKeyGenerationIsAvailable();
@@ -61625,8 +61625,8 @@ function extendClient(client, additions) {
 }
 function toConfigurableDescriptors(descriptors) {
   const result = {};
-  for (const key2 of Reflect.ownKeys(descriptors)) {
-    result[key2] = { ...descriptors[key2], configurable: true };
+  for (const key3 of Reflect.ownKeys(descriptors)) {
+    result[key3] = { ...descriptors[key3], configurable: true };
   }
   return result;
 }
@@ -63020,7 +63020,7 @@ var init_index_node28 = __esm({
 
 // node_modules/@solana/fast-stable-stringify/dist/index.node.mjs
 function stringify3(val, isArrayProp) {
-  let i, max, str, keys, key2, propVal, toStr;
+  let i, max, str, keys, key3, propVal, toStr;
   if (val === true) {
     return "true";
   }
@@ -63051,13 +63051,13 @@ function stringify3(val, isArrayProp) {
           str = "";
           i = 0;
           while (i < max) {
-            key2 = keys[i];
-            propVal = stringify3(val[key2], false);
+            key3 = keys[i];
+            propVal = stringify3(val[key3], false);
             if (propVal !== void 0) {
               if (str) {
                 str += ",";
               }
-              str += JSON.stringify(key2) + ":" + propVal;
+              str += JSON.stringify(key3) + ":" + propVal;
             }
             i++;
           }
@@ -63973,44 +63973,44 @@ var require_permessage_deflate = __commonJS({
        */
       normalizeParams(configurations) {
         configurations.forEach((params) => {
-          Object.keys(params).forEach((key2) => {
-            let value = params[key2];
+          Object.keys(params).forEach((key3) => {
+            let value = params[key3];
             if (value.length > 1) {
-              throw new Error(`Parameter "${key2}" must have only a single value`);
+              throw new Error(`Parameter "${key3}" must have only a single value`);
             }
             value = value[0];
-            if (key2 === "client_max_window_bits") {
+            if (key3 === "client_max_window_bits") {
               if (value !== true) {
                 const num2 = +value;
                 if (!Number.isInteger(num2) || num2 < 8 || num2 > 15) {
                   throw new TypeError(
-                    `Invalid value for parameter "${key2}": ${value}`
+                    `Invalid value for parameter "${key3}": ${value}`
                   );
                 }
                 value = num2;
               } else if (!this._isServer) {
                 throw new TypeError(
-                  `Invalid value for parameter "${key2}": ${value}`
+                  `Invalid value for parameter "${key3}": ${value}`
                 );
               }
-            } else if (key2 === "server_max_window_bits") {
+            } else if (key3 === "server_max_window_bits") {
               const num2 = +value;
               if (!Number.isInteger(num2) || num2 < 8 || num2 > 15) {
                 throw new TypeError(
-                  `Invalid value for parameter "${key2}": ${value}`
+                  `Invalid value for parameter "${key3}": ${value}`
                 );
               }
               value = num2;
-            } else if (key2 === "client_no_context_takeover" || key2 === "server_no_context_takeover") {
+            } else if (key3 === "client_no_context_takeover" || key3 === "server_no_context_takeover") {
               if (value !== true) {
                 throw new TypeError(
-                  `Invalid value for parameter "${key2}": ${value}`
+                  `Invalid value for parameter "${key3}": ${value}`
                 );
               }
             } else {
-              throw new Error(`Unknown parameter "${key2}"`);
+              throw new Error(`Unknown parameter "${key3}"`);
             }
-            params[key2] = value;
+            params[key3] = value;
           });
         });
         return configurations;
@@ -64058,8 +64058,8 @@ var require_permessage_deflate = __commonJS({
       _decompress(data, fin, callback) {
         const endpoint = this._isServer ? "client" : "server";
         if (!this._inflate) {
-          const key2 = `${endpoint}_max_window_bits`;
-          const windowBits = typeof this.params[key2] !== "number" ? zlib2.Z_DEFAULT_WINDOWBITS : this.params[key2];
+          const key3 = `${endpoint}_max_window_bits`;
+          const windowBits = typeof this.params[key3] !== "number" ? zlib2.Z_DEFAULT_WINDOWBITS : this.params[key3];
           this._inflate = zlib2.createInflateRaw({
             ...this._options.zlibInflateOptions,
             windowBits
@@ -64109,8 +64109,8 @@ var require_permessage_deflate = __commonJS({
       _compress(data, fin, callback) {
         const endpoint = this._isServer ? "server" : "client";
         if (!this._deflate) {
-          const key2 = `${endpoint}_max_window_bits`;
-          const windowBits = typeof this.params[key2] !== "number" ? zlib2.Z_DEFAULT_WINDOWBITS : this.params[key2];
+          const key3 = `${endpoint}_max_window_bits`;
+          const windowBits = typeof this.params[key3] !== "number" ? zlib2.Z_DEFAULT_WINDOWBITS : this.params[key3];
           this._deflate = zlib2.createDeflateRaw({
             ...this._options.zlibDeflateOptions,
             windowBits
@@ -66417,7 +66417,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key2 = randomBytes9(16).toString("base64");
+      const key3 = randomBytes9(16).toString("base64");
       const request2 = isSecure ? https2.request : http5.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -66428,7 +66428,7 @@ var require_websocket = __commonJS({
       opts.headers = {
         ...opts.headers,
         "Sec-WebSocket-Version": opts.protocolVersion,
-        "Sec-WebSocket-Key": key2,
+        "Sec-WebSocket-Key": key3,
         Connection: "Upgrade",
         Upgrade: "websocket"
       };
@@ -66479,8 +66479,8 @@ var require_websocket = __commonJS({
           const headers = options && options.headers;
           options = { ...options, headers: {} };
           if (headers) {
-            for (const [key3, value] of Object.entries(headers)) {
-              options.headers[key3.toLowerCase()] = value;
+            for (const [key4, value] of Object.entries(headers)) {
+              options.headers[key4.toLowerCase()] = value;
             }
           }
         } else if (websocket.listenerCount("redirect") === 0) {
@@ -66547,7 +66547,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash5("sha1").update(key2 + GUID).digest("base64");
+        const digest = createHash5("sha1").update(key3 + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -67115,7 +67115,7 @@ var require_websocket_server = __commonJS({
        */
       handleUpgrade(req, socket, head, cb) {
         socket.on("error", socketOnError);
-        const key2 = req.headers["sec-websocket-key"];
+        const key3 = req.headers["sec-websocket-key"];
         const upgrade = req.headers.upgrade;
         const version30 = +req.headers["sec-websocket-version"];
         if (req.method !== "GET") {
@@ -67128,7 +67128,7 @@ var require_websocket_server = __commonJS({
           abortHandshakeOrEmitwsClientError(this, req, socket, 400, message);
           return;
         }
-        if (key2 === void 0 || !keyRegex.test(key2)) {
+        if (key3 === void 0 || !keyRegex.test(key3)) {
           const message = "Missing or invalid Sec-WebSocket-Key header";
           abortHandshakeOrEmitwsClientError(this, req, socket, 400, message);
           return;
@@ -67188,7 +67188,7 @@ var require_websocket_server = __commonJS({
               }
               this.completeUpgrade(
                 extensions,
-                key2,
+                key3,
                 protocols,
                 req,
                 socket,
@@ -67200,7 +67200,7 @@ var require_websocket_server = __commonJS({
           }
           if (!this.options.verifyClient(info)) return abortHandshake(socket, 401);
         }
-        this.completeUpgrade(extensions, key2, protocols, req, socket, head, cb);
+        this.completeUpgrade(extensions, key3, protocols, req, socket, head, cb);
       }
       /**
        * Upgrade the connection to WebSocket.
@@ -67215,7 +67215,7 @@ var require_websocket_server = __commonJS({
        * @throws {Error} If called more than once with the same socket
        * @private
        */
-      completeUpgrade(extensions, key2, protocols, req, socket, head, cb) {
+      completeUpgrade(extensions, key3, protocols, req, socket, head, cb) {
         if (!socket.readable || !socket.writable) return socket.destroy();
         if (socket[kWebSocket]) {
           throw new Error(
@@ -67223,7 +67223,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash5("sha1").update(key2 + GUID).digest("base64");
+        const digest = createHash5("sha1").update(key3 + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -67818,10 +67818,10 @@ function signersAreEquivalent(a, b) {
   const aKeys = Object.getOwnPropertyNames(a);
   const bKeys = Object.getOwnPropertyNames(b);
   if (aKeys.length !== bKeys.length) return false;
-  return aKeys.every((key2) => {
-    if (!(key2 in b)) return false;
-    const aVal = a[key2];
-    const bVal = b[key2];
+  return aKeys.every((key3) => {
+    if (!(key3 in b)) return false;
+    const aVal = a[key3];
+    const bVal = b[key3];
     if (typeof aVal === "function" && typeof bVal === "function") {
       return aVal.toString() === bVal.toString();
     }
@@ -70488,10 +70488,10 @@ import { join as join8 } from "path";
 import { homedir as homedir5 } from "os";
 async function loadSavedWallet() {
   try {
-    const key2 = (await readTextFile(WALLET_FILE)).trim();
-    if (key2.startsWith("0x") && key2.length === 66) {
+    const key3 = (await readTextFile(WALLET_FILE)).trim();
+    if (key3.startsWith("0x") && key3.length === 66) {
       console.log(`[ClawRouter] \u2713 Loaded existing wallet from ${WALLET_FILE}`);
-      return key2;
+      return key3;
     }
     console.error(`[ClawRouter] \u2717 CRITICAL: Wallet file exists but has invalid format!`);
     console.error(`[ClawRouter]   File: ${WALLET_FILE}`);
@@ -70766,9 +70766,9 @@ async function loadCoreSolanaKeyForSelectedChain() {
   }
 }
 async function loadCoreWallet() {
-  const key2 = (await readExisting(CORE_WALLET_FILE))?.trim();
-  if (key2 === void 0) return void 0;
-  if (/^0x[0-9a-f]{64}$/i.test(key2)) return key2;
+  const key3 = (await readExisting(CORE_WALLET_FILE))?.trim();
+  if (key3 === void 0) return void 0;
+  if (/^0x[0-9a-f]{64}$/i.test(key3)) return key3;
   throw new Error(
     `BlockRun Core wallet at ${CORE_WALLET_FILE} has an invalid format. Refusing to use another wallet implicitly.`
   );
@@ -72047,6 +72047,58 @@ var init_exclude_models = __esm({
   }
 });
 
+// src/outcome-memory.ts
+function key(model, kind) {
+  return `${model}|${kind}`;
+}
+function recent(k, now2) {
+  const list = outcomes.get(k);
+  if (!list) return [];
+  const live = list.filter((o3) => now2 - o3.at < TTL_MS);
+  if (live.length === 0) outcomes.delete(k);
+  else if (live.length !== list.length) outcomes.set(k, live);
+  return live;
+}
+function recordOutcome(model, kind, ok, now2 = Date.now()) {
+  const k = key(model, kind);
+  const list = recent(k, now2);
+  list.push({ at: now2, ok });
+  if (list.length > WINDOW) list.splice(0, list.length - WINDOW);
+  outcomes.delete(k);
+  outcomes.set(k, list);
+  if (outcomes.size > MAX_KEYS) {
+    const oldest = outcomes.keys().next().value;
+    if (oldest !== void 0) outcomes.delete(oldest);
+  }
+}
+function isUnreliable(model, kind, now2 = Date.now()) {
+  const list = recent(key(model, kind), now2);
+  const failures = list.filter((o3) => !o3.ok).length;
+  return failures >= MIN_FAILURES && failures / list.length >= FAILURE_RATE;
+}
+function demoteUnreliable(models, kind, keep, now2 = Date.now()) {
+  const reliable = [];
+  const demoted = [];
+  for (const m of models) {
+    if (m !== keep && isUnreliable(m, kind, now2)) demoted.push(m);
+    else reliable.push(m);
+  }
+  if (reliable.length === 0) return { chain: models, demoted: [] };
+  return { chain: [...reliable, ...demoted], demoted };
+}
+var WINDOW, TTL_MS, MIN_FAILURES, FAILURE_RATE, MAX_KEYS, outcomes;
+var init_outcome_memory = __esm({
+  "src/outcome-memory.ts"() {
+    "use strict";
+    WINDOW = 10;
+    TTL_MS = 30 * 6e4;
+    MIN_FAILURES = 3;
+    FAILURE_RATE = 0.5;
+    MAX_KEYS = 512;
+    outcomes = /* @__PURE__ */ new Map();
+  }
+});
+
 // src/config.ts
 var DEFAULT_PORT, PROXY_PORT;
 var init_config = __esm({
@@ -73084,9 +73136,9 @@ var require_constants2 = __commonJS({
     var headerNameLowerCasedRecord = {};
     Object.setPrototypeOf(headerNameLowerCasedRecord, null);
     for (let i = 0; i < wellknownHeaderNames.length; ++i) {
-      const key2 = wellknownHeaderNames[i];
-      const lowerCasedKey = key2.toLowerCase();
-      headerNameLowerCasedRecord[key2] = headerNameLowerCasedRecord[lowerCasedKey] = lowerCasedKey;
+      const key3 = wellknownHeaderNames[i];
+      const lowerCasedKey = key3.toLowerCase();
+      headerNameLowerCasedRecord[key3] = headerNameLowerCasedRecord[lowerCasedKey] = lowerCasedKey;
     }
     module.exports = {
       wellknownHeaderNames,
@@ -73119,16 +73171,16 @@ var require_tree = __commonJS({
        * @param {any} value
        * @param {number} index
        */
-      constructor(key2, value, index2) {
-        if (index2 === void 0 || index2 >= key2.length) {
+      constructor(key3, value, index2) {
+        if (index2 === void 0 || index2 >= key3.length) {
           throw new TypeError("Unreachable");
         }
-        const code = this.code = key2.charCodeAt(index2);
+        const code = this.code = key3.charCodeAt(index2);
         if (code > 127) {
           throw new TypeError("key must be ascii string");
         }
-        if (key2.length !== ++index2) {
-          this.middle = new _TstNode(key2, value, index2);
+        if (key3.length !== ++index2) {
+          this.middle = new _TstNode(key3, value, index2);
         } else {
           this.value = value;
         }
@@ -73138,15 +73190,15 @@ var require_tree = __commonJS({
        * @param {any} value
        * @returns {void}
        */
-      add(key2, value) {
-        const length = key2.length;
+      add(key3, value) {
+        const length = key3.length;
         if (length === 0) {
           throw new TypeError("Unreachable");
         }
         let index2 = 0;
         let node = this;
         while (true) {
-          const code = key2.charCodeAt(index2);
+          const code = key3.charCodeAt(index2);
           if (code > 127) {
             throw new TypeError("key must be ascii string");
           }
@@ -73157,20 +73209,20 @@ var require_tree = __commonJS({
             } else if (node.middle !== null) {
               node = node.middle;
             } else {
-              node.middle = new _TstNode(key2, value, index2);
+              node.middle = new _TstNode(key3, value, index2);
               break;
             }
           } else if (node.code < code) {
             if (node.left !== null) {
               node = node.left;
             } else {
-              node.left = new _TstNode(key2, value, index2);
+              node.left = new _TstNode(key3, value, index2);
               break;
             }
           } else if (node.right !== null) {
             node = node.right;
           } else {
-            node.right = new _TstNode(key2, value, index2);
+            node.right = new _TstNode(key3, value, index2);
             break;
           }
         }
@@ -73179,12 +73231,12 @@ var require_tree = __commonJS({
        * @param {Uint8Array} key
        * @returns {TstNode | null}
        */
-      search(key2) {
-        const keylength = key2.length;
+      search(key3) {
+        const keylength = key3.length;
         let index2 = 0;
         let node = this;
         while (node !== null && index2 < keylength) {
-          let code = key2[index2];
+          let code = key3[index2];
           if (code <= 90 && code >= 65) {
             code |= 32;
           }
@@ -73210,25 +73262,25 @@ var require_tree = __commonJS({
        * @param {any} value
        * @returns {void}
        * */
-      insert(key2, value) {
+      insert(key3, value) {
         if (this.node === null) {
-          this.node = new TstNode(key2, value, 0);
+          this.node = new TstNode(key3, value, 0);
         } else {
-          this.node.add(key2, value);
+          this.node.add(key3, value);
         }
       }
       /**
        * @param {Uint8Array} key
        * @returns {any}
        */
-      lookup(key2) {
-        return this.node?.search(key2)?.value ?? null;
+      lookup(key3) {
+        return this.node?.search(key3)?.value ?? null;
       }
     };
     var tree = new TernarySearchTree();
     for (let i = 0; i < wellknownHeaderNames.length; ++i) {
-      const key2 = headerNameLowerCasedRecord[wellknownHeaderNames[i]];
-      tree.insert(key2, key2);
+      const key3 = headerNameLowerCasedRecord[wellknownHeaderNames[i]];
+      tree.insert(key3, key3);
     }
     module.exports = {
       TernarySearchTree,
@@ -73454,31 +73506,31 @@ var require_util = __commonJS({
     function parseHeaders(headers, obj) {
       if (obj === void 0) obj = {};
       for (let i = 0; i < headers.length; i += 2) {
-        const key2 = headerNameToString(headers[i]);
-        let val = obj[key2];
+        const key3 = headerNameToString(headers[i]);
+        let val = obj[key3];
         if (val !== void 0) {
-          if (!Object.hasOwn(obj, key2)) {
+          if (!Object.hasOwn(obj, key3)) {
             const headersValue = typeof headers[i + 1] === "string" ? headers[i + 1] : Array.isArray(headers[i + 1]) ? headers[i + 1].map((x) => x.toString("latin1")) : headers[i + 1].toString("latin1");
-            if (key2 === "__proto__") {
-              Object.defineProperty(obj, key2, {
+            if (key3 === "__proto__") {
+              Object.defineProperty(obj, key3, {
                 value: headersValue,
                 enumerable: true,
                 configurable: true,
                 writable: true
               });
             } else {
-              obj[key2] = headersValue;
+              obj[key3] = headersValue;
             }
           } else {
             if (typeof val === "string") {
               val = [val];
-              obj[key2] = val;
+              obj[key3] = val;
             }
             val.push(headers[i + 1].toString("latin1"));
           }
         } else {
           const headersValue = typeof headers[i + 1] === "string" ? headers[i + 1] : Array.isArray(headers[i + 1]) ? headers[i + 1].map((x) => x.toString("latin1")) : headers[i + 1].toString("latin1");
-          obj[key2] = headersValue;
+          obj[key3] = headersValue;
         }
       }
       return obj;
@@ -73502,14 +73554,14 @@ var require_util = __commonJS({
       }
       const headersLength = headers.length;
       const ret = new Array(headersLength);
-      let key2;
+      let key3;
       let val;
       for (let n = 0; n < headersLength; n += 2) {
-        key2 = headers[n];
+        key3 = headers[n];
         val = headers[n + 1];
-        typeof key2 !== "string" && (key2 = key2.toString());
+        typeof key3 !== "string" && (key3 = key3.toString());
         typeof val !== "string" && (val = val.toString("latin1"));
-        ret[n] = key2;
+        ret[n] = key3;
         ret[n + 1] = val;
       }
       return ret;
@@ -74694,20 +74746,20 @@ var require_request = __commonJS({
           this.endHandler = null;
         }
       }
-      addHeader(key2, value) {
-        processHeader(this, key2, value);
+      addHeader(key3, value) {
+        processHeader(this, key3, value);
         return this;
       }
     };
-    function processHeader(request2, key2, val) {
+    function processHeader(request2, key3, val) {
       if (val && (typeof val === "object" && !Array.isArray(val))) {
-        throw new InvalidArgumentError(`invalid ${key2} header`);
+        throw new InvalidArgumentError(`invalid ${key3} header`);
       } else if (val === void 0) {
         return;
       }
-      let headerName = headerNameLowerCasedRecord[key2];
+      let headerName = headerNameLowerCasedRecord[key3];
       if (headerName === void 0) {
-        headerName = key2.toLowerCase();
+        headerName = key3.toLowerCase();
         if (headerNameLowerCasedRecord[headerName] === void 0 && !isValidHTTPToken(headerName)) {
           throw new InvalidArgumentError("invalid header key");
         }
@@ -74717,17 +74769,17 @@ var require_request = __commonJS({
         for (let i = 0; i < val.length; i++) {
           if (typeof val[i] === "string") {
             if (!isValidHeaderValue(val[i])) {
-              throw new InvalidArgumentError(`invalid ${key2} header`);
+              throw new InvalidArgumentError(`invalid ${key3} header`);
             }
             arr.push(val[i]);
           } else if (val[i] === null) {
             arr.push("");
           } else if (typeof val[i] === "object") {
-            throw new InvalidArgumentError(`invalid ${key2} header`);
+            throw new InvalidArgumentError(`invalid ${key3} header`);
           } else {
             const str = `${val[i]}`;
             if (!isValidHeaderValue(str)) {
-              throw new InvalidArgumentError(`invalid ${key2} header`);
+              throw new InvalidArgumentError(`invalid ${key3} header`);
             }
             arr.push(str);
           }
@@ -74735,14 +74787,14 @@ var require_request = __commonJS({
         val = arr;
       } else if (typeof val === "string") {
         if (!isValidHeaderValue(val)) {
-          throw new InvalidArgumentError(`invalid ${key2} header`);
+          throw new InvalidArgumentError(`invalid ${key3} header`);
         }
       } else if (val === null) {
         val = "";
       } else {
         val = `${val}`;
         if (!isValidHeaderValue(val)) {
-          throw new InvalidArgumentError(`invalid ${key2} header`);
+          throw new InvalidArgumentError(`invalid ${key3} header`);
         }
       }
       if (headerName === "host") {
@@ -74763,7 +74815,7 @@ var require_request = __commonJS({
         request2.contentLength = parseInt(val, 10);
       } else if (request2.contentType === null && headerName === "content-type") {
         request2.contentType = val;
-        request2.headers.push(key2, val);
+        request2.headers.push(key3, val);
       } else if (headerName === "transfer-encoding" || headerName === "keep-alive" || headerName === "upgrade") {
         throw new InvalidArgumentError(`invalid ${headerName} header`);
       } else if (headerName === "connection") {
@@ -74783,7 +74835,7 @@ var require_request = __commonJS({
       } else if (headerName === "expect") {
         throw new NotSupportedError("expect header not supported");
       } else {
-        request2.headers.push(key2, val);
+        request2.headers.push(key3, val);
       }
     }
     module.exports = Request2;
@@ -74821,7 +74873,7 @@ var require_dispatcher = __commonJS({
           }
         }
         return new Proxy(this, {
-          get: (target, key2) => key2 === "dispatch" ? dispatch : target[key2]
+          get: (target, key3) => key3 === "dispatch" ? dispatch : target[key3]
         });
       }
     };
@@ -74995,13 +75047,13 @@ var require_connect = __commonJS({
       constructor(maxCachedSessions) {
         this._maxCachedSessions = maxCachedSessions;
         this._sessionCache = /* @__PURE__ */ new Map();
-        this._sessionRegistry = new FinalizationRegistry((key2) => {
+        this._sessionRegistry = new FinalizationRegistry((key3) => {
           if (this._sessionCache.size < this._maxCachedSessions) {
             return;
           }
-          const ref = this._sessionCache.get(key2);
+          const ref = this._sessionCache.get(key3);
           if (ref !== void 0 && ref.deref() === void 0) {
-            this._sessionCache.delete(key2);
+            this._sessionCache.delete(key3);
           }
         });
       }
@@ -75016,9 +75068,9 @@ var require_connect = __commonJS({
         if (this._sessionCache.has(sessionKey)) {
           this._sessionCache.delete(sessionKey);
         } else if (this._sessionCache.size >= this._maxCachedSessions) {
-          for (const [key2, ref] of this._sessionCache) {
+          for (const [key3, ref] of this._sessionCache) {
             if (ref.deref() === void 0) {
-              this._sessionCache.delete(key2);
+              this._sessionCache.delete(key3);
               return;
             }
           }
@@ -76735,20 +76787,20 @@ var require_webidl = __commonJS({
         const result = {};
         if (!types.isProxy(O)) {
           const keys2 = [...Object.getOwnPropertyNames(O), ...Object.getOwnPropertySymbols(O)];
-          for (const key2 of keys2) {
-            const keyName = webidl.util.Stringify(key2);
-            const typedKey = keyConverter(key2, prefix, `Key ${keyName} in ${argument}`);
-            const typedValue = valueConverter(O[key2], prefix, `${argument}[${keyName}]`);
+          for (const key3 of keys2) {
+            const keyName = webidl.util.Stringify(key3);
+            const typedKey = keyConverter(key3, prefix, `Key ${keyName} in ${argument}`);
+            const typedValue = valueConverter(O[key3], prefix, `${argument}[${keyName}]`);
             result[typedKey] = typedValue;
           }
           return result;
         }
         const keys = Reflect.ownKeys(O);
-        for (const key2 of keys) {
-          const desc = Reflect.getOwnPropertyDescriptor(O, key2);
+        for (const key3 of keys) {
+          const desc = Reflect.getOwnPropertyDescriptor(O, key3);
           if (desc?.enumerable) {
-            const typedKey = keyConverter(key2, prefix, argument);
-            const typedValue = valueConverter(O[key2], prefix, argument);
+            const typedKey = keyConverter(key3, prefix, argument);
+            const typedValue = valueConverter(O[key3], prefix, argument);
             result[typedKey] = typedValue;
           }
         }
@@ -76777,29 +76829,29 @@ var require_webidl = __commonJS({
           });
         }
         for (const options of converters) {
-          const { key: key2, defaultValue, required, converter } = options;
+          const { key: key3, defaultValue, required, converter } = options;
           if (required === true) {
-            if (dictionary == null || !Object.hasOwn(dictionary, key2)) {
+            if (dictionary == null || !Object.hasOwn(dictionary, key3)) {
               throw webidl.errors.exception({
                 header: prefix,
-                message: `Missing required key "${key2}".`
+                message: `Missing required key "${key3}".`
               });
             }
           }
-          let value = dictionary?.[key2];
+          let value = dictionary?.[key3];
           const hasDefault = defaultValue !== void 0;
           if (hasDefault && value === void 0) {
             value = defaultValue();
           }
           if (required || hasDefault || value !== void 0) {
-            value = converter(value, prefix, `${argument}.${key2}`);
+            value = converter(value, prefix, `${argument}.${key3}`);
             if (options.allowedValues && !options.allowedValues.includes(value)) {
               throw webidl.errors.exception({
                 header: prefix,
                 message: `${value} is not an accepted type. Expected one of ${options.allowedValues.join(", ")}.`
               });
             }
-            dict[key2] = value;
+            dict[key3] = value;
           }
         }
         return dict;
@@ -77446,18 +77498,18 @@ var require_util2 = __commonJS({
               done: true
             };
           }
-          const { [keyIndex]: key2, [valueIndex]: value } = values[index2];
+          const { [keyIndex]: key3, [valueIndex]: value } = values[index2];
           this.#index = index2 + 1;
           let result;
           switch (this.#kind) {
             case "key":
-              result = key2;
+              result = key3;
               break;
             case "value":
               result = value;
               break;
             case "key+value":
-              result = [key2, value];
+              result = [key3, value];
               break;
           }
           return {
@@ -77523,8 +77575,8 @@ var require_util2 = __commonJS({
                 `Failed to execute 'forEach' on '${name}': parameter 1 is not of type 'Function'.`
               );
             }
-            for (const { 0: key2, 1: value } of makeIterator(this, "key+value")) {
-              callbackfn.call(thisArg, value, key2, this);
+            for (const { 0: key3, 1: value } of makeIterator(this, "key+value")) {
+              callbackfn.call(thisArg, value, key3, this);
             }
           }
         }
@@ -79139,15 +79191,15 @@ var require_client_h1 = __commonJS({
         } else {
           this.headers[len - 1] = Buffer.concat([this.headers[len - 1], buf]);
         }
-        const key2 = this.headers[len - 2];
-        if (key2.length === 10) {
-          const headerName = util5.bufferToLowerCasedHeaderName(key2);
+        const key3 = this.headers[len - 2];
+        if (key3.length === 10) {
+          const headerName = util5.bufferToLowerCasedHeaderName(key3);
           if (headerName === "keep-alive") {
             this.keepAlive += buf.toString();
           } else if (headerName === "connection") {
             this.connectionKeepAlive = this.headers[len - 1].length === 10 && util5.bufferToLowerCasedHeaderName(this.headers[len - 1]) === "keep-alive";
           }
-        } else if (key2.length === 14 && util5.bufferToLowerCasedHeaderName(key2) === "content-length") {
+        } else if (key3.length === 14 && util5.bufferToLowerCasedHeaderName(key3) === "content-length") {
           if (this.contentLength === -1) {
             this.contentLength = 0;
           }
@@ -79709,15 +79761,15 @@ upgrade: ${upgrade}\r
       }
       if (Array.isArray(headers)) {
         for (let n = 0; n < headers.length; n += 2) {
-          const key2 = headers[n + 0];
+          const key3 = headers[n + 0];
           const val = headers[n + 1];
           if (Array.isArray(val)) {
             for (let i = 0; i < val.length; i++) {
-              header += `${key2}: ${val[i]}\r
+              header += `${key3}: ${val[i]}\r
 `;
             }
           } else {
-            header += `${key2}: ${val}\r
+            header += `${key3}: ${val}\r
 `;
           }
         }
@@ -80636,23 +80688,23 @@ var require_client_h2 = __commonJS({
     function buildRequestHeaders(reqHeaders) {
       const headers = {};
       for (let n = 0; n < reqHeaders.length; n += 2) {
-        const key2 = reqHeaders[n + 0];
+        const key3 = reqHeaders[n + 0];
         const val = reqHeaders[n + 1];
-        const current = headers[key2];
-        if (key2 === "cookie") {
+        const current = headers[key3];
+        if (key3 === "cookie") {
           if (current != null) {
-            headers[key2] = Array.isArray(current) ? (current.push(val), current) : [current, val];
+            headers[key3] = Array.isArray(current) ? (current.push(val), current) : [current, val];
           } else {
-            headers[key2] = val;
+            headers[key3] = val;
           }
           continue;
         }
         if (typeof val === "string") {
-          headers[key2] = current ? `${current}, ${val}` : val;
+          headers[key3] = current ? `${current}, ${val}` : val;
           continue;
         }
         for (let i = 0; i < val.length; i++) {
-          headers[key2] = headers[key2] ? `${headers[key2]}, ${val[i]}` : val[i];
+          headers[key3] = headers[key3] ? `${headers[key3]}, ${val[i]}` : val[i];
         }
       }
       return headers;
@@ -80891,8 +80943,8 @@ var require_client_h2 = __commonJS({
       refH2Session(session);
       if (channels.sendHeaders.hasSubscribers) {
         let header = "";
-        for (const key2 in headers) {
-          header += `${key2}: ${headers[key2]}\r
+        for (const key3 in headers) {
+          header += `${key3}: ${headers[key3]}\r
 `;
         }
         channels.sendHeaders.publish({ request: request2, headers: header, socket: session[kSocket] });
@@ -82594,21 +82646,21 @@ var require_agent = __commonJS({
           throw new InvalidArgumentError("opts.origin must be a non-empty string or URL.");
         }
         const allowH2 = opts.allowH2 ?? this[kOptions].allowH2;
-        const key2 = allowH2 === false ? `${origin2}#http1-only` : origin2;
+        const key3 = allowH2 === false ? `${origin2}#http1-only` : origin2;
         if (this[kOrigins].size >= this[kOptions].maxOrigins && !this[kOrigins].has(origin2)) {
           throw new MaxOriginsReachedError();
         }
-        let dispatcher = this[kClients].get(key2);
+        let dispatcher = this[kClients].get(key3);
         if (!dispatcher) {
           dispatcher = this[kFactory](opts.origin, allowH2 === false ? { ...this[kOptions], allowH2: false } : this[kOptions]);
           const closeClientIfUnused = () => {
-            if (this[kClients].get(key2) !== dispatcher) {
+            if (this[kClients].get(key3) !== dispatcher) {
               return;
             }
             if (dispatcher[kConnected] > 0 || dispatcher[kBusy]) {
               return;
             }
-            this[kClients].delete(key2);
+            this[kClients].delete(key3);
             if (!dispatcher.destroyed) {
               dispatcher.close();
             }
@@ -82630,7 +82682,7 @@ var require_agent = __commonJS({
             closeClientIfUnused();
             this[kOnConnectionError](origin3, targets, err);
           });
-          this[kClients].set(key2, dispatcher);
+          this[kClients].set(key3, dispatcher);
           this[kOrigins].add(origin2);
         }
         return dispatcher.dispatch(opts, handler);
@@ -83734,14 +83786,14 @@ var require_proxy_agent = __commonJS({
       return headers;
     }
     function throwIfProxyAuthIsSent(headers) {
-      for (const key2 in headers) {
-        if (isProxyAuthorizationHeader(key2)) {
+      for (const key3 in headers) {
+        if (isProxyAuthorizationHeader(key3)) {
           throwProxyAuthError();
         }
       }
     }
-    function isProxyAuthorizationHeader(key2) {
-      return key2.length === proxyAuthorization.length && key2.toLowerCase() === proxyAuthorization;
+    function isProxyAuthorizationHeader(key3) {
+      return key3.length === proxyAuthorization.length && key3.toLowerCase() === proxyAuthorization;
     }
     function throwProxyAuthError() {
       throw new InvalidArgumentError("Proxy-Authorization should be sent in ProxyAgent constructor");
@@ -84884,16 +84936,16 @@ var require_api_request = __commonJS({
       }
       onResponseEnd(_controller, trailers) {
         if (trailers && typeof trailers === "object") {
-          for (const key2 of Object.keys(trailers)) {
-            if (key2 === "__proto__") {
-              Object.defineProperty(this.trailers, key2, {
-                value: trailers[key2],
+          for (const key3 of Object.keys(trailers)) {
+            if (key3 === "__proto__") {
+              Object.defineProperty(this.trailers, key3, {
+                value: trailers[key3],
                 enumerable: true,
                 configurable: true,
                 writable: true
               });
             } else {
-              this.trailers[key2] = trailers[key2];
+              this.trailers[key3] = trailers[key3];
             }
           }
         }
@@ -85727,18 +85779,18 @@ var require_mock_utils = __commonJS({
         })
       );
     }
-    function getHeaderByName(headers, key2) {
+    function getHeaderByName(headers, key3) {
       if (Array.isArray(headers)) {
         for (let i = 0; i < headers.length; i += 2) {
-          if (headers[i].toLocaleLowerCase() === key2.toLocaleLowerCase()) {
+          if (headers[i].toLocaleLowerCase() === key3.toLocaleLowerCase()) {
             return headers[i + 1];
           }
         }
         return void 0;
       } else if (typeof headers.get === "function") {
-        return headers.get(key2);
+        return headers.get(key3);
       } else {
-        return lowerCaseEntries(headers)[key2.toLocaleLowerCase()];
+        return lowerCaseEntries(headers)[key3.toLocaleLowerCase()];
       }
     }
     function buildHeadersFromArray(headers) {
@@ -85776,21 +85828,21 @@ var require_mock_utils = __commonJS({
       }
       const originalQp = new URLSearchParams(query);
       const normalizedQp = new URLSearchParams();
-      for (let [key2, value] of originalQp.entries()) {
-        key2 = key2.replace("[]", "");
+      for (let [key3, value] of originalQp.entries()) {
+        key3 = key3.replace("[]", "");
         const valueRepresentsString = /^(['"]).*\1$/.test(value);
         if (valueRepresentsString) {
-          normalizedQp.append(key2, value);
+          normalizedQp.append(key3, value);
           continue;
         }
         if (value.includes(",")) {
           const values = value.split(",");
           for (const v of values) {
-            normalizedQp.append(key2, v);
+            normalizedQp.append(key3, v);
           }
           continue;
         }
-        normalizedQp.append(key2, value);
+        normalizedQp.append(key3, value);
       }
       return normalizedQp;
     }
@@ -85830,8 +85882,8 @@ var require_mock_utils = __commonJS({
         return "";
       }
     }
-    function getMockDispatch(mockDispatches, key2) {
-      const basePath = key2.query ? serializePathWithQuery(key2.path, key2.query) : key2.path;
+    function getMockDispatch(mockDispatches, key3) {
+      const basePath = key3.query ? serializePathWithQuery(key3.path, key3.query) : key3.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
       const resolvedPathWithoutTrailingSlash = removeTrailingSlash(resolvedPath);
       let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path5, ignoreTrailingSlash }) => {
@@ -85840,35 +85892,35 @@ var require_mock_utils = __commonJS({
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
-      matchedMockDispatches = matchedMockDispatches.filter(({ method }) => matchValue(method, key2.method));
+      matchedMockDispatches = matchedMockDispatches.filter(({ method }) => matchValue(method, key3.method));
       if (matchedMockDispatches.length === 0) {
-        throw new MockNotMatchedError(`Mock dispatch not matched for method '${key2.method}' on path '${resolvedPath}'`);
+        throw new MockNotMatchedError(`Mock dispatch not matched for method '${key3.method}' on path '${resolvedPath}'`);
       }
-      matchedMockDispatches = matchedMockDispatches.filter(({ body }) => typeof body !== "undefined" ? matchValue(body, key2.body) : true);
+      matchedMockDispatches = matchedMockDispatches.filter(({ body }) => typeof body !== "undefined" ? matchValue(body, key3.body) : true);
       if (matchedMockDispatches.length === 0) {
-        throw new MockNotMatchedError(`Mock dispatch not matched for body '${key2.body}' on path '${resolvedPath}'`);
+        throw new MockNotMatchedError(`Mock dispatch not matched for body '${key3.body}' on path '${resolvedPath}'`);
       }
-      matchedMockDispatches = matchedMockDispatches.filter((mockDispatch2) => matchHeaders(mockDispatch2, key2.headers));
+      matchedMockDispatches = matchedMockDispatches.filter((mockDispatch2) => matchHeaders(mockDispatch2, key3.headers));
       if (matchedMockDispatches.length === 0) {
-        const headers = typeof key2.headers === "object" ? JSON.stringify(key2.headers) : key2.headers;
+        const headers = typeof key3.headers === "object" ? JSON.stringify(key3.headers) : key3.headers;
         throw new MockNotMatchedError(`Mock dispatch not matched for headers '${headers}' on path '${resolvedPath}'`);
       }
       return matchedMockDispatches[0];
     }
-    function addMockDispatch(mockDispatches, key2, data, opts) {
+    function addMockDispatch(mockDispatches, key3, data, opts) {
       const baseData = { timesInvoked: 0, times: 1, persist: false, consumed: false, ...opts };
       const replyData = typeof data === "function" ? { callback: data } : { ...data };
-      const newMockDispatch = { ...baseData, ...key2, pending: true, data: { error: null, ...replyData } };
+      const newMockDispatch = { ...baseData, ...key3, pending: true, data: { error: null, ...replyData } };
       mockDispatches.push(newMockDispatch);
       mockDispatches[kTotalDispatchCount] = (mockDispatches[kTotalDispatchCount] || 0) + 1;
       return newMockDispatch;
     }
-    function deleteMockDispatch(mockDispatches, key2) {
+    function deleteMockDispatch(mockDispatches, key3) {
       const index2 = mockDispatches.findIndex((dispatch) => {
         if (!dispatch.consumed) {
           return false;
         }
-        return matchKey(dispatch, key2);
+        return matchKey(dispatch, key3);
       });
       if (index2 !== -1) {
         mockDispatches.splice(index2, 1);
@@ -85900,9 +85952,9 @@ var require_mock_utils = __commonJS({
       const keys = Object.keys(data);
       const result = [];
       for (let i = 0; i < keys.length; ++i) {
-        const key2 = keys[i];
-        const value = data[key2];
-        const name = Buffer.from(`${key2}`);
+        const key3 = keys[i];
+        const value = data[key3];
+        const name = Buffer.from(`${key3}`);
         if (Array.isArray(value)) {
           for (let j = 0; j < value.length; ++j) {
             result.push(name, Buffer.from(`${value[j]}`));
@@ -85924,8 +85976,8 @@ var require_mock_utils = __commonJS({
       return Buffer.concat(buffers).toString("utf8");
     }
     function mockDispatch(opts, handler) {
-      const key2 = buildKey(opts);
-      const mockDispatch2 = getMockDispatch(this[kDispatches], key2);
+      const key3 = buildKey(opts);
+      const mockDispatch2 = getMockDispatch(this[kDispatches], key3);
       const mockDispatches = this[kDispatches];
       mockDispatch2.timesInvoked++;
       const { timesInvoked, times } = mockDispatch2;
@@ -85943,7 +85995,7 @@ var require_mock_utils = __commonJS({
                 return;
               }
               mockDispatch2.data = { ...responseDefaults, ...resolvedData };
-              dispatchMockReply(mockDispatches, mockDispatch2, key2, opts, handler);
+              dispatchMockReply(mockDispatches, mockDispatch2, key3, opts, handler);
             },
             (error) => {
               handler.onResponseError(null, error);
@@ -85956,12 +86008,12 @@ var require_mock_utils = __commonJS({
         }
         mockDispatch2.data = { ...responseDefaults, ...callbackResult };
       }
-      return dispatchMockReply(mockDispatches, mockDispatch2, key2, opts, handler);
+      return dispatchMockReply(mockDispatches, mockDispatch2, key3, opts, handler);
     }
-    function dispatchMockReply(mockDispatches, mockDispatch2, key2, opts, handler) {
+    function dispatchMockReply(mockDispatches, mockDispatch2, key3, opts, handler) {
       const { data: response, delay } = mockDispatch2;
       if (response.error !== null) {
-        deleteMockDispatch(mockDispatches, key2);
+        deleteMockDispatch(mockDispatches, key3);
         handler.onResponseError(null, response.error);
         return true;
       }
@@ -86022,7 +86074,7 @@ var require_mock_utils = __commonJS({
           try {
             callbackResult = callback(replyOpts);
           } catch (err) {
-            deleteMockDispatch(mockDispatches, key2);
+            deleteMockDispatch(mockDispatches, key3);
             handler.onResponseError(null, err);
             return;
           }
@@ -86079,7 +86131,7 @@ var require_mock_utils = __commonJS({
         handler.onResponseStart?.(controller, statusCode, parseHeaders(responseHeaders), getStatusText(statusCode));
         handler.onResponseData?.(controller, Buffer.from(responseData));
         handler.onResponseEnd?.(controller, parseHeaders(responseTrailers));
-        deleteMockDispatch(mockDispatches2, key2);
+        deleteMockDispatch(mockDispatches2, key3);
       }
       return true;
     }
@@ -86567,12 +86619,12 @@ var require_mock_call_history = __commonJS({
       toString() {
         const options = { betweenKeyValueSeparator: "->", betweenPairSeparator: "|" };
         let result = "";
-        this.toMap().forEach((value, key2) => {
+        this.toMap().forEach((value, key3) => {
           if (typeof value === "string" || value === void 0 || value === null) {
-            result = `${result}${key2}${options.betweenKeyValueSeparator}${value}${options.betweenPairSeparator}`;
+            result = `${result}${key3}${options.betweenKeyValueSeparator}${value}${options.betweenPairSeparator}`;
           }
           if (typeof value === "object" && value !== null || Array.isArray(value)) {
-            result = `${result}${key2}${options.betweenKeyValueSeparator}${JSON.stringify(value)}${options.betweenPairSeparator}`;
+            result = `${result}${key3}${options.betweenKeyValueSeparator}${JSON.stringify(value)}${options.betweenPairSeparator}`;
           }
         });
         return result.slice(0, -1);
@@ -87008,10 +87060,10 @@ var require_snapshot_utils = __commonJS({
       if (!headers) return normalizedHeaders;
       if (isUndiciHeaders(headers)) {
         for (let i = 0; i < headers.length; i += 2) {
-          const key2 = headers[i];
+          const key3 = headers[i];
           const value = headers[i + 1];
-          if (key2 && value !== void 0) {
-            const keyStr = Buffer.isBuffer(key2) ? key2.toString() : key2;
+          if (key3 && value !== void 0) {
+            const keyStr = Buffer.isBuffer(key3) ? key3.toString() : key3;
             const valueStr = Buffer.isBuffer(value) ? value.toString() : value;
             normalizedHeaders[keyStr.toLowerCase()] = valueStr;
           }
@@ -87019,9 +87071,9 @@ var require_snapshot_utils = __commonJS({
         return normalizedHeaders;
       }
       if (headers && typeof headers === "object") {
-        for (const [key2, value] of Object.entries(headers)) {
-          if (key2 && typeof key2 === "string") {
-            normalizedHeaders[key2.toLowerCase()] = Array.isArray(value) ? value.join(", ") : String(value);
+        for (const [key3, value] of Object.entries(headers)) {
+          if (key3 && typeof key3 === "string") {
+            normalizedHeaders[key3.toLowerCase()] = Array.isArray(value) ? value.join(", ") : String(value);
           }
         }
       }
@@ -87089,8 +87141,8 @@ var require_snapshot_recorder = __commonJS({
       } = matchOptions;
       const filtered = {};
       const { ignore, exclude, match } = headerFilters;
-      for (const [key2, value] of Object.entries(headers)) {
-        const headerKey = caseSensitive ? key2 : key2.toLowerCase();
+      for (const [key3, value] of Object.entries(headers)) {
+        const headerKey = caseSensitive ? key3 : key3.toLowerCase();
         if (exclude.has(headerKey)) continue;
         if (ignore.has(headerKey)) continue;
         if (match.size !== 0) {
@@ -87107,8 +87159,8 @@ var require_snapshot_recorder = __commonJS({
       } = matchOptions;
       const filtered = {};
       const { exclude: excludeSet } = headerFilters;
-      for (const [key2, value] of Object.entries(headers)) {
-        const headerKey = caseSensitive ? key2 : key2.toLowerCase();
+      for (const [key3, value] of Object.entries(headers)) {
+        const headerKey = caseSensitive ? key3 : key3.toLowerCase();
         if (excludeSet.has(headerKey)) continue;
         filtered[headerKey] = value;
       }
@@ -87121,9 +87173,9 @@ var require_snapshot_recorder = __commonJS({
       ];
       if (formattedRequest.headers && typeof formattedRequest.headers === "object") {
         const headerKeys = Object.keys(formattedRequest.headers).sort();
-        for (const key2 of headerKeys) {
-          const values = Array.isArray(formattedRequest.headers[key2]) ? formattedRequest.headers[key2] : [formattedRequest.headers[key2]];
-          parts.push(key2);
+        for (const key3 of headerKeys) {
+          const values = Array.isArray(formattedRequest.headers[key3]) ? formattedRequest.headers[key3] : [formattedRequest.headers[key3]];
+          parts.push(key3);
           for (const value of values.sort()) {
             parts.push(String(value));
           }
@@ -88005,9 +88057,9 @@ var require_redirect_handler = __commonJS({
         }
       } else if (headers && typeof headers === "object") {
         const entries = util5.hasSafeIterator(headers) ? headers : Object.entries(headers);
-        for (const [key2, value] of entries) {
-          if (!shouldRemoveHeader(key2, removeContent, unknownOrigin, stripHeaders, stripHeadersOnCrossOrigin)) {
-            ret.push(key2, value);
+        for (const [key3, value] of entries) {
+          if (!shouldRemoveHeader(key3, removeContent, unknownOrigin, stripHeaders, stripHeadersOnCrossOrigin)) {
+            ret.push(key3, value);
           }
         }
       } else {
@@ -88247,8 +88299,8 @@ var require_dns = __commonJS({
       const ownIterator = Object.hasOwn(headers, Symbol.iterator);
       return ownIterator || prototype2 != null && prototype2 !== Object.prototype && typeof headers[Symbol.iterator] === "function";
     }
-    function isHostHeader(key2) {
-      return typeof key2 === "string" && key2.toLowerCase() === "host";
+    function isHostHeader(key3) {
+      return typeof key3 === "string" && key3.toLowerCase() === "host";
     }
     function normalizeHeaders3(headers) {
       if (headers == null) {
@@ -88297,8 +88349,8 @@ var require_dns = __commonJS({
         return false;
       }
       if (typeof headers === "object") {
-        for (const key2 in headers) {
-          if (isHostHeader(key2)) {
+        for (const key3 in headers) {
+          if (isHostHeader(key3)) {
             return true;
           }
         }
@@ -88765,7 +88817,7 @@ var require_cache = __commonJS({
       });
       return directives;
     }
-    function markInvalidCacheControlDirective(directives, key2) {
+    function markInvalidCacheControlDirective(directives, key3) {
       let invalidDirectives = directives[kInvalidCacheControlDirectives];
       if (invalidDirectives === void 0) {
         invalidDirectives = /* @__PURE__ */ new Set();
@@ -88773,22 +88825,22 @@ var require_cache = __commonJS({
           value: invalidDirectives
         });
       }
-      invalidDirectives.add(key2);
+      invalidDirectives.add(key3);
     }
-    function hasInvalidCacheControlDirective(directives, key2) {
-      return directives[kInvalidCacheControlDirectives]?.has(key2) === true;
+    function hasInvalidCacheControlDirective(directives, key3) {
+      return directives[kInvalidCacheControlDirectives]?.has(key3) === true;
     }
-    function getMalformedRestrictiveDirectiveName(key2) {
+    function getMalformedRestrictiveDirectiveName(key3) {
       for (const directiveName of RESTRICTIVE_DIRECTIVE_NAMES) {
-        if (key2.startsWith(directiveName) && key2.length > directiveName.length && !isValidHTTPToken(key2[directiveName.length])) {
+        if (key3.startsWith(directiveName) && key3.length > directiveName.length && !isValidHTTPToken(key3[directiveName.length])) {
           return directiveName;
         }
       }
       let tokenOnlyKey = "";
       let hasInvalidTokenChar = false;
-      for (let i = 0; i < key2.length; i++) {
-        if (isValidHTTPToken(key2[i])) {
-          tokenOnlyKey += key2[i];
+      for (let i = 0; i < key3.length; i++) {
+        if (isValidHTTPToken(key3[i])) {
+          tokenOnlyKey += key3[i];
         } else {
           hasInvalidTokenChar = true;
         }
@@ -88810,8 +88862,8 @@ var require_cache = __commonJS({
         headers: opts.headers
       };
     }
-    function appendHeader(headers, key2, val) {
-      const headerName = key2.toLowerCase();
+    function appendHeader(headers, key3, val) {
+      const headerName = key3.toLowerCase();
       const current = headers[headerName];
       const values = Array.isArray(val) ? val : [val];
       if (current === void 0) {
@@ -88836,11 +88888,11 @@ var require_cache = __commonJS({
                 if (!Array.isArray(x)) {
                   throw new Error("opts.headers is not a valid header map");
                 }
-                const [key2, val] = x;
-                if (typeof key2 !== "string" || typeof val !== "string") {
+                const [key3, val] = x;
+                if (typeof key3 !== "string" || typeof val !== "string") {
                   throw new Error("opts.headers is not a valid header map");
                 }
-                appendHeader(headers, key2, val);
+                appendHeader(headers, key3, val);
               }
             } else {
               const len = opts.headers.length;
@@ -88848,20 +88900,20 @@ var require_cache = __commonJS({
                 throw new Error("opts.headers is not a valid header map");
               }
               for (let i = 0; i < len; i += 2) {
-                const key2 = opts.headers[i];
+                const key3 = opts.headers[i];
                 const val = opts.headers[i + 1];
-                if (typeof key2 !== "string" || typeof val !== "string" && !Array.isArray(val)) {
+                if (typeof key3 !== "string" || typeof val !== "string" && !Array.isArray(val)) {
                   throw new Error("opts.headers is not a valid header map");
                 }
                 if (typeof val === "string") {
-                  appendHeader(headers, key2, val);
+                  appendHeader(headers, key3, val);
                 } else {
                   const mapped = [];
                   for (let j = 0; j < val.length; j++) {
                     const v = val[j];
                     mapped.push(typeof v === "string" ? v : v.toString("latin1"));
                   }
-                  appendHeader(headers, key2, mapped);
+                  appendHeader(headers, key3, mapped);
                 }
               }
             }
@@ -88870,16 +88922,16 @@ var require_cache = __commonJS({
               if (!Array.isArray(x)) {
                 throw new Error("opts.headers is not a valid header map");
               }
-              const [key2, val] = x;
-              if (typeof key2 !== "string" || typeof val !== "string") {
+              const [key3, val] = x;
+              if (typeof key3 !== "string" || typeof val !== "string") {
                 throw new Error("opts.headers is not a valid header map");
               }
-              appendHeader(headers, key2, val);
+              appendHeader(headers, key3, val);
             }
           }
         } else {
-          for (const key2 of Object.keys(opts.headers)) {
-            appendHeader(headers, key2, opts.headers[key2]);
+          for (const key3 of Object.keys(opts.headers)) {
+            appendHeader(headers, key3, opts.headers[key3]);
           }
         }
       } else {
@@ -88887,17 +88939,17 @@ var require_cache = __commonJS({
       }
       return headers;
     }
-    function assertCacheKey(key2) {
-      if (typeof key2 !== "object") {
-        throw new TypeError(`expected key to be object, got ${typeof key2}`);
+    function assertCacheKey(key3) {
+      if (typeof key3 !== "object") {
+        throw new TypeError(`expected key to be object, got ${typeof key3}`);
       }
       for (const property of ["origin", "method", "path"]) {
-        if (typeof key2[property] !== "string") {
-          throw new TypeError(`expected key.${property} to be string, got ${typeof key2[property]}`);
+        if (typeof key3[property] !== "string") {
+          throw new TypeError(`expected key.${property} to be string, got ${typeof key3[property]}`);
         }
       }
-      if (key2.headers !== void 0 && typeof key2.headers !== "object") {
-        throw new TypeError(`expected headers to be object, got ${typeof key2}`);
+      if (key3.headers !== void 0 && typeof key3.headers !== "object") {
+        throw new TypeError(`expected headers to be object, got ${typeof key3}`);
       }
     }
     function assertCacheValue(value) {
@@ -88932,7 +88984,7 @@ var require_cache = __commonJS({
         const directive = directiveRecord.value.toLowerCase();
         const fromMalformedQuote = directiveRecord.fromMalformedQuote;
         const keyValueDelimiter = directive.indexOf("=");
-        let key2;
+        let key3;
         let value;
         let keyHasTrailingWhitespace = false;
         let valueHasLeadingWhitespace = false;
@@ -88941,59 +88993,59 @@ var require_cache = __commonJS({
           const rawValue = directive.substring(keyValueDelimiter + 1);
           keyHasTrailingWhitespace = trimOWSEnd(rawKey) !== rawKey;
           valueHasLeadingWhitespace = trimOWSStart(rawValue) !== rawValue;
-          key2 = trimOWS2(rawKey);
+          key3 = trimOWS2(rawKey);
           value = trimOWSStart(rawValue);
         } else {
-          key2 = trimOWS2(directive);
+          key3 = trimOWS2(directive);
         }
-        const malformedRestrictiveDirectiveName = getMalformedRestrictiveDirectiveName(key2);
+        const malformedRestrictiveDirectiveName = getMalformedRestrictiveDirectiveName(key3);
         if (malformedRestrictiveDirectiveName !== void 0) {
           output[malformedRestrictiveDirectiveName] = true;
           continue;
         }
-        switch (key2) {
+        switch (key3) {
           case "min-fresh":
           case "max-stale":
           case "max-age":
           case "s-maxage":
           case "stale-while-revalidate":
           case "stale-if-error": {
-            if (fromMalformedQuote || invalidNumericDirectives.has(key2)) {
+            if (fromMalformedQuote || invalidNumericDirectives.has(key3)) {
               continue;
             }
             if (value === void 0 || keyHasTrailingWhitespace || valueHasLeadingWhitespace) {
-              delete output[key2];
-              invalidNumericDirectives.add(key2);
-              markInvalidCacheControlDirective(output, key2);
+              delete output[key3];
+              invalidNumericDirectives.add(key3);
+              markInvalidCacheControlDirective(output, key3);
               continue;
             }
             if (value.length >= 2 && value[0] === '"' && value[value.length - 1] === '"') {
               value = value.substring(1, value.length - 1);
             }
             if (!/^[0-9]+$/.test(value)) {
-              delete output[key2];
-              invalidNumericDirectives.add(key2);
-              markInvalidCacheControlDirective(output, key2);
+              delete output[key3];
+              invalidNumericDirectives.add(key3);
+              markInvalidCacheControlDirective(output, key3);
               continue;
             }
             const parsedValue = Math.min(parseInt(value, 10), MAX_DELTA_SECONDS);
-            if (key2 === "min-fresh") {
-              if (!(key2 in output) || output[key2] < parsedValue) {
-                output[key2] = parsedValue;
+            if (key3 === "min-fresh") {
+              if (!(key3 in output) || output[key3] < parsedValue) {
+                output[key3] = parsedValue;
               }
-            } else if (!(key2 in output) || output[key2] > parsedValue) {
-              output[key2] = parsedValue;
+            } else if (!(key3 in output) || output[key3] > parsedValue) {
+              output[key3] = parsedValue;
             }
             break;
           }
           case "private":
           case "no-cache": {
             if (fromMalformedQuote) {
-              output[key2] = true;
+              output[key3] = true;
               break;
             }
             if (value !== void 0 && value.length === 0) {
-              output[key2] = true;
+              output[key3] = true;
               break;
             }
             if (value) {
@@ -89022,7 +89074,7 @@ var require_cache = __commonJS({
                   fieldList = fieldListParts.join(",");
                 }
                 if (!foundEndingQuote) {
-                  output[key2] = true;
+                  output[key3] = true;
                   break;
                 }
                 i = lastQuotedPart;
@@ -89035,23 +89087,23 @@ var require_cache = __commonJS({
                   }
                 }
                 if (!validFieldNames) {
-                  output[key2] = true;
-                } else if (output[key2] !== true) {
-                  if (key2 in output) {
-                    output[key2] = output[key2].concat(headers);
+                  output[key3] = true;
+                } else if (output[key3] !== true) {
+                  if (key3 in output) {
+                    output[key3] = output[key3].concat(headers);
                   } else {
-                    output[key2] = headers;
+                    output[key3] = headers;
                   }
                 }
               } else {
                 const fieldName = trimOWS2(value);
                 if (!isValidHTTPToken(fieldName)) {
-                  output[key2] = true;
-                } else if (output[key2] !== true) {
-                  if (key2 in output) {
-                    output[key2] = output[key2].concat(fieldName);
+                  output[key3] = true;
+                } else if (output[key3] !== true) {
+                  if (key3 in output) {
+                    output[key3] = output[key3].concat(fieldName);
                   } else {
-                    output[key2] = [fieldName];
+                    output[key3] = [fieldName];
                   }
                 }
               }
@@ -89066,18 +89118,18 @@ var require_cache = __commonJS({
           case "no-transform":
           case "must-understand":
           case "only-if-cached":
-            if (fromMalformedQuote || invalidNoArgumentDirectives.has(key2)) {
+            if (fromMalformedQuote || invalidNoArgumentDirectives.has(key3)) {
               continue;
             }
             if (value !== void 0) {
-              delete output[key2];
-              invalidNoArgumentDirectives.add(key2);
+              delete output[key3];
+              invalidNoArgumentDirectives.add(key3);
               continue;
             }
-            output[key2] = true;
+            output[key3] = true;
             break;
           case "no-store":
-            output[key2] = true;
+            output[key3] = true;
             break;
           default:
             continue;
@@ -90291,12 +90343,12 @@ var require_memory_cache_store = __commonJS({
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheKey} req
        * @returns {import('../../types/cache-interceptor.d.ts').default.GetResult | undefined}
        */
-      get(key2) {
-        assertCacheKey(key2);
-        const topLevelKey = `${key2.origin}:${key2.path}`;
+      get(key3) {
+        assertCacheKey(key3);
+        const topLevelKey = `${key3.origin}:${key3.path}`;
         const now2 = Date.now();
         const entries = this.#entries.get(topLevelKey);
-        const entry = entries ? findEntry(key2, entries, now2) : null;
+        const entry = entries ? findEntry(key3, entries, now2) : null;
         return entry == null ? void 0 : {
           statusMessage: entry.statusMessage,
           statusCode: entry.statusCode,
@@ -90315,12 +90367,12 @@ var require_memory_cache_store = __commonJS({
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheValue} val
        * @returns {Writable | undefined}
        */
-      createWriteStream(key2, val) {
-        assertCacheKey(key2);
+      createWriteStream(key3, val) {
+        assertCacheKey(key3);
         assertCacheValue(val);
-        const topLevelKey = `${key2.origin}:${key2.path}`;
+        const topLevelKey = `${key3.origin}:${key3.path}`;
         const store = this;
-        const entry = { ...key2, ...val, body: [], size: 0 };
+        const entry = { ...key3, ...val, body: [], size: 0 };
         return new Writable({
           write(chunk, encoding, callback) {
             if (typeof chunk === "string") {
@@ -90340,7 +90392,7 @@ var require_memory_cache_store = __commonJS({
               entries = [];
               store.#entries.set(topLevelKey, entries);
             }
-            const previousEntry = findEntry(key2, entries, Date.now());
+            const previousEntry = findEntry(key3, entries, Date.now());
             if (previousEntry) {
               const index2 = entries.indexOf(previousEntry);
               entries.splice(index2, 1, entry);
@@ -90360,13 +90412,13 @@ var require_memory_cache_store = __commonJS({
                 });
                 store.#hasEmittedMaxSizeEvent = true;
               }
-              for (const [key3, entries2] of store.#entries) {
+              for (const [key4, entries2] of store.#entries) {
                 for (const entry2 of entries2.splice(0, entries2.length / 2)) {
                   store.#size -= entry2.size;
                   store.#count -= 1;
                 }
                 if (entries2.length === 0) {
-                  store.#entries.delete(key3);
+                  store.#entries.delete(key4);
                 }
               }
               if (store.#size < store.#maxSize && store.#count < store.#maxCount) {
@@ -90380,11 +90432,11 @@ var require_memory_cache_store = __commonJS({
       /**
        * @param {CacheKey} key
        */
-      delete(key2) {
-        if (typeof key2 !== "object") {
-          throw new TypeError(`expected key to be object, got ${typeof key2}`);
+      delete(key3) {
+        if (typeof key3 !== "object") {
+          throw new TypeError(`expected key to be object, got ${typeof key3}`);
         }
-        const topLevelKey = `${key2.origin}:${key2.path}`;
+        const topLevelKey = `${key3.origin}:${key3.path}`;
         for (const entry of this.#entries.get(topLevelKey) ?? []) {
           this.#size -= entry.size;
           this.#count -= 1;
@@ -90392,20 +90444,20 @@ var require_memory_cache_store = __commonJS({
         this.#entries.delete(topLevelKey);
       }
     };
-    function findEntry(key2, entries, now2) {
+    function findEntry(key3, entries, now2) {
       for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        if (entry.deleteAt > now2 && entry.method === key2.method && varyMatches(key2, entry)) {
+        if (entry.deleteAt > now2 && entry.method === key3.method && varyMatches(key3, entry)) {
           return entry;
         }
       }
     }
-    function varyMatches(key2, entry) {
+    function varyMatches(key3, entry) {
       if (entry.vary == null) {
         return true;
       }
       for (const headerName in entry.vary) {
-        if (Object.hasOwn(entry.vary, headerName) && !headerValueEquals(key2.headers?.[headerName], entry.vary[headerName])) {
+        if (Object.hasOwn(entry.vary, headerName) && !headerValueEquals(key3.headers?.[headerName], entry.vary[headerName])) {
           return false;
         }
       }
@@ -90638,9 +90690,9 @@ var require_cache2 = __commonJS({
         headers["if-none-match"] = result.etag;
       }
       if (result.vary) {
-        for (const key2 in result.vary) {
-          if (result.vary[key2] != null) {
-            headers[key2] = result.vary[key2];
+        for (const key3 in result.vary) {
+          if (result.vary[key3] != null) {
+            headers[key3] = result.vary[key3];
           }
         }
       }
@@ -91813,9 +91865,9 @@ var require_sqlite_cache_store = __commonJS({
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheKey} key
        * @returns {(import('../../types/cache-interceptor.d.ts').default.GetResult & { body?: Buffer }) | undefined}
        */
-      get(key2) {
-        assertCacheKey(key2);
-        const value = this.#findValue(key2);
+      get(key3) {
+        assertCacheKey(key3);
+        const value = this.#findValue(key3);
         return value ? {
           body: value.body ? Buffer.from(value.body.buffer, value.body.byteOffset, value.body.byteLength) : void 0,
           statusCode: value.statusCode,
@@ -91833,15 +91885,15 @@ var require_sqlite_cache_store = __commonJS({
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheKey} key
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheValue & { body: null | Buffer | Array<Buffer>}} value
        */
-      set(key2, value) {
-        assertCacheKey(key2);
-        const url2 = this.#makeValueUrl(key2);
+      set(key3, value) {
+        assertCacheKey(key3);
+        const url2 = this.#makeValueUrl(key3);
         const body = Array.isArray(value.body) ? Buffer.concat(value.body) : value.body;
         const size5 = body?.byteLength;
         if (size5 && size5 > this.#maxEntrySize) {
           return;
         }
-        const existingValue = this.#findValue(key2, true);
+        const existingValue = this.#findValue(key3, true);
         if (existingValue) {
           this.#updateValueQuery.run(
             body,
@@ -91859,7 +91911,7 @@ var require_sqlite_cache_store = __commonJS({
         } else {
           this.#insertValueQuery.run(
             url2,
-            key2.method,
+            key3.method,
             body,
             value.deleteAt,
             value.statusCode,
@@ -91879,8 +91931,8 @@ var require_sqlite_cache_store = __commonJS({
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheValue} value
        * @returns {Writable | undefined}
        */
-      createWriteStream(key2, value) {
-        assertCacheKey(key2);
+      createWriteStream(key3, value) {
+        assertCacheKey(key3);
         assertCacheValue(value);
         let size5 = 0;
         const body = [];
@@ -91897,7 +91949,7 @@ var require_sqlite_cache_store = __commonJS({
             callback();
           },
           final(callback) {
-            store.set(key2, { ...value, body });
+            store.set(key3, { ...value, body });
             callback();
           }
         });
@@ -91905,11 +91957,11 @@ var require_sqlite_cache_store = __commonJS({
       /**
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheKey} key
        */
-      delete(key2) {
-        if (typeof key2 !== "object") {
-          throw new TypeError(`expected key to be object, got ${typeof key2}`);
+      delete(key3) {
+        if (typeof key3 !== "object") {
+          throw new TypeError(`expected key to be object, got ${typeof key3}`);
         }
-        this.#deleteByUrlQuery.run(this.#makeValueUrl(key2));
+        this.#deleteByUrlQuery.run(this.#makeValueUrl(key3));
       }
       #prune() {
         if (Number.isFinite(this.#maxCount) && this.size <= this.#maxCount) {
@@ -91941,17 +91993,17 @@ var require_sqlite_cache_store = __commonJS({
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheKey} key
        * @returns {string}
        */
-      #makeValueUrl(key2) {
-        return `${key2.origin}/${key2.path}`;
+      #makeValueUrl(key3) {
+        return `${key3.origin}/${key3.path}`;
       }
       /**
        * @param {import('../../types/cache-interceptor.d.ts').default.CacheKey} key
        * @param {boolean} [canBeExpired=false]
        * @returns {SqliteStoreValue | undefined}
        */
-      #findValue(key2, canBeExpired = false) {
-        const url2 = this.#makeValueUrl(key2);
-        const { headers, method } = key2;
+      #findValue(key3, canBeExpired = false) {
+        const url2 = this.#makeValueUrl(key3);
+        const { headers, method } = key3;
         const values = this.#getValuesQuery.all(url2, method);
         if (values.length === 0) {
           return void 0;
@@ -95836,8 +95888,8 @@ var require_util4 = __commonJS({
         if (!part.includes("=")) {
           throw new Error("Invalid unparsed");
         }
-        const [key2, ...value] = part.split("=");
-        const trimmedKey = key2.trim();
+        const [key3, ...value] = part.split("=");
+        const trimmedKey = key3.trim();
         const joinedValue = value.join("=");
         validateCookieName(trimmedKey);
         validateCookieValue(joinedValue);
@@ -99317,10 +99369,10 @@ function extractOpenClawCalls(content) {
     OPENCLAW_ARG_RE.lastIndex = 0;
     let argMatch;
     while ((argMatch = OPENCLAW_ARG_RE.exec(argsBlock)) !== null) {
-      const key2 = argMatch[1]?.trim();
+      const key3 = argMatch[1]?.trim();
       const valueRaw = argMatch[2] ?? "";
-      if (key2) {
-        args[key2] = coerceValue(valueRaw);
+      if (key3) {
+        args[key3] = coerceValue(valueRaw);
       }
     }
     calls.push({
@@ -99350,10 +99402,10 @@ function extractAnthropicCalls(content) {
       ANTHROPIC_PARAM_RE.lastIndex = 0;
       let paramMatch;
       while ((paramMatch = ANTHROPIC_PARAM_RE.exec(invokeInner)) !== null) {
-        const key2 = paramMatch[1];
+        const key3 = paramMatch[1];
         const valueRaw = paramMatch[2] ?? "";
-        if (key2) {
-          args[key2] = coerceValue(valueRaw);
+        if (key3) {
+          args[key3] = coerceValue(valueRaw);
         }
       }
       calls.push({
@@ -99528,10 +99580,10 @@ function deriveRequestTools(tools) {
   }
   return derived;
 }
-function keyMatchesParam(key2, propKeys) {
-  if (propKeys.has(key2)) return true;
-  if (key2 === "cmd" && propKeys.has("command")) return true;
-  if (key2 === "command" && propKeys.has("cmd")) return true;
+function keyMatchesParam(key3, propKeys) {
+  if (propKeys.has(key3)) return true;
+  if (key3 === "cmd" && propKeys.has("command")) return true;
+  if (key3 === "command" && propKeys.has("cmd")) return true;
   return false;
 }
 function requiredSatisfied(tool, blobKeys) {
@@ -99710,17 +99762,17 @@ async function listRecent(limit = 20, daysBack = 7) {
   }
 }
 async function getLast(sessionId) {
-  const recent = await listRecent(50);
-  if (recent.length === 0) return null;
+  const recent2 = await listRecent(50);
+  if (recent2.length === 0) return null;
   if (sessionId) {
-    const match = recent.find((e7) => e7.sessionId === sessionId);
+    const match = recent2.find((e7) => e7.sessionId === sessionId);
     if (match) return match;
   }
-  return recent[0];
+  return recent2[0];
 }
 async function getById(id2) {
-  const recent = await listRecent(500);
-  return recent.find((e7) => e7.id === id2) ?? null;
+  const recent2 = await listRecent(500);
+  return recent2.find((e7) => e7.id === id2) ?? null;
 }
 var STORE_DIR, dirReady2;
 var init_response_store = __esm({
@@ -100824,20 +100876,20 @@ var init_src = __esm({
 
 // node_modules/@x402/svm/dist/esm/chunk-WIPN332D.mjs
 async function getCachedMintMetadata(rpc, network, asset, cache2) {
-  const key2 = `${network}:${asset}`;
-  let metadata = cache2.get(key2);
+  const key3 = `${network}:${asset}`;
+  let metadata = cache2.get(key3);
   if (!metadata) {
     metadata = fetchMint(rpc, asset).then((mint) => ({
       decimals: mint.data.decimals,
       programAddress: mint.programAddress
     }));
-    cache2.set(key2, metadata);
+    cache2.set(key3, metadata);
   }
   try {
     return await metadata;
   } catch (error) {
-    if (cache2.get(key2) === metadata) {
-      cache2.delete(key2);
+    if (cache2.get(key3) === metadata) {
+      cache2.delete(key3);
     }
     throw error;
   }
@@ -102089,8 +102141,8 @@ function estimateBalancePreflightAmount(modelId, bodyLength, maxTokens, models =
 }
 function estimatePhoneCost(urlPath) {
   const op = urlPath.replace(/^\/v1\//, "").split("?")[0];
-  for (const key2 of Object.keys(PHONE_PRICING).sort((a, b) => b.length - a.length)) {
-    if (op === key2 || op.startsWith(`${key2}/`)) return PHONE_PRICING[key2];
+  for (const key3 of Object.keys(PHONE_PRICING).sort((a, b) => b.length - a.length)) {
+    if (op === key3 || op.startsWith(`${key3}/`)) return PHONE_PRICING[key3];
   }
   return 0.05;
 }
@@ -102185,11 +102237,11 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   }
   const body = Buffer.concat(bodyChunks);
   const headers = {};
-  for (const [key2, value] of Object.entries(req.headers)) {
-    if (key2 === "host" || key2 === "connection" || key2 === "transfer-encoding" || key2 === "content-length")
+  for (const [key3, value] of Object.entries(req.headers)) {
+    if (key3 === "host" || key3 === "connection" || key3 === "transfer-encoding" || key3 === "content-length")
       continue;
-    if (key2.startsWith("x-stainless-") || key2.startsWith("anthropic-")) continue;
-    if (typeof value === "string") headers[key2] = value;
+    if (key3.startsWith("x-stainless-") || key3.startsWith("anthropic-")) continue;
+    if (typeof value === "string") headers[key3] = value;
   }
   if (!headers["content-type"]) headers["content-type"] = "application/json";
   headers["user-agent"] = USER_AGENT;
@@ -102206,10 +102258,10 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
     signal: clientAbort.signal
   });
   const responseHeaders = {};
-  upstream.headers.forEach((value, key2) => {
-    if (key2 === "transfer-encoding" || key2 === "connection" || key2 === "content-encoding" || key2 === "content-length")
+  upstream.headers.forEach((value, key3) => {
+    if (key3 === "transfer-encoding" || key3 === "connection" || key3 === "content-encoding" || key3 === "content-length")
       return;
-    responseHeaders[key2] = value;
+    responseHeaders[key3] = value;
   });
   if (accountPassthrough || authMode === "api-key") {
     responseHeaders["cache-control"] = "no-store";
@@ -104772,8 +104824,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
   }
   const cacheKey2 = `${isStreaming ? "sse" : "json"}:${ResponseCache.generateKey(body)}`;
   const reqHeaders = {};
-  for (const [key2, value] of Object.entries(req.headers)) {
-    if (typeof value === "string") reqHeaders[key2] = value;
+  for (const [key3, value] of Object.entries(req.headers)) {
+    if (typeof value === "string") reqHeaders[key3] = value;
   }
   if (responseCache2.shouldCache(body, reqHeaders)) {
     const cachedResponse = responseCache2.get(cacheKey2);
@@ -104999,12 +105051,12 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
     }, HEARTBEAT_INTERVAL_MS);
   }
   const headers = {};
-  for (const [key2, value] of Object.entries(req.headers)) {
-    if (key2 === "host" || key2 === "connection" || key2 === "transfer-encoding" || key2 === "content-length")
+  for (const [key3, value] of Object.entries(req.headers)) {
+    if (key3 === "host" || key3 === "connection" || key3 === "transfer-encoding" || key3 === "content-length")
       continue;
-    if (key2.startsWith("x-stainless-") || key2.startsWith("anthropic-")) continue;
+    if (key3.startsWith("x-stainless-") || key3.startsWith("anthropic-")) continue;
     if (typeof value === "string") {
-      headers[key2] = value;
+      headers[key3] = value;
     }
   }
   if (!headers["content-type"]) {
@@ -105044,9 +105096,9 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         `[ClawRouter] Wallet empty \u2014 skipping routing chain, using free model: ${freeFallback}`
       );
     } else if (routingDecision) {
-      const prependStickyExplicitModel = (chain3) => {
-        if (!stickyExplicitModel) return chain3;
-        return [stickyExplicitModel, ...chain3.filter((model) => model !== stickyExplicitModel)];
+      const prependStickyExplicitModel = (chain4) => {
+        if (!stickyExplicitModel) return chain4;
+        return [stickyExplicitModel, ...chain4.filter((model) => model !== stickyExplicitModel)];
       };
       const estimatedInputTokens = Math.ceil(body.length / 4);
       const estimatedTotalTokens = estimatedInputTokens + maxTokens;
@@ -105145,8 +105197,17 @@ data: [DONE]
           `[ClawRouter] Vision filter: excluded ${visionExcluded.join(", ")} (no vision support)`
         );
       }
-      modelsToTry = visionFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
-      modelsToTry = prioritizeNonRateLimited(modelsToTry);
+      const { chain: chain3, demoted } = demoteUnreliable(
+        visionFiltered,
+        hasTools ? "tools" : "chat",
+        stickyExplicitModel
+      );
+      if (demoted.length > 0) {
+        console.log(
+          `[ClawRouter] Outcome memory: tried last ${demoted.join(", ")} (repeated recent failures on ${hasTools ? "tool" : "chat"} requests)`
+        );
+      }
+      modelsToTry = prioritizeNonRateLimited(chain3).slice(0, MAX_FALLBACK_ATTEMPTS);
     } else {
       modelsToTry = modelId ? [modelId] : [];
     }
@@ -105244,6 +105305,17 @@ data: [DONE]
     let lastError;
     let actualModelUsed = modelId;
     const failedAttempts = [];
+    const requestKind = hasTools ? "tools" : "chat";
+    const isPaymentFailure = (errorBody) => /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
+      errorBody || ""
+    );
+    const recordAttempt = (model, r2, timedOut) => {
+      if (globalController.signal.aborted) return;
+      if (r2.success) recordOutcome(model, requestKind, true);
+      else if (timedOut || !isPaymentFailure(r2.errorBody) && (r2.errorCategory === "server_error" || r2.errorBody?.startsWith("degraded response"))) {
+        recordOutcome(model, requestKind, false);
+      }
+    };
     for (let i = 0; i < modelsToTry.length; i++) {
       const tryModel = modelsToTry[i];
       const isLastAttempt = i === modelsToTry.length - 1;
@@ -105273,7 +105345,9 @@ data: [DONE]
       if (globalController.signal.aborted) {
         throw abortError();
       }
-      if (!result.success && modelController.signal.aborted && !isLastAttempt) {
+      const timedOut = !result.success && modelController.signal.aborted;
+      if (timedOut) recordAttempt(tryModel, result, true);
+      if (timedOut && !isLastAttempt) {
         console.log(
           `[ClawRouter] Model ${tryModel} timed out after ${perAttemptTimeoutMs}ms, trying fallback`
         );
@@ -105288,6 +105362,7 @@ data: [DONE]
             `[ClawRouter] \u26A0\uFE0F  Degenerate output from ${tryModel} (finish_reason=length + repetition loop) \u2014 retrying with next fallback`
           );
           recordProviderError(tryModel, "server_error");
+          recordOutcome(tryModel, requestKind, false);
           failedAttempts.push({
             model: tryModel,
             reason: "degenerate_output",
@@ -105301,6 +105376,7 @@ data: [DONE]
           headers: result.response.headers
         });
         actualModelUsed = tryModel;
+        recordOutcome(tryModel, requestKind, true);
         console.log(`[ClawRouter] Success with model: ${tryModel}`);
         if (options.maxCostPerRunUsd && effectiveSessionId && !catalog.freeIds.has(tryModel)) {
           const costEst = estimate(tryModel, body.length, maxTokens);
@@ -105320,9 +105396,8 @@ data: [DONE]
         reason: result.errorCategory || `HTTP ${result.errorStatus || 500}`,
         status: result.errorStatus || 500
       });
-      const isPaymentErr = /payment.*verification.*failed|payment.*settlement.*failed|insufficient.*funds|transaction_simulation_failed/i.test(
-        result.errorBody || ""
-      );
+      const isPaymentErr = isPaymentFailure(result.errorBody);
+      recordAttempt(tryModel, result, false);
       if (isPaymentErr && !catalog.freeIds.has(tryModel) && !isLastAttempt) {
         failedAttempts.push({
           ...failedAttempts[failedAttempts.length - 1],
@@ -105373,6 +105448,11 @@ data: [DONE]
             modelsById.get(tryModel)?.reasoning
           );
           clearTimeout(retryTimeoutId);
+          recordAttempt(
+            tryModel,
+            retryResult,
+            !retryResult.success && retryController.signal.aborted
+          );
           if (retryResult.success && retryResult.response) {
             upstream = retryResult.response;
             actualModelUsed = tryModel;
@@ -105440,6 +105520,11 @@ data: [DONE]
                 modelsById.get(tryModel)?.reasoning
               );
               clearTimeout(retryTimeoutId);
+              recordAttempt(
+                tryModel,
+                retryResult,
+                !retryResult.success && retryController.signal.aborted
+              );
               if (retryResult.success && retryResult.response) {
                 upstream = retryResult.response;
                 actualModelUsed = tryModel;
@@ -105804,10 +105889,10 @@ data: [DONE]
       });
     } else {
       const responseHeaders = {};
-      upstream.headers.forEach((value, key2) => {
-        if (key2 === "transfer-encoding" || key2 === "connection" || key2 === "content-encoding")
+      upstream.headers.forEach((value, key3) => {
+        if (key3 === "transfer-encoding" || key3 === "connection" || key3 === "content-encoding")
           return;
-        responseHeaders[key2] = value;
+        responseHeaders[key3] = value;
       });
       responseHeaders["x-context-used-kb"] = String(originalContextSizeKB);
       responseHeaders["x-context-limit-kb"] = String(CONTEXT_LIMIT_KB);
@@ -105923,8 +106008,8 @@ data: [DONE]
         console.error(
           `[ClawRouter] Invalid response header, sanitizing all values: ${String(headerError)}`
         );
-        for (const [key2, value] of Object.entries(responseHeaders)) {
-          responseHeaders[key2] = sanitizeHeaderValue(value);
+        for (const [key3, value] of Object.entries(responseHeaders)) {
+          responseHeaders[key3] = sanitizeHeaderValue(value);
         }
         res.writeHead(upstream.status, responseHeaders);
       }
@@ -106105,6 +106190,7 @@ var init_proxy = __esm({
     init_session();
     init_updater();
     init_exclude_models();
+    init_outcome_memory();
     init_config();
     init_journal();
     init_upstream_proxy();
@@ -106444,8 +106530,8 @@ function resolveSiteName(url2) {
   }
 }
 function readResultString(entry, keys) {
-  for (const key2 of keys) {
-    const value = readString(entry[key2]);
+  for (const key3 of keys) {
+    const value = readString(entry[key3]);
     if (value) return value;
   }
   return void 0;
@@ -107525,15 +107611,15 @@ function buildTool(service, proxyBaseUrl) {
             );
           }
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            for (const [key2, value] of Object.entries(parsed)) {
+            for (const [key3, value] of Object.entries(parsed)) {
               if (value === void 0 || value === null) continue;
-              leftoverParams[key2] = value;
+              leftoverParams[key3] = value;
             }
           }
         } else if (params.query && typeof params.query === "object" && !Array.isArray(params.query)) {
-          for (const [key2, value] of Object.entries(params.query)) {
+          for (const [key3, value] of Object.entries(params.query)) {
             if (value === void 0 || value === null) continue;
-            leftoverParams[key2] = value;
+            leftoverParams[key3] = value;
           }
         }
         if (dynamicMethod === "POST") {
@@ -107554,13 +107640,13 @@ function buildTool(service, proxyBaseUrl) {
         }
       } else {
         path5 = `/v1${service.proxyPath}`;
-        for (const [key2, value] of Object.entries(params)) {
+        for (const [key3, value] of Object.entries(params)) {
           if (value === void 0 || value === null) continue;
-          const placeholder = `:${key2}`;
+          const placeholder = `:${key3}`;
           if (path5.includes(placeholder)) {
             path5 = path5.replace(placeholder, encodeURIComponent(String(value)));
           } else {
-            leftoverParams[key2] = value;
+            leftoverParams[key3] = value;
           }
         }
       }
@@ -107568,8 +107654,8 @@ function buildTool(service, proxyBaseUrl) {
       let url2 = `${proxyBaseUrl}${path5}`;
       if (effectiveMethod === "GET" && Object.keys(leftoverParams).length > 0) {
         const qs = new URLSearchParams();
-        for (const [key2, value] of Object.entries(leftoverParams)) {
-          qs.set(key2, Array.isArray(value) ? value.join(",") : String(value));
+        for (const [key3, value] of Object.entries(leftoverParams)) {
+          qs.set(key3, Array.isArray(value) ? value.join(",") : String(value));
         }
         url2 += `?${qs.toString()}`;
       }
@@ -107784,11 +107870,11 @@ var init_hmac7 = __esm({
       let message = timestamp + method + requestPath;
       if (body !== void 0) message += body;
       const keyBytes = decodeBase64Secret(secret);
-      const key2 = await globalThis.crypto.subtle.importKey("raw", keyBytes, {
+      const key3 = await globalThis.crypto.subtle.importKey("raw", keyBytes, {
         name: "HMAC",
         hash: "SHA-256"
       }, false, ["sign"]);
-      const sigBuffer = await globalThis.crypto.subtle.sign("HMAC", key2, new TextEncoder().encode(message));
+      const sigBuffer = await globalThis.crypto.subtle.sign("HMAC", key3, new TextEncoder().encode(message));
       const sigBytes = new Uint8Array(sigBuffer);
       let binary = "";
       for (let i = 0; i < sigBytes.length; i++) binary += String.fromCharCode(sigBytes[i]);
@@ -109058,24 +109144,24 @@ function forEach(obj, fn, { allOwnKeys = false } = {}) {
     }
     const keys = allOwnKeys ? Object.getOwnPropertyNames(obj) : Object.keys(obj);
     const len = keys.length;
-    let key2;
+    let key3;
     for (i = 0; i < len; i++) {
-      key2 = keys[i];
-      fn.call(null, obj[key2], key2, obj);
+      key3 = keys[i];
+      fn.call(null, obj[key3], key3, obj);
     }
   }
 }
-function findKey(obj, key2) {
+function findKey(obj, key3) {
   if (isBuffer(obj)) {
     return null;
   }
-  key2 = key2.toLowerCase();
+  key3 = key3.toLowerCase();
   const keys = Object.keys(obj);
   let i = keys.length;
   let _key;
   while (i-- > 0) {
     _key = keys[i];
-    if (key2 === _key.toLowerCase()) {
+    if (key3 === _key.toLowerCase()) {
       return _key;
     }
   }
@@ -109084,11 +109170,11 @@ function findKey(obj, key2) {
 function merge(...objs) {
   const { caseless, skipUndefined } = isContextDefined(this) && this || {};
   const result = {};
-  const assignValue = (val, key2) => {
-    if (key2 === "__proto__" || key2 === "constructor" || key2 === "prototype") {
+  const assignValue = (val, key3) => {
+    if (key3 === "__proto__" || key3 === "constructor" || key3 === "prototype") {
       return;
     }
-    const targetKey = caseless && typeof key2 === "string" && findKey(result, key2) || key2;
+    const targetKey = caseless && typeof key3 === "string" && findKey(result, key3) || key3;
     const existing = hasOwnProperty(result, targetKey) ? result[targetKey] : void 0;
     if (isPlainObject3(existing) && isPlainObject3(val)) {
       result[targetKey] = merge(existing, val);
@@ -109224,9 +109310,9 @@ var init_utils16 = __esm({
     extend = (a, b, thisArg, { allOwnKeys } = {}) => {
       forEach(
         b,
-        (val, key2) => {
+        (val, key3) => {
           if (thisArg && isFunction(val)) {
-            Object.defineProperty(a, key2, {
+            Object.defineProperty(a, key3, {
               // Null-proto descriptor so a polluted Object.prototype.get cannot
               // hijack defineProperty's accessor-vs-data resolution.
               __proto__: null,
@@ -109236,7 +109322,7 @@ var init_utils16 = __esm({
               configurable: true
             });
           } else {
-            Object.defineProperty(a, key2, {
+            Object.defineProperty(a, key3, {
               __proto__: null,
               value: val,
               writable: true,
@@ -109407,9 +109493,9 @@ var init_utils16 = __esm({
               }
             } else {
               target = isArray(source) ? [] : {};
-              forEach(source, (value, key2) => {
+              forEach(source, (value, key3) => {
                 const reducedValue = visit(value);
-                !isUndefined(reducedValue) && (target[key2] = reducedValue);
+                !isUndefined(reducedValue) && (target[key3] = reducedValue);
               });
             }
             visited.delete(source);
@@ -109540,25 +109626,25 @@ var init_parseHeaders = __esm({
     ]);
     parseHeaders_default = (rawHeaders) => {
       const parsed = {};
-      let key2;
+      let key3;
       let val;
       let i;
       rawHeaders && rawHeaders.split("\n").forEach(function parser(line) {
         i = line.indexOf(":");
-        key2 = line.substring(0, i).trim().toLowerCase();
+        key3 = line.substring(0, i).trim().toLowerCase();
         val = line.substring(i + 1).trim();
-        const hasKey = utils_default.hasOwnProp(parsed, key2);
-        if (!key2 || hasKey && utils_default.hasOwnProp(ignoreDuplicateOf, key2)) {
+        const hasKey = utils_default.hasOwnProp(parsed, key3);
+        if (!key3 || hasKey && utils_default.hasOwnProp(ignoreDuplicateOf, key3)) {
           return;
         }
-        if (key2 === "set-cookie") {
+        if (key3 === "set-cookie") {
           if (hasKey) {
-            parsed[key2].push(val);
+            parsed[key3].push(val);
           } else {
-            parsed[key2] = [val];
+            parsed[key3] = [val];
           }
         } else {
-          parsed[key2] = hasKey ? parsed[key2] + ", " + val : val;
+          parsed[key3] = hasKey ? parsed[key3] + ", " + val : val;
         }
       });
       return parsed;
@@ -109768,9 +109854,9 @@ var init_AxiosHeaders = __esm({
           if (!lHeader) {
             return;
           }
-          const key2 = utils_default.findKey(self2, lHeader);
-          if (!key2 || self2[key2] === void 0 || _rewrite === true || _rewrite === void 0 && self2[key2] !== false) {
-            self2[key2 || _header] = normalizeValue(_value);
+          const key3 = utils_default.findKey(self2, lHeader);
+          if (!key3 || self2[key3] === void 0 || _rewrite === true || _rewrite === void 0 && self2[key3] !== false) {
+            self2[key3 || _header] = normalizeValue(_value);
           }
         }
         const setHeaders = (headers, _rewrite) => utils_default.forEach(headers, (_value, _header) => setHeader(_value, _header, _rewrite));
@@ -109779,17 +109865,17 @@ var init_AxiosHeaders = __esm({
         } else if (utils_default.isString(header) && (header = header.trim()) && !isValidHeaderName(header)) {
           setHeaders(parseHeaders_default(header), valueOrRewrite);
         } else if (utils_default.isObject(header) && utils_default.isSafeIterable(header)) {
-          let obj = /* @__PURE__ */ Object.create(null), dest, key2;
+          let obj = /* @__PURE__ */ Object.create(null), dest, key3;
           for (const entry of header) {
             if (!utils_default.isArray(entry)) {
               throw new TypeError("Object iterator must return a key-value pair");
             }
-            key2 = entry[0];
-            if (utils_default.hasOwnProp(obj, key2)) {
-              dest = obj[key2];
-              obj[key2] = utils_default.isArray(dest) ? [...dest, entry[1]] : [dest, entry[1]];
+            key3 = entry[0];
+            if (utils_default.hasOwnProp(obj, key3)) {
+              dest = obj[key3];
+              obj[key3] = utils_default.isArray(dest) ? [...dest, entry[1]] : [dest, entry[1]];
             } else {
-              obj[key2] = entry[1];
+              obj[key3] = entry[1];
             }
           }
           setHeaders(obj, valueOrRewrite);
@@ -109801,9 +109887,9 @@ var init_AxiosHeaders = __esm({
       get(header, parser) {
         header = normalizeHeader(header);
         if (header) {
-          const key2 = utils_default.findKey(this, header);
-          if (key2) {
-            const value = this[key2];
+          const key3 = utils_default.findKey(this, header);
+          if (key3) {
+            const value = this[key3];
             if (!parser) {
               return value;
             }
@@ -109811,7 +109897,7 @@ var init_AxiosHeaders = __esm({
               return parseTokens(value);
             }
             if (utils_default.isFunction(parser)) {
-              return parser.call(this, value, key2);
+              return parser.call(this, value, key3);
             }
             if (utils_default.isRegExp(parser)) {
               return parser.exec(value);
@@ -109823,8 +109909,8 @@ var init_AxiosHeaders = __esm({
       has(header, matcher) {
         header = normalizeHeader(header);
         if (header) {
-          const key2 = utils_default.findKey(this, header);
-          return !!(key2 && this[key2] !== void 0 && (!matcher || matchHeaderValue(this, this[key2], key2, matcher)));
+          const key3 = utils_default.findKey(this, header);
+          return !!(key3 && this[key3] !== void 0 && (!matcher || matchHeaderValue(this, this[key3], key3, matcher)));
         }
         return false;
       }
@@ -109834,9 +109920,9 @@ var init_AxiosHeaders = __esm({
         function deleteHeader(_header) {
           _header = normalizeHeader(_header);
           if (_header) {
-            const key2 = utils_default.findKey(self2, _header);
-            if (key2 && (!matcher || matchHeaderValue(self2, self2[key2], key2, matcher))) {
-              delete self2[key2];
+            const key3 = utils_default.findKey(self2, _header);
+            if (key3 && (!matcher || matchHeaderValue(self2, self2[key3], key3, matcher))) {
+              delete self2[key3];
               deleted = true;
             }
           }
@@ -109853,9 +109939,9 @@ var init_AxiosHeaders = __esm({
         let i = keys.length;
         let deleted = false;
         while (i--) {
-          const key2 = keys[i];
-          if (!matcher || matchHeaderValue(this, this[key2], key2, matcher, true)) {
-            delete this[key2];
+          const key3 = keys[i];
+          if (!matcher || matchHeaderValue(this, this[key3], key3, matcher, true)) {
+            delete this[key3];
             deleted = true;
           }
         }
@@ -109865,9 +109951,9 @@ var init_AxiosHeaders = __esm({
         const self2 = this;
         const headers = {};
         utils_default.forEach(this, (value, header) => {
-          const key2 = utils_default.findKey(headers, header);
-          if (key2) {
-            self2[key2] = normalizeValue(value);
+          const key3 = utils_default.findKey(headers, header);
+          if (key3) {
+            self2[key3] = normalizeValue(value);
             delete self2[header];
             return;
           }
@@ -109939,8 +110025,8 @@ var init_AxiosHeaders = __esm({
       "User-Agent",
       "Authorization"
     ]);
-    utils_default.reduceDescriptors(AxiosHeaders.prototype, ({ value }, key2) => {
-      let mapped = key2[0].toUpperCase() + key2.slice(1);
+    utils_default.reduceDescriptors(AxiosHeaders.prototype, ({ value }, key3) => {
+      let mapped = key3[0].toUpperCase() + key3.slice(1);
       return {
         get: () => value,
         set(headerValue) {
@@ -109993,10 +110079,10 @@ function redactConfig(config, redactKeys) {
         return source;
       }
       result = /* @__PURE__ */ Object.create(null);
-      for (const [key2, value] of Object.entries(source)) {
-        const reducedValue = lowerKeys.has(key2.toLowerCase()) ? REDACTED : visit(value);
+      for (const [key3, value] of Object.entries(source)) {
+        const reducedValue = lowerKeys.has(key3.toLowerCase()) ? REDACTED : visit(value);
         if (!utils_default.isUndefined(reducedValue)) {
-          result[key2] = reducedValue;
+          result[key3] = reducedValue;
         }
       }
     }
@@ -119057,9 +119143,9 @@ var require_abort = __commonJS({
       Object.keys(state.jobs).forEach(clean7.bind(state));
       state.jobs = {};
     }
-    function clean7(key2) {
-      if (typeof this.jobs[key2] == "function") {
-        this.jobs[key2]();
+    function clean7(key3) {
+      if (typeof this.jobs[key3] == "function") {
+        this.jobs[key3]();
       }
     }
   }
@@ -119073,26 +119159,26 @@ var require_iterate = __commonJS({
     var abort = require_abort();
     module.exports = iterate;
     function iterate(list, iterator2, state, callback) {
-      var key2 = state["keyedList"] ? state["keyedList"][state.index] : state.index;
-      state.jobs[key2] = runJob(iterator2, key2, list[key2], function(error, output) {
-        if (!(key2 in state.jobs)) {
+      var key3 = state["keyedList"] ? state["keyedList"][state.index] : state.index;
+      state.jobs[key3] = runJob(iterator2, key3, list[key3], function(error, output) {
+        if (!(key3 in state.jobs)) {
           return;
         }
-        delete state.jobs[key2];
+        delete state.jobs[key3];
         if (error) {
           abort(state);
         } else {
-          state.results[key2] = output;
+          state.results[key3] = output;
         }
         callback(error, state.results);
       });
     }
-    function runJob(iterator2, key2, item, callback) {
+    function runJob(iterator2, key3, item, callback) {
       var aborter;
       if (iterator2.length == 2) {
         aborter = iterator2(item, async(callback));
       } else {
-        aborter = iterator2(item, key2, async(callback));
+        aborter = iterator2(item, key3, async(callback));
       }
       return aborter;
     }
@@ -120438,12 +120524,12 @@ var init_Buffer = __esm({
 function isVisitable(thing) {
   return utils_default.isPlainObject(thing) || utils_default.isArray(thing);
 }
-function removeBrackets(key2) {
-  return utils_default.endsWith(key2, "[]") ? key2.slice(0, -2) : key2;
+function removeBrackets(key3) {
+  return utils_default.endsWith(key3, "[]") ? key3.slice(0, -2) : key3;
 }
-function renderKey(path5, key2, dots) {
-  if (!path5) return key2;
-  return path5.concat(key2).map(function each(token, i) {
+function renderKey(path5, key3, dots) {
+  if (!path5) return key3;
+  return path5.concat(key3).map(function each(token, i) {
     token = removeBrackets(token);
     return !dots && i ? "[" + token + "]" : token;
   }).join(dots ? "." : "");
@@ -120526,22 +120612,22 @@ function toFormData(obj, formData, options) {
       return currentValue;
     });
   }
-  function defaultVisitor(value, key2, path5) {
+  function defaultVisitor(value, key3, path5) {
     let arr = value;
     if (utils_default.isReactNative(formData) && utils_default.isReactNativeBlob(value)) {
-      formData.append(renderKey(path5, key2, dots), convertValue(value));
+      formData.append(renderKey(path5, key3, dots), convertValue(value));
       return false;
     }
     if (value && !path5 && typeof value === "object") {
-      if (utils_default.endsWith(key2, "{}")) {
-        key2 = metaTokens ? key2 : key2.slice(0, -2);
+      if (utils_default.endsWith(key3, "{}")) {
+        key3 = metaTokens ? key3 : key3.slice(0, -2);
         value = stringifyWithDepthLimit(value, 1);
-      } else if (utils_default.isArray(value) && isFlatArray(value) || (utils_default.isFileList(value) || utils_default.endsWith(key2, "[]")) && (arr = utils_default.toArray(value))) {
-        key2 = removeBrackets(key2);
+      } else if (utils_default.isArray(value) && isFlatArray(value) || (utils_default.isFileList(value) || utils_default.endsWith(key3, "[]")) && (arr = utils_default.toArray(value))) {
+        key3 = removeBrackets(key3);
         arr.forEach(function each(el, index2) {
           !(utils_default.isUndefined(el) || el === null) && formData.append(
             // eslint-disable-next-line no-nested-ternary
-            indexes === true ? renderKey([key2], index2, dots) : indexes === null ? key2 : key2 + "[]",
+            indexes === true ? renderKey([key3], index2, dots) : indexes === null ? key3 : key3 + "[]",
             convertValue(el)
           );
         });
@@ -120551,7 +120637,7 @@ function toFormData(obj, formData, options) {
     if (isVisitable(value)) {
       return true;
     }
-    formData.append(renderKey(path5, key2, dots), convertValue(value));
+    formData.append(renderKey(path5, key3, dots), convertValue(value));
     return false;
   }
   const exposedHelpers = Object.assign(predicates, {
@@ -120566,10 +120652,10 @@ function toFormData(obj, formData, options) {
       throw new Error("Circular reference detected in " + path5.join("."));
     }
     stack.push(value);
-    utils_default.forEach(value, function each(el, key2) {
-      const result = !(utils_default.isUndefined(el) || el === null) && visitor.call(formData, el, utils_default.isString(key2) ? key2.trim() : key2, path5, exposedHelpers);
+    utils_default.forEach(value, function each(el, key3) {
+      const result = !(utils_default.isUndefined(el) || el === null) && visitor.call(formData, el, utils_default.isString(key3) ? key3.trim() : key3, path5, exposedHelpers);
       if (result === true) {
-        build(el, path5 ? path5.concat(key2) : [key2], depth + 1);
+        build(el, path5 ? path5.concat(key3) : [key3], depth + 1);
       }
     });
     stack.pop();
@@ -120848,9 +120934,9 @@ var init_platform = __esm({
 // node_modules/axios/lib/helpers/toURLEncodedForm.js
 function toURLEncodedForm(data, options) {
   return toFormData_default(data, new platform_default.classes.URLSearchParams(), {
-    visitor: function(value, key2, path5, helpers) {
+    visitor: function(value, key3, path5, helpers) {
       if (platform_default.isNode && utils_default.isBuffer(value)) {
-        this.append(key2, value.toString("base64"));
+        this.append(key3, value.toString("base64"));
         return false;
       }
       return helpers.defaultVisitor.apply(this, arguments);
@@ -120891,10 +120977,10 @@ function arrayToObject(arr) {
   const keys = Object.keys(arr);
   let i;
   const len = keys.length;
-  let key2;
+  let key3;
   for (i = 0; i < len; i++) {
-    key2 = keys[i];
-    obj[key2] = arr[key2];
+    key3 = keys[i];
+    obj[key3] = arr[key3];
   }
   return obj;
 }
@@ -120969,7 +121055,7 @@ var init_defaults = __esm({
     init_toURLEncodedForm();
     init_platform();
     init_formDataToJSON();
-    own = (obj, key2) => obj != null && utils_default.hasOwnProp(obj, key2) ? obj[key2] : void 0;
+    own = (obj, key3) => obj != null && utils_default.hasOwnProp(obj, key3) ? obj[key3] : void 0;
     defaults = {
       transitional: transitional_default,
       adapter: ["xhr", "http", "fetch"],
@@ -121303,8 +121389,8 @@ function shouldProxy(hostname, port) {
     return !hostname.endsWith(parsedProxyHostname);
   });
 }
-function getEnv(key2) {
-  return process.env[key2.toLowerCase()] || process.env[key2.toUpperCase()] || "";
+function getEnv(key3) {
+  return process.env[key3.toLowerCase()] || process.env[key3.toUpperCase()] || "";
 }
 var DEFAULT_PORTS;
 var init_proxy_from_env = __esm({
@@ -121451,8 +121537,8 @@ var require_common = __commonJS({
       createDebug3.enabled = enabled;
       createDebug3.humanize = require_ms();
       createDebug3.destroy = destroy;
-      Object.keys(env).forEach((key2) => {
-        createDebug3[key2] = env[key2];
+      Object.keys(env).forEach((key3) => {
+        createDebug3[key3] = env[key3];
       });
       createDebug3.names = [];
       createDebug3.skips = [];
@@ -121889,13 +121975,13 @@ var require_node = __commonJS({
       }
     } catch (error) {
     }
-    exports.inspectOpts = Object.keys(process.env).filter((key2) => {
-      return /^debug_/i.test(key2);
-    }).reduce((obj, key2) => {
-      const prop = key2.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
+    exports.inspectOpts = Object.keys(process.env).filter((key3) => {
+      return /^debug_/i.test(key3);
+    }).reduce((obj, key3) => {
+      const prop = key3.substring(6).toLowerCase().replace(/_([a-z])/g, (_, k) => {
         return k.toUpperCase();
       });
-      let val = process.env[key2];
+      let val = process.env[key3];
       if (/^(yes|on|true|enabled)$/i.test(val)) {
         val = true;
       } else if (/^(no|off|false|disabled)$/i.test(val)) {
@@ -122394,10 +122480,10 @@ var require_agent2 = __commonJS({
     }
     function omit2(obj, ...keys) {
       const ret = {};
-      let key2;
-      for (key2 in obj) {
-        if (!keys.includes(key2)) {
-          ret[key2] = obj[key2];
+      let key3;
+      for (key3 in obj) {
+        if (!keys.includes(key3)) {
+          ret[key3] = obj[key3];
         }
       }
       return ret;
@@ -122878,8 +122964,8 @@ var require_follow_redirects = __commonJS({
     }
     function spreadUrlObject(urlObject, target) {
       var spread3 = target || {};
-      for (var key2 of preservedUrlFields) {
-        spread3[key2] = urlObject[key2];
+      for (var key3 of preservedUrlFields) {
+        spread3[key3] = urlObject[key3];
       }
       if (spread3.hostname.startsWith("[")) {
         spread3.hostname = spread3.hostname.slice(1, -1);
@@ -123028,9 +123114,9 @@ function setFormDataHeaders(headers, formHeaders, policy) {
     headers.set(formHeaders);
     return;
   }
-  Object.entries(formHeaders || {}).forEach(([key2, val]) => {
-    if (FORM_DATA_CONTENT_HEADERS.includes(key2.toLowerCase())) {
-      headers.set(key2, val);
+  Object.entries(formHeaders || {}).forEach(([key3, val]) => {
+    if (FORM_DATA_CONTENT_HEADERS.includes(key3.toLowerCase())) {
+      headers.set(key3, val);
     }
   });
 }
@@ -123910,9 +123996,9 @@ function getProxyEnvAgent(options, configHttpAgent, configHttpsAgent) {
   return isHttps.test(options.protocol) ? configHttpsAgent || https.globalAgent : configHttpAgent || http3.globalAgent;
 }
 function getTunnelingAgent(agentOptions, userHttpsAgent) {
-  const key2 = agentOptions.protocol + "//" + agentOptions.hostname + ":" + (agentOptions.port || "") + "#" + (agentOptions.auth || "");
+  const key3 = agentOptions.protocol + "//" + agentOptions.hostname + ":" + (agentOptions.port || "") + "#" + (agentOptions.auth || "");
   const cache2 = userHttpsAgent ? tunnelingAgentCacheUser.get(userHttpsAgent) || tunnelingAgentCacheUser.set(userHttpsAgent, /* @__PURE__ */ new Map()).get(userHttpsAgent) : tunnelingAgentCache;
-  let agent = cache2.get(key2);
+  let agent = cache2.get(key3);
   if (agent) return agent;
   const merged = userHttpsAgent && userHttpsAgent.options ? { ...userHttpsAgent.options, ...agentOptions } : agentOptions;
   agent = new import_https_proxy_agent.default(merged);
@@ -123924,7 +124010,7 @@ function getTunnelingAgent(agentOptions, userHttpsAgent) {
     };
   }
   agent[kAxiosInstalledTunnel] = true;
-  cache2.set(key2, agent);
+  cache2.set(key3, agent);
   return agent;
 }
 function dispatchBeforeRedirect(options, responseDetails, requestDetails) {
@@ -123984,7 +124070,7 @@ function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, 
   }
   if (proxy) {
     const isProxyURL = proxy instanceof URL;
-    const readProxyField = (key2) => isProxyURL || utils_default.hasOwnProp(proxy, key2) ? proxy[key2] : void 0;
+    const readProxyField = (key3) => isProxyURL || utils_default.hasOwnProp(proxy, key3) ? proxy[key3] : void 0;
     const proxyUsername = readProxyField("username");
     const proxyPassword = readProxyField("password");
     let proxyAuth = utils_default.hasOwnProp(proxy, "auth") ? proxy.auth : void 0;
@@ -124200,7 +124286,7 @@ var init_http4 = __esm({
     };
     http_default = isHttpAdapterSupported && function httpAdapter(config) {
       return wrapAsync(async function dispatchHttpRequest(resolve, reject, onDone) {
-        const own2 = (key2) => utils_default.getSafeProp(config, key2);
+        const own2 = (key3) => utils_default.getSafeProp(config, key3);
         const transitional2 = own2("transitional") || transitional_default;
         let data = own2("data");
         let lookup = own2("lookup");
@@ -125096,7 +125182,7 @@ var init_mergeConfig = __esm({
 // node_modules/axios/lib/helpers/resolveConfig.js
 function resolveConfig(config) {
   const newConfig = mergeConfig({}, config);
-  const own2 = (key2) => utils_default.hasOwnProp(newConfig, key2) ? newConfig[key2] : void 0;
+  const own2 = (key3) => utils_default.hasOwnProp(newConfig, key3) ? newConfig[key3] : void 0;
   const data = own2("data");
   let withXSRFToken = own2("withXSRFToken");
   const xsrfHeaderName = own2("xsrfHeaderName");
@@ -125279,8 +125365,8 @@ var init_xhr = __esm({
         };
         requestData === void 0 && requestHeaders.setContentType(null);
         if ("setRequestHeader" in request2) {
-          utils_default.forEach(toByteStringHeaderObject(requestHeaders), function setRequestHeader(val, key2) {
-            request2.setRequestHeader(key2, val);
+          utils_default.forEach(toByteStringHeaderObject(requestHeaders), function setRequestHeader(val, key3) {
+            request2.setRequestHeader(key3, val);
           });
         }
         if (!utils_default.isUndefined(_config.withCredentials)) {
@@ -125627,7 +125713,7 @@ var init_fetch = __esm({
         } = resolveConfig_default(config);
         const hasMaxContentLength = utils_default.isNumber(maxContentLength) && maxContentLength > -1;
         const hasMaxBodyLength = utils_default.isNumber(maxBodyLength) && maxBodyLength > -1;
-        const own2 = (key2) => utils_default.hasOwnProp(config, key2) ? config[key2] : void 0;
+        const own2 = (key3) => utils_default.hasOwnProp(config, key3) ? config[key3] : void 0;
         let _fetch = envFetch || fetch;
         responseType = responseType ? (responseType + "").toLowerCase() : "text";
         let composedSignal = composeSignals_default(
@@ -126562,8 +126648,8 @@ var init_HttpStatusCode = __esm({
       SslHandshakeFailed: 525,
       InvalidSslCertificate: 526
     };
-    Object.entries(HttpStatusCode).forEach(([key2, value]) => {
-      HttpStatusCode[value] = key2;
+    Object.entries(HttpStatusCode).forEach(([key3, value]) => {
+      HttpStatusCode[value] = key3;
     });
     HttpStatusCode_default = HttpStatusCode;
   }
@@ -127098,10 +127184,10 @@ var init_client4 = __esm({
         const headers = await createL2Headers(this.signer, this.creds, headerArgs, this.useServerTime ? await this.getServerTime() : void 0);
         return this.get(`${this.host}${endpoint}`, { headers });
       }
-      async deleteReadonlyApiKey(key2) {
+      async deleteReadonlyApiKey(key3) {
         this.canL2Auth();
         const endpoint = DELETE_READONLY_API_KEY;
-        const payload = { key: key2 };
+        const payload = { key: key3 };
         const headerArgs = {
           method: DELETE,
           requestPath: endpoint,
@@ -127908,15 +127994,15 @@ function parseProxyResponse(socket) {
           socket.destroy();
           return reject(new Error(`Invalid header from proxy CONNECT response: "${header}"`));
         }
-        const key2 = header.slice(0, firstColon).toLowerCase();
+        const key3 = header.slice(0, firstColon).toLowerCase();
         const value = header.slice(firstColon + 1).trimStart();
-        const current = headers[key2];
+        const current = headers[key3];
         if (typeof current === "string") {
-          headers[key2] = [current, value];
+          headers[key3] = [current, value];
         } else if (Array.isArray(current)) {
           current.push(value);
         } else {
-          headers[key2] = value;
+          headers[key3] = value;
         }
       }
       debug("got proxy server response: %o %o", firstLine, headers);
@@ -127991,10 +128077,10 @@ function resume(socket) {
 }
 function omit(obj, ...keys) {
   const ret = {};
-  let key2;
-  for (key2 in obj) {
-    if (!keys.includes(key2)) {
-      ret[key2] = obj[key2];
+  let key3;
+  for (key3 in obj) {
+    if (!keys.includes(key3)) {
+      ret[key3] = obj[key3];
     }
   }
   return ret;
@@ -128344,9 +128430,9 @@ import { join as join12 } from "path";
 function getOrCreateWalletKey() {
   const envKey = process.env.BLOCKRUN_WALLET_KEY?.trim();
   if (envKey && /^0x[0-9a-fA-F]{64}$/.test(envKey)) return envKey;
-  let key2;
+  let key3;
   try {
-    key2 = fs2.readFileSync(WALLET_FILE2, "utf-8").trim();
+    key3 = fs2.readFileSync(WALLET_FILE2, "utf-8").trim();
   } catch (err) {
     if (err.code === "ENOENT") {
       throw new Error(
@@ -128356,7 +128442,7 @@ function getOrCreateWalletKey() {
     }
     throw err;
   }
-  if (/^0x[0-9a-fA-F]{64}$/.test(key2)) return key2;
+  if (/^0x[0-9a-fA-F]{64}$/.test(key3)) return key3;
   throw new Error(
     `Wallet file at ${WALLET_FILE2} is present but not a 0x-prefixed 64-hex key. Restore your backup or set BLOCKRUN_WALLET_KEY.`
   );
@@ -129326,15 +129412,15 @@ function __rest(s3, e7) {
     }
   return t;
 }
-function __decorate(decorators, target, key2, desc) {
-  var c = arguments.length, r2 = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key2) : desc, d;
-  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r2 = Reflect.decorate(decorators, target, key2, desc);
-  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r2 = (c < 3 ? d(r2) : c > 3 ? d(target, key2, r2) : d(target, key2)) || r2;
-  return c > 3 && r2 && Object.defineProperty(target, key2, r2), r2;
+function __decorate(decorators, target, key3, desc) {
+  var c = arguments.length, r2 = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key3) : desc, d;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r2 = Reflect.decorate(decorators, target, key3, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r2 = (c < 3 ? d(r2) : c > 3 ? d(target, key3, r2) : d(target, key3)) || r2;
+  return c > 3 && r2 && Object.defineProperty(target, key3, r2), r2;
 }
 function __param(paramIndex, decorator) {
-  return function(target, key2) {
-    decorator(target, key2, paramIndex);
+  return function(target, key3) {
+    decorator(target, key3, paramIndex);
   };
 }
 function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, extraInitializers) {
@@ -129342,7 +129428,7 @@ function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, e
     if (f !== void 0 && typeof f !== "function") throw new TypeError("Function expected");
     return f;
   }
-  var kind = contextIn.kind, key2 = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
+  var kind = contextIn.kind, key3 = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
   var target = !descriptorIn && ctor ? contextIn["static"] ? ctor : ctor.prototype : null;
   var descriptor = descriptorIn || (target ? Object.getOwnPropertyDescriptor(target, contextIn.name) : {});
   var _, done = false;
@@ -129354,7 +129440,7 @@ function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, e
       if (done) throw new TypeError("Cannot add initializers after decoration has completed");
       extraInitializers.push(accept(f || null));
     };
-    var result = (0, decorators[i])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key2], context);
+    var result = (0, decorators[i])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key3], context);
     if (kind === "accessor") {
       if (result === void 0) continue;
       if (result === null || typeof result !== "object") throw new TypeError("Object expected");
@@ -129363,7 +129449,7 @@ function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, e
       if (_ = accept(result.init)) initializers.unshift(_);
     } else if (_ = accept(result)) {
       if (kind === "field") initializers.unshift(_);
-      else descriptor[key2] = _;
+      else descriptor[key3] = _;
     }
   }
   if (target) Object.defineProperty(target, contextIn.name, descriptor);
@@ -132661,18 +132747,18 @@ var require_lru = __commonJS({
         });
         this.maxSize = size5;
       }
-      get(key2) {
-        const value = super.get(key2);
-        if (super.has(key2)) {
-          super.delete(key2);
-          super.set(key2, value);
+      get(key3) {
+        const value = super.get(key3);
+        if (super.has(key3)) {
+          super.delete(key3);
+          super.set(key3, value);
         }
         return value;
       }
-      set(key2, value) {
-        if (super.has(key2))
-          super.delete(key2);
-        super.set(key2, value);
+      set(key3, value) {
+        if (super.has(key3))
+          super.delete(key3);
+        super.set(key3, value);
         if (this.maxSize && this.size > this.maxSize) {
           const firstKey = super.keys().next().value;
           if (firstKey !== void 0)
@@ -133981,9 +134067,9 @@ var require_stringify = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.stringify = void 0;
-    var stringify4 = (value, replacer, space) => JSON.stringify(value, (key2, value_) => {
+    var stringify4 = (value, replacer, space) => JSON.stringify(value, (key3, value_) => {
       const value2 = typeof value_ === "bigint" ? value_.toString() : value_;
-      return typeof replacer === "function" ? replacer(key2, value2) : value2;
+      return typeof replacer === "function" ? replacer(key3, value2) : value2;
     }, space);
     exports.stringify = stringify4;
   }
@@ -134222,13 +134308,13 @@ var require_transaction = __commonJS({
     var formatGwei_js_1 = require_formatGwei();
     var base_js_1 = require_base();
     function prettyPrint2(args) {
-      const entries = Object.entries(args).map(([key2, value]) => {
+      const entries = Object.entries(args).map(([key3, value]) => {
         if (value === void 0 || value === false)
           return null;
-        return [key2, value];
+        return [key3, value];
       }).filter(Boolean);
-      const maxLength = entries.reduce((acc, [key2]) => Math.max(acc, key2.length), 0);
-      return entries.map(([key2, value]) => `  ${`${key2}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
+      const maxLength = entries.reduce((acc, [key3]) => Math.max(acc, key3.length), 0);
+      return entries.map(([key3, value]) => `  ${`${key3}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
     }
     var FeeConflictError = class extends base_js_1.BaseError {
       constructor() {
@@ -134294,7 +134380,7 @@ var require_transaction = __commonJS({
     exports.InvalidSerializedTransactionTypeError = InvalidSerializedTransactionTypeError;
     var InvalidSerializedTransactionError = class extends base_js_1.BaseError {
       constructor({ attributes, serializedTransaction, type }) {
-        const missing = Object.entries(attributes).map(([key2, value]) => typeof value === "undefined" ? key2 : void 0).filter(Boolean);
+        const missing = Object.entries(attributes).map(([key3, value]) => typeof value === "undefined" ? key3 : void 0).filter(Boolean);
         super(`Invalid serialized transaction of type "${type}" was provided.`, {
           metaMessages: [
             `Serialized Transaction: "${serializedTransaction}"`,
@@ -136080,7 +136166,7 @@ var require_hmac = __commonJS({
         this.finished = false;
         this.destroyed = false;
         (0, utils_ts_1.ahash)(hash5);
-        const key2 = (0, utils_ts_1.toBytes)(_key);
+        const key3 = (0, utils_ts_1.toBytes)(_key);
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -136088,7 +136174,7 @@ var require_hmac = __commonJS({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -136139,9 +136225,9 @@ var require_hmac = __commonJS({
       }
     };
     exports.HMAC = HMAC4;
-    var hmac8 = (hash5, key2, message) => new HMAC4(hash5, key2).update(message).digest();
+    var hmac8 = (hash5, key3, message) => new HMAC4(hash5, key3).update(message).digest();
     exports.hmac = hmac8;
-    exports.hmac.create = (hash5, key2) => new HMAC4(hash5, key2);
+    exports.hmac.create = (hash5, key3) => new HMAC4(hash5, key3);
   }
 });
 
@@ -136747,13 +136833,13 @@ var require_modular = __commonJS({
       const length = getFieldBytesLength4(fieldOrder);
       return length + Math.ceil(length / 2);
     }
-    function mapHashToField4(key2, fieldOrder, isLE3 = false) {
-      const len = key2.length;
+    function mapHashToField4(key3, fieldOrder, isLE3 = false) {
+      const len = key3.length;
       const fieldLen = getFieldBytesLength4(fieldOrder);
       const minLen = getMinHashLength4(fieldOrder);
       if (len < 16 || len < minLen || len > 1024)
         throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-      const num2 = isLE3 ? (0, utils_ts_1.bytesToNumberLE)(key2) : (0, utils_ts_1.bytesToNumberBE)(key2);
+      const num2 = isLE3 ? (0, utils_ts_1.bytesToNumberLE)(key3) : (0, utils_ts_1.bytesToNumberBE)(key3);
       const reduced = mod5(num2, fieldOrder - _1n17) + _1n17;
       return isLE3 ? (0, utils_ts_1.numberToBytesLE)(reduced, fieldLen) : (0, utils_ts_1.numberToBytesBE)(reduced, fieldLen);
     }
@@ -137234,20 +137320,20 @@ var require_weierstrass = __commonJS({
       function isWithinCurveOrder(num2) {
         return (0, utils_ts_1.inRange)(num2, _1n17, CURVE.n);
       }
-      function normPrivateKeyToScalar(key2) {
+      function normPrivateKeyToScalar(key3) {
         const { allowedPrivateKeyLengths: lengths, nByteLength, wrapPrivateKey, n: N2 } = CURVE;
-        if (lengths && typeof key2 !== "bigint") {
-          if ((0, utils_ts_1.isBytes)(key2))
-            key2 = (0, utils_ts_1.bytesToHex)(key2);
-          if (typeof key2 !== "string" || !lengths.includes(key2.length))
+        if (lengths && typeof key3 !== "bigint") {
+          if ((0, utils_ts_1.isBytes)(key3))
+            key3 = (0, utils_ts_1.bytesToHex)(key3);
+          if (typeof key3 !== "string" || !lengths.includes(key3.length))
             throw new Error("invalid private key");
-          key2 = key2.padStart(nByteLength * 2, "0");
+          key3 = key3.padStart(nByteLength * 2, "0");
         }
         let num2;
         try {
-          num2 = typeof key2 === "bigint" ? key2 : (0, utils_ts_1.bytesToNumberBE)((0, utils_ts_1.ensureBytes)("private key", key2, nByteLength));
+          num2 = typeof key3 === "bigint" ? key3 : (0, utils_ts_1.bytesToNumberBE)((0, utils_ts_1.ensureBytes)("private key", key3, nByteLength));
         } catch (error) {
-          throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key2);
+          throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key3);
         }
         if (wrapPrivateKey)
           num2 = (0, modular_ts_1.mod)(num2, N2);
@@ -138056,7 +138142,7 @@ var require_shortw_utils = __commonJS({
     function getHash3(hash5) {
       return {
         hash: hash5,
-        hmac: (key2, ...msgs) => (0, hmac_1.hmac)(hash5, key2, (0, utils_12.concatBytes)(...msgs)),
+        hmac: (key3, ...msgs) => (0, hmac_1.hmac)(hash5, key3, (0, utils_12.concatBytes)(...msgs)),
         randomBytes: utils_12.randomBytes
       };
     }
@@ -139010,11 +139096,11 @@ var require_extract = __commonJS({
       const value = {};
       function extract_(formatted2) {
         const keys = Object.keys(formatted2);
-        for (const key2 of keys) {
-          if (key2 in value_)
-            value[key2] = value_[key2];
-          if (formatted2[key2] && typeof formatted2[key2] === "object" && !Array.isArray(formatted2[key2]))
-            extract_(formatted2[key2]);
+        for (const key3 of keys) {
+          if (key3 in value_)
+            value[key3] = value_[key3];
+          if (formatted2[key3] && typeof formatted2[key3] === "object" && !Array.isArray(formatted2[key3]))
+            extract_(formatted2[key3]);
         }
       }
       const formatted = format2(value_ || {});
@@ -139037,8 +139123,8 @@ var require_formatter = __commonJS({
           format: (args, action) => {
             const formatted = format2(args, action);
             if (exclude) {
-              for (const key2 of exclude) {
-                delete formatted[key2];
+              for (const key3 of exclude) {
+                delete formatted[key3];
               }
             }
             return {
@@ -140782,14 +140868,14 @@ var require_parseEventLogs = __commonJS({
         });
       }
       if (typeof args === "object" && !Array.isArray(args) && typeof matchArgs === "object" && !Array.isArray(matchArgs))
-        return Object.entries(matchArgs).every(([key2, value]) => {
+        return Object.entries(matchArgs).every(([key3, value]) => {
           if (value === null || value === void 0)
             return true;
-          const input = inputs.find((input2) => input2.name === key2);
+          const input = inputs.find((input2) => input2.name === key3);
           if (!input)
             return false;
           const value_ = Array.isArray(value) ? value : [value];
-          return value_.some((value2) => isEqual2(input, value2, args[key2]));
+          return value_.some((value2) => isEqual2(input, value2, args[key3]));
         });
       return false;
     }
@@ -141219,13 +141305,13 @@ var require_errors3 = __commonJS({
     function prettyPrint2(args) {
       if (!args)
         return "";
-      const entries = Object.entries(args).map(([key2, value]) => {
+      const entries = Object.entries(args).map(([key3, value]) => {
         if (value === void 0 || value === false)
           return null;
-        return [key2, value];
+        return [key3, value];
       }).filter(Boolean);
-      const maxLength = entries.reduce((acc, [key2]) => Math.max(acc, key2.length), 0);
-      return entries.map(([key2, value]) => `  ${`${key2}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
+      const maxLength = entries.reduce((acc, [key3]) => Math.max(acc, key3.length), 0);
+      return entries.map(([key3, value]) => `  ${`${key3}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
     }
   }
 });
@@ -141545,10 +141631,10 @@ var require_Json = __commonJS({
       if (Array.isArray(value))
         return `[${value.map((item) => canonicalize3(item)).join(",")}]`;
       if (typeof value === "object") {
-        const entries = Object.keys(value).sort().reduce((acc, key2) => {
-          const v = value[key2];
+        const entries = Object.keys(value).sort().reduce((acc, key3) => {
+          const v = value[key3];
           if (v !== void 0)
-            acc.push(`${JSON.stringify(key2)}:${canonicalize3(v)}`);
+            acc.push(`${JSON.stringify(key3)}:${canonicalize3(v)}`);
           return acc;
         }, []);
         return `{${entries.join(",")}}`;
@@ -141556,17 +141642,17 @@ var require_Json = __commonJS({
       return void 0;
     }
     function parse2(string, reviver) {
-      return JSON.parse(string, (key2, value_) => {
+      return JSON.parse(string, (key3, value_) => {
         const value = value_;
         if (typeof value === "string" && value.endsWith(bigIntSuffix2))
           return BigInt(value.slice(0, -bigIntSuffix2.length));
-        return typeof reviver === "function" ? reviver(key2, value) : value;
+        return typeof reviver === "function" ? reviver(key3, value) : value;
       });
     }
     function stringify4(value, replacer, space) {
-      return JSON.stringify(value, (key2, value2) => {
+      return JSON.stringify(value, (key3, value2) => {
         if (typeof replacer === "function")
-          return replacer(key2, value2);
+          return replacer(key3, value2);
         if (typeof value2 === "bigint")
           return value2.toString() + bigIntSuffix2;
         return value2;
@@ -145203,13 +145289,13 @@ var require_observe = __commonJS({
       if (listeners && listeners.length > 0)
         return unwatch;
       const emit = {};
-      for (const key2 in callbacks) {
-        emit[key2] = ((...args) => {
+      for (const key3 in callbacks) {
+        emit[key3] = ((...args) => {
           const listeners2 = getListeners();
           if (listeners2.length === 0)
             return;
           for (const listener of listeners2)
-            listener.fns[key2]?.(...args);
+            listener.fns[key3]?.(...args);
         });
       }
       const cleanup = fn(emit);
@@ -146486,7 +146572,7 @@ var require_createClient = __commonJS({
     var parseAccount_js_1 = require_parseAccount();
     var uid_js_1 = require_uid();
     function createClient3(parameters) {
-      const { batch, chain: chain3, ccipRead, dataSuffix, key: key2 = "base", name = "Base Client", tokens, type = "base" } = parameters;
+      const { batch, chain: chain3, ccipRead, dataSuffix, key: key3 = "base", name = "Base Client", tokens, type = "base" } = parameters;
       const experimental_blockTag = parameters.experimental_blockTag ?? (typeof chain3?.experimental_preconfirmationTime === "number" ? "pending" : void 0);
       const blockTime = chain3?.blockTime ?? 12e3;
       const defaultPollingInterval = Math.min(Math.max(Math.floor(blockTime / 2), 500), 4e3);
@@ -146506,7 +146592,7 @@ var require_createClient = __commonJS({
         ccipRead,
         chain: chain3,
         dataSuffix,
-        key: key2,
+        key: key3,
         name,
         pollingInterval,
         request: request2,
@@ -146519,14 +146605,14 @@ var require_createClient = __commonJS({
       function extend2(base4) {
         return (extendFn) => {
           const extended = extendFn(base4);
-          for (const key3 in client)
-            delete extended[key3];
+          for (const key4 in client)
+            delete extended[key4];
           const combined = { ...base4, ...extended };
-          for (const key3 in extended) {
-            const a = base4[key3];
-            const b = extended[key3];
+          for (const key4 in extended) {
+            const a = base4[key4];
+            const b = extended[key4];
             if (isPlainObject4(a) && isPlainObject4(b))
-              combined[key3] = { ...a, ...b };
+              combined[key4] = { ...a, ...b };
           }
           return Object.assign(combined, { extend: extend2(combined) });
         };
@@ -146541,7 +146627,7 @@ var require_createClient = __commonJS({
     }
     function bindActionDecorators2(client, action) {
       const wrapped = (parameters = {}) => action(client, parameters);
-      for (const key2 of [
+      for (const key3 of [
         "call",
         "calls",
         "callWithPeriod",
@@ -146550,17 +146636,17 @@ var require_createClient = __commonJS({
         "prepareRecipient",
         "simulate"
       ])
-        if (Object.hasOwn(action, key2)) {
-          const helper = action[key2];
-          wrapped[key2] = (args = {}) => {
+        if (Object.hasOwn(action, key3)) {
+          const helper = action[key3];
+          wrapped[key3] = (args = {}) => {
             if (helper.length === 1)
               return helper(args);
             return helper(client, args);
           };
         }
-      for (const key2 of ["extractEvent", "extractEvents"])
-        if (Object.hasOwn(action, key2))
-          wrapped[key2] = action[key2];
+      for (const key3 of ["extractEvent", "extractEvents"])
+        if (Object.hasOwn(action, key3))
+          wrapped[key3] = action[key3];
       return wrapped;
     }
     function rpcSchema() {
@@ -147096,7 +147182,7 @@ var require_getEnsText = __commonJS({
     var getAction_js_1 = require_getAction();
     var readContract_js_1 = require_readContract();
     async function getEnsText2(client, parameters) {
-      const { blockNumber, blockTag, key: key2, name, gatewayUrls, strict } = parameters;
+      const { blockNumber, blockTag, key: key3, name, gatewayUrls, strict } = parameters;
       const { chain: chain3 } = client;
       const universalResolverAddress = (() => {
         if (parameters.universalResolverAddress)
@@ -147121,7 +147207,7 @@ var require_getEnsText = __commonJS({
             (0, encodeFunctionData_js_1.encodeFunctionData)({
               abi: abis_js_1.textResolverAbi,
               functionName: "text",
-              args: [(0, namehash_js_1.namehash)(name), key2]
+              args: [(0, namehash_js_1.namehash)(name), key3]
             }),
             gatewayUrls ?? [localBatchGatewayRequest_js_1.localBatchGatewayUrl]
           ],
@@ -149062,50 +149148,50 @@ var require_nonceManager = __commonJS({
       const nonceMap = new lru_js_1.LruMap(8192);
       const promiseMap = /* @__PURE__ */ new Map();
       const getKey = ({ address: address2, chainId }) => `${address2}.${chainId}`;
-      const resetCache = (key2) => {
-        deltaMap.delete(key2);
-        promiseMap.delete(key2);
+      const resetCache = (key3) => {
+        deltaMap.delete(key3);
+        promiseMap.delete(key3);
       };
       return {
         async consume({ address: address2, chainId, client }) {
-          const key2 = getKey({ address: address2, chainId });
+          const key3 = getKey({ address: address2, chainId });
           const promise = this.get({ address: address2, chainId, client });
           this.increment({ address: address2, chainId });
           const nonce = await promise;
           await source.set({ address: address2, chainId }, nonce);
-          nonceMap.set(key2, nonce);
+          nonceMap.set(key3, nonce);
           return nonce;
         },
         async increment({ address: address2, chainId }) {
-          const key2 = getKey({ address: address2, chainId });
-          const delta = deltaMap.get(key2) ?? 0;
-          deltaMap.set(key2, delta + 1);
+          const key3 = getKey({ address: address2, chainId });
+          const delta = deltaMap.get(key3) ?? 0;
+          deltaMap.set(key3, delta + 1);
         },
         async get({ address: address2, chainId, client }) {
-          const key2 = getKey({ address: address2, chainId });
-          let promise = promiseMap.get(key2);
+          const key3 = getKey({ address: address2, chainId });
+          let promise = promiseMap.get(key3);
           if (!promise) {
             promise = (async () => {
               try {
                 const nonce = await source.get({ address: address2, chainId, client });
-                const previousNonce = nonceMap.get(key2) ?? 0;
+                const previousNonce = nonceMap.get(key3) ?? 0;
                 if (previousNonce > 0 && nonce <= previousNonce)
                   return previousNonce + 1;
-                nonceMap.delete(key2);
+                nonceMap.delete(key3);
                 return nonce;
               } finally {
-                resetCache(key2);
+                resetCache(key3);
               }
             })();
-            promiseMap.set(key2, promise);
+            promiseMap.set(key3, promise);
           }
-          const delta = deltaMap.get(key2) ?? 0;
+          const delta = deltaMap.get(key3) ?? 0;
           return delta + await promise;
         },
         reset({ address: address2, chainId }) {
-          const key2 = getKey({ address: address2, chainId });
-          nonceMap.delete(key2);
-          resetCache(key2);
+          const key3 = getKey({ address: address2, chainId });
+          nonceMap.delete(key3);
+          resetCache(key3);
         }
       };
     }
@@ -149374,10 +149460,10 @@ var require_socket = __commonJS({
     var id_js_1 = require_id();
     exports.socketClientCache = /* @__PURE__ */ new Map();
     async function getSocketRpcClient(parameters) {
-      const { getSocket, keepAlive = true, key: key2 = "socket", reconnect = true, url: url2 } = parameters;
+      const { getSocket, keepAlive = true, key: key3 = "socket", reconnect = true, url: url2 } = parameters;
       const { interval: keepAliveInterval = 3e4 } = typeof keepAlive === "object" ? keepAlive : {};
       const { attempts = 5, delay = 2e3 } = typeof reconnect === "object" ? reconnect : {};
-      const id2 = JSON.stringify({ keepAlive, key: key2, url: url2, reconnect });
+      const id2 = JSON.stringify({ keepAlive, key: key3, url: url2, reconnect });
       let socketClient = exports.socketClientCache.get(id2);
       if (socketClient)
         return socketClient;
@@ -149458,10 +149544,10 @@ var require_socket = __commonJS({
             }
             if (reconnect && subscriptions.size > 0) {
               const subscriptionEntries = subscriptions.entries();
-              for (const [key3, { onResponse, body, onError }] of subscriptionEntries) {
+              for (const [key4, { onResponse, body, onError }] of subscriptionEntries) {
                 if (!body)
                   continue;
-                subscriptions.delete(key3);
+                subscriptions.delete(key4);
                 socketClient?.request({ body, onResponse, onError });
               }
             }
@@ -150112,16 +150198,16 @@ var require_lru2 = __commonJS({
         });
         this.maxSize = size5;
       }
-      get(key2) {
-        const value = super.get(key2);
-        if (super.has(key2) && value !== void 0) {
-          this.delete(key2);
-          super.set(key2, value);
+      get(key3) {
+        const value = super.get(key3);
+        if (super.has(key3) && value !== void 0) {
+          this.delete(key3);
+          super.set(key3, value);
         }
         return value;
       }
-      set(key2, value) {
-        super.set(key2, value);
+      set(key3, value) {
+        super.set(key3, value);
         if (this.maxSize && this.size > this.maxSize) {
           const firstKey = this.keys().next().value;
           if (firstKey)
@@ -150419,7 +150505,7 @@ var require_hmac2 = __commonJS({
         this.finished = false;
         this.destroyed = false;
         (0, utils_ts_1.ahash)(hash5);
-        const key2 = (0, utils_ts_1.toBytes)(_key);
+        const key3 = (0, utils_ts_1.toBytes)(_key);
         this.iHash = hash5.create();
         if (typeof this.iHash.update !== "function")
           throw new Error("Expected instance of class which extends utils.Hash");
@@ -150427,7 +150513,7 @@ var require_hmac2 = __commonJS({
         this.outputLen = this.iHash.outputLen;
         const blockLen = this.blockLen;
         const pad4 = new Uint8Array(blockLen);
-        pad4.set(key2.length > blockLen ? hash5.create().update(key2).digest() : key2);
+        pad4.set(key3.length > blockLen ? hash5.create().update(key3).digest() : key3);
         for (let i = 0; i < pad4.length; i++)
           pad4[i] ^= 54;
         this.iHash.update(pad4);
@@ -150478,9 +150564,9 @@ var require_hmac2 = __commonJS({
       }
     };
     exports.HMAC = HMAC4;
-    var hmac8 = (hash5, key2, message) => new HMAC4(hash5, key2).update(message).digest();
+    var hmac8 = (hash5, key3, message) => new HMAC4(hash5, key3).update(message).digest();
     exports.hmac = hmac8;
-    exports.hmac.create = (hash5, key2) => new HMAC4(hash5, key2);
+    exports.hmac.create = (hash5, key3) => new HMAC4(hash5, key3);
   }
 });
 
@@ -151747,9 +151833,9 @@ var require_Hash = __commonJS({
         return bytes;
       return Hex.fromBytes(bytes);
     }
-    function hmac256(key2, value, options = {}) {
+    function hmac256(key3, value, options = {}) {
       const { as = typeof value === "string" ? "Hex" : "Bytes" } = options;
-      const bytes = (0, hmac_1.hmac)(sha256_1.sha256, Bytes.from(key2), Bytes.from(value));
+      const bytes = (0, hmac_1.hmac)(sha256_1.sha256, Bytes.from(key3), Bytes.from(value));
       if (as === "Bytes")
         return bytes;
       return Hex.fromBytes(bytes);
@@ -153560,13 +153646,13 @@ var require_modular2 = __commonJS({
       const length = getFieldBytesLength4(fieldOrder);
       return length + Math.ceil(length / 2);
     }
-    function mapHashToField4(key2, fieldOrder, isLE3 = false) {
-      const len = key2.length;
+    function mapHashToField4(key3, fieldOrder, isLE3 = false) {
+      const len = key3.length;
       const fieldLen = getFieldBytesLength4(fieldOrder);
       const minLen = getMinHashLength4(fieldOrder);
       if (len < 16 || len < minLen || len > 1024)
         throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-      const num2 = isLE3 ? (0, utils_ts_1.bytesToNumberLE)(key2) : (0, utils_ts_1.bytesToNumberBE)(key2);
+      const num2 = isLE3 ? (0, utils_ts_1.bytesToNumberLE)(key3) : (0, utils_ts_1.bytesToNumberBE)(key3);
       const reduced = mod5(num2, fieldOrder - _1n17) + _1n17;
       return isLE3 ? (0, utils_ts_1.numberToBytesLE)(reduced, fieldLen) : (0, utils_ts_1.numberToBytesBE)(reduced, fieldLen);
     }
@@ -154047,20 +154133,20 @@ var require_weierstrass2 = __commonJS({
       function isWithinCurveOrder(num2) {
         return (0, utils_ts_1.inRange)(num2, _1n17, CURVE.n);
       }
-      function normPrivateKeyToScalar(key2) {
+      function normPrivateKeyToScalar(key3) {
         const { allowedPrivateKeyLengths: lengths, nByteLength, wrapPrivateKey, n: N2 } = CURVE;
-        if (lengths && typeof key2 !== "bigint") {
-          if ((0, utils_ts_1.isBytes)(key2))
-            key2 = (0, utils_ts_1.bytesToHex)(key2);
-          if (typeof key2 !== "string" || !lengths.includes(key2.length))
+        if (lengths && typeof key3 !== "bigint") {
+          if ((0, utils_ts_1.isBytes)(key3))
+            key3 = (0, utils_ts_1.bytesToHex)(key3);
+          if (typeof key3 !== "string" || !lengths.includes(key3.length))
             throw new Error("invalid private key");
-          key2 = key2.padStart(nByteLength * 2, "0");
+          key3 = key3.padStart(nByteLength * 2, "0");
         }
         let num2;
         try {
-          num2 = typeof key2 === "bigint" ? key2 : (0, utils_ts_1.bytesToNumberBE)((0, utils_ts_1.ensureBytes)("private key", key2, nByteLength));
+          num2 = typeof key3 === "bigint" ? key3 : (0, utils_ts_1.bytesToNumberBE)((0, utils_ts_1.ensureBytes)("private key", key3, nByteLength));
         } catch (error) {
-          throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key2);
+          throw new Error("invalid private key, expected hex or " + nByteLength + " bytes, got " + typeof key3);
         }
         if (wrapPrivateKey)
           num2 = (0, modular_ts_1.mod)(num2, N2);
@@ -154869,7 +154955,7 @@ var require_shortw_utils2 = __commonJS({
     function getHash3(hash5) {
       return {
         hash: hash5,
-        hmac: (key2, ...msgs) => (0, hmac_1.hmac)(hash5, key2, (0, utils_12.concatBytes)(...msgs)),
+        hmac: (key3, ...msgs) => (0, hmac_1.hmac)(hash5, key3, (0, utils_12.concatBytes)(...msgs)),
         randomBytes: utils_12.randomBytes
       };
     }
@@ -156381,7 +156467,7 @@ var require_parseTransaction = __commonJS({
           throw new address_js_1.InvalidAddressError({ address: address2 });
         accessList.push({
           address: address2,
-          storageKeys: storageKeys.map((key2) => (0, isHash_js_1.isHash)(key2) ? key2 : (0, trim_js_1.trim)(key2))
+          storageKeys: storageKeys.map((key3) => (0, isHash_js_1.isHash)(key3) ? key3 : (0, trim_js_1.trim)(key3))
         });
       }
       return accessList;
@@ -160268,10 +160354,10 @@ var require_createPublicClient = __commonJS({
     var createClient_js_1 = require_createClient();
     var public_js_1 = require_public();
     function createPublicClient2(parameters) {
-      const { key: key2 = "public", name = "Public Client" } = parameters;
+      const { key: key3 = "public", name = "Public Client" } = parameters;
       const client = (0, createClient_js_1.createClient)({
         ...parameters,
-        key: key2,
+        key: key3,
         name,
         type: "publicClient"
       });
@@ -160885,10 +160971,10 @@ var require_createTestClient = __commonJS({
     var createClient_js_1 = require_createClient();
     var test_js_1 = require_test();
     function createTestClient(parameters) {
-      const { key: key2 = "test", name = "Test Client", mode } = parameters;
+      const { key: key3 = "test", name = "Test Client", mode } = parameters;
       const client = (0, createClient_js_1.createClient)({
         ...parameters,
-        key: key2,
+        key: key3,
         name,
         type: "testClient"
       });
@@ -160980,10 +161066,10 @@ var require_getCapabilities = __commonJS({
       const capabilities = {};
       for (const [chainId2, capabilities_] of Object.entries(capabilities_raw)) {
         capabilities[Number(chainId2)] = {};
-        for (let [key2, value] of Object.entries(capabilities_)) {
-          if (key2 === "addSubAccount")
-            key2 = "unstable_addSubAccount";
-          capabilities[Number(chainId2)][key2] = value;
+        for (let [key3, value] of Object.entries(capabilities_)) {
+          if (key3 === "addSubAccount")
+            key3 = "unstable_addSubAccount";
+          capabilities[Number(chainId2)][key3] = value;
         }
       }
       return typeof chainId === "number" ? capabilities[chainId] : capabilities;
@@ -161391,10 +161477,10 @@ var require_createWalletClient = __commonJS({
     var createClient_js_1 = require_createClient();
     var wallet_js_1 = require_wallet();
     function createWalletClient2(parameters) {
-      const { key: key2 = "wallet", name = "Wallet Client", transport } = parameters;
+      const { key: key3 = "wallet", name = "Wallet Client", transport } = parameters;
       const client = (0, createClient_js_1.createClient)({
         ...parameters,
-        key: key2,
+        key: key3,
         name,
         transport,
         type: "walletClient"
@@ -161412,11 +161498,11 @@ var require_createTransport = __commonJS({
     exports.createTransport = createTransport2;
     var buildRequest_js_1 = require_buildRequest();
     var uid_js_1 = require_uid();
-    function createTransport2({ key: key2, methods, name, request: request2, retryCount = 3, retryDelay = 150, timeout, type }, value) {
+    function createTransport2({ key: key3, methods, name, request: request2, retryCount = 3, retryDelay = 150, timeout, type }, value) {
       const uid2 = (0, uid_js_1.uid)();
       return {
         config: {
-          key: key2,
+          key: key3,
           methods,
           name,
           request: request2,
@@ -161440,9 +161526,9 @@ var require_custom = __commonJS({
     exports.custom = custom2;
     var createTransport_js_1 = require_createTransport();
     function custom2(provider, config = {}) {
-      const { key: key2 = "custom", methods, name = "Custom Provider", retryDelay } = config;
+      const { key: key3 = "custom", methods, name = "Custom Provider", retryDelay } = config;
       return ({ retryCount: defaultRetryCount }) => (0, createTransport_js_1.createTransport)({
-        key: key2,
+        key: key3,
         methods,
         name,
         request: provider.request.bind(provider),
@@ -161467,13 +161553,13 @@ var require_fallback = __commonJS({
     var wait_js_1 = require_wait();
     var createTransport_js_1 = require_createTransport();
     function fallback2(transports_, config = {}) {
-      const { key: key2 = "fallback", name = "Fallback", rank = false, shouldThrow: shouldThrow_ = shouldThrow2, retryCount, retryDelay } = config;
+      const { key: key3 = "fallback", name = "Fallback", rank = false, shouldThrow: shouldThrow_ = shouldThrow2, retryCount, retryDelay } = config;
       return (({ chain: chain3, pollingInterval = 4e3, timeout, ...rest }) => {
         let transports = transports_;
         let onResponse = () => {
         };
         const transport = (0, createTransport_js_1.createTransport)({
-          key: key2,
+          key: key3,
           name,
           async request({ method, params }) {
             let includes;
@@ -161643,7 +161729,7 @@ var require_http2 = __commonJS({
       return nextId;
     }
     function http5(url2, config = {}) {
-      const { batch, fetchFn, fetchOptions, key: key2 = "http", maxResponseBodySize, methods, name = "HTTP JSON-RPC", onFetchRequest, onFetchResponse, retryDelay, raw } = config;
+      const { batch, fetchFn, fetchOptions, key: key3 = "http", maxResponseBodySize, methods, name = "HTTP JSON-RPC", onFetchRequest, onFetchResponse, retryDelay, raw } = config;
       return ({ chain: chain3, retryCount: retryCount_, timeout: timeout_ }) => {
         const { batchSize = 1e3, wait: wait2 = 0 } = typeof batch === "object" ? batch : {};
         const retryCount = config.retryCount ?? retryCount_;
@@ -161660,7 +161746,7 @@ var require_http2 = __commonJS({
           timeout
         });
         return (0, createTransport_js_1.createTransport)({
-          key: key2,
+          key: key3,
           methods,
           name,
           async request({ method, params }, options) {
@@ -161720,7 +161806,7 @@ var require_webSocket2 = __commonJS({
     var webSocket_js_1 = require_webSocket();
     var createTransport_js_1 = require_createTransport();
     function webSocket(url2, config = {}) {
-      const { keepAlive, key: key2 = "webSocket", methods, name = "WebSocket JSON-RPC", reconnect, retryDelay } = config;
+      const { keepAlive, key: key3 = "webSocket", methods, name = "WebSocket JSON-RPC", reconnect, retryDelay } = config;
       return ({ chain: chain3, retryCount: retryCount_, timeout: timeout_ }) => {
         const retryCount = config.retryCount ?? retryCount_;
         const timeout = timeout_ ?? config.timeout ?? 1e4;
@@ -161729,7 +161815,7 @@ var require_webSocket2 = __commonJS({
         if (!url_)
           throw new transport_js_1.UrlRequiredError();
         return (0, createTransport_js_1.createTransport)({
-          key: key2,
+          key: key3,
           methods,
           name,
           async request({ method, params }) {
@@ -186346,9 +186432,9 @@ var require_Cbor = __commonJS({
       getEncodable4.byteString = byteString;
       function object(value) {
         const keys = Object.keys(value);
-        const entries = keys.map((key2) => ({
-          key: getEncodable4(key2),
-          value: getEncodable4(value[key2])
+        const entries = keys.map((key3) => ({
+          key: getEncodable4(key3),
+          value: getEncodable4(value[key3])
         }));
         const bodyLength = entries.reduce((acc, entry) => acc + entry.key.length + entry.value.length, 0);
         const size5 = keys.length;
@@ -186586,8 +186672,8 @@ var require_Cbor = __commonJS({
               cursor.readUint8();
               break;
             }
-            const key2 = decodeCursor2(cursor);
-            const keyStr = typeof key2 === "string" ? key2 : typeof key2 === "number" ? String(key2) : String(key2);
+            const key3 = decodeCursor2(cursor);
+            const keyStr = typeof key3 === "string" ? key3 : typeof key3 === "number" ? String(key3) : String(key3);
             const value = decodeCursor2(cursor);
             result2[keyStr] = value;
           }
@@ -186596,8 +186682,8 @@ var require_Cbor = __commonJS({
         const length = readLength(cursor, additionalInfo);
         const result = {};
         for (let i = 0; i < length; i++) {
-          const key2 = decodeCursor2(cursor);
-          const keyStr = typeof key2 === "string" ? key2 : typeof key2 === "number" ? String(key2) : String(key2);
+          const key3 = decodeCursor2(cursor);
+          const keyStr = typeof key3 === "string" ? key3 : typeof key3 === "number" ? String(key3) : String(key3);
           const value = decodeCursor2(cursor);
           result[keyStr] = value;
         }
@@ -186870,17 +186956,17 @@ var require_Registration = __commonJS({
     function serializeResponse(response) {
       const { credential, ...rest } = response;
       const rawResponse = {};
-      for (const key2 of utils_js_1.responseKeys) {
+      for (const key3 of utils_js_1.responseKeys) {
         const r2 = credential.raw.response;
-        let value = r2[key2];
+        let value = r2[key3];
         if (!(value instanceof ArrayBuffer)) {
-          const getter = `get${key2[0].toUpperCase()}${key2.slice(1)}`;
+          const getter = `get${key3[0].toUpperCase()}${key3.slice(1)}`;
           const fn = r2[getter];
           if (typeof fn === "function")
             value = fn.call(r2);
         }
         if (value instanceof ArrayBuffer)
-          rawResponse[key2] = Base64.fromBytes(new Uint8Array(value), utils_js_1.base64UrlOptions);
+          rawResponse[key3] = Base64.fromBytes(new Uint8Array(value), utils_js_1.base64UrlOptions);
       }
       return {
         ...rest,
@@ -186952,8 +187038,8 @@ var require_Registration = __commonJS({
     function deserializeResponse(response) {
       const { credential, ...rest } = response;
       const rawResponse = {};
-      for (const [key2, value] of Object.entries(credential.raw.response))
-        rawResponse[key2] = (0, utils_js_1.bytesToArrayBuffer)(Base64.toBytes(value));
+      for (const [key3, value] of Object.entries(credential.raw.response))
+        rawResponse[key3] = (0, utils_js_1.bytesToArrayBuffer)(Base64.toBytes(value));
       return {
         ...rest,
         credential: {
@@ -187155,8 +187241,8 @@ var require_webauthn = __commonJS({
         const data = new Uint8Array(attestationObject ?? response.attestationObject);
         const coordinateLength = 32;
         const cborPrefix = 88;
-        const findStart = (key2) => {
-          const coordinate = new Uint8Array([key2, cborPrefix, coordinateLength]);
+        const findStart = (key3) => {
+          const coordinate = new Uint8Array([key3, cborPrefix, coordinateLength]);
           for (let i = 0; i < data.length - coordinate.length; i++)
             if (coordinate.every((byte, j) => data[i + j] === byte))
               return i + coordinate.length;
@@ -187279,8 +187365,8 @@ var require_Authentication = __commonJS({
     function deserializeResponse(response) {
       const { id: id2, metadata, raw, signature: signature3 } = response;
       const rawResponse = {};
-      for (const [key2, value] of Object.entries(raw.response))
-        rawResponse[key2] = (0, utils_js_1.bytesToArrayBuffer)(Base64.toBytes(value));
+      for (const [key3, value] of Object.entries(raw.response))
+        rawResponse[key3] = (0, utils_js_1.bytesToArrayBuffer)(Base64.toBytes(value));
       return {
         id: id2,
         metadata,
@@ -187368,17 +187454,17 @@ var require_Authentication = __commonJS({
     function serializeResponse(response) {
       const { id: id2, metadata, raw, signature: signature3 } = response;
       const rawResponse = {};
-      for (const key2 of utils_js_1.responseKeys) {
+      for (const key3 of utils_js_1.responseKeys) {
         const r2 = raw.response;
-        let value = r2[key2];
+        let value = r2[key3];
         if (!(value instanceof ArrayBuffer)) {
-          const getter = `get${key2[0].toUpperCase()}${key2.slice(1)}`;
+          const getter = `get${key3[0].toUpperCase()}${key3.slice(1)}`;
           const fn = r2[getter];
           if (typeof fn === "function")
             value = fn.call(r2);
         }
         if (value instanceof ArrayBuffer)
-          rawResponse[key2] = Base64.fromBytes(new Uint8Array(value), utils_js_1.base64UrlOptions);
+          rawResponse[key3] = Base64.fromBytes(new Uint8Array(value), utils_js_1.base64UrlOptions);
       }
       return {
         id: id2,
@@ -188914,11 +189000,11 @@ var require_KeyAuthorization = __commonJS({
           return void 0;
         const grouped = /* @__PURE__ */ new Map();
         for (const scope of scopes) {
-          const key2 = scope.address;
-          if (!grouped.has(key2))
-            grouped.set(key2, []);
+          const key3 = scope.address;
+          if (!grouped.has(key3))
+            grouped.set(key3, []);
           if (scope.selector) {
-            grouped.get(key2).push({
+            grouped.get(key3).push({
               selector: resolveSelector(scope.selector),
               ...scope.recipients && scope.recipients.length > 0 ? { recipients: scope.recipients } : {}
             });
@@ -188979,11 +189065,11 @@ var require_KeyAuthorization = __commonJS({
           return void 0;
         const grouped = /* @__PURE__ */ new Map();
         for (const scope of scopes) {
-          const key2 = scope.address;
-          if (!grouped.has(key2))
-            grouped.set(key2, []);
+          const key3 = scope.address;
+          if (!grouped.has(key3))
+            grouped.set(key3, []);
           if (scope.selector) {
-            grouped.get(key2).push([
+            grouped.get(key3).push([
               resolveSelector(scope.selector),
               scope.recipients ?? []
             ]);
@@ -189210,16 +189296,16 @@ var require_AbiEvent = __commonJS({
         }
       }
       if (typeof args === "object" && !Array.isArray(args) && typeof matchArgs === "object" && !Array.isArray(matchArgs))
-        for (const [key2, value] of Object.entries(matchArgs)) {
+        for (const [key3, value] of Object.entries(matchArgs)) {
           if (value === null || value === void 0)
             continue;
-          const input = abiEvent.inputs.find((input2) => input2.name === key2);
+          const input = abiEvent.inputs.find((input2) => input2.name === key3);
           if (!input)
-            throw new InputNotFoundError({ abiEvent, name: key2 });
+            throw new InputNotFoundError({ abiEvent, name: key3 });
           const value_ = Array.isArray(value) ? value : [value];
           let equal = false;
           for (const value2 of value_) {
-            if (isEqual2(input, value2, args[key2]))
+            if (isEqual2(input, value2, args[key3]))
               equal = true;
           }
           if (!equal)
@@ -190208,7 +190294,7 @@ var require_AccessList = __commonJS({
           Address.assert(address2, { strict: false });
         list.push({
           address: address2,
-          storageKeys: storageKeys.map((key2) => Hash4.validate(key2) ? key2 : Hex.trimLeft(key2))
+          storageKeys: storageKeys.map((key3) => Hash4.validate(key3) ? key3 : Hex.trimLeft(key3))
         });
       }
       return list;
@@ -190383,7 +190469,7 @@ var require_TxEnvelope = __commonJS({
     exports.InvalidChainIdError = InvalidChainIdError2;
     var InvalidSerializedError = class extends Errors.BaseError {
       constructor({ attributes, serialized, type }) {
-        const missing = Object.entries(attributes).map(([key2, value]) => typeof value === "undefined" ? key2 : void 0).filter(Boolean);
+        const missing = Object.entries(attributes).map(([key3, value]) => typeof value === "undefined" ? key3 : void 0).filter(Boolean);
         super(`Invalid serialized transaction of type "${type}" was provided.`, {
           metaMessages: [
             `Serialized Transaction: "${serialized}"`,
@@ -197452,8 +197538,8 @@ var require_Account = __commonJS({
       return account.source === "accessKey" && "accessKeyAddress" in account;
     }
     async function signKeyAuthorization(account, parameters) {
-      const { chainId, key: key2, expiry, limits, scopes, witness, admin } = parameters;
-      const { accessKeyAddress, keyType: type } = resolveAccessKey(key2);
+      const { chainId, key: key3, expiry, limits, scopes, witness, admin } = parameters;
+      const { accessKeyAddress, keyType: type } = resolveAccessKey(key3);
       const isAccessKey = isAccessKeyAccount(account);
       const boundFields = isAccessKey ? { account: account.address } : {};
       const restrictions = admin ? {} : { expiry, limits, scopes };
@@ -197564,9 +197650,9 @@ var require_Account = __commonJS({
       return {
         ...account,
         source: "root",
-        async signKeyAuthorization(key2, parameters2) {
+        async signKeyAuthorization(key3, parameters2) {
           const { chainId, expiry, limits, scopes, witness, admin } = parameters2;
-          const { accessKeyAddress, keyType: type } = resolveAccessKey(key2);
+          const { accessKeyAddress, keyType: type } = resolveAccessKey(key3);
           const restrictions = admin ? {} : { expiry, limits, scopes };
           const signature3 = await account.sign({
             hash: tempo_1.KeyAuthorization.getSignPayload({
@@ -198395,16 +198481,16 @@ var require_concurrent = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.detect = detect;
     var concurrentCounts = /* @__PURE__ */ new Map();
-    async function detect(key2) {
-      concurrentCounts.set(key2, (concurrentCounts.get(key2) ?? 0) + 1);
+    async function detect(key3) {
+      concurrentCounts.set(key3, (concurrentCounts.get(key3) ?? 0) + 1);
       await Promise.resolve();
-      const isConcurrent = (concurrentCounts.get(key2) ?? 0) > 1;
+      const isConcurrent = (concurrentCounts.get(key3) ?? 0) > 1;
       queueMicrotask(() => {
-        const count = concurrentCounts.get(key2) ?? 0;
+        const count = concurrentCounts.get(key3) ?? 0;
         if (count <= 1)
-          concurrentCounts.delete(key2);
+          concurrentCounts.delete(key3);
         else
-          concurrentCounts.set(key2, count - 1);
+          concurrentCounts.set(key3, count - 1);
       });
       return isConcurrent;
     }
@@ -198492,16 +198578,16 @@ var require_chainConfig5 = __commonJS({
               if (typeof chainId !== "undefined") {
                 const address2 = request2.account.address;
                 const accessKey = request2.account.accessKeyAddress;
-                const key2 = { address: address2, accessKey, chainId };
-                const keyAuthorization = await keyAuthorizationManager.get(key2);
+                const key3 = { address: address2, accessKey, chainId };
+                const keyAuthorization = await keyAuthorizationManager.get(key3);
                 if (keyAuthorization) {
                   const now2 = BigInt(Math.floor(Date.now() / 1e3));
                   if (keyAuthorization.expiry != null && BigInt(keyAuthorization.expiry) <= now2) {
-                    await keyAuthorizationManager.remove(key2);
+                    await keyAuthorizationManager.remove(key3);
                   } else {
                     const metadata = await (0, getAction_js_1.getAction)(client, accessKey_js_1.getMetadata, "getMetadata")({ account: address2, accessKey });
                     if ((0, isAddressEqual_js_1.isAddressEqual)(metadata.address, accessKey) && !metadata.isRevoked && metadata.expiry > now2)
-                      await keyAuthorizationManager.remove(key2);
+                      await keyAuthorizationManager.remove(key3);
                     else
                       request2.keyAuthorization = keyAuthorization;
                   }
@@ -207888,8 +207974,8 @@ var init_lib2 = __esm({
           params = {};
         }
         const messageDetails = [];
-        Object.keys(params).forEach((key2) => {
-          const value = params[key2];
+        Object.keys(params).forEach((key3) => {
+          const value = params[key3];
           try {
             if (value instanceof Uint8Array) {
               let hex = "";
@@ -207897,12 +207983,12 @@ var init_lib2 = __esm({
                 hex += HEX[value[i] >> 4];
                 hex += HEX[value[i] & 15];
               }
-              messageDetails.push(key2 + "=Uint8Array(0x" + hex + ")");
+              messageDetails.push(key3 + "=Uint8Array(0x" + hex + ")");
             } else {
-              messageDetails.push(key2 + "=" + JSON.stringify(value));
+              messageDetails.push(key3 + "=" + JSON.stringify(value));
             }
           } catch (error2) {
-            messageDetails.push(key2 + "=" + JSON.stringify(params[key2].toString()));
+            messageDetails.push(key3 + "=" + JSON.stringify(params[key3].toString()));
           }
         });
         messageDetails.push(`code=${code}`);
@@ -207948,8 +208034,8 @@ var init_lib2 = __esm({
         const error = new Error(message);
         error.reason = reason;
         error.code = code;
-        Object.keys(params).forEach(function(key2) {
-          error[key2] = params[key2];
+        Object.keys(params).forEach(function(key3) {
+          error[key3] = params[key3];
         });
         return error;
       }
@@ -208686,7 +208772,7 @@ var init_bignumber = __esm({
       toHexString() {
         return this._hex;
       }
-      toJSON(key2) {
+      toJSON(key3) {
         return { type: "BigNumber", hex: this.toHexString() };
       }
       static from(value) {
@@ -208891,14 +208977,14 @@ var init_fixednumber = __esm({
             decimals = parseInt(match[3]);
           }
         } else if (value) {
-          const check = (key2, type, defaultValue) => {
-            if (value[key2] == null) {
+          const check = (key3, type, defaultValue) => {
+            if (value[key3] == null) {
               return defaultValue;
             }
-            if (typeof value[key2] !== type) {
-              logger3.throwArgumentError("invalid fixed format (" + key2 + " not " + type + ")", "format." + key2, value[key2]);
+            if (typeof value[key3] !== type) {
+              logger3.throwArgumentError("invalid fixed format (" + key3 + " not " + type + ")", "format." + key3, value[key3]);
             }
-            return value[key2];
+            return value[key3];
           };
           signed2 = check("signed", "boolean", signed2);
           width = check("width", "number", width);
@@ -209123,10 +209209,10 @@ function defineReadOnly(object, name, value) {
     writable: false
   });
 }
-function getStatic(ctor, key2) {
+function getStatic(ctor, key3) {
   for (let i = 0; i < 32; i++) {
-    if (ctor[key2]) {
-      return ctor[key2];
+    if (ctor[key3]) {
+      return ctor[key3];
     }
     if (!ctor.prototype || typeof ctor.prototype !== "object") {
       break;
@@ -209137,9 +209223,9 @@ function getStatic(ctor, key2) {
 }
 function resolveProperties(object) {
   return __awaiter2(this, void 0, void 0, function* () {
-    const promises = Object.keys(object).map((key2) => {
-      const value = object[key2];
-      return Promise.resolve(value).then((v) => ({ key: key2, value: v }));
+    const promises = Object.keys(object).map((key3) => {
+      const value = object[key3];
+      return Promise.resolve(value).then((v) => ({ key: key3, value: v }));
     });
     const results = yield Promise.all(promises);
     return results.reduce((accum, result) => {
@@ -209152,16 +209238,16 @@ function checkProperties(object, properties) {
   if (!object || typeof object !== "object") {
     logger4.throwArgumentError("invalid object", "object", object);
   }
-  Object.keys(object).forEach((key2) => {
-    if (!properties[key2]) {
-      logger4.throwArgumentError("invalid object key - " + key2, "transaction:" + key2, object);
+  Object.keys(object).forEach((key3) => {
+    if (!properties[key3]) {
+      logger4.throwArgumentError("invalid object key - " + key3, "transaction:" + key3, object);
     }
   });
 }
 function shallowCopy(object) {
   const result = {};
-  for (const key2 in object) {
-    result[key2] = object[key2];
+  for (const key3 in object) {
+    result[key3] = object[key3];
   }
   return result;
 }
@@ -209198,12 +209284,12 @@ function _deepCopy(object) {
   }
   if (typeof object === "object") {
     const result = {};
-    for (const key2 in object) {
-      const value = object[key2];
+    for (const key3 in object) {
+      const value = object[key3];
       if (value === void 0) {
         continue;
       }
-      defineReadOnly(result, key2, deepCopy(value));
+      defineReadOnly(result, key3, deepCopy(value));
     }
     return result;
   }
@@ -209249,8 +209335,8 @@ var init_lib5 = __esm({
     opaque = { bigint: true, boolean: true, "function": true, number: true, string: true };
     Description = class {
       constructor(info) {
-        for (const key2 in info) {
-          this[key2] = deepCopy(info[key2]);
+        for (const key3 in info) {
+          this[key3] = deepCopy(info[key3]);
         }
       }
     };
@@ -209438,8 +209524,8 @@ function parseParamType(param, allowIndexed) {
   return parent;
 }
 function populate(object, params) {
-  for (let key2 in params) {
-    defineReadOnly(object, key2, params[key2]);
+  for (let key3 in params) {
+    defineReadOnly(object, key3, params[key3]);
   }
 }
 function parseParams(value, allowIndex) {
@@ -210092,11 +210178,11 @@ function checkResultErrors(result) {
     if (!Array.isArray(object)) {
       return;
     }
-    for (let key2 in object) {
+    for (let key3 in object) {
       const childPath = path5.slice();
-      childPath.push(key2);
+      childPath.push(key3);
       try {
-        checkErrors(childPath, object[key2]);
+        checkErrors(childPath, object[key3]);
       } catch (error) {
         errors.push({ path: childPath, error });
       }
@@ -210247,12 +210333,12 @@ var require_sha33 = __commonJS({
       "use strict";
       var INPUT_ERROR = "input is invalid type";
       var FINALIZE_ERROR = "finalize already called";
-      var WINDOW = typeof window === "object";
-      var root = WINDOW ? window : {};
+      var WINDOW2 = typeof window === "object";
+      var root = WINDOW2 ? window : {};
       if (root.JS_SHA3_NO_WINDOW) {
-        WINDOW = false;
+        WINDOW2 = false;
       }
-      var WEB_WORKER = !WINDOW && typeof self === "object";
+      var WEB_WORKER = !WINDOW2 && typeof self === "object";
       var NODE_JS = !root.JS_SHA3_NO_NODE_JS && typeof process === "object" && process.versions && process.versions.node;
       if (NODE_JS) {
         root = global;
@@ -210351,8 +210437,8 @@ var require_sha33 = __commonJS({
         };
       };
       var createKmacOutputMethod = function(bits2, padding3, outputType) {
-        return function(key2, message, outputBits, s3) {
-          return methods["kmac" + bits2].update(key2, message, outputBits, s3)[outputType]();
+        return function(key3, message, outputBits, s3) {
+          return methods["kmac" + bits2].update(key3, message, outputBits, s3)[outputType]();
         };
       };
       var createOutputMethods = function(method, createMethod2, bits2, padding3) {
@@ -210400,11 +210486,11 @@ var require_sha33 = __commonJS({
       var createKmacMethod = function(bits2, padding3) {
         var w = CSHAKE_BYTEPAD[bits2];
         var method = createKmacOutputMethod(bits2, padding3, "hex");
-        method.create = function(key2, outputBits, s3) {
-          return new Kmac(bits2, padding3, outputBits).bytepad(["KMAC", s3], w).bytepad([key2], w);
+        method.create = function(key3, outputBits, s3) {
+          return new Kmac(bits2, padding3, outputBits).bytepad(["KMAC", s3], w).bytepad([key3], w);
         };
-        method.update = function(key2, message, outputBits, s3) {
-          return method.create(key2, outputBits, s3).update(message);
+        method.update = function(key3, message, outputBits, s3) {
+          return method.create(key3, outputBits, s3).update(message);
         };
         return createOutputMethods(method, createKmacOutputMethod, bits2, padding3);
       };
@@ -212785,10 +212871,10 @@ function hexPadRight(value) {
   }
   return hexlify(bytes);
 }
-function checkString(key2) {
+function checkString(key3) {
   return function(value) {
     if (typeof value !== "string") {
-      logger13.throwArgumentError(`invalid domain value for ${JSON.stringify(key2)}`, `domain.${key2}`, value);
+      logger13.throwArgumentError(`invalid domain value for ${JSON.stringify(key3)}`, `domain.${key3}`, value);
     }
     return value;
   };
@@ -214044,9 +214130,9 @@ var init_lib16 = __esm({
       //   - estimateGas
       //   - populateTransaction (and therefor sendTransaction)
       checkTransaction(transaction) {
-        for (const key2 in transaction) {
-          if (allowedTransactionKeys.indexOf(key2) === -1) {
-            logger16.throwArgumentError("invalid transaction key: " + key2, "transaction", transaction);
+        for (const key3 in transaction) {
+          if (allowedTransactionKeys.indexOf(key3) === -1) {
+            logger16.throwArgumentError("invalid transaction key: " + key3, "transaction", transaction);
           }
         }
         const tx = shallowCopy(transaction);
@@ -215852,29 +215938,29 @@ var require_hmac3 = __commonJS({
     "use strict";
     var utils2 = require_utils15();
     var assert10 = require_minimalistic_assert();
-    function Hmac(hash5, key2, enc) {
+    function Hmac(hash5, key3, enc) {
       if (!(this instanceof Hmac))
-        return new Hmac(hash5, key2, enc);
+        return new Hmac(hash5, key3, enc);
       this.Hash = hash5;
       this.blockSize = hash5.blockSize / 8;
       this.outSize = hash5.outSize / 8;
       this.inner = null;
       this.outer = null;
-      this._init(utils2.toArray(key2, enc));
+      this._init(utils2.toArray(key3, enc));
     }
     module.exports = Hmac;
-    Hmac.prototype._init = function init2(key2) {
-      if (key2.length > this.blockSize)
-        key2 = new this.Hash().update(key2).digest();
-      assert10(key2.length <= this.blockSize);
-      for (var i = key2.length; i < this.blockSize; i++)
-        key2.push(0);
-      for (i = 0; i < key2.length; i++)
-        key2[i] ^= 54;
-      this.inner = new this.Hash().update(key2);
-      for (i = 0; i < key2.length; i++)
-        key2[i] ^= 106;
-      this.outer = new this.Hash().update(key2);
+    Hmac.prototype._init = function init2(key3) {
+      if (key3.length > this.blockSize)
+        key3 = new this.Hash().update(key3).digest();
+      assert10(key3.length <= this.blockSize);
+      for (var i = key3.length; i < this.blockSize; i++)
+        key3.push(0);
+      for (i = 0; i < key3.length; i++)
+        key3[i] ^= 54;
+      this.inner = new this.Hash().update(key3);
+      for (i = 0; i < key3.length; i++)
+        key3[i] ^= 106;
+      this.outer = new this.Hash().update(key3);
     };
     Hmac.prototype.update = function update2(msg, enc) {
       this.inner.update(msg, enc);
@@ -216112,7 +216198,7 @@ function EC(options) {
   this.g.precompute(options.curve.n.bitLength() + 1);
   this.hash = options.hash || options.curve.hash;
 }
-var import_bn2, import_hash2, minimalisticAssert, utils_1, utils_1$1, getNAF, getJSF, assert$1, base3, inherits_browser, assert$2, short_1, curve_1, curves_1, hmacDrbg, assert$3, key, assert$4, signature2, rand, assert$5, ec, elliptic_1, EC$1;
+var import_bn2, import_hash2, minimalisticAssert, utils_1, utils_1$1, getNAF, getJSF, assert$1, base3, inherits_browser, assert$2, short_1, curve_1, curves_1, hmacDrbg, assert$3, key2, assert$4, signature2, rand, assert$5, ec, elliptic_1, EC$1;
 var init_elliptic = __esm({
   "node_modules/@ethersproject/signing-key/lib.esm/elliptic.js"() {
     "use strict";
@@ -216262,9 +216348,9 @@ var init_elliptic = __esm({
       }
       utils2.getJSF = getJSF2;
       function cachedProperty(obj, name, computer) {
-        var key2 = "_" + name;
+        var key3 = "_" + name;
         obj.prototype[name] = function cachedProperty2() {
-          return this[key2] !== void 0 ? this[key2] : this[key2] = computer.call(this);
+          return this[key3] !== void 0 ? this[key3] : this[key3] = computer.call(this);
         };
       }
       utils2.cachedProperty = cachedProperty;
@@ -217473,7 +217559,7 @@ var init_elliptic = __esm({
       return utils_1.encode(res, enc);
     };
     assert$3 = utils_1$1.assert;
-    key = KeyPair;
+    key2 = KeyPair;
     KeyPair.fromPublic = function fromPublic(ec2, pub, enc) {
       if (pub instanceof KeyPair)
         return pub;
@@ -217517,21 +217603,21 @@ var init_elliptic = __esm({
       else
         return this.priv;
     };
-    KeyPair.prototype._importPrivate = function _importPrivate(key2, enc) {
-      this.priv = new import_bn2.default(key2, enc || 16);
+    KeyPair.prototype._importPrivate = function _importPrivate(key3, enc) {
+      this.priv = new import_bn2.default(key3, enc || 16);
       this.priv = this.priv.umod(this.ec.curve.n);
     };
-    KeyPair.prototype._importPublic = function _importPublic(key2, enc) {
-      if (key2.x || key2.y) {
+    KeyPair.prototype._importPublic = function _importPublic(key3, enc) {
+      if (key3.x || key3.y) {
         if (this.ec.curve.type === "mont") {
-          assert$3(key2.x, "Need x coordinate");
+          assert$3(key3.x, "Need x coordinate");
         } else if (this.ec.curve.type === "short" || this.ec.curve.type === "edwards") {
-          assert$3(key2.x && key2.y, "Need both x and y coordinate");
+          assert$3(key3.x && key3.y, "Need both x and y coordinate");
         }
-        this.pub = this.ec.curve.point(key2.x, key2.y);
+        this.pub = this.ec.curve.point(key3.x, key3.y);
         return;
       }
-      this.pub = this.ec.curve.decodePoint(key2, enc);
+      this.pub = this.ec.curve.decodePoint(key3, enc);
     };
     KeyPair.prototype.derive = function derive(pub) {
       if (!pub.validate()) {
@@ -217638,13 +217724,13 @@ var init_elliptic = __esm({
     assert$5 = utils_1$1.assert;
     ec = EC;
     EC.prototype.keyPair = function keyPair(options) {
-      return new key(this, options);
+      return new key2(this, options);
     };
     EC.prototype.keyFromPrivate = function keyFromPrivate(priv, enc) {
-      return key.fromPrivate(this, priv, enc);
+      return key2.fromPrivate(this, priv, enc);
     };
     EC.prototype.keyFromPublic = function keyFromPublic(pub, enc) {
-      return key.fromPublic(this, pub, enc);
+      return key2.fromPublic(this, pub, enc);
     };
     EC.prototype.genKeyPair = function genKeyPair(options) {
       if (!options)
@@ -217691,7 +217777,7 @@ var init_elliptic = __esm({
       else
         return msg;
     };
-    EC.prototype.sign = function sign3(msg, key2, enc, options) {
+    EC.prototype.sign = function sign3(msg, key3, enc, options) {
       if (typeof enc === "object") {
         options = enc;
         enc = null;
@@ -217706,11 +217792,11 @@ var init_elliptic = __esm({
         assert$5(msg.length >>> 0 === msg.length);
         for (var i = 0; i < msg.length; i++) assert$5((msg[i] & 255) === msg[i]);
       }
-      key2 = this.keyFromPrivate(key2, enc);
+      key3 = this.keyFromPrivate(key3, enc);
       msg = this._truncateToN(msg, false, options.msgBitLength);
       assert$5(!msg.isNeg(), "Can not sign a negative message");
       var bytes = this.n.byteLength();
-      var bkey = key2.getPrivate().toArray("be", bytes);
+      var bkey = key3.getPrivate().toArray("be", bytes);
       var nonce = msg.toArray("be", bytes);
       assert$5(new import_bn2.default(nonce).eq(msg), "Can not sign message");
       var drbg = new hmacDrbg({
@@ -217733,7 +217819,7 @@ var init_elliptic = __esm({
         var r2 = kpX.umod(this.n);
         if (r2.cmpn(0) === 0)
           continue;
-        var s3 = k.invm(this.n).mul(r2.mul(key2.getPrivate()).iadd(msg));
+        var s3 = k.invm(this.n).mul(r2.mul(key3.getPrivate()).iadd(msg));
         s3 = s3.umod(this.n);
         if (s3.cmpn(0) === 0)
           continue;
@@ -217745,11 +217831,11 @@ var init_elliptic = __esm({
         return new signature2({ r: r2, s: s3, recoveryParam });
       }
     };
-    EC.prototype.verify = function verify2(msg, signature$1, key2, enc, options) {
+    EC.prototype.verify = function verify2(msg, signature$1, key3, enc, options) {
       if (!options)
         options = {};
       msg = this._truncateToN(msg, false, options.msgBitLength);
-      key2 = this.keyFromPublic(key2, enc);
+      key3 = this.keyFromPublic(key3, enc);
       signature$1 = new signature2(signature$1, "hex");
       var r2 = signature$1.r;
       var s3 = signature$1.s;
@@ -217762,12 +217848,12 @@ var init_elliptic = __esm({
       var u2 = sinv.mul(r2).umod(this.n);
       var p;
       if (!this.curve._maxwellTrick) {
-        p = this.g.mulAdd(u1, key2.getPublic(), u2);
+        p = this.g.mulAdd(u1, key3.getPublic(), u2);
         if (p.isInfinity())
           return false;
         return p.getX().umod(this.n).cmp(r2) === 0;
       }
-      p = this.g.jmulAdd(u1, key2.getPublic(), u2);
+      p = this.g.jmulAdd(u1, key3.getPublic(), u2);
       if (p.isInfinity())
         return false;
       return p.eqXToP(r2);
@@ -217849,8 +217935,8 @@ function recoverPublicKey3(digest, signature3) {
   const rs = { r: arrayify(sig.r), s: arrayify(sig.s) };
   return "0x" + getCurve().recoverPubKey(arrayify(digest), rs, sig.recoveryParam).encode("hex", false);
 }
-function computePublicKey(key2, compressed) {
-  const bytes = arrayify(key2);
+function computePublicKey(key3, compressed) {
+  const bytes = arrayify(key3);
   if (bytes.length === 32) {
     const signingKey = new SigningKey(bytes);
     if (compressed) {
@@ -217945,8 +218031,8 @@ function handleNumber(value) {
   }
   return BigNumber.from(value);
 }
-function computeAddress(key2) {
-  const publicKey = computePublicKey(key2);
+function computeAddress(key3) {
+  const publicKey = computePublicKey(key3);
   return getAddress2(hexDataSlice(keccak2563(hexDataSlice(publicKey, 1)), 12));
 }
 function recoverAddress3(digest, signature3) {
@@ -218453,7 +218539,7 @@ function populateTransaction(contract, fragment, args) {
     delete overrides.maxPriorityFeePerGas;
     delete overrides.customData;
     delete overrides.ccipReadEnabled;
-    const leftovers = Object.keys(overrides).filter((key2) => overrides[key2] != null);
+    const leftovers = Object.keys(overrides).filter((key3) => overrides[key3] != null);
     if (leftovers.length) {
       logger19.throwError(`cannot override ${leftovers.map((l2) => JSON.stringify(l2)).join(",")}`, Logger.errors.UNSUPPORTED_OPERATION, {
         operation: "overrides",
@@ -218925,11 +219011,11 @@ var init_lib19 = __esm({
           logger19.throwError("sending a transactions require a signer", Logger.errors.UNSUPPORTED_OPERATION, { operation: "sendTransaction(fallback)" });
         }
         const tx = shallowCopy(overrides || {});
-        ["from", "to"].forEach(function(key2) {
-          if (tx[key2] == null) {
+        ["from", "to"].forEach(function(key3) {
+          if (tx[key3] == null) {
             return;
           }
-          logger19.throwError("cannot override " + key2, Logger.errors.UNSUPPORTED_OPERATION, { operation: key2 });
+          logger19.throwError("cannot override " + key3, Logger.errors.UNSUPPORTED_OPERATION, { operation: key3 });
         });
         tx.to = this.resolvedAddress;
         return this.deployed().then(() => {
@@ -219093,8 +219179,8 @@ var init_lib19 = __esm({
           return 0;
         }
         if (eventName == null) {
-          return Object.keys(this._runningEvents).reduce((accum, key2) => {
-            return accum + this._runningEvents[key2].listenerCount();
+          return Object.keys(this._runningEvents).reduce((accum, key3) => {
+            return accum + this._runningEvents[key3].listenerCount();
           }, 0);
         }
         return this._getRunningEvent(eventName).listenerCount();
@@ -219176,17 +219262,17 @@ var init_lib19 = __esm({
         let tx = {};
         if (args.length === this.interface.deploy.inputs.length + 1 && typeof args[args.length - 1] === "object") {
           tx = shallowCopy(args.pop());
-          for (const key2 in tx) {
-            if (!allowedTransactionKeys3[key2]) {
-              throw new Error("unknown transaction override " + key2);
+          for (const key3 in tx) {
+            if (!allowedTransactionKeys3[key3]) {
+              throw new Error("unknown transaction override " + key3);
             }
           }
         }
-        ["data", "from", "to"].forEach((key2) => {
-          if (tx[key2] == null) {
+        ["data", "from", "to"].forEach((key3) => {
+          if (tx[key3] == null) {
             return;
           }
-          logger19.throwError("cannot override " + key2, Logger.errors.UNSUPPORTED_OPERATION, { operation: key2 });
+          logger19.throwError("cannot override " + key3, Logger.errors.UNSUPPORTED_OPERATION, { operation: key3 });
         });
         if (tx.value) {
           const value = BigNumber.from(tx.value);
@@ -219368,14 +219454,14 @@ function sha2568(data) {
 function sha5124(data) {
   return "0x" + import_hash3.default.sha512().update(arrayify(data)).digest("hex");
 }
-function computeHmac(algorithm, key2, data) {
+function computeHmac(algorithm, key3, data) {
   if (!SupportedAlgorithm[algorithm]) {
     logger20.throwError("unsupported algorithm " + algorithm, Logger.errors.UNSUPPORTED_OPERATION, {
       operation: "hmac",
       algorithm
     });
   }
-  return "0x" + import_hash3.default.hmac(import_hash3.default[algorithm], arrayify(key2)).update(arrayify(data)).digest("hex");
+  return "0x" + import_hash3.default.hmac(import_hash3.default[algorithm], arrayify(key3)).update(arrayify(data)).digest("hex");
 }
 var import_hash3, logger20;
 var init_sha27 = __esm({
@@ -219861,19 +219947,19 @@ var init_lib24 = __esm({
         const parentFingerprint = hexlify(bytes.slice(5, 9));
         const index2 = parseInt(hexlify(bytes.slice(9, 13)).substring(2), 16);
         const chainCode = hexlify(bytes.slice(13, 45));
-        const key2 = bytes.slice(45, 78);
+        const key3 = bytes.slice(45, 78);
         switch (hexlify(bytes.slice(0, 4))) {
           // Public Key
           case "0x0488b21e":
           case "0x043587cf":
-            return new _HDNode(_constructorGuard4, null, hexlify(key2), parentFingerprint, chainCode, index2, depth, null);
+            return new _HDNode(_constructorGuard4, null, hexlify(key3), parentFingerprint, chainCode, index2, depth, null);
           // Private Key
           case "0x0488ade4":
           case "0x04358394 ":
-            if (key2[0] !== 0) {
+            if (key3[0] !== 0) {
               break;
             }
-            return new _HDNode(_constructorGuard4, hexlify(key2.slice(1)), null, parentFingerprint, chainCode, index2, depth, null);
+            return new _HDNode(_constructorGuard4, hexlify(key3.slice(1)), null, parentFingerprint, chainCode, index2, depth, null);
         }
         return logger22.throwArgumentError("invalid extended key", "extendedKey", "[REDACTED]");
       }
@@ -220098,12 +220184,12 @@ var require_aes_js = __commonJS({
         }
         return result;
       }
-      var AES = function(key2) {
+      var AES = function(key3) {
         if (!(this instanceof AES)) {
           throw Error("AES must be instanitated with `new`");
         }
         Object.defineProperty(this, "key", {
-          value: coerceArray(key2, true)
+          value: coerceArray(key3, true)
         });
         this._prepare();
       };
@@ -220215,13 +220301,13 @@ var require_aes_js = __commonJS({
         }
         return result;
       };
-      var ModeOfOperationECB = function(key2) {
+      var ModeOfOperationECB = function(key3) {
         if (!(this instanceof ModeOfOperationECB)) {
           throw Error("AES must be instanitated with `new`");
         }
         this.description = "Electronic Code Block";
         this.name = "ecb";
-        this._aes = new AES(key2);
+        this._aes = new AES(key3);
       };
       ModeOfOperationECB.prototype.encrypt = function(plaintext) {
         plaintext = coerceArray(plaintext);
@@ -220251,7 +220337,7 @@ var require_aes_js = __commonJS({
         }
         return plaintext;
       };
-      var ModeOfOperationCBC = function(key2, iv) {
+      var ModeOfOperationCBC = function(key3, iv) {
         if (!(this instanceof ModeOfOperationCBC)) {
           throw Error("AES must be instanitated with `new`");
         }
@@ -220263,7 +220349,7 @@ var require_aes_js = __commonJS({
           throw new Error("invalid initialation vector size (must be 16 bytes)");
         }
         this._lastCipherblock = coerceArray(iv, true);
-        this._aes = new AES(key2);
+        this._aes = new AES(key3);
       };
       ModeOfOperationCBC.prototype.encrypt = function(plaintext) {
         plaintext = coerceArray(plaintext);
@@ -220299,7 +220385,7 @@ var require_aes_js = __commonJS({
         }
         return plaintext;
       };
-      var ModeOfOperationCFB = function(key2, iv, segmentSize) {
+      var ModeOfOperationCFB = function(key3, iv, segmentSize) {
         if (!(this instanceof ModeOfOperationCFB)) {
           throw Error("AES must be instanitated with `new`");
         }
@@ -220315,7 +220401,7 @@ var require_aes_js = __commonJS({
         }
         this.segmentSize = segmentSize;
         this._shiftRegister = coerceArray(iv, true);
-        this._aes = new AES(key2);
+        this._aes = new AES(key3);
       };
       ModeOfOperationCFB.prototype.encrypt = function(plaintext) {
         if (plaintext.length % this.segmentSize != 0) {
@@ -220349,7 +220435,7 @@ var require_aes_js = __commonJS({
         }
         return plaintext;
       };
-      var ModeOfOperationOFB = function(key2, iv) {
+      var ModeOfOperationOFB = function(key3, iv) {
         if (!(this instanceof ModeOfOperationOFB)) {
           throw Error("AES must be instanitated with `new`");
         }
@@ -220362,7 +220448,7 @@ var require_aes_js = __commonJS({
         }
         this._lastPrecipher = coerceArray(iv, true);
         this._lastPrecipherIndex = 16;
-        this._aes = new AES(key2);
+        this._aes = new AES(key3);
       };
       ModeOfOperationOFB.prototype.encrypt = function(plaintext) {
         var encrypted = coerceArray(plaintext, true);
@@ -220416,7 +220502,7 @@ var require_aes_js = __commonJS({
           }
         }
       };
-      var ModeOfOperationCTR = function(key2, counter) {
+      var ModeOfOperationCTR = function(key3, counter) {
         if (!(this instanceof ModeOfOperationCTR)) {
           throw Error("AES must be instanitated with `new`");
         }
@@ -220428,7 +220514,7 @@ var require_aes_js = __commonJS({
         this._counter = counter;
         this._remainingCounter = null;
         this._remainingCounterIndex = 16;
-        this._aes = new AES(key2);
+        this._aes = new AES(key3);
       };
       ModeOfOperationCTR.prototype.encrypt = function(plaintext) {
         var encrypted = coerceArray(plaintext, true);
@@ -220546,9 +220632,9 @@ function searchPath(object, path5) {
   const comps = path5.toLowerCase().split("/");
   for (let i = 0; i < comps.length; i++) {
     let matchingChild = null;
-    for (const key2 in currentChild) {
-      if (key2.toLowerCase() === comps[i]) {
-        matchingChild = currentChild[key2];
+    for (const key3 in currentChild) {
+      if (key3.toLowerCase() === comps[i]) {
+        matchingChild = currentChild[key3];
         break;
       }
     }
@@ -220589,10 +220675,10 @@ function decrypt(json, password) {
   if (!encseed || encseed.length % 16 !== 0) {
     logger24.throwArgumentError("invalid encseed", "json", json);
   }
-  const key2 = arrayify(pbkdf22(password, password, 2e3, 32, "sha256")).slice(0, 16);
+  const key3 = arrayify(pbkdf22(password, password, 2e3, 32, "sha256")).slice(0, 16);
   const iv = encseed.slice(0, 16);
   const encryptedSeed = encseed.slice(16);
-  const aesCbc = new import_aes_js.default.ModeOfOperation.cbc(key2, iv);
+  const aesCbc = new import_aes_js.default.ModeOfOperation.cbc(key3, iv);
   const seed = import_aes_js.default.padding.pkcs7.strip(arrayify(aesCbc.decrypt(encryptedSeed)));
   let seedHex = "";
   for (let i = 0; i < seed.length; i++) {
@@ -221112,14 +221198,14 @@ var require_scrypt = __commonJS({
             if (progressCallback) {
               progressCallback(0);
             }
-            _scrypt(password, salt, N2, r2, p, dkLen, function(error, progress, key2) {
+            _scrypt(password, salt, N2, r2, p, dkLen, function(error, progress, key3) {
               if (error) {
                 reject(error);
-              } else if (key2) {
+              } else if (key3) {
                 if (progressCallback && lastProgress !== 1) {
                   progressCallback(1);
                 }
-                resolve(new Uint8Array(key2));
+                resolve(new Uint8Array(key3));
               } else if (progressCallback && progress !== lastProgress) {
                 lastProgress = progress;
                 return progressCallback(progress);
@@ -221149,29 +221235,29 @@ var require_scrypt = __commonJS({
 function hasMnemonic(value) {
   return value != null && value.mnemonic && value.mnemonic.phrase;
 }
-function _decrypt(data, key2, ciphertext) {
+function _decrypt(data, key3, ciphertext) {
   const cipher = searchPath(data, "crypto/cipher");
   if (cipher === "aes-128-ctr") {
     const iv = looseArrayify(searchPath(data, "crypto/cipherparams/iv"));
     const counter = new import_aes_js2.default.Counter(iv);
-    const aesCtr = new import_aes_js2.default.ModeOfOperation.ctr(key2, counter);
+    const aesCtr = new import_aes_js2.default.ModeOfOperation.ctr(key3, counter);
     return arrayify(aesCtr.decrypt(ciphertext));
   }
   return null;
 }
-function _getAccount(data, key2) {
+function _getAccount(data, key3) {
   const ciphertext = looseArrayify(searchPath(data, "crypto/ciphertext"));
-  const computedMAC = hexlify(keccak2563(concat3([key2.slice(16, 32), ciphertext]))).substring(2);
+  const computedMAC = hexlify(keccak2563(concat3([key3.slice(16, 32), ciphertext]))).substring(2);
   if (computedMAC !== searchPath(data, "crypto/mac").toLowerCase()) {
     throw new Error("invalid password");
   }
-  const privateKey = _decrypt(data, key2.slice(0, 16), ciphertext);
+  const privateKey = _decrypt(data, key3.slice(0, 16), ciphertext);
   if (!privateKey) {
     logger25.throwError("unsupported cipher", Logger.errors.UNSUPPORTED_OPERATION, {
       operation: "decrypt"
     });
   }
-  const mnemonicKey = key2.slice(32, 64);
+  const mnemonicKey = key3.slice(32, 64);
   const address2 = computeAddress(privateKey);
   if (data.address) {
     let check = data.address.toLowerCase();
@@ -221262,14 +221348,14 @@ function _computeKdfKey(data, password, pbkdf2Func, scryptFunc, progressCallback
 }
 function decryptSync(json, password) {
   const data = JSON.parse(json);
-  const key2 = _computeKdfKey(data, password, pbkdf2Sync, import_scrypt_js.default.syncScrypt);
-  return _getAccount(data, key2);
+  const key3 = _computeKdfKey(data, password, pbkdf2Sync, import_scrypt_js.default.syncScrypt);
+  return _getAccount(data, key3);
 }
 function decrypt2(json, password, progressCallback) {
   return __awaiter7(this, void 0, void 0, function* () {
     const data = JSON.parse(json);
-    const key2 = yield _computeKdfKey(data, password, pbkdf23, import_scrypt_js.default.scrypt, progressCallback);
-    return _getAccount(data, key2);
+    const key3 = yield _computeKdfKey(data, password, pbkdf23, import_scrypt_js.default.scrypt, progressCallback);
+    return _getAccount(data, key3);
   });
 }
 function encrypt(account, password, options, progressCallback) {
@@ -221346,11 +221432,11 @@ function encrypt(account, password, options, progressCallback) {
       p = options.scrypt.p;
     }
   }
-  return import_scrypt_js.default.scrypt(passwordBytes, salt, N2, r2, p, 64, progressCallback).then((key2) => {
-    key2 = arrayify(key2);
-    const derivedKey = key2.slice(0, 16);
-    const macPrefix = key2.slice(16, 32);
-    const mnemonicKey = key2.slice(32, 64);
+  return import_scrypt_js.default.scrypt(passwordBytes, salt, N2, r2, p, 64, progressCallback).then((key3) => {
+    key3 = arrayify(key3);
+    const derivedKey = key3.slice(0, 16);
+    const macPrefix = key3.slice(16, 32);
+    const mnemonicKey = key3.slice(32, 64);
     const counter = new import_aes_js2.default.Counter(iv);
     const aesCtr = new import_aes_js2.default.ModeOfOperation.ctr(derivedKey, counter);
     const ciphertext = arrayify(aesCtr.encrypt(privateKey));
@@ -222003,12 +222089,12 @@ function getUrl2(href, options) {
     const body = yield response.arrayBuffer();
     const headers = {};
     if (response.headers.forEach) {
-      response.headers.forEach((value, key2) => {
-        headers[key2.toLowerCase()] = value;
+      response.headers.forEach((value, key3) => {
+        headers[key3.toLowerCase()] = value;
       });
     } else {
-      response.headers.keys().forEach((key2) => {
-        headers[key2.toLowerCase()] = response.headers.get(key2);
+      response.headers.keys().forEach((key3) => {
+        headers[key3.toLowerCase()] = response.headers.get(key3);
       });
     }
     return {
@@ -222109,9 +222195,9 @@ function _fetchData(connection, body, processFunc) {
       timeout = connection.timeout;
     }
     if (connection.headers) {
-      for (const key2 in connection.headers) {
-        headers[key2.toLowerCase()] = { key: key2, value: String(connection.headers[key2]) };
-        if (["if-none-match", "if-modified-since"].indexOf(key2.toLowerCase()) >= 0) {
+      for (const key3 in connection.headers) {
+        headers[key3.toLowerCase()] = { key: key3, value: String(connection.headers[key3]) };
+        if (["if-none-match", "if-modified-since"].indexOf(key3.toLowerCase()) >= 0) {
           allow304 = true;
         }
       }
@@ -222170,8 +222256,8 @@ function _fetchData(connection, body, processFunc) {
     }
   }
   const flatHeaders = {};
-  Object.keys(headers).forEach((key2) => {
-    const header = headers[key2];
+  Object.keys(headers).forEach((key3) => {
+    const header = headers[key3];
     flatHeaders[header.key] = header.value;
   });
   options.headers = flatHeaders;
@@ -222989,15 +223075,15 @@ var init_formatter2 = __esm({
       }
       static check(format2, object) {
         const result = {};
-        for (const key2 in format2) {
+        for (const key3 in format2) {
           try {
-            const value = format2[key2](object[key2]);
+            const value = format2[key3](object[key3]);
             if (value !== void 0) {
-              result[key2] = value;
+              result[key3] = value;
             }
           } catch (error) {
-            error.checkKey = key2;
-            error.checkValue = object[key2];
+            error.checkKey = key3;
+            error.checkValue = object[key3];
             throw error;
           }
         }
@@ -223571,12 +223657,12 @@ var init_base_provider = __esm({
           });
         });
       }
-      getText(key2) {
+      getText(key3) {
         return __awaiter11(this, void 0, void 0, function* () {
-          let keyBytes = toUtf8Bytes(key2);
+          let keyBytes = toUtf8Bytes(key3);
           keyBytes = concat3([bytes32ify(64), bytes32ify(keyBytes.length), keyBytes]);
           if (keyBytes.length % 32 !== 0) {
-            keyBytes = concat3([keyBytes, hexZeroPad("0x", 32 - key2.length % 32)]);
+            keyBytes = concat3([keyBytes, hexZeroPad("0x", 32 - key3.length % 32)]);
           }
           const hexBytes3 = yield this._fetchBytes("0x59d1d43c", hexlify(keyBytes));
           if (hexBytes3 == null || hexBytes3 === "0x") {
@@ -223799,16 +223885,16 @@ var init_base_provider = __esm({
           }
           if (this._emitted.block !== blockNumber) {
             this._emitted.block = blockNumber;
-            Object.keys(this._emitted).forEach((key2) => {
-              if (key2 === "block") {
+            Object.keys(this._emitted).forEach((key3) => {
+              if (key3 === "block") {
                 return;
               }
-              const eventBlockNumber = this._emitted[key2];
+              const eventBlockNumber = this._emitted[key3];
               if (eventBlockNumber === "pending") {
                 return;
               }
               if (blockNumber - eventBlockNumber > 12) {
-                delete this._emitted[key2];
+                delete this._emitted[key3];
               }
             });
           }
@@ -224301,32 +224387,32 @@ var init_base_provider = __esm({
         return __awaiter11(this, void 0, void 0, function* () {
           const values = yield transaction;
           const tx = {};
-          ["from", "to"].forEach((key2) => {
-            if (values[key2] == null) {
+          ["from", "to"].forEach((key3) => {
+            if (values[key3] == null) {
               return;
             }
-            tx[key2] = Promise.resolve(values[key2]).then((v) => v ? this._getAddress(v) : null);
+            tx[key3] = Promise.resolve(values[key3]).then((v) => v ? this._getAddress(v) : null);
           });
-          ["gasLimit", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "value"].forEach((key2) => {
-            if (values[key2] == null) {
+          ["gasLimit", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "value"].forEach((key3) => {
+            if (values[key3] == null) {
               return;
             }
-            tx[key2] = Promise.resolve(values[key2]).then((v) => v ? BigNumber.from(v) : null);
+            tx[key3] = Promise.resolve(values[key3]).then((v) => v ? BigNumber.from(v) : null);
           });
-          ["type"].forEach((key2) => {
-            if (values[key2] == null) {
+          ["type"].forEach((key3) => {
+            if (values[key3] == null) {
               return;
             }
-            tx[key2] = Promise.resolve(values[key2]).then((v) => v != null ? v : null);
+            tx[key3] = Promise.resolve(values[key3]).then((v) => v != null ? v : null);
           });
           if (values.accessList) {
             tx.accessList = this.formatter.accessList(values.accessList);
           }
-          ["data"].forEach((key2) => {
-            if (values[key2] == null) {
+          ["data"].forEach((key3) => {
+            if (values[key3] == null) {
               return;
             }
-            tx[key2] = Promise.resolve(values[key2]).then((v) => v ? hexlify(v) : null);
+            tx[key3] = Promise.resolve(values[key3]).then((v) => v ? hexlify(v) : null);
           });
           return this.formatter.transactionRequest(yield resolveProperties(tx));
         });
@@ -224338,17 +224424,17 @@ var init_base_provider = __esm({
           if (filter2.address != null) {
             result.address = this._getAddress(filter2.address);
           }
-          ["blockHash", "topics"].forEach((key2) => {
-            if (filter2[key2] == null) {
+          ["blockHash", "topics"].forEach((key3) => {
+            if (filter2[key3] == null) {
               return;
             }
-            result[key2] = filter2[key2];
+            result[key3] = filter2[key3];
           });
-          ["fromBlock", "toBlock"].forEach((key2) => {
-            if (filter2[key2] == null) {
+          ["fromBlock", "toBlock"].forEach((key3) => {
+            if (filter2[key3] == null) {
               return;
             }
-            result[key2] = this._getBlockTag(filter2[key2]);
+            result[key3] = this._getBlockTag(filter2[key3]);
           });
           return this.formatter.filter(yield resolveProperties(result));
         });
@@ -224887,8 +224973,8 @@ function spelunk(value, requireData) {
     }
   }
   if (typeof value === "object") {
-    for (const key2 in value) {
-      const result = spelunk(value[key2], requireData);
+    for (const key3 in value) {
+      const result = spelunk(value[key3], requireData);
       if (result) {
         return result;
       }
@@ -225519,29 +225605,29 @@ var init_json_rpc_provider = __esm({
       static hexlifyTransaction(transaction, allowExtra) {
         const allowed = shallowCopy(allowedTransactionKeys4);
         if (allowExtra) {
-          for (const key2 in allowExtra) {
-            if (allowExtra[key2]) {
-              allowed[key2] = true;
+          for (const key3 in allowExtra) {
+            if (allowExtra[key3]) {
+              allowed[key3] = true;
             }
           }
         }
         checkProperties(transaction, allowed);
         const result = {};
-        ["chainId", "gasLimit", "gasPrice", "type", "maxFeePerGas", "maxPriorityFeePerGas", "nonce", "value"].forEach(function(key2) {
-          if (transaction[key2] == null) {
+        ["chainId", "gasLimit", "gasPrice", "type", "maxFeePerGas", "maxPriorityFeePerGas", "nonce", "value"].forEach(function(key3) {
+          if (transaction[key3] == null) {
             return;
           }
-          const value = hexValue2(BigNumber.from(transaction[key2]));
-          if (key2 === "gasLimit") {
-            key2 = "gas";
+          const value = hexValue2(BigNumber.from(transaction[key3]));
+          if (key3 === "gasLimit") {
+            key3 = "gas";
           }
-          result[key2] = value;
+          result[key3] = value;
         });
-        ["from", "to", "data"].forEach(function(key2) {
-          if (transaction[key2] == null) {
+        ["from", "to", "data"].forEach(function(key3) {
+          if (transaction[key3] == null) {
             return;
           }
-          result[key2] = hexlify(transaction[key2]);
+          result[key3] = hexlify(transaction[key3]);
         });
         if (transaction.accessList) {
           result["accessList"] = accessListify(transaction.accessList);
@@ -225929,8 +226015,8 @@ var init_url_json_rpc_provider = __esm({
         if (typeof apiKey === "string") {
           defineReadOnly(this, "apiKey", apiKey);
         } else if (apiKey != null) {
-          Object.keys(apiKey).forEach((key2) => {
-            defineReadOnly(this, key2, apiKey[key2]);
+          Object.keys(apiKey).forEach((key3) => {
+            defineReadOnly(this, key3, apiKey[key3]);
           });
         }
       }
@@ -226201,24 +226287,24 @@ var init_cloudflare_provider = __esm({
 // node_modules/@ethersproject/providers/lib.esm/etherscan-provider.js
 function getTransactionPostData(transaction) {
   const result = {};
-  for (let key2 in transaction) {
-    if (transaction[key2] == null) {
+  for (let key3 in transaction) {
+    if (transaction[key3] == null) {
       continue;
     }
-    let value = transaction[key2];
-    if (key2 === "type" && value === 0) {
+    let value = transaction[key3];
+    if (key3 === "type" && value === 0) {
       continue;
     }
-    if ({ type: true, gasLimit: true, gasPrice: true, maxFeePerGs: true, maxPriorityFeePerGas: true, nonce: true, value: true }[key2]) {
+    if ({ type: true, gasLimit: true, gasPrice: true, maxFeePerGs: true, maxPriorityFeePerGas: true, nonce: true, value: true }[key3]) {
       value = hexValue2(hexlify(value));
-    } else if (key2 === "accessList") {
+    } else if (key3 === "accessList") {
       value = "[" + accessListify(value).map((set) => {
         return `{address:"${set.address}",storageKeys:["${set.storageKeys.join('","')}"]}`;
       }).join(",") + "]";
     } else {
       value = hexlify(value);
     }
-    result[key2] = value;
+    result[key3] = value;
   }
   return result;
 }
@@ -226398,10 +226484,10 @@ var init_etherscan_provider = __esm({
         return logger37.throwArgumentError("unsupported network", "network", this.network.name);
       }
       getUrl(module, params) {
-        const query = Object.keys(params).reduce((accum, key2) => {
-          const value = params[key2];
+        const query = Object.keys(params).reduce((accum, key3) => {
+          const value = params[key3];
           if (value != null) {
-            accum += `&${key2}=${value}`;
+            accum += `&${key3}=${value}`;
           }
           return accum;
         }, "");
@@ -226439,8 +226525,8 @@ var init_etherscan_provider = __esm({
           let payloadStr = null;
           if (payload) {
             connection.headers = { "content-type": "application/x-www-form-urlencoded; charset=UTF-8" };
-            payloadStr = Object.keys(payload).map((key2) => {
-              return `${key2}=${payload[key2]}`;
+            payloadStr = Object.keys(payload).map((key3) => {
+              return `${key3}=${payload[key3]}`;
             }).join("&");
           }
           const result = yield fetchJson(connection, payloadStr, procFunc || getJsonResult);
@@ -226608,9 +226694,9 @@ var init_etherscan_provider = __esm({
           };
           const result = yield this.fetch("account", params);
           return result.map((tx) => {
-            ["contractAddress", "to"].forEach(function(key2) {
-              if (tx[key2] == "") {
-                delete tx[key2];
+            ["contractAddress", "to"].forEach(function(key3) {
+              if (tx[key3] == "") {
+                delete tx[key3];
               }
             });
             if (tx.creates == null && tx.contractAddress != null) {
@@ -226678,14 +226764,14 @@ function serialize2(value) {
   } else if (typeof value === "object") {
     const keys = Object.keys(value);
     keys.sort();
-    return "{" + keys.map((key2) => {
-      let v = value[key2];
+    return "{" + keys.map((key3) => {
+      let v = value[key3];
       if (typeof v === "function") {
         v = "[function]";
       } else {
         v = serialize2(v);
       }
-      return JSON.stringify(key2) + ":" + v;
+      return JSON.stringify(key3) + ":" + v;
     }).join(",") + "}";
   }
   throw new Error("unknown value type: " + typeof value);
@@ -228693,24 +228779,24 @@ var require_axios = __commonJS({
         }
         const keys = allOwnKeys ? Object.getOwnPropertyNames(obj) : Object.keys(obj);
         const len = keys.length;
-        let key2;
+        let key3;
         for (i = 0; i < len; i++) {
-          key2 = keys[i];
-          fn.call(null, obj[key2], key2, obj);
+          key3 = keys[i];
+          fn.call(null, obj[key3], key3, obj);
         }
       }
     }
-    function findKey2(obj, key2) {
+    function findKey2(obj, key3) {
       if (isBuffer2(obj)) {
         return null;
       }
-      key2 = key2.toLowerCase();
+      key3 = key3.toLowerCase();
       const keys = Object.keys(obj);
       let i = keys.length;
       let _key;
       while (i-- > 0) {
         _key = keys[i];
-        if (key2 === _key.toLowerCase()) {
+        if (key3 === _key.toLowerCase()) {
           return _key;
         }
       }
@@ -228727,11 +228813,11 @@ var require_axios = __commonJS({
         skipUndefined
       } = isContextDefined2(this) && this || {};
       const result = {};
-      const assignValue = (val, key2) => {
-        if (key2 === "__proto__" || key2 === "constructor" || key2 === "prototype") {
+      const assignValue = (val, key3) => {
+        if (key3 === "__proto__" || key3 === "constructor" || key3 === "prototype") {
           return;
         }
-        const targetKey = caseless && typeof key2 === "string" && findKey2(result, key2) || key2;
+        const targetKey = caseless && typeof key3 === "string" && findKey2(result, key3) || key3;
         const existing = hasOwnProperty2(result, targetKey) ? result[targetKey] : void 0;
         if (isPlainObject4(existing) && isPlainObject4(val)) {
           result[targetKey] = merge2(existing, val);
@@ -228765,9 +228851,9 @@ var require_axios = __commonJS({
     var extend2 = (a, b, thisArg, {
       allOwnKeys
     } = {}) => {
-      forEach2(b, (val, key2) => {
+      forEach2(b, (val, key3) => {
         if (thisArg && isFunction$1(val)) {
-          Object.defineProperty(a, key2, {
+          Object.defineProperty(a, key3, {
             // Null-proto descriptor so a polluted Object.prototype.get cannot
             // hijack defineProperty's accessor-vs-data resolution.
             __proto__: null,
@@ -228777,7 +228863,7 @@ var require_axios = __commonJS({
             configurable: true
           });
         } else {
-          Object.defineProperty(a, key2, {
+          Object.defineProperty(a, key3, {
             __proto__: null,
             value: val,
             writable: true,
@@ -228953,9 +229039,9 @@ var require_axios = __commonJS({
               }
             } else {
               target = isArray2(source) ? [] : {};
-              forEach2(source, (value, key2) => {
+              forEach2(source, (value, key3) => {
                 const reducedValue = visit(value);
-                !isUndefined2(reducedValue) && (target[key2] = reducedValue);
+                !isUndefined2(reducedValue) && (target[key3] = reducedValue);
               });
             }
             visited.delete(source);
@@ -229058,25 +229144,25 @@ var require_axios = __commonJS({
     var ignoreDuplicateOf2 = utils$1.toObjectSet(["age", "authorization", "content-length", "content-type", "etag", "expires", "from", "host", "if-modified-since", "if-unmodified-since", "last-modified", "location", "max-forwards", "proxy-authorization", "referer", "retry-after", "user-agent"]);
     var parseHeaders = (rawHeaders) => {
       const parsed = {};
-      let key2;
+      let key3;
       let val;
       let i;
       rawHeaders && rawHeaders.split("\n").forEach(function parser(line) {
         i = line.indexOf(":");
-        key2 = line.substring(0, i).trim().toLowerCase();
+        key3 = line.substring(0, i).trim().toLowerCase();
         val = line.substring(i + 1).trim();
-        const hasKey = utils$1.hasOwnProp(parsed, key2);
-        if (!key2 || hasKey && utils$1.hasOwnProp(ignoreDuplicateOf2, key2)) {
+        const hasKey = utils$1.hasOwnProp(parsed, key3);
+        if (!key3 || hasKey && utils$1.hasOwnProp(ignoreDuplicateOf2, key3)) {
           return;
         }
-        if (key2 === "set-cookie") {
+        if (key3 === "set-cookie") {
           if (hasKey) {
-            parsed[key2].push(val);
+            parsed[key3].push(val);
           } else {
-            parsed[key2] = [val];
+            parsed[key3] = [val];
           }
         } else {
-          parsed[key2] = hasKey ? parsed[key2] + ", " + val : val;
+          parsed[key3] = hasKey ? parsed[key3] + ", " + val : val;
         }
       });
       return parsed;
@@ -229266,9 +229352,9 @@ var require_axios = __commonJS({
           if (!lHeader) {
             return;
           }
-          const key2 = utils$1.findKey(self2, lHeader);
-          if (!key2 || self2[key2] === void 0 || _rewrite === true || _rewrite === void 0 && self2[key2] !== false) {
-            self2[key2 || _header] = normalizeValue2(_value);
+          const key3 = utils$1.findKey(self2, lHeader);
+          if (!key3 || self2[key3] === void 0 || _rewrite === true || _rewrite === void 0 && self2[key3] !== false) {
+            self2[key3 || _header] = normalizeValue2(_value);
           }
         }
         const setHeaders = (headers, _rewrite) => utils$1.forEach(headers, (_value, _header) => setHeader(_value, _header, _rewrite));
@@ -229277,17 +229363,17 @@ var require_axios = __commonJS({
         } else if (utils$1.isString(header) && (header = header.trim()) && !isValidHeaderName2(header)) {
           setHeaders(parseHeaders(header), valueOrRewrite);
         } else if (utils$1.isObject(header) && utils$1.isSafeIterable(header)) {
-          let obj = /* @__PURE__ */ Object.create(null), dest, key2;
+          let obj = /* @__PURE__ */ Object.create(null), dest, key3;
           for (const entry of header) {
             if (!utils$1.isArray(entry)) {
               throw new TypeError("Object iterator must return a key-value pair");
             }
-            key2 = entry[0];
-            if (utils$1.hasOwnProp(obj, key2)) {
-              dest = obj[key2];
-              obj[key2] = utils$1.isArray(dest) ? [...dest, entry[1]] : [dest, entry[1]];
+            key3 = entry[0];
+            if (utils$1.hasOwnProp(obj, key3)) {
+              dest = obj[key3];
+              obj[key3] = utils$1.isArray(dest) ? [...dest, entry[1]] : [dest, entry[1]];
             } else {
-              obj[key2] = entry[1];
+              obj[key3] = entry[1];
             }
           }
           setHeaders(obj, valueOrRewrite);
@@ -229299,9 +229385,9 @@ var require_axios = __commonJS({
       get(header, parser) {
         header = normalizeHeader2(header);
         if (header) {
-          const key2 = utils$1.findKey(this, header);
-          if (key2) {
-            const value = this[key2];
+          const key3 = utils$1.findKey(this, header);
+          if (key3) {
+            const value = this[key3];
             if (!parser) {
               return value;
             }
@@ -229309,7 +229395,7 @@ var require_axios = __commonJS({
               return parseTokens2(value);
             }
             if (utils$1.isFunction(parser)) {
-              return parser.call(this, value, key2);
+              return parser.call(this, value, key3);
             }
             if (utils$1.isRegExp(parser)) {
               return parser.exec(value);
@@ -229321,8 +229407,8 @@ var require_axios = __commonJS({
       has(header, matcher) {
         header = normalizeHeader2(header);
         if (header) {
-          const key2 = utils$1.findKey(this, header);
-          return !!(key2 && this[key2] !== void 0 && (!matcher || matchHeaderValue2(this, this[key2], key2, matcher)));
+          const key3 = utils$1.findKey(this, header);
+          return !!(key3 && this[key3] !== void 0 && (!matcher || matchHeaderValue2(this, this[key3], key3, matcher)));
         }
         return false;
       }
@@ -229332,9 +229418,9 @@ var require_axios = __commonJS({
         function deleteHeader(_header) {
           _header = normalizeHeader2(_header);
           if (_header) {
-            const key2 = utils$1.findKey(self2, _header);
-            if (key2 && (!matcher || matchHeaderValue2(self2, self2[key2], key2, matcher))) {
-              delete self2[key2];
+            const key3 = utils$1.findKey(self2, _header);
+            if (key3 && (!matcher || matchHeaderValue2(self2, self2[key3], key3, matcher))) {
+              delete self2[key3];
               deleted = true;
             }
           }
@@ -229351,9 +229437,9 @@ var require_axios = __commonJS({
         let i = keys.length;
         let deleted = false;
         while (i--) {
-          const key2 = keys[i];
-          if (!matcher || matchHeaderValue2(this, this[key2], key2, matcher, true)) {
-            delete this[key2];
+          const key3 = keys[i];
+          if (!matcher || matchHeaderValue2(this, this[key3], key3, matcher, true)) {
+            delete this[key3];
             deleted = true;
           }
         }
@@ -229363,9 +229449,9 @@ var require_axios = __commonJS({
         const self2 = this;
         const headers = {};
         utils$1.forEach(this, (value, header) => {
-          const key2 = utils$1.findKey(headers, header);
-          if (key2) {
-            self2[key2] = normalizeValue2(value);
+          const key3 = utils$1.findKey(headers, header);
+          if (key3) {
+            self2[key3] = normalizeValue2(value);
             delete self2[header];
             return;
           }
@@ -229432,8 +229518,8 @@ var require_axios = __commonJS({
     AxiosHeaders3.accessor(["Content-Type", "Content-Length", "Accept", "Accept-Encoding", "User-Agent", "Authorization"]);
     utils$1.reduceDescriptors(AxiosHeaders3.prototype, ({
       value
-    }, key2) => {
-      let mapped = key2[0].toUpperCase() + key2.slice(1);
+    }, key3) => {
+      let mapped = key3[0].toUpperCase() + key3.slice(1);
       return {
         get: () => value,
         set(headerValue) {
@@ -229482,10 +229568,10 @@ var require_axios = __commonJS({
             return source;
           }
           result = /* @__PURE__ */ Object.create(null);
-          for (const [key2, value] of Object.entries(source)) {
-            const reducedValue = lowerKeys.has(key2.toLowerCase()) ? REDACTED2 : visit(value);
+          for (const [key3, value] of Object.entries(source)) {
+            const reducedValue = lowerKeys.has(key3.toLowerCase()) ? REDACTED2 : visit(value);
             if (!utils$1.isUndefined(reducedValue)) {
-              result[key2] = reducedValue;
+              result[key3] = reducedValue;
             }
           }
         }
@@ -229613,12 +229699,12 @@ var require_axios = __commonJS({
     function isVisitable2(thing) {
       return utils$1.isPlainObject(thing) || utils$1.isArray(thing);
     }
-    function removeBrackets2(key2) {
-      return utils$1.endsWith(key2, "[]") ? key2.slice(0, -2) : key2;
+    function removeBrackets2(key3) {
+      return utils$1.endsWith(key3, "[]") ? key3.slice(0, -2) : key3;
     }
-    function renderKey2(path6, key2, dots) {
-      if (!path6) return key2;
-      return path6.concat(key2).map(function each(token, i) {
+    function renderKey2(path6, key3, dots) {
+      if (!path6) return key3;
+      return path6.concat(key3).map(function each(token, i) {
         token = removeBrackets2(token);
         return !dots && i ? "[" + token + "]" : token;
       }).join(dots ? "." : "");
@@ -229696,22 +229782,22 @@ var require_axios = __commonJS({
           return currentValue;
         });
       }
-      function defaultVisitor(value, key2, path6) {
+      function defaultVisitor(value, key3, path6) {
         let arr = value;
         if (utils$1.isReactNative(formData) && utils$1.isReactNativeBlob(value)) {
-          formData.append(renderKey2(path6, key2, dots), convertValue(value));
+          formData.append(renderKey2(path6, key3, dots), convertValue(value));
           return false;
         }
         if (value && !path6 && typeof value === "object") {
-          if (utils$1.endsWith(key2, "{}")) {
-            key2 = metaTokens ? key2 : key2.slice(0, -2);
+          if (utils$1.endsWith(key3, "{}")) {
+            key3 = metaTokens ? key3 : key3.slice(0, -2);
             value = stringifyWithDepthLimit(value, 1);
-          } else if (utils$1.isArray(value) && isFlatArray2(value) || (utils$1.isFileList(value) || utils$1.endsWith(key2, "[]")) && (arr = utils$1.toArray(value))) {
-            key2 = removeBrackets2(key2);
+          } else if (utils$1.isArray(value) && isFlatArray2(value) || (utils$1.isFileList(value) || utils$1.endsWith(key3, "[]")) && (arr = utils$1.toArray(value))) {
+            key3 = removeBrackets2(key3);
             arr.forEach(function each(el, index2) {
               !(utils$1.isUndefined(el) || el === null) && formData.append(
                 // eslint-disable-next-line no-nested-ternary
-                indexes === true ? renderKey2([key2], index2, dots) : indexes === null ? key2 : key2 + "[]",
+                indexes === true ? renderKey2([key3], index2, dots) : indexes === null ? key3 : key3 + "[]",
                 convertValue(el)
               );
             });
@@ -229721,7 +229807,7 @@ var require_axios = __commonJS({
         if (isVisitable2(value)) {
           return true;
         }
-        formData.append(renderKey2(path6, key2, dots), convertValue(value));
+        formData.append(renderKey2(path6, key3, dots), convertValue(value));
         return false;
       }
       const exposedHelpers = Object.assign(predicates2, {
@@ -229736,10 +229822,10 @@ var require_axios = __commonJS({
           throw new Error("Circular reference detected in " + path6.join("."));
         }
         stack.push(value);
-        utils$1.forEach(value, function each(el, key2) {
-          const result = !(utils$1.isUndefined(el) || el === null) && visitor.call(formData, el, utils$1.isString(key2) ? key2.trim() : key2, path6, exposedHelpers);
+        utils$1.forEach(value, function each(el, key3) {
+          const result = !(utils$1.isUndefined(el) || el === null) && visitor.call(formData, el, utils$1.isString(key3) ? key3.trim() : key3, path6, exposedHelpers);
           if (result === true) {
-            build(el, path6 ? path6.concat(key2) : [key2], depth + 1);
+            build(el, path6 ? path6.concat(key3) : [key3], depth + 1);
           }
         });
         stack.pop();
@@ -229928,9 +230014,9 @@ var require_axios = __commonJS({
     };
     function toURLEncodedForm2(data, options) {
       return toFormData3(data, new platform.classes.URLSearchParams(), {
-        visitor: function(value, key2, path6, helpers) {
+        visitor: function(value, key3, path6, helpers) {
           if (platform.isNode && utils$1.isBuffer(value)) {
-            this.append(key2, value.toString("base64"));
+            this.append(key3, value.toString("base64"));
             return false;
           }
           return helpers.defaultVisitor.apply(this, arguments);
@@ -229959,10 +230045,10 @@ var require_axios = __commonJS({
       const keys = Object.keys(arr);
       let i;
       const len = keys.length;
-      let key2;
+      let key3;
       for (i = 0; i < len; i++) {
-        key2 = keys[i];
-        obj[key2] = arr[key2];
+        key3 = keys[i];
+        obj[key3] = arr[key3];
       }
       return obj;
     }
@@ -230000,7 +230086,7 @@ var require_axios = __commonJS({
       }
       return null;
     }
-    var own2 = (obj, key2) => obj != null && utils$1.hasOwnProp(obj, key2) ? obj[key2] : void 0;
+    var own2 = (obj, key3) => obj != null && utils$1.hasOwnProp(obj, key3) ? obj[key3] : void 0;
     function stringifySafely3(rawValue, parser, encoder5) {
       if (utils$1.isString(rawValue)) {
         try {
@@ -230271,8 +230357,8 @@ var require_axios = __commonJS({
         return !hostname.endsWith(parsedProxyHostname);
       });
     }
-    function getEnv2(key2) {
-      return process.env[key2.toLowerCase()] || process.env[key2.toUpperCase()] || "";
+    function getEnv2(key3) {
+      return process.env[key3.toLowerCase()] || process.env[key3.toUpperCase()] || "";
     }
     var VERSION4 = "1.19.0";
     function parseProtocol2(url3) {
@@ -230321,9 +230407,9 @@ var require_axios = __commonJS({
         headers.set(formHeaders);
         return;
       }
-      Object.entries(formHeaders || {}).forEach(([key2, val]) => {
-        if (FORM_DATA_CONTENT_HEADERS2.includes(key2.toLowerCase())) {
-          headers.set(key2, val);
+      Object.entries(formHeaders || {}).forEach(([key3, val]) => {
+        if (FORM_DATA_CONTENT_HEADERS2.includes(key3.toLowerCase())) {
+          headers.set(key3, val);
         }
       });
     }
@@ -231091,9 +231177,9 @@ var require_axios = __commonJS({
       return isHttps2.test(options.protocol) ? configHttpsAgent || https2.globalAgent : configHttpAgent || http5.globalAgent;
     }
     function getTunnelingAgent2(agentOptions, userHttpsAgent) {
-      const key2 = agentOptions.protocol + "//" + agentOptions.hostname + ":" + (agentOptions.port || "") + "#" + (agentOptions.auth || "");
+      const key3 = agentOptions.protocol + "//" + agentOptions.hostname + ":" + (agentOptions.port || "") + "#" + (agentOptions.auth || "");
       const cache2 = userHttpsAgent ? tunnelingAgentCacheUser2.get(userHttpsAgent) || tunnelingAgentCacheUser2.set(userHttpsAgent, /* @__PURE__ */ new Map()).get(userHttpsAgent) : tunnelingAgentCache2;
-      let agent = cache2.get(key2);
+      let agent = cache2.get(key3);
       if (agent) return agent;
       const merged = userHttpsAgent && userHttpsAgent.options ? {
         ...userHttpsAgent.options,
@@ -231113,7 +231199,7 @@ var require_axios = __commonJS({
         };
       }
       agent[kAxiosInstalledTunnel2] = true;
-      cache2.set(key2, agent);
+      cache2.set(key3, agent);
       return agent;
     }
     var supportedProtocols2 = platform.protocols.map((protocol) => {
@@ -231191,7 +231277,7 @@ var require_axios = __commonJS({
       }
       if (proxy) {
         const isProxyURL = proxy instanceof URL;
-        const readProxyField = (key2) => isProxyURL || utils$1.hasOwnProp(proxy, key2) ? proxy[key2] : void 0;
+        const readProxyField = (key3) => isProxyURL || utils$1.hasOwnProp(proxy, key3) ? proxy[key3] : void 0;
         const proxyUsername = readProxyField("username");
         const proxyPassword = readProxyField("password");
         let proxyAuth = utils$1.hasOwnProp(proxy, "auth") ? proxy.auth : void 0;
@@ -231339,7 +231425,7 @@ var require_axios = __commonJS({
     };
     var httpAdapter2 = isHttpAdapterSupported2 && function httpAdapter3(config) {
       return wrapAsync2(async function dispatchHttpRequest(resolve, reject, onDone) {
-        const own3 = (key2) => utils$1.getSafeProp(config, key2);
+        const own3 = (key3) => utils$1.getSafeProp(config, key3);
         const transitional2 = own3("transitional") || transitionalDefaults;
         let data = own3("data");
         let lookup = own3("lookup");
@@ -232080,7 +232166,7 @@ var require_axios = __commonJS({
     var encodeUTF8$1 = (str) => encodeURIComponent(str).replace(/%([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
     function resolveConfig2(config) {
       const newConfig = mergeConfig3({}, config);
-      const own3 = (key2) => utils$1.hasOwnProp(newConfig, key2) ? newConfig[key2] : void 0;
+      const own3 = (key3) => utils$1.hasOwnProp(newConfig, key3) ? newConfig[key3] : void 0;
       const data = own3("data");
       let withXSRFToken = own3("withXSRFToken");
       const xsrfHeaderName = own3("xsrfHeaderName");
@@ -232209,8 +232295,8 @@ var require_axios = __commonJS({
         };
         requestData === void 0 && requestHeaders.setContentType(null);
         if ("setRequestHeader" in request2) {
-          utils$1.forEach(toByteStringHeaderObject2(requestHeaders), function setRequestHeader(val, key2) {
-            request2.setRequestHeader(key2, val);
+          utils$1.forEach(toByteStringHeaderObject2(requestHeaders), function setRequestHeader(val, key3) {
+            request2.setRequestHeader(key3, val);
           });
         }
         if (!utils$1.isUndefined(_config.withCredentials)) {
@@ -232514,7 +232600,7 @@ var require_axios = __commonJS({
         } = resolveConfig2(config);
         const hasMaxContentLength = utils$1.isNumber(maxContentLength) && maxContentLength > -1;
         const hasMaxBodyLength = utils$1.isNumber(maxBodyLength) && maxBodyLength > -1;
-        const own3 = (key2) => utils$1.hasOwnProp(config, key2) ? config[key2] : void 0;
+        const own3 = (key3) => utils$1.hasOwnProp(config, key3) ? config[key3] : void 0;
         let _fetch = envFetch || fetch;
         responseType = responseType ? (responseType + "").toLowerCase() : "text";
         let composedSignal = composeSignals2([signal, cancelToken && cancelToken.toAbortSignal()], timeout);
@@ -233278,8 +233364,8 @@ var require_axios = __commonJS({
       SslHandshakeFailed: 525,
       InvalidSslCertificate: 526
     };
-    Object.entries(HttpStatusCode3).forEach(([key2, value]) => {
-      HttpStatusCode3[value] = key2;
+    Object.entries(HttpStatusCode3).forEach(([key3, value]) => {
+      HttpStatusCode3[value] = key3;
     });
     function createInstance2(defaultConfig) {
       const context = new Axios3(defaultConfig);
@@ -236637,8 +236723,8 @@ var require_config2 = __commonJS({
       static hasValidLocalCreds(creds) {
         if (!creds)
           return false;
-        const { key: key2, secret, passphrase } = creds;
-        if (!key2.trim())
+        const { key: key3, secret, passphrase } = creds;
+        if (!key3.trim())
           return false;
         if (!secret.trim())
           return false;
@@ -237528,19 +237614,19 @@ function extractPaymentDetails(paymentRequired, preferredNetwork) {
     resource: paymentRequired.resource
   };
 }
-function validatePrivateKey(key2) {
-  if (typeof key2 !== "string") {
+function validatePrivateKey(key3) {
+  if (typeof key3 !== "string") {
     throw new Error("Private key must be a string");
   }
-  if (!key2.startsWith("0x")) {
+  if (!key3.startsWith("0x")) {
     throw new Error("Private key must start with 0x");
   }
-  if (key2.length !== 66) {
+  if (key3.length !== 66) {
     throw new Error(
       "Private key must be 66 characters (0x + 64 hexadecimal characters)"
     );
   }
-  if (!/^0x[0-9a-fA-F]{64}$/.test(key2)) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key3)) {
     throw new Error(
       "Private key must contain only hexadecimal characters (0-9, a-f, A-F)"
     );
@@ -237880,15 +237966,15 @@ var init_dist7 = __esm({
         const base4 = `${this.apiUrl}${normalized}`;
         if (!params) return base4;
         const qs = new URLSearchParams();
-        for (const [key2, value] of Object.entries(params)) {
+        for (const [key3, value] of Object.entries(params)) {
           if (value === void 0 || value === null) continue;
           if (Array.isArray(value)) {
             for (const v of value) {
               if (v === void 0 || v === null) continue;
-              qs.append(key2, String(v));
+              qs.append(key3, String(v));
             }
           } else {
-            qs.append(key2, String(value));
+            qs.append(key3, String(value));
           }
         }
         const query = qs.toString();
@@ -238484,8 +238570,8 @@ var init_exclude = __esm({
 });
 
 // src/commands/policy.ts
-function unsetMeaning(key2) {
-  switch (key2) {
+function unsetMeaning(key3) {
+  switch (key3) {
     case "allowedPayees":
       return "every payee is permitted";
     case "allowedNetworks":
@@ -238495,7 +238581,7 @@ function unsetMeaning(key2) {
     case "blockedPayees":
       return "no payee is blocked";
     default:
-      return `spend in the ${key2} window is uncapped`;
+      return `spend in the ${key3} window is uncapped`;
   }
 }
 function fail(text) {
@@ -238612,7 +238698,7 @@ Nothing was written; repair or delete spending.json, then retry.`);
   }
   if (plan.kind === "show") return { text: formatPolicy(control.getLimits()) };
   const before = openControl().getLimits();
-  const key2 = plan.kind === "limit" ? plan.window : plan.list;
+  const key3 = plan.kind === "limit" ? plan.window : plan.list;
   let expected;
   try {
     if (plan.kind === "limit") {
@@ -238629,16 +238715,16 @@ Nothing was written; repair or delete spending.json, then retry.`);
   } catch (err) {
     if (err instanceof SpendPolicyConflictError) {
       return fail(
-        `${key2} was not written: another writer changed spending.json while this command ran, and replacing it would have dropped their change. Run "policy" to see what disk holds now, then retry`
+        `${key3} was not written: another writer changed spending.json while this command ran, and replacing it would have dropped their change. Run "policy" to see what disk holds now, then retry`
       );
     }
     return fail(`Nothing was written: ${err instanceof Error ? err.message : String(err)}`);
   }
   const expectedAll = { ...before };
-  if (expected === void 0) delete expectedAll[key2];
-  else expectedAll[key2] = expected;
+  if (expected === void 0) delete expectedAll[key3];
+  else expectedAll[key3] = expected;
   const after = openControl().getLimits();
-  const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after), key2])];
+  const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after), key3])];
   const drift = keys.filter((k) => JSON.stringify(after[k]) !== JSON.stringify(expectedAll[k]));
   if (drift.length > 0) {
     const show = (v) => v === void 0 ? "(unset)" : JSON.stringify(v);
@@ -238647,7 +238733,7 @@ Nothing was written; repair or delete spending.json, then retry.`);
       `Write did not land cleanly \u2014 on disk vs expected: ${detail}. Another write may have raced this one; run "policy" to see what disk holds now`
     );
   }
-  const headline = expected === void 0 ? `${key2} is now unset \u2014 ${unsetMeaning(key2)}.` : `${key2}: ${JSON.stringify(expected)}`;
+  const headline = expected === void 0 ? `${key3} is now unset \u2014 ${unsetMeaning(key3)}.` : `${key3}: ${JSON.stringify(expected)}`;
   return {
     text: live ? `${headline}
 ${APPLIED_LIVE}` : `${RESTART_REQUIRED}
@@ -238765,24 +238851,24 @@ function prepareBlockRunPluginConfig(config, options = {}) {
     if (!currentEntry && typeof legacyEntry.enabled === "boolean") {
       migratedEntry.enabled = legacyEntry.enabled;
     }
-    for (const key2 of ["walletKey", "routing"]) {
-      if (!(key2 in migratedEntry) && key2 in legacyEntry) {
-        migratedEntry[key2] = legacyEntry[key2];
+    for (const key3 of ["walletKey", "routing"]) {
+      if (!(key3 in migratedEntry) && key3 in legacyEntry) {
+        migratedEntry[key3] = legacyEntry[key3];
       }
-      if (key2 in legacyEntry) {
-        delete legacyEntry[key2];
+      if (key3 in legacyEntry) {
+        delete legacyEntry[key3];
         changed = true;
       }
     }
     const legacyConfig = asObject2(legacyEntry.config);
     if (legacyConfig) {
       const currentConfig = asObject2(migratedEntry.config) ?? {};
-      for (const key2 of ["walletKey", "routing"]) {
-        if (!(key2 in currentConfig) && key2 in legacyConfig) {
-          currentConfig[key2] = legacyConfig[key2];
+      for (const key3 of ["walletKey", "routing"]) {
+        if (!(key3 in currentConfig) && key3 in legacyConfig) {
+          currentConfig[key3] = legacyConfig[key3];
         }
-        if (key2 in legacyConfig) {
-          delete legacyConfig[key2];
+        if (key3 in legacyConfig) {
+          delete legacyConfig[key3];
           changed = true;
         }
       }
@@ -239096,9 +239182,9 @@ function injectModelsConfig(logger48, options = {}) {
   const allowlist = defaults2.models;
   const DEPRECATED_BLOCKRUN_MODELS = ["blockrun/xai/grok-code-fast-1"];
   let removedDeprecatedCount = 0;
-  for (const key2 of DEPRECATED_BLOCKRUN_MODELS) {
-    if (allowlist[key2]) {
-      delete allowlist[key2];
+  for (const key3 of DEPRECATED_BLOCKRUN_MODELS) {
+    if (allowlist[key3]) {
+      delete allowlist[key3];
       removedDeprecatedCount++;
     }
   }
@@ -239109,16 +239195,16 @@ function injectModelsConfig(logger48, options = {}) {
   const expectedBlockrunKeys = new Set(visibleIds.map((id2) => `blockrun/${id2}`));
   let addedCount = 0;
   let prunedCount = 0;
-  for (const key2 of Object.keys(allowlist)) {
-    if (key2.startsWith("blockrun/") && !expectedBlockrunKeys.has(key2)) {
-      delete allowlist[key2];
+  for (const key3 of Object.keys(allowlist)) {
+    if (key3.startsWith("blockrun/") && !expectedBlockrunKeys.has(key3)) {
+      delete allowlist[key3];
       prunedCount++;
     }
   }
   for (const id2 of visibleIds) {
-    const key2 = `blockrun/${id2}`;
-    if (!allowlist[key2]) {
-      allowlist[key2] = {};
+    const key3 = `blockrun/${id2}`;
+    if (!allowlist[key3]) {
+      allowlist[key3] = {};
       addedCount++;
     }
   }
@@ -239135,7 +239221,7 @@ function injectModelsConfig(logger48, options = {}) {
   const legacyEntryConfig = legacyEntry?.config;
   const legacyBlockRunInstall = Boolean(
     legacyEntry && (["walletKey", "routing"].some(
-      (key2) => key2 in legacyEntry || (legacyEntryConfig ? key2 in legacyEntryConfig : false)
+      (key3) => key3 in legacyEntry || (legacyEntryConfig ? key3 in legacyEntryConfig : false)
     ) || legacyPackageIsBlockRun())
   );
   if (legacyBlockRunInstall && prepareBlockRunPluginConfig(config, { legacyBlockRunInstall })) {
@@ -239611,11 +239697,11 @@ function parseCallArgs(raw) {
     const tok = raw2.startsWith('"') && raw2.endsWith('"') ? raw2.slice(1, -1) : raw2;
     const eqMatch = tok.match(/^--(voice|max-duration|max_duration|from|language|lang)=(.+)$/);
     if (eqMatch) {
-      const [, key2, value] = eqMatch;
-      if (key2 === "voice") voice = value;
-      else if (key2 === "max-duration" || key2 === "max_duration") max_duration = Number(value);
-      else if (key2 === "from") from15 = value;
-      else if (key2 === "language" || key2 === "lang") language = value;
+      const [, key3, value] = eqMatch;
+      if (key3 === "voice") voice = value;
+      else if (key3 === "max-duration" || key3 === "max_duration") max_duration = Number(value);
+      else if (key3 === "from") from15 = value;
+      else if (key3 === "language" || key3 === "lang") language = value;
       continue;
     }
     const spaceMatch = tok.match(/^--(voice|max-duration|max_duration|from|language|lang)$/);
@@ -239623,11 +239709,11 @@ function parseCallArgs(raw) {
       const next = tokens[i + 1];
       if (next !== void 0) {
         const value = next.startsWith('"') && next.endsWith('"') ? next.slice(1, -1) : next;
-        const key2 = spaceMatch[1];
-        if (key2 === "voice") voice = value;
-        else if (key2 === "max-duration" || key2 === "max_duration") max_duration = Number(value);
-        else if (key2 === "from") from15 = value;
-        else if (key2 === "language" || key2 === "lang") language = value;
+        const key3 = spaceMatch[1];
+        if (key3 === "voice") voice = value;
+        else if (key3 === "max-duration" || key3 === "max_duration") max_duration = Number(value);
+        else if (key3 === "from") from15 = value;
+        else if (key3 === "language" || key3 === "lang") language = value;
         i++;
       }
       continue;
@@ -239658,11 +239744,11 @@ function parseGenArgs(raw) {
     const t = tok.startsWith('"') && tok.endsWith('"') ? tok.slice(1, -1) : tok;
     const flagMatch = t.match(/^--(model|size|n|count|duration|duration_seconds)=(.+)$/);
     if (flagMatch) {
-      const [, key2, value] = flagMatch;
-      if (key2 === "model") model = value;
-      else if (key2 === "size") size5 = value;
-      else if (key2 === "n" || key2 === "count") n = Number(value);
-      else if (key2 === "duration" || key2 === "duration_seconds") duration = Number(value);
+      const [, key3, value] = flagMatch;
+      if (key3 === "model") model = value;
+      else if (key3 === "size") size5 = value;
+      else if (key3 === "n" || key3 === "count") n = Number(value);
+      else if (key3 === "duration" || key3 === "duration_seconds") duration = Number(value);
       continue;
     }
     promptParts.push(t);
@@ -240704,9 +240790,9 @@ ${errText}`
               delete config.models.providers.blockrun;
             }
             removeManagedBlockrunMcpServerConfig(config);
-            for (const key2 of [BLOCKRUN_PLUGIN_ID, "ClawRouter", "@blockrun/clawrouter"]) {
-              if (config.plugins?.entries?.[key2]) delete config.plugins.entries[key2];
-              if (config.plugins?.installs?.[key2]) delete config.plugins.installs[key2];
+            for (const key3 of [BLOCKRUN_PLUGIN_ID, "ClawRouter", "@blockrun/clawrouter"]) {
+              if (config.plugins?.entries?.[key3]) delete config.plugins.entries[key3];
+              if (config.plugins?.installs?.[key3]) delete config.plugins.installs[key3];
             }
             if (Array.isArray(config.plugins?.allow)) {
               config.plugins.allow = config.plugins.allow.filter(
@@ -240719,8 +240805,8 @@ ${errText}`
               );
             }
             if (config.agents?.defaults?.models) {
-              for (const key2 of Object.keys(config.agents.defaults.models)) {
-                if (key2.startsWith("blockrun/")) delete config.agents.defaults.models[key2];
+              for (const key3 of Object.keys(config.agents.defaults.models)) {
+                if (key3.startsWith("blockrun/")) delete config.agents.defaults.models[key3];
               }
             }
             if (config.agents?.defaults?.model?.primary?.startsWith("blockrun/")) {
