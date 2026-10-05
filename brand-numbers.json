@@ -2,17 +2,17 @@
   "$schema": "https://blockrun.ai/brand/numbers.schema.json",
   "version": 1,
   "models": {
-    "chatVisible": 82,
-    "totalVisible": 109,
-    "free": 6,
-    "freeWithheld": 27,
+    "chatVisible": 86,
+    "totalVisible": 113,
+    "free": 7,
+    "freeWithheld": 28,
     "image": 12,
     "video": 8,
     "music": 1,
     "speech": 5,
     "soundfx": 1,
-    "withFallback": 25,
-    "withFallbackAllEntries": 64
+    "withFallback": 27,
+    "withFallbackAllEntries": 67
   },
   "clawrouter": {
     "dimensions": 15,
@@ -28,6 +28,15 @@
   },
   "chains": {
     "rpc": 40
+  },
+  "agentPayments": {
+    "rank": 1,
+    "windowDays": 30,
+    "tx": 8241102,
+    "volumeUsd": 97598,
+    "runnerUpTx": 466221,
+    "measuredAt": "2026-10-02",
+    "source": "https://www.x402scan.com"
   },
   "savings": {
     "baselineModel": "anthropic/claude-opus-5",
