@@ -4,6 +4,32 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.282 — October 5, 2026
+
+### Security: the local proxy only answers local clients
+
+**Web pages can no longer spend from your wallet.** The proxy listens on
+127.0.0.1, but a page open in your browser could still send it requests, and
+some paid routes accepted them. The proxy now refuses any request from another
+site, and any request whose `Host` is not a local name, which also blocks
+DNS-rebinding pages. OpenClaw, the CLI, SDKs and `curl` send no `Origin` and
+work as before. A page served from `localhost` is still allowed.
+
+**img2img reads only images.** A local path in an img2img request, or after
+`/img2img --image`, is read only if the file really is a PNG, JPEG or WebP.
+The extension is not trusted. Source image URLs must be public, and every
+redirect is re-checked. To use a local image server, set
+`CLAWROUTER_ALLOW_PRIVATE_FETCH=1`.
+
+**Paid channel commands need an authorized sender.** `/cr-imagegen`,
+`/videogen` and `/cr-call` spend from the wallet, and now follow OpenClaw's
+default of only accepting authorized senders. `/partners` stays open.
+
+**The Predexon endpoint tool stays inside `/pm`.** Encoded path segments are
+checked the way the URL parser resolves them.
+
+---
+
 ## v0.12.281 — October 3, 2026
 
 ### Outcome memory: models that keep failing on a kind of request are tried last

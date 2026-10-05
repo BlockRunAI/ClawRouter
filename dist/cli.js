@@ -66178,6 +66178,156 @@ ${lines.join("\n")}`;
   }
 });
 
+// src/local-guard.ts
+import { closeSync as closeSync2, fstatSync as fstatSync2, openSync as openSync2, readSync as readSync2, realpathSync } from "fs";
+import { homedir as homedir7 } from "os";
+import { join as join10 } from "path";
+function isLocalHostname(hostname) {
+  const h = hostname.toLowerCase().replace(/\.$/, "");
+  return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+}
+function untrustedRequestReason(req) {
+  const host = req.headers.host;
+  if (host) {
+    let hostname;
+    try {
+      hostname = new URL(`http://${host}`).hostname;
+    } catch {
+      return "malformed Host header";
+    }
+    if (!isLocalHostname(hostname)) return `non-local Host header (${hostname})`;
+  }
+  const origin2 = req.headers.origin;
+  if (Array.isArray(origin2)) return "multiple Origin headers";
+  if (origin2 !== void 0) {
+    if (origin2 === "null") return "opaque Origin";
+    let o3;
+    try {
+      o3 = new URL(origin2);
+    } catch {
+      return "malformed Origin header";
+    }
+    if (o3.protocol !== "http:" && o3.protocol !== "https:" || !isLocalHostname(o3.hostname)) {
+      return `cross-site Origin (${origin2})`;
+    }
+  }
+  const site = req.headers["sec-fetch-site"];
+  if (site === "cross-site") return "cross-site browser request";
+  return null;
+}
+function v4FromHex(hi, lo) {
+  return `${hi >>> 8 & 255}.${hi & 255}.${lo >>> 8 & 255}.${lo & 255}`;
+}
+function isBlockedSsrfHost(hostname) {
+  const h = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
+  if (!h) return true;
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true;
+  if (h.endsWith(".internal")) return true;
+  if (METADATA_HOSTS.has(h)) return true;
+  if (h.includes(":")) {
+    if (h === "::1" || h === "::") return true;
+    if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
+    const sixToFour = h.match(/^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4}):/);
+    if (sixToFour) {
+      return isBlockedSsrfHost(v4FromHex(parseInt(sixToFour[1], 16), parseInt(sixToFour[2], 16)));
+    }
+    const embedded = h.match(/^64:ff9b::(.+)$/) ?? h.match(/::ffff:(.+)$/);
+    if (embedded) {
+      const tail = embedded[1];
+      if (tail.includes(".")) return isBlockedSsrfHost(tail);
+      const seg = tail.split(":");
+      if (seg.length === 2)
+        return isBlockedSsrfHost(v4FromHex(parseInt(seg[0], 16), parseInt(seg[1], 16)));
+    }
+    return false;
+  }
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const c = Number(m[3]);
+    if (a === 127 || a === 0 || a === 10) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a === 192 && b === 0 && c === 0) return true;
+  }
+  return false;
+}
+async function ssrfSafeFetch(url2, init2 = {}, maxHops = 5) {
+  const { allowPrivate, ...fetchInit } = init2;
+  let current = url2;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const u = new URL(current);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      throw new Error(`refusing to fetch non-http(s) URL (${u.protocol})`);
+    }
+    if (!allowPrivate && isBlockedSsrfHost(u.hostname)) {
+      throw new Error(`refusing to fetch a private/loopback/metadata address: ${u.hostname}`);
+    }
+    const res = await fetch(current, { ...fetchInit, redirect: "manual" });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) return res;
+      current = new URL(loc, current).href;
+      continue;
+    }
+    return res;
+  }
+  throw new Error("too many redirects");
+}
+function readLocalImageAsDataUri(filePath) {
+  const expanded = filePath.startsWith("~/") ? join10(homedir7(), filePath.slice(2)) : filePath;
+  const refuse = () => new Error(`Not a readable PNG, JPEG or WebP image: ${filePath}`);
+  let fd;
+  try {
+    fd = openSync2(realpathSync(expanded), "r");
+  } catch {
+    throw refuse();
+  }
+  try {
+    const st = fstatSync2(fd);
+    if (!st.isFile() || st.size === 0 || st.size > MAX_LOCAL_IMAGE_BYTES) throw refuse();
+    const head = Buffer.alloc(12);
+    readSync2(fd, head, 0, 12, 0);
+    const sig = IMAGE_SIGNATURES.find((s3) => s3.test(head));
+    if (!sig) throw refuse();
+    const data = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = readSync2(fd, data, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    return `data:${sig.mime};base64,${data.subarray(0, off).toString("base64")}`;
+  } finally {
+    closeSync2(fd);
+  }
+}
+var METADATA_HOSTS, MAX_LOCAL_IMAGE_BYTES, IMAGE_SIGNATURES;
+var init_local_guard = __esm({
+  "src/local-guard.ts"() {
+    "use strict";
+    METADATA_HOSTS = /* @__PURE__ */ new Set(["metadata", "metadata.goog", "instance-data"]);
+    MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
+    IMAGE_SIGNATURES = [
+      {
+        mime: "image/png",
+        test: (b) => b.length >= 8 && b.readUInt32BE(0) === 2303741511 && b.readUInt32BE(4) === 218765834
+      },
+      {
+        mime: "image/jpeg",
+        test: (b) => b.length >= 3 && b[0] === 255 && b[1] === 216 && b[2] === 255
+      },
+      {
+        mime: "image/webp",
+        test: (b) => b.length >= 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP"
+      }
+    ];
+  }
+});
+
 // node_modules/undici/lib/core/symbols.js
 var require_symbols = __commonJS({
   "node_modules/undici/lib/core/symbols.js"(exports, module) {
@@ -93571,8 +93721,8 @@ var init_textual_tool_calls = __esm({
 
 // src/response-store.ts
 import { appendFile as appendFile2, mkdir as mkdir5, readFile, readdir as readdir2 } from "fs/promises";
-import { homedir as homedir7 } from "os";
-import { join as join10 } from "path";
+import { homedir as homedir8 } from "os";
+import { join as join11 } from "path";
 import { randomBytes as randomBytes7 } from "crypto";
 function isEnabled() {
   const v = process.env.BLOCKRUN_RESPONSE_STORE;
@@ -93585,7 +93735,7 @@ async function ensureDir2() {
 }
 function dailyFile(date = /* @__PURE__ */ new Date()) {
   const iso = date.toISOString().slice(0, 10);
-  return join10(STORE_DIR, `responses-${iso}.jsonl`);
+  return join11(STORE_DIR, `responses-${iso}.jsonl`);
 }
 function genId() {
   return `resp_${Date.now()}_${randomBytes7(3).toString("hex")}`;
@@ -93635,7 +93785,7 @@ async function listRecent(limit = 20, daysBack = 7) {
       d.setUTCDate(d.getUTCDate() - i);
       const iso = d.toISOString().slice(0, 10);
       const name = `responses-${iso}.jsonl`;
-      if (files.includes(name)) candidateFiles.push(join10(STORE_DIR, name));
+      if (files.includes(name)) candidateFiles.push(join11(STORE_DIR, name));
     }
     const all3 = [];
     for (const f of candidateFiles) {
@@ -93664,7 +93814,7 @@ var STORE_DIR, dirReady2;
 var init_response_store = __esm({
   "src/response-store.ts"() {
     "use strict";
-    STORE_DIR = join10(homedir7(), ".openclaw", "blockrun", "responses");
+    STORE_DIR = join11(homedir8(), ".openclaw", "blockrun", "responses");
     dirReady2 = false;
   }
 });
@@ -95301,10 +95451,10 @@ import { createHmac } from "crypto";
 import { createServer } from "http";
 import { finished, Readable } from "stream";
 import { pipeline } from "stream/promises";
-import { homedir as homedir8 } from "os";
-import { join as join11 } from "path";
+import { homedir as homedir9 } from "os";
+import { join as join12 } from "path";
 import { mkdir as mkdir6, writeFile as writeFile4, readFile as readFile2, stat as fsStat } from "fs/promises";
-import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
+import { readFileSync as readFileSync2 } from "fs";
 async function loadGatewayCatalog(apiBase, apiKey) {
   try {
     const controller = new AbortController();
@@ -96198,22 +96348,6 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   }).catch(() => {
   });
 }
-function readImageFileAsDataUri(filePath) {
-  const resolved = filePath.startsWith("~/") ? join11(homedir8(), filePath.slice(2)) : filePath;
-  if (!existsSync2(resolved)) {
-    throw new Error(`Image file not found: ${resolved}`);
-  }
-  const ext = resolved.split(".").pop()?.toLowerCase() ?? "png";
-  const mimeMap = {
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    webp: "image/webp"
-  };
-  const mime = mimeMap[ext] ?? "image/png";
-  const data = readFileSync2(resolved);
-  return `data:${mime};base64,${data.toString("base64")}`;
-}
 async function uploadDataUriToHost(dataUri) {
   const match = dataUri.match(/^data:(image\/\w+);base64,(.+)$/);
   if (!match) throw new Error("Invalid data URI format");
@@ -96490,6 +96624,13 @@ async function startProxy(options) {
           console.error(`[ClawRouter] Request finished with error: ${err.message}`);
         }
       });
+      const untrusted = untrustedRequestReason(req);
+      if (untrusted) {
+        console.warn(`[ClawRouter] Refused request to ${req.url}: ${untrusted}`);
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "forbidden", details: untrusted }));
+        return;
+      }
       if (req.url === "/health" || req.url?.startsWith("/health?")) {
         const url2 = new URL(req.url, "http://localhost");
         const full = url2.searchParams.get("full") === "true";
@@ -96718,7 +96859,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join11(IMAGE_DIR, filename);
+        const filePath = join12(IMAGE_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -96749,7 +96890,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join11(AUDIO_DIR, filename);
+        const filePath = join12(AUDIO_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -96779,7 +96920,7 @@ async function startProxy(options) {
           res.end("Bad request");
           return;
         }
-        const filePath = join11(VIDEO_DIR, filename);
+        const filePath = join12(VIDEO_DIR, filename);
         try {
           const s3 = await fsStat(filePath);
           if (!s3.isFile()) throw new Error("not a file");
@@ -96921,7 +97062,7 @@ async function startProxy(options) {
                 const [, mimeType, b64] = dataUriMatch;
                 const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
                 const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                await writeFile4(join11(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                await writeFile4(join12(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
                 img.url = `http://localhost:${port2}/images/${filename}`;
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
@@ -96932,7 +97073,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await imgResp.arrayBuffer());
-                    await writeFile4(join11(IMAGE_DIR, filename), buf);
+                    await writeFile4(join12(IMAGE_DIR, filename), buf);
                     img.url = `http://localhost:${port2}/images/${filename}`;
                     console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
                   }
@@ -96995,7 +97136,10 @@ async function startProxy(options) {
             if (typeof val !== "string" || !val) continue;
             if (val.startsWith("data:")) {
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
-              const imgResp = await fetch(val, { signal: clientAbort.signal });
+              const imgResp = await ssrfSafeFetch(val, {
+                signal: clientAbort.signal,
+                allowPrivate: process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH === "1"
+              });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -97005,7 +97149,7 @@ async function startProxy(options) {
                 `[ClawRouter] img2img: downloaded ${field} URL \u2192 data URI (${buf.length} bytes)`
               );
             } else {
-              parsed[field] = readImageFileAsDataUri(val);
+              parsed[field] = readLocalImageAsDataUri(val);
               console.log(`[ClawRouter] img2img: read ${field} file \u2192 data URI`);
             }
           }
@@ -97054,7 +97198,7 @@ async function startProxy(options) {
                 const [, mimeType, b64] = dataUriMatch;
                 const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] ?? "png";
                 const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-                await writeFile4(join11(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
+                await writeFile4(join12(IMAGE_DIR, filename), Buffer.from(b64, "base64"));
                 img.url = `http://localhost:${port2}/images/${filename}`;
                 console.log(`[ClawRouter] Image saved \u2192 ${img.url}`);
               } else if (img.url?.startsWith("https://") || img.url?.startsWith("http://")) {
@@ -97065,7 +97209,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await imgResp.arrayBuffer());
-                    await writeFile4(join11(IMAGE_DIR, filename), buf);
+                    await writeFile4(join12(IMAGE_DIR, filename), buf);
                     img.url = `http://localhost:${port2}/images/${filename}`;
                     console.log(`[ClawRouter] Image downloaded & saved \u2192 ${img.url}`);
                   }
@@ -97161,7 +97305,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("wav") ? "wav" : "mp3";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await audioResp.arrayBuffer());
-                    await writeFile4(join11(AUDIO_DIR, filename), buf);
+                    await writeFile4(join12(AUDIO_DIR, filename), buf);
                     track.url = `http://localhost:${port2}/audio/${filename}`;
                     console.log(`[ClawRouter] Audio saved \u2192 ${track.url}`);
                   }
@@ -97328,7 +97472,7 @@ async function startProxy(options) {
                     const ext = contentType.includes("webm") ? "webm" : contentType.includes("quicktime") ? "mov" : "mp4";
                     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
                     const buf = Buffer.from(await videoResp.arrayBuffer());
-                    await writeFile4(join11(VIDEO_DIR, filename), buf);
+                    await writeFile4(join12(VIDEO_DIR, filename), buf);
                     clip.url = `http://localhost:${port2}/videos/${filename}`;
                     console.log(`[ClawRouter] Video saved \u2192 ${clip.url}`);
                   }
@@ -98294,8 +98438,8 @@ async function proxyRequest(req, res, apiBase, payFetch, options, routerOpts, de
         let imageDataUri;
         let maskDataUri;
         try {
-          imageDataUri = readImageFileAsDataUri(imagePath);
-          if (maskPath) maskDataUri = readImageFileAsDataUri(maskPath);
+          imageDataUri = readLocalImageAsDataUri(imagePath);
+          if (maskPath) maskDataUri = readLocalImageAsDataUri(maskPath);
         } catch (fileErr) {
           const fileErrMsg = fileErr instanceof Error ? fileErr.message : String(fileErr);
           sendImg2ImgText(`Failed to read image file: ${fileErrMsg}`);
@@ -100033,6 +100177,7 @@ var init_proxy = __esm({
     init_outcome_memory();
     init_config();
     init_journal();
+    init_local_guard();
     init_upstream_proxy();
     init_textual_tool_calls();
     init_response_store();
@@ -100041,10 +100186,10 @@ var init_proxy = __esm({
     paymentStore = new AsyncLocalStorage();
     BLOCKRUN_API = "https://blockrun.ai/api";
     BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
-    DESKTOP_SERVICE_TOKEN_FILE = process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ?? join11(homedir8(), ".clawrouter-desktop", "service-token");
-    IMAGE_DIR = join11(homedir8(), ".openclaw", "blockrun", "images");
-    AUDIO_DIR = join11(homedir8(), ".openclaw", "blockrun", "audio");
-    VIDEO_DIR = join11(homedir8(), ".openclaw", "blockrun", "videos");
+    DESKTOP_SERVICE_TOKEN_FILE = process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ?? join12(homedir9(), ".clawrouter-desktop", "service-token");
+    IMAGE_DIR = join12(homedir9(), ".openclaw", "blockrun", "images");
+    AUDIO_DIR = join12(homedir9(), ".openclaw", "blockrun", "audio");
+    VIDEO_DIR = join12(homedir9(), ".openclaw", "blockrun", "videos");
     AUTO_MODEL = "blockrun/auto";
     ROUTING_PROFILES = /* @__PURE__ */ new Set([
       "blockrun/eco",
@@ -101154,7 +101299,13 @@ function buildTool(service, proxyBaseUrl) {
       if (service.proxyPath === "/pm/__dynamic__") {
         const rawPath = typeof params.path === "string" ? params.path : "";
         const normalized = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-        if (!normalized.startsWith("/pm/") || normalized.includes("..")) {
+        let resolved;
+        try {
+          resolved = new URL(`/v1${normalized}`, "http://x").pathname;
+        } catch {
+          resolved = "";
+        }
+        if (!normalized.startsWith("/pm/") || normalized.includes("..") || /%2e|%2f|%5c|\\/i.test(normalized) || !resolved.startsWith("/v1/pm/")) {
           throw new Error(
             `predexon_endpoint_call: invalid path '${rawPath}' \u2014 must begin with '/pm/' and contain no '..'`
           );
@@ -101493,8 +101644,8 @@ __export(reconcile_exports, {
   reconcile: () => reconcile
 });
 import { readFile as readFile3, readdir as readdir3 } from "fs/promises";
-import { join as join12 } from "path";
-import { homedir as homedir9 } from "os";
+import { join as join13 } from "path";
+import { homedir as homedir10 } from "os";
 async function loadLocalRows(since) {
   let files;
   try {
@@ -101507,7 +101658,7 @@ async function loadLocalRows(since) {
   for (const file of files) {
     let text;
     try {
-      text = await readFile3(join12(LOG_DIR3, file), "utf8");
+      text = await readFile3(join13(LOG_DIR3, file), "utf8");
     } catch {
       continue;
     }
@@ -101665,7 +101816,7 @@ var init_reconcile = __esm({
   "src/reconcile.ts"() {
     "use strict";
     init_api_key();
-    LOG_DIR3 = join12(homedir9(), ".openclaw", "blockrun", "logs");
+    LOG_DIR3 = join13(homedir10(), ".openclaw", "blockrun", "logs");
     CENT_EPSILON = 1e-9;
     usd = (n) => Math.abs(n) < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`;
   }
@@ -122657,8 +122808,8 @@ var init_constants3 = __esm({
 
 // src/polymarket/wallet-adapter.ts
 import fs2 from "fs";
-import { homedir as homedir10 } from "os";
-import { join as join13 } from "path";
+import { homedir as homedir11 } from "os";
+import { join as join14 } from "path";
 function getOrCreateWalletKey() {
   const envKey = process.env.BLOCKRUN_WALLET_KEY?.trim();
   if (envKey && /^0x[0-9a-fA-F]{64}$/.test(envKey)) return envKey;
@@ -122706,7 +122857,7 @@ var init_wallet_adapter = __esm({
     init_esm();
     init_chains();
     init_constants3();
-    WALLET_FILE2 = join13(homedir10(), ".openclaw", "blockrun", "wallet.key");
+    WALLET_FILE2 = join14(homedir11(), ".openclaw", "blockrun", "wallet.key");
     BASE_RPC_URLS = [
       "https://mainnet.base.org",
       "https://base.llamarpc.com",
@@ -233099,7 +233250,7 @@ __export(index_exports, {
 });
 import {
   writeFileSync as writeFileSync3,
-  existsSync as existsSync4,
+  existsSync as existsSync3,
   readdirSync,
   mkdirSync as mkdirSync3,
   copyFileSync,
@@ -233108,9 +233259,9 @@ import {
   unlinkSync
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
-import { homedir as homedir15 } from "os";
+import { homedir as homedir16 } from "os";
 import { randomUUID } from "crypto";
-import { join as join18 } from "path";
+import { join as join19 } from "path";
 async function waitForProxyHealth(port, timeoutMs = 3e3) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -233130,12 +233281,12 @@ function writePrivateJsonSync(path5, value) {
     renameSync2(temporary, path5);
     chmodSync(path5, 384);
   } finally {
-    if (existsSync4(temporary)) unlinkSync(temporary);
+    if (existsSync3(temporary)) unlinkSync(temporary);
   }
 }
 function hasConfiguredWallet() {
   return Boolean(
-    process["env"].BLOCKRUN_WALLET_KEY || existsSync4(CORE_WALLET_FILE) || existsSync4(WALLET_FILE)
+    process["env"].BLOCKRUN_WALLET_KEY || existsSync3(CORE_WALLET_FILE) || existsSync3(WALLET_FILE)
   );
 }
 function isCompletionMode() {
@@ -233153,11 +233304,11 @@ function isBlockrunWebSearchDisabled(config) {
 }
 function legacyPackageIsBlockRun() {
   for (const dir of [
-    join18(homedir15(), ".openclaw", "extensions", "clawrouter"),
-    join18(homedir15(), ".openclaw", "npm", "node_modules", "@blockrun", "clawrouter")
+    join19(homedir16(), ".openclaw", "extensions", "clawrouter"),
+    join19(homedir16(), ".openclaw", "npm", "node_modules", "@blockrun", "clawrouter")
   ]) {
     try {
-      const metadata = JSON.parse(readTextFileSync(join18(dir, "package.json")));
+      const metadata = JSON.parse(readTextFileSync(join19(dir, "package.json")));
       if (metadata.name === "@blockrun/clawrouter") return true;
     } catch {
     }
@@ -233165,11 +233316,11 @@ function legacyPackageIsBlockRun() {
   return false;
 }
 function injectModelsConfig(logger48, options = {}) {
-  const configDir = join18(homedir15(), ".openclaw");
-  const configPath = join18(configDir, "openclaw.json");
+  const configDir = join19(homedir16(), ".openclaw");
+  const configPath = join19(configDir, "openclaw.json");
   let config = {};
   let needsWrite = false;
-  if (!existsSync4(configDir)) {
+  if (!existsSync3(configDir)) {
     try {
       mkdirSync3(configDir, { recursive: true });
       logger48.info("Created OpenClaw config directory");
@@ -233180,7 +233331,7 @@ function injectModelsConfig(logger48, options = {}) {
       return;
     }
   }
-  if (existsSync4(configPath)) {
+  if (existsSync3(configPath)) {
     try {
       const content = readTextFileSync(configPath).trim();
       if (content) {
@@ -233387,8 +233538,8 @@ function injectModelsConfig(logger48, options = {}) {
 }
 function syncAgentModelCache(logger48, options = {}) {
   if (!isGatewayMode() && !options.forceWrite) return;
-  const agentsDir = join18(homedir15(), ".openclaw", "agents");
-  if (!existsSync4(agentsDir)) return;
+  const agentsDir = join19(homedir16(), ".openclaw", "agents");
+  if (!existsSync3(agentsDir)) return;
   let agentDirs;
   try {
     agentDirs = readdirSync(agentsDir);
@@ -233397,8 +233548,8 @@ function syncAgentModelCache(logger48, options = {}) {
   }
   const expectedIds = VISIBLE_OPENCLAW_MODELS.map((m) => m.id);
   for (const agent of agentDirs) {
-    const cachePath = join18(agentsDir, agent, "agent", "models.json");
-    if (!existsSync4(cachePath)) continue;
+    const cachePath = join19(agentsDir, agent, "agent", "models.json");
+    if (!existsSync3(cachePath)) continue;
     try {
       const raw = readTextFileSync(cachePath).trim();
       if (!raw) continue;
@@ -233426,8 +233577,8 @@ function syncAgentModelCache(logger48, options = {}) {
   }
 }
 function injectAuthProfile(logger48) {
-  const agentsDir = join18(homedir15(), ".openclaw", "agents");
-  if (!existsSync4(agentsDir)) {
+  const agentsDir = join19(homedir16(), ".openclaw", "agents");
+  if (!existsSync3(agentsDir)) {
     try {
       mkdirSync3(agentsDir, { recursive: true });
     } catch (err) {
@@ -233443,10 +233594,10 @@ function injectAuthProfile(logger48) {
       agents = ["main", ...agents];
     }
     for (const agentId of agents) {
-      const authDir = join18(agentsDir, agentId, "agent");
-      const authPath = join18(authDir, "auth-profiles.json");
-      const sqlitePath = join18(authDir, "openclaw-agent.sqlite");
-      if (existsSync4(sqlitePath)) {
+      const authDir = join19(agentsDir, agentId, "agent");
+      const authPath = join19(authDir, "auth-profiles.json");
+      const sqlitePath = join19(authDir, "openclaw-agent.sqlite");
+      if (existsSync3(sqlitePath)) {
         removeInjectedAuthPlaceholder(authPath, logger48, agentId);
         continue;
       }
@@ -233454,7 +233605,7 @@ function injectAuthProfile(logger48) {
         removeInjectedAuthPlaceholder(authPath, logger48, agentId);
         continue;
       }
-      if (!existsSync4(authDir)) {
+      if (!existsSync3(authDir)) {
         try {
           mkdirSync3(authDir, { recursive: true });
         } catch {
@@ -233465,7 +233616,7 @@ function injectAuthProfile(logger48) {
         version: 1,
         profiles: {}
       };
-      if (existsSync4(authPath)) {
+      if (existsSync3(authPath)) {
         try {
           const existing = JSON.parse(readTextFileSync(authPath));
           if (existing.version && existing.profiles) {
@@ -233498,7 +233649,7 @@ function injectAuthProfile(logger48) {
 }
 function removeInjectedAuthPlaceholder(authPath, logger48, agentId) {
   try {
-    if (!existsSync4(authPath)) return;
+    if (!existsSync3(authPath)) return;
     const parsed = JSON.parse(readTextFileSync(authPath));
     const profiles = parsed?.profiles;
     if (!profiles || typeof profiles !== "object" || Array.isArray(profiles)) return;
@@ -233953,7 +234104,7 @@ function buildImageGenerationProvider() {
         (result.data ?? []).map(async (img) => {
           const filename = img.url?.split("/images/").pop();
           if (!filename) throw new Error(`Unexpected image URL format: ${img.url}`);
-          const filePath = join18(IMAGE_DIR2, filename);
+          const filePath = join19(IMAGE_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "png";
           const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
@@ -234005,7 +234156,7 @@ function buildMusicGenerationProvider() {
         (result.data ?? []).map(async (track) => {
           const filename = track.url?.split("/audio/").pop();
           if (!filename) throw new Error(`Unexpected audio URL format: ${track.url}`);
-          const filePath = join18(AUDIO_DIR2, filename);
+          const filePath = join19(AUDIO_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "mp3";
           const mimeType = ext === "wav" ? "audio/wav" : "audio/mpeg";
@@ -234081,7 +234232,7 @@ function buildVideoGenerationProvider() {
         (result.data ?? []).map(async (clip) => {
           const filename = clip.url?.split("/videos/").pop();
           if (!filename) throw new Error(`Unexpected video URL format: ${clip.url}`);
-          const filePath = join18(VIDEO_DIR2, filename);
+          const filePath = join19(VIDEO_DIR2, filename);
           const buffer2 = await readFileAsync(filePath);
           const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
           const mimeType = ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
@@ -234182,7 +234333,7 @@ function createWalletCommand(api) {
         ];
         let hasMnemonic3 = false;
         try {
-          if (existsSync4(MNEMONIC_FILE)) {
+          if (existsSync3(MNEMONIC_FILE)) {
             const mnemonic = readTextFileSync(MNEMONIC_FILE).trim();
             if (mnemonic) {
               hasMnemonic3 = true;
@@ -234253,7 +234404,7 @@ function createWalletCommand(api) {
               ].join("\n")
             };
           }
-          if (existsSync4(MNEMONIC_FILE)) {
+          if (existsSync3(MNEMONIC_FILE)) {
             const existingMnemonic = readTextFileSync(MNEMONIC_FILE).trim();
             if (existingMnemonic) {
               await savePaymentChain("solana");
@@ -234446,9 +234597,9 @@ var init_index = __esm({
     init_partners();
     activeProxyHandle = null;
     pendingConfiguredStartupApi = null;
-    IMAGE_DIR2 = join18(homedir15(), ".openclaw", "blockrun", "images");
-    AUDIO_DIR2 = join18(homedir15(), ".openclaw", "blockrun", "audio");
-    VIDEO_DIR2 = join18(homedir15(), ".openclaw", "blockrun", "videos");
+    IMAGE_DIR2 = join19(homedir16(), ".openclaw", "blockrun", "images");
+    AUDIO_DIR2 = join19(homedir16(), ".openclaw", "blockrun", "audio");
+    VIDEO_DIR2 = join19(homedir16(), ".openclaw", "blockrun", "videos");
     plugin = {
       // NOT "clawrouter". OpenClaw bundles its own plugin under that id since the
       // 2026.7.1 line (vendored at dist/extensions/clawrouter, provider `clawrouter/*`,
@@ -234588,7 +234739,8 @@ var init_index = __esm({
           name: "cr-imagegen",
           description: "Generate an image (BlockRun image models, paid via wallet)",
           acceptsArgs: true,
-          requireAuth: false,
+          // Paid from the wallet: only authorized senders.
+          requireAuth: true,
           handler: async (ctx) => {
             const parsed = parseGenArgs(ctx.args ?? "");
             if (!parsed.prompt) {
@@ -234640,7 +234792,8 @@ ${errText}`
           name: "videogen",
           description: "Generate a short video (Grok Imagine / Seedance, paid via wallet)",
           acceptsArgs: true,
-          requireAuth: false,
+          // Paid from the wallet: only authorized senders.
+          requireAuth: true,
           handler: async (ctx) => {
             const parsed = parseGenArgs(ctx.args ?? "");
             if (!parsed.prompt) {
@@ -234689,7 +234842,8 @@ ${errText}`
           name: "cr-call",
           description: "Place an AI voice call via BlockRun + Bland.ai (paid from wallet, $0.54/call)",
           acceptsArgs: true,
-          requireAuth: false,
+          // Paid from the wallet: only authorized senders.
+          requireAuth: true,
           handler: async (ctx) => {
             const parsed = parseCallArgs(ctx.args ?? "");
             if (!parsed.to || !parsed.task) {
@@ -234886,8 +235040,8 @@ ${errText}`
         }
         resetProxyStartupState();
         try {
-          const configPath = join18(homedir15(), ".openclaw", "openclaw.json");
-          if (existsSync4(configPath)) {
+          const configPath = join19(homedir16(), ".openclaw", "openclaw.json");
+          if (existsSync3(configPath)) {
             const config = JSON.parse(readTextFileSync(configPath));
             if (config.models?.providers?.blockrun) {
               delete config.models.providers.blockrun;
@@ -234928,12 +235082,12 @@ ${errText}`
           api.logger.warn(`Config cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         try {
-          const agentsDir = join18(homedir15(), ".openclaw", "agents");
-          if (existsSync4(agentsDir)) {
+          const agentsDir = join19(homedir16(), ".openclaw", "agents");
+          if (existsSync3(agentsDir)) {
             for (const entry of readdirSync(agentsDir, { withFileTypes: true })) {
               if (!entry.isDirectory()) continue;
-              const authPath = join18(agentsDir, entry.name, "agent", "auth-profiles.json");
-              if (!existsSync4(authPath)) continue;
+              const authPath = join19(agentsDir, entry.name, "agent", "auth-profiles.json");
+              if (!existsSync3(authPath)) continue;
               try {
                 const store = JSON.parse(readTextFileSync(authPath));
                 if (store.profiles?.["blockrun:default"]) {
@@ -235018,7 +235172,7 @@ init_proxy();
 init_spend_control();
 init_version4();
 import { platform, arch, freemem, totalmem } from "os";
-import { existsSync as existsSync3, readFileSync as readFileSync3 } from "fs";
+import { existsSync as existsSync2, readFileSync as readFileSync3 } from "fs";
 function formatBytes(bytes) {
   const gb = bytes / (1024 * 1024 * 1024);
   return `${gb.toFixed(1)}GB`;
@@ -235388,7 +235542,7 @@ async function analyzeWithAI(diagnostics, userQuestion, model = "sonnet") {
     const paymentChain = diagnostics.wallet.paymentChain;
     if (paymentChain === "solana") {
       try {
-        if (!existsSync3(MNEMONIC_FILE)) {
+        if (!existsSync2(MNEMONIC_FILE)) {
           throw new Error(`mnemonic file missing at ${MNEMONIC_FILE}`);
         }
         const mnemonic = readFileSync3(MNEMONIC_FILE, "utf8").trim();
@@ -236037,7 +236191,7 @@ async function cmdSetup() {
   const {
     copyFileSync: copyFileSync2,
     cpSync,
-    existsSync: existsSync5,
+    existsSync: existsSync4,
     mkdirSync: mkdirSync4,
     readFileSync: readFileSync4,
     readdirSync: readdirSync2,
@@ -236046,8 +236200,8 @@ async function cmdSetup() {
     unlinkSync: unlinkSync2,
     writeFileSync: writeFileSync4
   } = await import("fs");
-  const { dirname: dirname5, join: join19 } = await import("path");
-  const { homedir: homedir16 } = await import("os");
+  const { dirname: dirname5, join: join20 } = await import("path");
+  const { homedir: homedir17 } = await import("os");
   const { injectModelsConfig: injectModelsConfig2, injectAuthProfile: injectAuthProfile2, syncAgentModelCache: syncAgentModelCache2, VISIBLE_OPENCLAW_MODELS: VISIBLE_OPENCLAW_MODELS2 } = await Promise.resolve().then(() => (init_index(), index_exports));
   const { BLOCKRUN_PLUGIN_ID: BLOCKRUN_PLUGIN_ID2, prepareBlockRunPluginConfig: prepareBlockRunPluginConfig2 } = await Promise.resolve().then(() => (init_openclaw_plugin_config(), openclaw_plugin_config_exports));
   console.log("\u{1F99E} ClawRouter setup\n");
@@ -236062,22 +236216,22 @@ async function cmdSetup() {
     } catch {
     }
     if (process.env.npm_config_prefix) {
-      candidates.push(join19(process.env.npm_config_prefix, "bin", "openclaw"));
+      candidates.push(join20(process.env.npm_config_prefix, "bin", "openclaw"));
     }
     try {
       const npmRoot = execSync("npm root -g", {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "ignore"]
       }).trim();
-      if (npmRoot) candidates.push(join19(dirname5(dirname5(npmRoot)), "bin", "openclaw"));
+      if (npmRoot) candidates.push(join20(dirname5(dirname5(npmRoot)), "bin", "openclaw"));
     } catch {
     }
     candidates.push(
-      join19(homedir16(), ".npm-global", "bin", "openclaw"),
-      join19(homedir16(), ".local", "bin", "openclaw"),
+      join20(homedir17(), ".npm-global", "bin", "openclaw"),
+      join20(homedir17(), ".local", "bin", "openclaw"),
       "/usr/local/bin/openclaw"
     );
-    return candidates.find((candidate) => existsSync5(candidate)) ?? "";
+    return candidates.find((candidate) => existsSync4(candidate)) ?? "";
   })();
   if (!openclawPath) {
     console.error("  \u2717 openclaw not found on PATH");
@@ -236086,31 +236240,31 @@ async function cmdSetup() {
     process.exit(1);
   }
   console.log(`  \u2713 Found openclaw at ${openclawPath}`);
-  const configPath = join19(homedir16(), ".openclaw", "openclaw.json");
-  const configInitiallyExisted = existsSync5(configPath);
+  const configPath = join20(homedir17(), ".openclaw", "openclaw.json");
+  const configInitiallyExisted = existsSync4(configPath);
   const configRollbackBackup = configInitiallyExisted ? `${configPath}.before-${BLOCKRUN_PLUGIN_ID2}.${Date.now()}` : void 0;
   if (configRollbackBackup) copyFileSync2(configPath, configRollbackBackup);
   const ensureConfigRollbackBackup = () => {
     return configRollbackBackup;
   };
   let installAttempted = false;
-  const openclawRoot = join19(homedir16(), ".openclaw");
+  const openclawRoot = join20(homedir17(), ".openclaw");
   const findManagedBlockRunInstalls = () => {
     const candidates = [
-      join19(openclawRoot, "extensions", BLOCKRUN_PLUGIN_ID2),
-      join19(openclawRoot, "extensions", "clawrouter"),
-      join19(openclawRoot, "npm", "node_modules", "@blockrun", "clawrouter")
+      join20(openclawRoot, "extensions", BLOCKRUN_PLUGIN_ID2),
+      join20(openclawRoot, "extensions", "clawrouter"),
+      join20(openclawRoot, "npm", "node_modules", "@blockrun", "clawrouter")
     ];
-    const projectsDir = join19(openclawRoot, "npm", "projects");
+    const projectsDir = join20(openclawRoot, "npm", "projects");
     try {
       for (const project of readdirSync2(projectsDir)) {
-        candidates.push(join19(projectsDir, project, "node_modules", "@blockrun", "clawrouter"));
+        candidates.push(join20(projectsDir, project, "node_modules", "@blockrun", "clawrouter"));
       }
     } catch {
     }
     return [...new Set(candidates)].filter((candidate) => {
       try {
-        const metadata = JSON.parse(readFileSync4(join19(candidate, "package.json"), "utf8"));
+        const metadata = JSON.parse(readFileSync4(join20(candidate, "package.json"), "utf8"));
         return metadata.name === "@blockrun/clawrouter";
       } catch {
         return false;
@@ -236118,7 +236272,7 @@ async function cmdSetup() {
     });
   };
   const initialPluginDirs = findManagedBlockRunInstalls();
-  const setupRollbackRoot = join19(
+  const setupRollbackRoot = join20(
     openclawRoot,
     "blockrun",
     "setup-rollbacks",
@@ -236128,16 +236282,16 @@ async function cmdSetup() {
   if (initialPluginDirs.length > 0) {
     mkdirSync4(setupRollbackRoot, { recursive: true, mode: 448 });
     for (const [index2, pluginDir] of initialPluginDirs.entries()) {
-      const backup = join19(setupRollbackRoot, String(index2));
+      const backup = join20(setupRollbackRoot, String(index2));
       cpSync(pluginDir, backup, { recursive: true });
       pluginRollbackBackups.set(pluginDir, backup);
     }
   }
   const restoreSetupConfig = () => {
-    if (configRollbackBackup && existsSync5(configRollbackBackup)) {
+    if (configRollbackBackup && existsSync4(configRollbackBackup)) {
       copyFileSync2(configRollbackBackup, configPath);
       console.error(`  \u2713 Restored original OpenClaw config from ${configRollbackBackup}`);
-    } else if (!configInitiallyExisted && existsSync5(configPath)) {
+    } else if (!configInitiallyExisted && existsSync4(configPath)) {
       rmSync(configPath);
       console.error("  \u2713 Removed the partially created OpenClaw config");
     }
@@ -236159,7 +236313,7 @@ async function cmdSetup() {
         }
       }
       for (const [pluginDir, backup] of pluginRollbackBackups) {
-        if (!existsSync5(backup)) continue;
+        if (!existsSync4(backup)) continue;
         rmSync(pluginDir, { recursive: true, force: true });
         mkdirSync4(dirname5(pluginDir), { recursive: true });
         cpSync(backup, pluginDir, { recursive: true });
@@ -236170,17 +236324,17 @@ async function cmdSetup() {
   };
   let legacyBlockRunInstall = false;
   let stagedLegacyEntry;
-  if (existsSync5(configPath)) {
+  if (existsSync4(configPath)) {
     try {
       const config = JSON.parse(readFileSync4(configPath, "utf8"));
-      const legacyPackagePath = join19(
-        homedir16(),
+      const legacyPackagePath = join20(
+        homedir17(),
         ".openclaw",
         "extensions",
         "clawrouter",
         "package.json"
       );
-      if (existsSync5(legacyPackagePath)) {
+      if (existsSync4(legacyPackagePath)) {
         try {
           const legacyPackage = JSON.parse(readFileSync4(legacyPackagePath, "utf8"));
           legacyBlockRunInstall = legacyPackage.name === "@blockrun/clawrouter";
@@ -236261,7 +236415,7 @@ async function cmdSetup() {
     );
     process.exit(1);
   }
-  if (existsSync5(configPath)) {
+  if (existsSync4(configPath)) {
     try {
       const config = JSON.parse(readFileSync4(configPath, "utf8"));
       if (stagedLegacyEntry) {
@@ -236303,7 +236457,7 @@ async function cmdSetup() {
     info: (msg) => console.log(`  ${msg}`)
   };
   try {
-    if (existsSync5(configPath)) ensureConfigRollbackBackup();
+    if (existsSync4(configPath)) ensureConfigRollbackBackup();
     injectModelsConfig2(setupLogger, { forceWrite: true });
     syncAgentModelCache2(setupLogger, { forceWrite: true });
     injectAuthProfile2(setupLogger);
@@ -236314,7 +236468,7 @@ async function cmdSetup() {
   }
   console.log("\n\u2713 Setup complete.");
   rmSync(setupRollbackRoot, { recursive: true, force: true });
-  if (configRollbackBackup && existsSync5(configRollbackBackup)) {
+  if (configRollbackBackup && existsSync4(configRollbackBackup)) {
     unlinkSync2(configRollbackBackup);
   }
   console.log("\nNext: restart the gateway to load ClawRouter:");
