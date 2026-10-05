@@ -555,7 +555,7 @@ Both now forward verbatim through the existing paid-passthrough, verified live a
 
 ### Fixed — the API-key docs described a gateway that no longer exists
 
-The 404 hint and the README both said `api.blockrun.ai` "currently carries chat and text completions" and that "image, video, audio and the partner APIs are still wallet-only". Probing the live gateway on 2026-09-05 disproved it: chat, `/v1/messages`, `/v1/models`, image generation, speech, video, Surf, Exa, prediction markets and phone lookup/fraud **all work on an API key**, and so do all <!-- br:models.free -->6<!-- /br:models.free --> free models. The genuine wallet-only exceptions are the routes that bind a lease or a position to a payer address — buying/renewing/releasing phone numbers, and Polymarket trading — and those are now what the hint names.
+The 404 hint and the README both said `api.blockrun.ai` "currently carries chat and text completions" and that "image, video, audio and the partner APIs are still wallet-only". Probing the live gateway on 2026-09-05 disproved it: chat, `/v1/messages`, `/v1/models`, image generation, speech, video, Surf, Exa, prediction markets and phone lookup/fraud **all work on an API key**, and so do all <!-- br:models.free -->7<!-- /br:models.free --> free models. The genuine wallet-only exceptions are the routes that bind a lease or a position to a payer address — buying/renewing/releasing phone numbers, and Polymarket trading — and those are now what the hint names.
 
 ### Changed — Solana is the stated preference, without stranding Base wallets
 
