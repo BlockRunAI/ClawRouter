@@ -2183,7 +2183,8 @@ const plugin: OpenClawPluginDefinition = {
       name: "cr-imagegen",
       description: "Generate an image (BlockRun image models, paid via wallet)",
       acceptsArgs: true,
-      requireAuth: false,
+      // Paid from the wallet: only authorized senders.
+      requireAuth: true,
       handler: async (ctx: PluginCommandContext) => {
         const parsed = parseGenArgs(ctx.args ?? "");
         if (!parsed.prompt) {
@@ -2237,7 +2238,8 @@ const plugin: OpenClawPluginDefinition = {
       name: "videogen",
       description: "Generate a short video (Grok Imagine / Seedance, paid via wallet)",
       acceptsArgs: true,
-      requireAuth: false,
+      // Paid from the wallet: only authorized senders.
+      requireAuth: true,
       handler: async (ctx: PluginCommandContext) => {
         const parsed = parseGenArgs(ctx.args ?? "");
         if (!parsed.prompt) {
@@ -2295,7 +2297,8 @@ const plugin: OpenClawPluginDefinition = {
       name: "cr-call",
       description: "Place an AI voice call via BlockRun + Bland.ai (paid from wallet, $0.54/call)",
       acceptsArgs: true,
-      requireAuth: false,
+      // Paid from the wallet: only authorized senders.
+      requireAuth: true,
       handler: async (ctx: PluginCommandContext) => {
         const parsed = parseCallArgs(ctx.args ?? "");
         if (!parsed.to || !parsed.task) {

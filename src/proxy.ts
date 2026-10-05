@@ -36,7 +36,7 @@ import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdir, writeFile, readFile, stat as fsStat } from "node:fs/promises";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
@@ -121,6 +121,7 @@ import { loadExcludeList } from "./exclude-models.js";
 import { demoteUnreliable, recordOutcome } from "./outcome-memory.js";
 import { PROXY_PORT } from "./config.js";
 import { SessionJournal } from "./journal.js";
+import { readLocalImageAsDataUri, ssrfSafeFetch, untrustedRequestReason } from "./local-guard.js";
 import { applyUpstreamProxy } from "./upstream-proxy.js";
 import { extractTextualToolCalls } from "./textual-tool-calls.js";
 import {
@@ -2490,29 +2491,6 @@ async function proxyPaidApiRequest(
 }
 
 /**
- * Read a local image file and return it as a base64 data URI.
- * Supports ~/ home directory expansion.
- */
-function readImageFileAsDataUri(filePath: string): string {
-  const resolved = filePath.startsWith("~/") ? join(homedir(), filePath.slice(2)) : filePath;
-
-  if (!existsSync(resolved)) {
-    throw new Error(`Image file not found: ${resolved}`);
-  }
-
-  const ext = resolved.split(".").pop()?.toLowerCase() ?? "png";
-  const mimeMap: Record<string, string> = {
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    webp: "image/webp",
-  };
-  const mime = mimeMap[ext] ?? "image/png";
-  const data = readFileSync(resolved);
-  return `data:${mime};base64,${data.toString("base64")}`;
-}
-
-/**
  * Upload a base64 data URI to catbox.moe and return a public URL.
  * Google image models (nano-banana) return data URIs instead of hosted URLs,
  * which breaks Telegram and other clients that can't render raw base64.
@@ -3000,6 +2978,17 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           console.error(`[ClawRouter] Request finished with error: ${err.message}`);
         }
       });
+
+      // Only local clients. Loopback binding keeps the LAN out but not a web
+      // page in the user's browser (a text/plain POST needs no preflight) or a
+      // DNS-rebinding page. Native clients send no Origin and pass.
+      const untrusted = untrustedRequestReason(req);
+      if (untrusted) {
+        console.warn(`[ClawRouter] Refused request to ${req.url}: ${untrusted}`);
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "forbidden", details: untrusted }));
+        return;
+      }
 
       // Health check with optional balance info
       if (req.url === "/health" || req.url?.startsWith("/health?")) {
@@ -3606,8 +3595,13 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             if (val.startsWith("data:")) {
               // Already a data URI — pass through
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
-              // Download URL → data URI
-              const imgResp = await fetch(val, { signal: clientAbort.signal });
+              // Download URL → data URI. Public hosts only, every redirect
+              // re-checked: this URL comes from the request body.
+              // CLAWROUTER_ALLOW_PRIVATE_FETCH=1 opts in to a local image server.
+              const imgResp = await ssrfSafeFetch(val, {
+                signal: clientAbort.signal,
+                allowPrivate: process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH === "1",
+              });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
               const contentType = imgResp.headers.get("content-type") ?? "image/png";
@@ -3618,7 +3612,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               );
             } else {
               // Local file path → data URI
-              parsed[field] = readImageFileAsDataUri(val);
+              parsed[field] = readLocalImageAsDataUri(val);
               console.log(`[ClawRouter] img2img: read ${field} file → data URI`);
             }
           }
@@ -5380,8 +5374,8 @@ async function proxyRequest(
         let imageDataUri: string;
         let maskDataUri: string | undefined;
         try {
-          imageDataUri = readImageFileAsDataUri(imagePath);
-          if (maskPath) maskDataUri = readImageFileAsDataUri(maskPath);
+          imageDataUri = readLocalImageAsDataUri(imagePath);
+          if (maskPath) maskDataUri = readLocalImageAsDataUri(maskPath);
         } catch (fileErr) {
           const fileErrMsg = fileErr instanceof Error ? fileErr.message : String(fileErr);
           sendImg2ImgText(`Failed to read image file: ${fileErrMsg}`);
