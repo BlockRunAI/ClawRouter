@@ -109,6 +109,8 @@ describe("image2image upstream call on client abort", () => {
     });
     await new Promise<void>((resolve) => imageHost.listen(0, "127.0.0.1", resolve));
     const imgAddr = imageHost.address() as AddressInfo;
+    // The image host is on loopback, which the SSRF guard refuses by default.
+    process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH = "1";
 
     try {
       const url = new URL(`${proxy.baseUrl}/v1/images/image2image`);
@@ -157,6 +159,7 @@ describe("image2image upstream call on client abort", () => {
       expect(clientStatus).toBeUndefined();
       expect(upstreamHits).toBe(0);
     } finally {
+      delete process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH;
       imageHost.closeAllConnections?.();
       await new Promise<void>((resolve) => imageHost.close(() => resolve()));
     }

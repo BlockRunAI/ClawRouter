@@ -70,7 +70,21 @@ function buildTool(service: PartnerServiceDefinition, proxyBaseUrl: string): Par
         // Validate `path` to prevent escaping the /pm namespace via leading-slash tricks.
         const rawPath = typeof params.path === "string" ? params.path : "";
         const normalized = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-        if (!normalized.startsWith("/pm/") || normalized.includes("..")) {
+        // Check the path as the URL parser will resolve it: `%2e%2e` decodes
+        // to `..` there, so a literal-string check alone lets /pm/%2e%2e/voice/call
+        // escape to /v1/voice/call.
+        let resolved: string;
+        try {
+          resolved = new URL(`/v1${normalized}`, "http://x").pathname;
+        } catch {
+          resolved = "";
+        }
+        if (
+          !normalized.startsWith("/pm/") ||
+          normalized.includes("..") ||
+          /%2e|%2f|%5c|\\/i.test(normalized) ||
+          !resolved.startsWith("/v1/pm/")
+        ) {
           throw new Error(
             `predexon_endpoint_call: invalid path '${rawPath}' — must begin with '/pm/' and contain no '..'`,
           );
