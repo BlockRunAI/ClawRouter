@@ -46,6 +46,8 @@ export type ReconcileResult = {
   unavailableDays: string[];
   /** Journal entries with no request id at all — unreconcilable, not a mismatch. */
   unkeyedLocalCount: number;
+  /** Why the ledger read stopped before its last page, if it did. */
+  ledgerIncomplete?: string;
 };
 
 /** Read journal entries written on or after `since`. */
@@ -91,24 +93,42 @@ export async function loadLocalRows(since: Date): Promise<{ rows: LocalRow[]; un
   return { rows, unkeyed };
 }
 
-/** Pull the whole ledger window, following the opaque cursor. */
+/**
+ * Pull the whole ledger window, following the opaque cursor.
+ *
+ * When the read stops early (a later page fails, or pages are left past
+ * `maxPages`) the rows read so far are kept, but `incomplete` says why. A short
+ * ledger looks clean on its own: every charge on the unread pages silently
+ * drops out of `chargedNotRecorded`.
+ */
 export async function loadGatewayRows(
   apiKey: string,
   from: string,
   maxPages = 40,
-): Promise<{ rows: UsageRow[]; unavailableDays: string[] } | undefined> {
+): Promise<{ rows: UsageRow[]; unavailableDays: string[]; incomplete?: string } | undefined> {
   const rows: UsageRow[] = [];
   const unavailableDays = new Set<string>();
   let cursor: string | undefined;
   for (let page = 0; page < maxPages; page++) {
     const result = await fetchUsagePage(apiKey, { from, limit: 500, cursor });
-    if (!result) return page === 0 ? undefined : { rows, unavailableDays: [...unavailableDays] };
+    if (!result) {
+      if (page === 0) return undefined;
+      return {
+        rows,
+        unavailableDays: [...unavailableDays],
+        incomplete: `page ${page + 1} of the ledger could not be read`,
+      };
+    }
     rows.push(...result.rows);
     result.unavailableDays.forEach((d) => unavailableDays.add(d));
-    if (!result.nextCursor) break;
+    if (!result.nextCursor) return { rows, unavailableDays: [...unavailableDays] };
     cursor = result.nextCursor; // opaque by contract — passed back, never parsed
   }
-  return { rows, unavailableDays: [...unavailableDays] };
+  return {
+    rows,
+    unavailableDays: [...unavailableDays],
+    incomplete: `the ledger has more than ${maxPages} pages for this window; try fewer --days`,
+  };
 }
 
 /** Amounts equal to the cent, allowing for float representation. */
@@ -171,7 +191,21 @@ export async function reconcile(apiKey: string, days: number): Promise<Reconcile
     loadGatewayRows(apiKey, since.toISOString()),
   ]);
   if (!gateway) throw new Error("Could not read the BlockRun usage ledger (GET /v1/usage).");
-  return joinRows(localRows, gateway.rows, unkeyed, gateway.unavailableDays);
+  const result = joinRows(localRows, gateway.rows, unkeyed, gateway.unavailableDays);
+  if (gateway.incomplete) result.ledgerIncomplete = gateway.incomplete;
+  return result;
+}
+
+/**
+ * Exit status for `clawrouter reconcile`, so a scheduled check can alert:
+ * 2 when money was charged that this machine has no record of, 1 when the
+ * ledger could not be read in full (unread pages can hide exactly those
+ * charges), 0 otherwise.
+ */
+export function reconcileExitCode(r: ReconcileResult): number {
+  if (r.chargedNotRecorded.length > 0) return 2;
+  if (r.ledgerIncomplete) return 1;
+  return 0;
 }
 
 const usd = (n: number): string => (Math.abs(n) < 0.01 ? `$${n.toFixed(6)}` : `$${n.toFixed(2)}`);
@@ -182,6 +216,12 @@ export function formatReconcile(r: ReconcileResult, days: number): string {
   const mismatched = r.matched.filter((m) => Math.abs(m.deltaUsd) > CENT_EPSILON);
 
   out.push(`\nBlockRun reconciliation — last ${days} day${days === 1 ? "" : "s"}\n`);
+  if (r.ledgerIncomplete) {
+    // First, because it qualifies every number below.
+    out.push(`  ⚠ Partial ledger: ${r.ledgerIncomplete}.`);
+    out.push(`    The totals and lists below cover only the pages that were read;`);
+    out.push(`    charges on the unread pages are not checked.\n`);
+  }
   out.push(
     `  Gateway charged:  ${usd(r.gatewayTotalUsd)}   (${r.matched.length + r.chargedNotRecorded.length} settled calls)`,
   );
