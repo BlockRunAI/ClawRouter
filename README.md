@@ -697,8 +697,9 @@ table has drifted from the gateway's. **Charged but not in this machine's
 journal** is the one to look at hardest: money left the account for a call this
 machine did not make — expected if the same key is used on another machine or by
 another BlockRun product, and worth investigating if not. Exit code `2` in that
-case, so a scheduled check can alert on it. Rows still **pending pricing** are
-excluded from the totals rather than counted as $0.
+case, so a scheduled check can alert on it, and `1` when the ledger could not be
+read in full, since the unread pages could hold exactly those charges. Rows still
+**pending pricing** are excluded from the totals rather than counted as $0.
 
 Your per-call sum will always be less than your card statement by exactly the
 top-up fees, which are charged at purchase and never appear as ledger rows. That

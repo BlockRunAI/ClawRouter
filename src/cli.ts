@@ -308,12 +308,12 @@ async function cmdReconcile(days: number): Promise<void> {
     process.exit(1);
   }
   try {
-    const { reconcile, formatReconcile } = await import("./reconcile.js");
+    const { reconcile, formatReconcile, reconcileExitCode } = await import("./reconcile.js");
     const result = await reconcile(resolved.key, days);
     console.log(formatReconcile(result, days));
-    // Money charged that this machine cannot account for is the one outcome
-    // worth a non-zero exit, so a scheduled check can alert on it.
-    process.exitCode = result.chargedNotRecorded.length > 0 ? 2 : 0;
+    // Non-zero so a scheduled check can alert: unaccounted charges, or a
+    // ledger read too short to rule them out.
+    process.exitCode = reconcileExitCode(result);
   } catch (error) {
     console.error(`✗ ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);

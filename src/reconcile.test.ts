@@ -18,8 +18,14 @@
  * would report a number that changes on the next run.
  */
 
-import { describe, it, expect } from "vitest";
-import { joinRows, formatReconcile, type LocalRow } from "./reconcile.js";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import {
+  joinRows,
+  formatReconcile,
+  loadGatewayRows,
+  reconcileExitCode,
+  type LocalRow,
+} from "./reconcile.js";
 import type { UsageRow } from "./api-key.js";
 
 const local = (requestId: string, cost: number, model = "openai/gpt-4o-mini"): LocalRow => ({
@@ -128,5 +134,145 @@ describe("formatReconcile", () => {
     // Rounding a real charge to $0.00 is how a discrepancy hides.
     const out = formatReconcile(joinRows([local("a", 0.001)], [remote("a", 0.0000066)]), 1);
     expect(out).toContain("0.000007");
+  });
+});
+
+describe("loadGatewayRows", () => {
+  // One ledger page as GET /v1/usage returns it.
+  const page = (ids: string[], nextCursor: string | null) =>
+    new Response(
+      JSON.stringify({
+        data: ids.map((id) => ({
+          request_id: id,
+          timestamp: "2026-09-05T18:00:00Z",
+          endpoint: "/v1/chat/completions",
+          cost_usd: 0.01,
+          cost_state: "priced",
+        })),
+        next_cursor: nextCursor,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("follows the cursor to the last page, passing it back verbatim", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(page(["a"], "opaque/cursor=1"))
+      .mockResolvedValueOnce(page(["b"], null));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z");
+
+    expect(r?.rows.map((x) => x.requestId)).toEqual(["a", "b"]);
+    expect(new URL(fetchMock.mock.calls[1][0] as string).searchParams.get("cursor")).toBe(
+      "opaque/cursor=1",
+    );
+  });
+
+  it("marks the ledger incomplete when a page after the first fails", async () => {
+    // Page 2 is lost. Page 1 alone reconciles "cleanly": every charge on the
+    // missing pages silently drops out of chargedNotRecorded, the finding this
+    // command exists to surface.
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(page(["a"], "c1"))
+        .mockResolvedValueOnce(new Response("upstream error", { status: 502 })),
+    );
+
+    const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z");
+
+    expect(r?.rows.map((x) => x.requestId)).toEqual(["a"]);
+    expect(r?.incomplete).toMatch(/page 2/);
+  });
+
+  it("marks the ledger incomplete when pages are left past the cap", async () => {
+    // Every page says there is more, each with a fresh cursor. Stopping at the
+    // cap is fine; passing what was read off as the whole ledger is not.
+    let n = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      n++;
+      return page([`x${n}`], `c${n}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z", 3);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(r?.rows.map((x) => x.requestId)).toEqual(["x1", "x2", "x3"]);
+    expect(r?.incomplete).toMatch(/more than 3 pages/);
+  });
+
+  it("stops at a cursor it has already requested instead of reading that page again", async () => {
+    // Page 2 hands back the cursor that produced it. Following it would append
+    // page 2's rows on every pass until the cap and count those charges twice.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(page(["a"], "c1"))
+      .mockResolvedValueOnce(page(["b"], "c1"))
+      .mockImplementation(async () => page(["b"], "c1"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z", 5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(r?.rows.map((x) => x.requestId)).toEqual(["a", "b"]);
+    expect(r?.incomplete).toMatch(/stopped advancing after page 2/);
+  });
+
+  it("still returns undefined when the first page fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+    await expect(loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z")).resolves.toBe(
+      undefined,
+    );
+  });
+
+  it("leaves a complete read unmarked", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(page(["a"], null)));
+    const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z");
+    expect(r?.incomplete).toBeUndefined();
+  });
+});
+
+describe("partial ledger", () => {
+  const partial = () => {
+    const r = joinRows([local("a", 0.01)], [remote("a", 0.01)]);
+    r.ledgerIncomplete = "page 2 of the ledger could not be read";
+    return r;
+  };
+
+  it("says so before the totals it qualifies", () => {
+    const out = formatReconcile(partial(), 7);
+    expect(out).toContain("Partial ledger: page 2 of the ledger could not be read");
+    expect(out.indexOf("Partial ledger")).toBeLessThan(out.indexOf("Gateway charged"));
+  });
+
+  it("calls only the gateway side short, since the journal still covers the window", () => {
+    // The journal total and recordedNotCharged come from the full local window;
+    // only the ledger side is missing pages.
+    const out = formatReconcile(partial(), 7);
+    expect(out).toMatch(/gateway total is\s+short/);
+    expect(out).toMatch(/recorded locally with no settled ledger row/);
+    expect(out).not.toMatch(/totals and lists below cover only/i);
+  });
+
+  it("does not exit 0, since unread pages can hide unrecorded charges", () => {
+    expect(reconcileExitCode(partial())).toBe(1);
+  });
+
+  it("keeps exit 2 for unrecorded charges, partial or not", () => {
+    const r = joinRows([], [remote("ghost", 2.43)]);
+    expect(reconcileExitCode(r)).toBe(2);
+    r.ledgerIncomplete = "page 2 of the ledger could not be read";
+    expect(reconcileExitCode(r)).toBe(2);
+  });
+
+  it("exits 0 for a complete, clean reconciliation", () => {
+    expect(reconcileExitCode(joinRows([local("a", 0.01)], [remote("a", 0.01)]))).toBe(0);
   });
 });
