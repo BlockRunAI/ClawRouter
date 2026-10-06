@@ -192,16 +192,37 @@ describe("loadGatewayRows", () => {
   });
 
   it("marks the ledger incomplete when pages are left past the cap", async () => {
-    // Every page says there is more. Stopping at the cap is fine; passing what
-    // was read off as the whole ledger is not.
-    const fetchMock = vi.fn().mockImplementation(async () => page(["x"], "more"));
+    // Every page says there is more, each with a fresh cursor. Stopping at the
+    // cap is fine; passing what was read off as the whole ledger is not.
+    let n = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      n++;
+      return page([`x${n}`], `c${n}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z", 3);
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(r?.rows).toHaveLength(3);
+    expect(r?.rows.map((x) => x.requestId)).toEqual(["x1", "x2", "x3"]);
     expect(r?.incomplete).toMatch(/more than 3 pages/);
+  });
+
+  it("stops at a cursor it has already requested instead of reading that page again", async () => {
+    // Page 2 hands back the cursor that produced it. Following it would append
+    // page 2's rows on every pass until the cap and count those charges twice.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(page(["a"], "c1"))
+      .mockResolvedValueOnce(page(["b"], "c1"))
+      .mockImplementation(async () => page(["b"], "c1"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await loadGatewayRows("brk_live_test", "2026-09-01T00:00:00.000Z", 5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(r?.rows.map((x) => x.requestId)).toEqual(["a", "b"]);
+    expect(r?.incomplete).toMatch(/stopped advancing after page 2/);
   });
 
   it("still returns undefined when the first page fails", async () => {
@@ -229,6 +250,15 @@ describe("partial ledger", () => {
     const out = formatReconcile(partial(), 7);
     expect(out).toContain("Partial ledger: page 2 of the ledger could not be read");
     expect(out.indexOf("Partial ledger")).toBeLessThan(out.indexOf("Gateway charged"));
+  });
+
+  it("calls only the gateway side short, since the journal still covers the window", () => {
+    // The journal total and recordedNotCharged come from the full local window;
+    // only the ledger side is missing pages.
+    const out = formatReconcile(partial(), 7);
+    expect(out).toMatch(/gateway total is\s+short/);
+    expect(out).toMatch(/recorded locally with no settled ledger row/);
+    expect(out).not.toMatch(/totals and lists below cover only/i);
   });
 
   it("does not exit 0, since unread pages can hide unrecorded charges", () => {

@@ -96,10 +96,10 @@ export async function loadLocalRows(since: Date): Promise<{ rows: LocalRow[]; un
 /**
  * Pull the whole ledger window, following the opaque cursor.
  *
- * When the read stops early (a later page fails, or pages are left past
- * `maxPages`) the rows read so far are kept, but `incomplete` says why. A short
- * ledger looks clean on its own: every charge on the unread pages silently
- * drops out of `chargedNotRecorded`.
+ * When the read stops early (a later page fails, the cursor stops advancing, or
+ * pages are left past `maxPages`) the rows read so far are kept, but
+ * `incomplete` says why. A short ledger looks clean on its own: every charge on
+ * the unread pages silently drops out of `chargedNotRecorded`.
  */
 export async function loadGatewayRows(
   apiKey: string,
@@ -108,6 +108,7 @@ export async function loadGatewayRows(
 ): Promise<{ rows: UsageRow[]; unavailableDays: string[]; incomplete?: string } | undefined> {
   const rows: UsageRow[] = [];
   const unavailableDays = new Set<string>();
+  const requested = new Set<string>();
   let cursor: string | undefined;
   for (let page = 0; page < maxPages; page++) {
     const result = await fetchUsagePage(apiKey, { from, limit: 500, cursor });
@@ -122,7 +123,17 @@ export async function loadGatewayRows(
     rows.push(...result.rows);
     result.unavailableDays.forEach((d) => unavailableDays.add(d));
     if (!result.nextCursor) return { rows, unavailableDays: [...unavailableDays] };
+    // A cursor already requested leads back to a page already read. Following
+    // it would append the same rows again on every pass until `maxPages`.
+    if (requested.has(result.nextCursor)) {
+      return {
+        rows,
+        unavailableDays: [...unavailableDays],
+        incomplete: `the ledger's page cursor stopped advancing after page ${page + 1}`,
+      };
+    }
     cursor = result.nextCursor; // opaque by contract — passed back, never parsed
+    requested.add(cursor);
   }
   return {
     rows,
@@ -218,9 +229,13 @@ export function formatReconcile(r: ReconcileResult, days: number): string {
   out.push(`\nBlockRun reconciliation — last ${days} day${days === 1 ? "" : "s"}\n`);
   if (r.ledgerIncomplete) {
     // First, because it qualifies every number below.
+    // Only the gateway side is short. The journal still covers the whole window,
+    // so its total is complete and calls billed on unread pages land in
+    // recordedNotCharged rather than matched.
     out.push(`  ⚠ Partial ledger: ${r.ledgerIncomplete}.`);
-    out.push(`    The totals and lists below cover only the pages that were read;`);
-    out.push(`    charges on the unread pages are not checked.\n`);
+    out.push(`    Only the ledger pages that were read are compared: the gateway total is`);
+    out.push(`    short, charges on the unread pages are not checked, and calls billed on`);
+    out.push(`    those pages show up as recorded locally with no settled ledger row.\n`);
   }
   out.push(
     `  Gateway charged:  ${usd(r.gatewayTotalUsd)}   (${r.matched.length + r.chargedNotRecorded.length} settled calls)`,
