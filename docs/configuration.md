@@ -21,17 +21,20 @@ Complete reference for ClawRouter configuration options.
 
 ## Environment Variables
 
-| Variable                    | Default                               | Description                                                                                                                                                 |
-| --------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BLOCKRUN_API_KEY`          | -                                     | BlockRun API key (`brk_live_…`). Pays from card-funded account credit via `api.blockrun.ai` instead of a wallet. Takes precedence over every wallet source. |
-| `BLOCKRUN_API_BASE_URL`     | `https://api.blockrun.ai`             | Override the API-key gateway (staging deploys only).                                                                                                        |
-| `BLOCKRUN_WALLET_KEY`       | -                                     | Explicit Base wallet override (hex, 0x-prefixed).                                                                                                           |
-| `BLOCKRUN_PROXY_PORT`       | `8402`                                | Port for the local x402 proxy server.                                                                                                                       |
-| `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                                                                                                                |
-| `CLAWROUTER_DISABLED`       | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).                                                                                       |
-| `CLAWROUTER_WORKER`         | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).                                                                                      |
-| `CLAWROUTER_DEBUG_HEADERS`  | (on)                                  | Set to `off`/`false`/`0` to suppress the `x-clawrouter-*` debug response headers.                                                                           |
-| `BLOCKRUN_WEB_SEARCH`       | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.                                                                                    |
+| Variable                               | Default                               | Description                                                                                                                                                 |
+| -------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BLOCKRUN_API_KEY`                     | -                                     | BlockRun API key (`brk_live_…`). Pays from card-funded account credit via `api.blockrun.ai` instead of a wallet. Takes precedence over every wallet source. |
+| `BLOCKRUN_API_BASE_URL`                | `https://api.blockrun.ai`             | Override the API-key gateway (staging deploys only).                                                                                                        |
+| `BLOCKRUN_WALLET_KEY`                  | -                                     | Explicit Base wallet override (hex, 0x-prefixed).                                                                                                           |
+| `BLOCKRUN_PROXY_PORT`                  | `8402`                                | Port for the local x402 proxy server.                                                                                                                       |
+| `CLAWROUTER_SOLANA_RPC_URL`            | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint for USDC balance checks.                                                                                                                |
+| `CLAWROUTER_SOLANA_BATCH`              | off                                   | Set to `1` to pay Solana calls through an x402 batch-settlement channel. See below.                                                                         |
+| `CLAWROUTER_SOLANA_BATCH_DEPOSIT_USDC` | `1`                                   | Channel deposit in USDC; also the most a trusted operator can hold.                                                                                         |
+| `CLAWROUTER_SOLANA_BATCH_OPERATORS`    | -                                     | Comma-separated operator keys trusted for server-signed channels. Empty = batch stays off.                                                                  |
+| `CLAWROUTER_DISABLED`                  | `false`                               | Set to `true` to disable smart routing (pass requests through as-is).                                                                                       |
+| `CLAWROUTER_WORKER`                    | -                                     | Set to `1` to enable Worker Mode (earn USDC by running health checks).                                                                                      |
+| `CLAWROUTER_DEBUG_HEADERS`             | (on)                                  | Set to `off`/`false`/`0` to suppress the `x-clawrouter-*` debug response headers.                                                                           |
+| `BLOCKRUN_WEB_SEARCH`                  | (auto-enabled)                        | Set to `off` to disable BlockRun's Exa web search provider registration.                                                                                    |
 
 ---
 
@@ -233,6 +236,41 @@ curl -s -m 10 -X POST https://api.mainnet-beta.solana.com \
 
 If that hangs or is refused, point this variable at an endpoint the host can
 reach.
+
+### CLAWROUTER_SOLANA_BATCH
+
+Experimental, off by default, Solana chain only. `sol.blockrun.ai` offers two
+schemes: `exact` (one on-chain USDC transfer per call) and `batch-settlement`
+(one deposit opens a payment channel; each call is then paid with a signed
+voucher and the gateway claims vouchers in batches, so calls skip the per-call
+transaction).
+
+BlockRun's channels are **server signed**: the gateway's operator key can claim
+up to the whole deposit without another signature from your wallet. So nothing
+is trusted by default; you name the operator and the deposit caps the exposure:
+
+```bash
+export CLAWROUTER_SOLANA_BATCH=1
+export CLAWROUTER_SOLANA_BATCH_OPERATORS=<operator key from the gateway's 402 (extra.operator)>
+export CLAWROUTER_SOLANA_BATCH_DEPOSIT_USDC=1   # default; the escrow cap equals the deposit
+openclaw gateway restart
+```
+
+- With no operator listed, or an operator the 402 does not advertise, every call
+  stays on `exact`.
+- Any batch failure (signing, RPC, a 402 for the voucher) pays that request with
+  `exact` instead. A request whose voucher was sent but whose response was lost
+  is not paid again.
+- What your wallet has signed per channel is kept in
+  `~/.openclaw/blockrun/solana-batch-channels.json` (atomic writes), so a
+  restart neither loses nor double counts it. Do not delete it while a channel
+  is open.
+- At start and every 10 minutes the proxy reads each channel account on chain
+  and compares what was claimed (`settled`) with what you signed. Claimed above
+  signed turns batch off for the process and logs a warning; `clawrouter doctor`
+  runs the same check and lists each channel.
+- The deposit is escrow, not a spend: ClawRouter's spend limits count the
+  per-call price, not the deposit.
 
 ---
 

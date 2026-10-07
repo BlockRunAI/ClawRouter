@@ -777,6 +777,7 @@ For basic usage, no configuration needed. For advanced options:
 | `CLAWROUTER_DISABLED`       | `false`                               | Disable smart routing                                                                                                       |
 | `CLAWROUTER_DEBUG_HEADERS`  | `on`                                  | Set to `off` to suppress `x-clawrouter-*` debug response headers                                                            |
 | `CLAWROUTER_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint — balance checks and payment signing                                                                    |
+| `CLAWROUTER_SOLANA_BATCH`   | off                                   | Opt-in Solana x402 batch settlement (needs a trusted operator; see the configuration reference)                             |
 
 **Full reference:** [docs/configuration.md](docs/configuration.md)
 

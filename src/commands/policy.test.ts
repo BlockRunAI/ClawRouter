@@ -36,7 +36,8 @@ describe("runPolicyCommand (in-memory store)", () => {
     expect(run(["set", "blockedPayees", payee]).isError).toBeFalsy();
 
     let signerCalls = 0;
-    const client = new x402Client();
+    // As startProxy builds it: ClawRouter's policy, not the SDK's spendControls.
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, openControl());
     client.register(CAIP2_BASE, {
       scheme: "exact",

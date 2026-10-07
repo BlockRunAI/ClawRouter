@@ -606,7 +606,9 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
     const control = new SpendControl({ storage });
     control.setPolicy("blockedPayees", [blocked]);
 
-    const client = new x402Client();
+    // As startProxy builds it: ClawRouter's policy, not the SDK's spendControls.
+
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, control);
     client.register(CAIP2_BASE, {
       scheme: "exact",
@@ -624,7 +626,7 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
     let signerCalls = 0;
     const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
     control.setLimit("hourly", 0.015);
-    const client = new x402Client();
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, control);
     client.register(CAIP2_BASE, {
       scheme: "exact",
@@ -646,7 +648,7 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
     let signerCalls = 0;
     const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
     control.setLimit("hourly", 0.015);
-    const client = new x402Client();
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, control);
     client.register(CAIP2_BASE, {
       scheme: "exact",
@@ -679,7 +681,7 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
         let signerCalls = 0;
         const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
         control.setLimit("perRequest", 0.01);
-        const client = new x402Client();
+        const client = new x402Client().setSpendControls(false);
         registerSpendPolicyHook(client, control);
         client.register(CAIP2_BASE, {
           scheme: "exact",
@@ -700,7 +702,7 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
       let signerCalls = 0;
       const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
       control.setLimit("perRequest", 0.02);
-      const client = new x402Client();
+      const client = new x402Client().setSpendControls(false);
       registerSpendPolicyHook(client, control);
       client.register(CAIP2_BASE, {
         scheme: "exact",
@@ -747,7 +749,7 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
   it("releases the reservation when the signer fails, instead of draining the window", async () => {
     const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
     control.setLimit("hourly", 0.015);
-    const client = new x402Client();
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, control);
     client.register(CAIP2_BASE, {
       scheme: "exact",
@@ -769,7 +771,7 @@ describe("x402 onBeforePaymentCreation spend policy", () => {
   it("throws a typed SpendPolicyError so callers can tell refusal from an upstream fault", async () => {
     const control = new SpendControl({ storage: new InMemorySpendControlStorage() });
     control.setPolicy("blockedPayees", [blocked]);
-    const client = new x402Client();
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, control);
     client.register(CAIP2_BASE, {
       scheme: "exact",
