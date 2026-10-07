@@ -26,6 +26,7 @@ import { x402HTTPClient } from "@x402/fetch";
 
 import { resolveMaxTokens } from "./max-tokens.js";
 import { SpendPolicyError } from "./spend-control.js";
+import { BATCH_SCHEME, withoutBatchAccepts } from "./solana-batch.js";
 
 type PaymentRequired = Parameters<InstanceType<typeof x402Client>["createPaymentPayload"]>[0];
 
@@ -223,14 +224,86 @@ export function createPayFetchWithPreAuth(
       );
     }
 
+    const sendPaid = (payload: PaymentPayload): Promise<Response> => {
+      const paidRequest = clonedRequest.clone();
+      for (const [key, value] of Object.entries(httpClient.encodePaymentSignatureHeader(payload))) {
+        paidRequest.headers.set(key, value);
+      }
+      return baseFetch(paidRequest);
+    };
+
+    // Signing fails before anything is sent. When the offer included a
+    // batch-settlement accept, sign the same offer without it (`exact`).
+    const sign = async (): Promise<PaymentPayload> => {
+      try {
+        return await client.createPaymentPayload(paymentRequired);
+      } catch (err) {
+        const exactOnly =
+          err instanceof SpendPolicyError ? undefined : withoutBatchAccepts(paymentRequired);
+        if (!exactOnly) throw err;
+        warnBatchFallback(err);
+        return client.createPaymentPayload(exactOnly);
+      }
+    };
+
     // Sign payment and retry
-    const payload = await client.createPaymentPayload(paymentRequired);
-    const paymentHeaders = httpClient.encodePaymentSignatureHeader(payload);
-    for (const [key, value] of Object.entries(paymentHeaders)) {
-      clonedRequest.headers.set(key, value);
+    let payload = await sign();
+    let paidResponse = await sendPaid(payload);
+
+    if (payload.accepted?.scheme === BATCH_SCHEME) {
+      // Unlike `exact`, the batch scheme keeps channel state that depends on the
+      // gateway's answer: it commits the confirmed cumulative, or resyncs from a
+      // corrective 402 and asks for one retry (what @x402/fetch does too).
+      if (await processBatchResult(httpClient, payload, paidResponse)) {
+        payload = await sign();
+        paidResponse = await sendPaid(payload);
+        if (payload.accepted?.scheme === BATCH_SCHEME) {
+          await processBatchResult(httpClient, payload, paidResponse);
+        }
+      }
+      // A 402 is an answer: the gateway took nothing for this voucher, so paying
+      // the same request with `exact` cannot charge twice. Transport errors are
+      // NOT retried (see #317 above): the voucher may have been accepted.
+      const exactOnly =
+        paidResponse.status === 402 && payload.accepted?.scheme === BATCH_SCHEME
+          ? withoutBatchAccepts(paymentRequired)
+          : undefined;
+      if (exactOnly) {
+        warnBatchFallback(new Error("the gateway answered 402 to the batch payment"));
+        payload = await client.createPaymentPayload(exactOnly);
+        paidResponse = await sendPaid(payload);
+      }
     }
-    const paidResponse = await baseFetch(clonedRequest);
     notifyAcceptedPayment(paidResponse, payload);
     return paidResponse;
   };
+}
+
+type PaymentPayload = Awaited<ReturnType<InstanceType<typeof x402Client>["createPaymentPayload"]>>;
+
+/** Feed the gateway's answer to the batch scheme. Returns whether it asks for a retry. */
+async function processBatchResult(
+  httpClient: x402HTTPClient,
+  payload: PaymentPayload,
+  response: Response,
+): Promise<boolean> {
+  try {
+    const result = await httpClient.processPaymentResult(
+      payload,
+      (name) => response.headers.get(name),
+      response.status,
+    );
+    return result.recovered;
+  } catch (err) {
+    console.warn(
+      `[ClawRouter] Solana batch: could not process the payment response: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return false;
+  }
+}
+
+function warnBatchFallback(err: unknown): void {
+  console.warn(
+    `[ClawRouter] Solana batch payment failed (${err instanceof Error ? err.message : String(err)}); paying this request with exact`,
+  );
 }

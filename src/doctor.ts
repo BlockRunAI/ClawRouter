@@ -33,6 +33,8 @@ import { getStats } from "./stats.js";
 import { getProxyPort } from "./proxy.js";
 import { getSharedSpendControl, registerSpendPolicyHook, SpendControl } from "./spend-control.js";
 import { VERSION } from "./version.js";
+import { solanaBatchConfigFromEnv, solanaRpcUrlFromEnv } from "./config.js";
+import type { SolanaBatchReport } from "./solana-batch.js";
 
 // Types
 interface SystemInfo {
@@ -85,6 +87,8 @@ interface DiagnosticResult {
   wallet: WalletInfo;
   network: NetworkInfo;
   logs: LogInfo;
+  /** Present only when CLAWROUTER_SOLANA_BATCH is set. */
+  solanaBatch?: SolanaBatchReport;
   issues: string[];
 }
 
@@ -327,6 +331,26 @@ async function collectLogInfo(): Promise<LogInfo> {
   }
 }
 
+// Solana batch settlement: config state and a read-only claim check
+async function collectSolanaBatchInfo(
+  apiKeyConfigured: boolean,
+): Promise<SolanaBatchReport | undefined> {
+  const config = solanaBatchConfigFromEnv();
+  if (apiKeyConfigured || config.status === "off") return undefined;
+  const { inspectSolanaBatch, DEFAULT_CHANNEL_STORE } = await import("./solana-batch.js");
+  try {
+    return await inspectSolanaBatch(config, { rpcUrl: solanaRpcUrlFromEnv() });
+  } catch (err) {
+    return {
+      status: config.status,
+      message: `claim check failed: ${err instanceof Error ? err.message : String(err)}`,
+      store: DEFAULT_CHANNEL_STORE,
+      channels: [],
+      overclaimed: false,
+    };
+  }
+}
+
 // Identify issues
 function identifyIssues(result: DiagnosticResult): string[] {
   const issues: string[] = [];
@@ -353,6 +377,13 @@ function identifyIssues(result: DiagnosticResult): string[] {
     }
   } else if (result.wallet.isLow) {
     issues.push("Wallet balance is low (< $1.00)");
+  }
+  if (result.solanaBatch?.overclaimed) {
+    issues.push(
+      "Solana batch settlement: the gateway claimed more than this wallet signed. Unset CLAWROUTER_SOLANA_BATCH and check the channel on a Solana explorer",
+    );
+  } else if (result.solanaBatch?.message) {
+    issues.push(`Solana batch settlement: ${result.solanaBatch.message}`);
   }
   return finishIssues(result, issues);
 }
@@ -447,6 +478,19 @@ function printDiagnostics(result: DiagnosticResult): void {
     console.log(`  ${red("No wallet found")}`);
   }
 
+  if (result.solanaBatch) {
+    console.log("\nSolana batch settlement");
+    const status = `Status: ${result.solanaBatch.status}`;
+    console.log(`  ${result.solanaBatch.status === "on" ? green(status) : yellow(status)}`);
+    console.log(`  ${green(`Channel store: ${result.solanaBatch.store}`)}`);
+    if (result.solanaBatch.channels.length === 0) {
+      console.log(`  ${green("Channels: none opened yet")}`);
+    }
+    for (const line of result.solanaBatch.channels) {
+      console.log(`  ${result.solanaBatch.overclaimed ? red(line) : green(line)}`);
+    }
+  }
+
   printRestOfDiagnostics(result);
 }
 
@@ -516,7 +560,9 @@ export function createDoctorX402Client(opts: {
   const account = privateKeyToAccount(opts.walletKey as `0x${string}`);
   const publicClient = createPublicClient({ chain: base, transport: http() });
   const evmSigner = toClientEvmSigner(account, publicClient);
-  const x402 = new x402Client();
+  // ClawRouter's spend policy governs; keep the SDK's own spendControls off,
+  // exactly as startProxy does.
+  const x402 = new x402Client().setSpendControls(false);
   registerSpendPolicyHook(x402, opts.spendControl ?? getSharedSpendControl());
   registerExactEvmScheme(x402, { signer: evmSigner });
   return x402;
@@ -715,12 +761,13 @@ export async function runDoctor(
   // Collect all diagnostics
   // The key is resolved first: it decides whether a wallet is even relevant.
   const apiKey = await collectApiKeyInfo();
-  const [system, wallet, network, logs, latestVersion] = await Promise.all([
+  const [system, wallet, network, logs, latestVersion, solanaBatch] = await Promise.all([
     collectSystemInfo(),
     collectWalletInfo(apiKey.configured),
     collectNetworkInfo(),
     collectLogInfo(),
     fetchLatestVersion(),
+    collectSolanaBatchInfo(apiKey.configured),
   ]);
 
   const result: DiagnosticResult = {
@@ -732,6 +779,7 @@ export async function runDoctor(
     wallet,
     network,
     logs,
+    ...(solanaBatch ? { solanaBatch } : {}),
     issues: [],
   };
 

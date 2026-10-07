@@ -119,7 +119,8 @@ import {
 import { checkForUpdates } from "./updater.js";
 import { loadExcludeList } from "./exclude-models.js";
 import { demoteUnreliable, recordOutcome } from "./outcome-memory.js";
-import { PROXY_PORT } from "./config.js";
+import { PROXY_PORT, solanaBatchConfigFromEnv } from "./config.js";
+import type { SolanaBatchGuard } from "./solana-batch.js";
 import { SessionJournal } from "./journal.js";
 import { readLocalImageAsDataUri, ssrfSafeFetch, untrustedRequestReason } from "./local-guard.js";
 import { applyUpstreamProxy } from "./upstream-proxy.js";
@@ -2797,7 +2798,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // pay", and we pay no one — the gateway bills the account server-side).
   // `account` stays undefined and every wallet-shaped field reads off it.
   const account = walletKey ? privateKeyToAccount(walletKey as `0x${string}`) : undefined;
-  const x402 = authMode === "wallet" ? new x402Client() : undefined;
+  // Spend limits are ClawRouter's own (`registerSpendPolicyHook` below), so the
+  // SDK's built-in spendControls (since @x402/core 2.28: default assets only,
+  // $1 per payment) are turned off to keep payments exactly as they were.
+  const x402 = authMode === "wallet" ? new x402Client().setSpendControls(false) : undefined;
   if (x402 && account) {
     const evmPublicClient = createPublicClient({ chain: base, transport: http() });
     const evmSigner = toClientEvmSigner(account, evmPublicClient);
@@ -2811,6 +2815,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   //   - solana:* wildcard (catches any CAIP-2 Solana network)
   //   - V1 compat names: "solana", "solana-devnet", "solana-testnet"
   let solanaAddress: string | undefined;
+  let solanaBatchGuard: SolanaBatchGuard | undefined;
   if (x402 && solanaPrivateKeyBytes) {
     const { registerExactSvmScheme } = await import("@x402/svm/exact/client");
     const { createKeyPairSignerFromPrivateKeyBytes } = await import("@solana/kit");
@@ -2841,6 +2846,28 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.log(`[ClawRouter] Solana wallet: ${solanaAddress}`);
     if (solanaRpcUrl) {
       console.log(`[ClawRouter] Solana RPC (payment signing + balance): ${solanaRpcUrl}`);
+    }
+
+    // Opt-in batch settlement (CLAWROUTER_SOLANA_BATCH). Off, misconfigured, or
+    // failing to load, every Solana payment stays on `exact`.
+    const batchConfig = solanaBatchConfigFromEnv();
+    if (batchConfig.status === "on") {
+      try {
+        const { registerSolanaBatchScheme, formatMicrosAsUsd } = await import("./solana-batch.js");
+        solanaBatchGuard = await registerSolanaBatchScheme(x402, solanaSigner, batchConfig, {
+          rpcUrl: solanaRpcUrl,
+        });
+        solanaBatchGuard.start();
+        console.log(
+          `[ClawRouter] Solana batch settlement: on (deposit $${formatMicrosAsUsd(batchConfig.depositMicros)}, trusted operator(s): ${batchConfig.allowedOperators.join(", ")})`,
+        );
+      } catch (err) {
+        console.warn(
+          `[ClawRouter] Solana batch settlement could not start, paying with exact: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    } else if (batchConfig.message) {
+      console.warn(`[ClawRouter] Solana batch settlement: ${batchConfig.message}`);
     }
   }
 
@@ -4425,6 +4452,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         }, 4000);
 
         sessionStore.close();
+        solanaBatchGuard?.stop();
         // Destroy all active connections before closing server
         for (const socket of connections) {
           socket.destroy();

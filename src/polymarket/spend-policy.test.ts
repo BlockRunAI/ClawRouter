@@ -411,7 +411,8 @@ describe("the singleton is the one ledger every surface reads and writes", () =>
     expect((await executeTrade(limitBuy)).isError).toBeFalsy(); // $5 notional, allowed
 
     let signerCalls = 0;
-    const client = new x402Client();
+    // As startProxy builds it: ClawRouter's policy, not the SDK's spendControls.
+    const client = new x402Client().setSpendControls(false);
     registerSpendPolicyHook(client, getSharedSpendControl());
     client.register(CAIP2_BASE, {
       scheme: "exact",
