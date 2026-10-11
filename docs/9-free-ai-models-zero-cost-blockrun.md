@@ -1,7 +1,7 @@
 # 9 Free AI Models, Zero Cost: How BlockRun Gives Developers Top-Tier LLMs for Nothing
 
 > **The count in this title is a snapshot, and so is every model name below.**
-> It was 9 when this was written; the published free tier is <!-- br:models.free -->6<!-- /br:models.free --> today, and _none_ of the
+> It was 9 when this was written; the published free tier is <!-- br:models.free -->7<!-- /br:models.free --> today, and _none_ of the
 > nine originals is still in it. Free hosting is volatile — NVIDIA retired four
 > of the five visible free models in a single sweep on 2026-08-30 — so the tier
 > gets rebuilt rather than topped up. The URL keeps its original slug so existing
@@ -23,7 +23,7 @@ BlockRun's answer: just take them.
 
 ---
 
-## The Lineup: <!-- br:models.free -->6<!-- /br:models.free --> Models, $0.00
+## The Lineup: <!-- br:models.free -->7<!-- /br:models.free --> Models, $0.00
 
 Through [ClawRouter](https://github.com/BlockRunAI/ClawRouter) — BlockRun's local AI routing proxy — you get zero-cost access to the following (checked against the live catalog 2026-09-29):
 
@@ -236,13 +236,13 @@ Look at the cost trajectory over the past three years:
 - **2023:** GPT-4 dominates alone at $30/$60 per M tokens
 - **2024:** Open-source models surge, prices halve repeatedly
 - **2025:** DeepSeek, Qwen push top-tier inference below $1/M
-- **2026:** BlockRun offers <!-- br:models.free -->6<!-- /br:models.free --> free models through a single API
+- **2026:** BlockRun offers <!-- br:models.free -->7<!-- /br:models.free --> free models through a single API
 
 **A free tier that gets rebuilt rather than retired isn't just a product feature — it's a signal.** Baseline AI capability is becoming infrastructure. Like internet bandwidth before it, the cost of "good enough" AI inference is converging toward zero.
 
 BlockRun and ClawRouter exist to be the **routing layer** in this transition: not locked to any single provider, not bound to any single model, always giving developers the lowest-cost path to the right capability.
 
-Today it's <!-- br:models.free -->6<!-- /br:models.free --> free models, and they are not the same seven as last month. Tomorrow it could be 50. Prices will only drop. Capabilities will only improve. The names will keep churning.
+Today it's <!-- br:models.free -->7<!-- /br:models.free --> free models, and they are not the same seven as last month. Tomorrow it could be 50. Prices will only drop. Capabilities will only improve. The names will keep churning.
 
 **The one constant: your code doesn't need to change.**
 
@@ -257,7 +257,7 @@ clawrouter start
 
 Point your `base_url` to `http://localhost:8402/v1`. That's the whole setup.
 
-<!-- br:models.free -->6<!-- /br:models.free --> free models. Up to 1M context. Unlimited calls. Zero cost.
+<!-- br:models.free -->7<!-- /br:models.free --> free models. Up to 1M context. Unlimited calls. Zero cost.
 
 Go build something.
 
