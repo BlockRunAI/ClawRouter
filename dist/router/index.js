@@ -502,6 +502,12 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: true,
     supportsVision: true
   },
+  "anthropic/claude-fable-5.1": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
   "anthropic/claude-haiku-4.5": {
     // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
     contextWindow: 2e5,
@@ -533,6 +539,12 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: true,
     supportsVision: true
   },
+  "anthropic/claude-opus-5.5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
   "anthropic/claude-sonnet-4.5": {
     contextWindow: 2e5,
     maxOutputTokens: 64e3,
@@ -547,6 +559,12 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: true
   },
   "anthropic/claude-sonnet-5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-sonnet-5.5": {
     contextWindow: 1e6,
     maxOutputTokens: 128e3,
     supportsTools: true,
@@ -570,6 +588,12 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     maxOutputTokens: 65536,
     supportsTools: true,
     supportsVision: false
+  },
+  "deepseek/deepseek-v4-flash-vision-exp": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
+    supportsVision: true
   },
   "deepseek/deepseek-v4-pro": {
     contextWindow: 1048576,
@@ -631,6 +655,12 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: true,
     supportsVision: true
   },
+  "google/gemini-3.8-flash": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
   "minimax/minimax-m2.7": {
     contextWindow: 204800,
     maxOutputTokens: 16384,
@@ -655,6 +685,13 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     maxOutputTokens: 16384,
     supportsTools: false,
     supportsVision: true
+  },
+  "nvidia/muse-glimmer-30b": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
   },
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
     // override: The catalog tags this model "vision", but a correctly sized probe does not hold up (ClawRouter, 2026-08-31): a 64x64 solid-red PNG was named correctly 1 of 4 times on Base, and on Solana the image was silently dropped and a text model answered "white". An HTTP 200 with a confident wrong answer gives the caller nothing to branch on, so image turns must not be routed here. It is ecoTiers.SIMPLE.fallback[0] since nemotron-3-nano-30b was delisted (2026-09-08); remove once a probe of this size comes back right on both chains.
@@ -718,6 +755,12 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     maxOutputTokens: 128e3,
     supportsTools: true,
     supportsVision: false
+  },
+  "openai/gpt-5.1": {
+    contextWindow: 4e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
   },
   "openai/gpt-5.2": {
     contextWindow: 4e5,
@@ -813,6 +856,24 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: true,
     supportsVision: true
   },
+  "openai/gpt-6-astra": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6-luna": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6-sol": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
   "openai/o1": {
     contextWindow: 2e5,
     maxOutputTokens: 1e5,
@@ -835,6 +896,13 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     contextWindow: 128e3,
     maxOutputTokens: 1e5,
     supportsTools: true,
+    supportsVision: false
+  },
+  "poolside/laguna-s-2.1": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 131072,
+    supportsTools: false,
     supportsVision: false
   },
   "poolside/laguna-xs-2.1": {
@@ -862,10 +930,24 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: true,
     supportsVision: false
   },
-  "tencent/hy3": {
-    contextWindow: 262144,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
+  "qwen/qwen3.8-flash": {
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "qwen/qwen3.8-max": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "tencent/hy4-preview": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 64e3,
+    supportsTools: false,
     supportsVision: false
   },
   "xai/grok-4.3": {
@@ -880,11 +962,29 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: true,
     supportsVision: true
   },
+  "xai/grok-4.6": {
+    contextWindow: 5e5,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "xai/grok-4.7": {
+    contextWindow: 5e5,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
   "xai/grok-build-0.1": {
     contextWindow: 256e3,
     maxOutputTokens: 16384,
     supportsTools: true,
     supportsVision: false
+  },
+  "xiaomi/mimo-v2.5": {
+    contextWindow: 1048576,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: true
   },
   "xiaomi/mimo-v2.5-pro": {
     contextWindow: 1048576,
@@ -2128,6 +2228,19 @@ function evidenceCandidates(task) {
   }
   return [];
 }
+var VERIFIED_TOOL_FALLBACKS = [
+  "anthropic/claude-fable-5.1",
+  "anthropic/claude-opus-5.5",
+  "anthropic/claude-sonnet-5.5",
+  "google/gemini-3.8-flash",
+  "openai/gpt-5.1",
+  "openai/gpt-6-astra",
+  "openai/gpt-6-luna",
+  "openai/gpt-6-sol",
+  "xai/grok-4.6",
+  "xai/grok-4.7",
+  "xiaomi/mimo-v2.5"
+];
 function isEligible(modelId, features, maxOutputTokens, options) {
   const model = options.modelCapabilities?.[modelId] ?? DEFAULT_MODEL_CAPABILITIES[modelId];
   if (!model) return true;
@@ -2174,8 +2287,17 @@ var PortfolioStrategy = class {
     const tierConfig = tierConfigs[targetTier];
     const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
     const unavailable = new Set(options.unavailableModels ?? []);
+    const verifiedToolFallbacks = features.needsTools ? VERIFIED_TOOL_FALLBACKS.filter((model2) => options.modelPricing.has(model2)) : [];
+    if (options.routingProfile !== "premium") {
+      const fallbackCost = (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens);
+      verifiedToolFallbacks.sort((a, b) => fallbackCost(a) - fallbackCost(b));
+    }
     const chain = [
-      .../* @__PURE__ */ new Set([...configuredCandidates, ...evidenceCandidates(features.taskType)])
+      .../* @__PURE__ */ new Set([
+        ...configuredCandidates,
+        ...evidenceCandidates(features.taskType),
+        ...verifiedToolFallbacks
+      ])
     ].filter(
       (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
     );
