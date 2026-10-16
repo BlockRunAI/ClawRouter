@@ -104,7 +104,7 @@
     "bs58": "^6.0.0",
     "https-proxy-agent": "^9.1.0",
     "undici": "^8.11.2",
-    "viem": "~2.56.9"
+    "viem": "~2.57.5"
   },
   "peerDependencies": {
     "openclaw": ">=2025.1.0"
