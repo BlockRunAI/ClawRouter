@@ -10180,7 +10180,7 @@ var version2;
 var init_version2 = __esm({
   "node_modules/viem/_esm/errors/version.js"() {
     "use strict";
-    version2 = "2.56.9";
+    version2 = "2.57.5";
   }
 });
 
@@ -11336,7 +11336,7 @@ function normalizeSignature(signature3) {
       continue;
     }
     if (char === " ") {
-      if (signature3[i - 1] !== "," && current !== "," && current !== ",(") {
+      if (!current.endsWith(",") && !current.endsWith("(")) {
         current = "";
         active = false;
       }
@@ -13911,7 +13911,7 @@ var init_rpc = __esm({
 
 // node_modules/viem/_esm/utils/errors/getContractError.js
 function getContractError(err, { abi: abi2, address: address2, args, docsPath: docsPath8, functionName, sender }) {
-  const error = err instanceof RawContractError ? err : err instanceof BaseError2 ? err.walk((err2) => "data" in err2) || err.walk() : {};
+  const error = err instanceof RawContractError ? err : err instanceof BaseError2 ? err.walk((err2) => typeof err2 === "object" && err2 !== null && "data" in err2) || err.walk() : {};
   const { code, data, details, message, shortMessage } = error;
   const cause = (() => {
     if (err instanceof AbiDecodingZeroDataError)
@@ -22152,7 +22152,7 @@ async function sendCalls(client, parameters) {
     return response;
   } catch (err) {
     const error = err;
-    if (experimental_fallback && (error.name === "MethodNotFoundRpcError" || error.name === "MethodNotSupportedRpcError" || error.name === "UnknownRpcError" || error.details.toLowerCase().includes("does not exist / is not available") || error.details.toLowerCase().includes("missing or invalid. request()") || error.details.toLowerCase().includes("did not match any variant of untagged enum") || error.details.toLowerCase().includes("account upgraded to unsupported contract") || error.details.toLowerCase().includes("eip-7702 not supported") || error.details.toLowerCase().includes("unsupported wc_ method") || // magic.link
+    if (experimental_fallback && (error.name === "MethodNotFoundRpcError" || error.name === "MethodNotSupportedRpcError" || error.name === "UnknownRpcError" || error.details.toLowerCase() === "this request method is not supported" || error.details.toLowerCase().includes("does not exist / is not available") || error.details.toLowerCase().includes("missing or invalid. request()") || error.details.toLowerCase().includes("did not match any variant of untagged enum") || error.details.toLowerCase().includes("account upgraded to unsupported contract") || error.details.toLowerCase().includes("eip-7702 not supported") || error.details.toLowerCase().includes("unsupported wc_ method") || // magic.link
     error.details.toLowerCase().includes("feature toggled misconfigured") || // Trust Wallet
     error.details.toLowerCase().includes("jsonrpcengine: response has no error or result for request"))) {
       if (capabilities) {
@@ -22305,6 +22305,14 @@ var init_getCallsStatus = __esm({
 });
 
 // node_modules/viem/_esm/actions/wallet/waitForCallsStatus.js
+function getFunctionId(fn) {
+  let fnId = functionIds.get(fn);
+  if (fnId === void 0) {
+    fnId = ++functionCount;
+    functionIds.set(fn, fnId);
+  }
+  return fnId;
+}
 async function waitForCallsStatus(client, parameters) {
   const {
     id: id2,
@@ -22316,7 +22324,28 @@ async function waitForCallsStatus(client, parameters) {
     timeout = 6e4,
     throwOnFailure = false
   } = parameters;
-  const observerId = stringify(["waitForCallsStatus", client.uid, id2]);
+  const observerId = stringify([
+    "waitForCallsStatus",
+    client.uid,
+    id2,
+    // Concurrent calls with different behavior-defining options must not
+    // share an observer: the first call's polling closure decides the
+    // status check, failure handling and retry behavior for everyone.
+    // `timeout` is enforced per caller below, so it is not included.
+    {
+      pollingInterval,
+      retryCount,
+      // Caller-provided functions are keyed by identity, not source text:
+      // two predicates built by the same factory have identical source
+      // but capture different values, so they must not share an observer.
+      // Keying on `parameters.*` (not the destructured defaults) keeps
+      // calls that use the defaults on one shared observer, since the
+      // default functions are recreated on every call.
+      retryDelay: typeof parameters.retryDelay === "function" ? ["function", getFunctionId(parameters.retryDelay)] : parameters.retryDelay,
+      status: parameters.status ? getFunctionId(parameters.status) : void 0,
+      throwOnFailure
+    }
+  ]);
   const { promise, resolve: resolve2, reject } = withResolvers();
   let timer2;
   const unobserve = observe(observerId, { resolve: resolve2, reject }, (emit) => {
@@ -22354,9 +22383,9 @@ async function waitForCallsStatus(client, parameters) {
     clearTimeout(timer2);
     reject(new WaitForCallsStatusTimeoutError({ id: id2 }));
   }, timeout) : void 0;
-  return await promise;
+  return await promise.finally(() => unobserve());
 }
-var WaitForCallsStatusTimeoutError;
+var functionIds, functionCount, WaitForCallsStatusTimeoutError;
 var init_waitForCallsStatus = __esm({
   "node_modules/viem/_esm/actions/wallet/waitForCallsStatus.js"() {
     "use strict";
@@ -22369,6 +22398,8 @@ var init_waitForCallsStatus = __esm({
     init_withRetry();
     init_stringify();
     init_getCallsStatus();
+    functionIds = /* @__PURE__ */ new WeakMap();
+    functionCount = 0;
     WaitForCallsStatusTimeoutError = class extends BaseError2 {
       constructor({ id: id2 }) {
         super(`Timed out while waiting for call bundle with id "${id2}" to be confirmed.`, { name: "WaitForCallsStatusTimeoutError" });
@@ -24278,41 +24309,52 @@ function getHttpRpcClient(url_, options = {}) {
       };
       const { headers, method, signal: signal_ } = fetchOptions;
       try {
-        const response = await withTimeout(async ({ signal }) => {
-          const init2 = {
-            ...fetchOptions,
-            body: Array.isArray(body) ? stringify(body.map((body2) => ({
-              jsonrpc: "2.0",
-              id: body2.id ?? idCache.take(),
-              ...body2
-            }))) : stringify({
-              jsonrpc: "2.0",
-              id: body.id ?? idCache.take(),
-              ...body
-            }),
-            headers: {
-              ...headers_url,
-              "Content-Type": "application/json",
-              ...headers
-            },
-            method: method || "POST",
-            signal: signal_ || (timeout > 0 ? signal : null)
-          };
-          const request2 = new Request(url2, init2);
-          const args = await onRequest?.(request2, init2) ?? { ...init2, url: url2 };
-          const response2 = await fetchFn(args.url ?? url2, args);
-          return response2;
+        const { response, responseBody } = await withTimeout(async ({ signal: timeoutSignal }) => {
+          const { signal, cleanup } = anySignal([
+            signal_,
+            timeout > 0 ? timeoutSignal : null
+          ]);
+          try {
+            const init2 = {
+              ...fetchOptions,
+              body: Array.isArray(body) ? stringify(body.map((body2) => ({
+                jsonrpc: "2.0",
+                id: body2.id ?? idCache.take(),
+                ...body2
+              }))) : stringify({
+                jsonrpc: "2.0",
+                id: body.id ?? idCache.take(),
+                ...body
+              }),
+              headers: {
+                ...headers_url,
+                "Content-Type": "application/json",
+                ...headers
+              },
+              method: method || "POST",
+              signal
+            };
+            const request2 = new Request(url2, init2);
+            const args = await onRequest?.(request2, init2) ?? {
+              ...init2,
+              url: url2
+            };
+            const response2 = await fetchFn(args.url ?? url2, args);
+            if (onResponse)
+              await onResponse(response2);
+            const responseBody2 = await readResponseBody(response2, {
+              maxResponseBodySize
+            });
+            return { response: response2, responseBody: responseBody2 };
+          } finally {
+            cleanup();
+          }
         }, {
           errorInstance: new TimeoutError({ body, url: url2 }),
           timeout,
           signal: true
         });
-        if (onResponse)
-          await onResponse(response);
         let data;
-        const responseBody = await readResponseBody(response, {
-          maxResponseBodySize
-        });
         if (response.headers.get("Content-Type")?.startsWith("application/json"))
           data = JSON.parse(responseBody);
         else {
@@ -24356,6 +24398,30 @@ function getHttpRpcClient(url_, options = {}) {
       }
     }
   };
+}
+function anySignal(signals) {
+  const signals_ = signals.filter((signal) => !!signal);
+  if (signals_.length < 2)
+    return { signal: signals_[0] ?? null, cleanup: () => {
+    } };
+  const controller = new AbortController();
+  const onAbort = () => {
+    cleanup();
+    controller.abort(signals_.find((signal) => signal.aborted)?.reason);
+  };
+  const cleanup = () => {
+    for (const signal of signals_)
+      signal.removeEventListener("abort", onAbort);
+  };
+  for (const signal of signals_) {
+    if (signal.aborted) {
+      cleanup();
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener("abort", onAbort);
+  }
+  return { signal: controller.signal, cleanup };
 }
 async function readResponseBody(response, { maxResponseBodySize }) {
   if (maxResponseBodySize === false)
@@ -31516,7 +31582,6 @@ async function waitForTransactionReceipt(client, parameters) {
     // exponential backoff
     timeout = 18e4
   } = parameters;
-  const observerId = stringify(["waitForTransactionReceipt", client.uid, hash5]);
   const pollingInterval = (() => {
     if (parameters.pollingInterval)
       return parameters.pollingInterval;
@@ -31524,6 +31589,21 @@ async function waitForTransactionReceipt(client, parameters) {
       return client.chain.experimental_preconfirmationTime;
     return client.pollingInterval;
   })();
+  const observerId = stringify([
+    "waitForTransactionReceipt",
+    client.uid,
+    hash5,
+    // Concurrent calls with different behavior-defining options must not
+    // share an observer: the first call's polling closure decides timeout,
+    // confirmations, polling interval and replacement checks for everyone.
+    {
+      checkReplacement,
+      confirmations,
+      pollingInterval,
+      retryCount,
+      timeout
+    }
+  ]);
   let transaction;
   let replacedTransaction;
   let receipt;
@@ -31600,7 +31680,7 @@ async function waitForTransactionReceipt(client, parameters) {
                 shouldRetry: ({ error }) => error instanceof BlockNotFoundError
               });
               retrying = false;
-              const replacementTransaction = block.transactions.find(({ from: from16, nonce }) => from16 === replacedTransaction.from && nonce === replacedTransaction.nonce);
+              const replacementTransaction = block.transactions.find(({ from: from16, hash: hash6, nonce }) => isAddressEqual(from16, replacedTransaction.from) && hash6 !== replacedTransaction.hash && nonce === replacedTransaction.nonce);
               if (!replacementTransaction)
                 return;
               receipt = await getAction(client, getTransactionReceipt, "getTransactionReceipt")({
@@ -31609,7 +31689,7 @@ async function waitForTransactionReceipt(client, parameters) {
               if (confirmations > 1 && (!receipt.blockNumber || blockNumber - receipt.blockNumber + 1n < confirmations))
                 return;
               let reason = "replaced";
-              if (replacementTransaction.to === replacedTransaction.to && replacementTransaction.value === replacedTransaction.value && replacementTransaction.input === replacedTransaction.input) {
+              if ((replacementTransaction.to && replacedTransaction.to ? isAddressEqual(replacementTransaction.to, replacedTransaction.to) : replacementTransaction.to === replacedTransaction.to) && replacementTransaction.value === replacedTransaction.value && replacementTransaction.input === replacedTransaction.input) {
                 reason = "repriced";
               } else if (replacementTransaction.from === replacementTransaction.to && replacementTransaction.value === 0n) {
                 reason = "cancelled";
@@ -31640,6 +31720,7 @@ var init_waitForTransactionReceipt = __esm({
     "use strict";
     init_block();
     init_transaction();
+    init_isAddressEqual();
     init_getAction();
     init_observe();
     init_withResolvers();
@@ -32127,8 +32208,8 @@ function parseSiweDateTime(value) {
 }
 function parseSiweMessage(message) {
   const { scheme, statement, ...prefix } = message.match(prefixRegex)?.groups ?? {};
-  const { chainId, expirationTime, issuedAt, notBefore, requestId, ...suffix } = message.match(suffixRegex)?.groups ?? {};
-  const resources = message.split("Resources:")[1]?.split("\n- ").slice(1);
+  const { chainId, expirationTime, issuedAt, notBefore, requestId, resources: resources_, ...suffix } = message.match(suffixRegex)?.groups ?? {};
+  const resources = resources_?.split("\n- ").slice(1);
   return {
     ...prefix,
     ...suffix,
@@ -32148,7 +32229,7 @@ var init_parseSiweMessage = __esm({
     "use strict";
     siweDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
     prefixRegex = /^(?:(?<scheme>[a-zA-Z][a-zA-Z0-9+\-.]*):\/\/)?(?<domain>[a-zA-Z0-9+-.]*(?::[0-9]{1,5})?) (?:wants you to sign in with your Ethereum account:\n)(?<address>0x[a-fA-F0-9]{40})\n\n(?:(?<statement>.*)\n\n)?/;
-    suffixRegex = /(?:URI: (?<uri>.+))\n(?:Version: (?<version>.+))\n(?:Chain ID: (?<chainId>\d+))\n(?:Nonce: (?<nonce>[a-zA-Z0-9]+))\n(?:Issued At: (?<issuedAt>.+))(?:\nExpiration Time: (?<expirationTime>.+))?(?:\nNot Before: (?<notBefore>.+))?(?:\nRequest ID: (?<requestId>.+))?/;
+    suffixRegex = /(?:URI: (?<uri>.+))\n(?:Version: (?<version>.+))\n(?:Chain ID: (?<chainId>\d+))\n(?:Nonce: (?<nonce>[a-zA-Z0-9]+))\n(?:Issued At: (?<issuedAt>.+))(?:\nExpiration Time: (?<expirationTime>.+))?(?:\nNot Before: (?<notBefore>.+))?(?:\nRequest ID: (?<requestId>.*))?(?:\nResources:(?<resources>(?:\n- .+)*))?/;
   }
 });
 
@@ -45176,7 +45257,7 @@ function route(prompt, systemPrompt, maxOutputTokens, options) {
   const strategy = getStrategy(options.config.strategy ?? "portfolio");
   return strategy.route(prompt, systemPrompt, maxOutputTokens, options);
 }
-var BASELINE_MODEL_ID, BASELINE_INPUT_PRICE, BASELINE_OUTPUT_PRICE, SERVER_MARGIN_PERCENT, MIN_PAYMENT_USD, RulesStrategy, registry, DEFAULT_MODEL_CAPABILITIES, model_profiles_generated_default, LIVE_MODEL_PROFILES, HISTORICAL_MODEL_PROFILES, DEFAULT_PORTFOLIO_WEIGHTS, PortfolioStrategy, DEFAULT_ROUTING_CONFIG;
+var BASELINE_MODEL_ID, BASELINE_INPUT_PRICE, BASELINE_OUTPUT_PRICE, SERVER_MARGIN_PERCENT, MIN_PAYMENT_USD, RulesStrategy, registry, DEFAULT_MODEL_CAPABILITIES, model_profiles_generated_default, LIVE_MODEL_PROFILES, HISTORICAL_MODEL_PROFILES, DEFAULT_PORTFOLIO_WEIGHTS, VERIFIED_TOOL_FALLBACKS, PortfolioStrategy, DEFAULT_ROUTING_CONFIG;
 var init_dist = __esm({
   "node_modules/@blockrun/router-core/dist/index.js"() {
     "use strict";
@@ -45299,6 +45380,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
+      "anthropic/claude-fable-5.1": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
       "anthropic/claude-haiku-4.5": {
         // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
         contextWindow: 2e5,
@@ -45330,6 +45417,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
+      "anthropic/claude-opus-5.5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
       "anthropic/claude-sonnet-4.5": {
         contextWindow: 2e5,
         maxOutputTokens: 64e3,
@@ -45344,6 +45437,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsVision: true
       },
       "anthropic/claude-sonnet-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-5.5": {
         contextWindow: 1e6,
         maxOutputTokens: 128e3,
         supportsTools: true,
@@ -45367,6 +45466,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         maxOutputTokens: 65536,
         supportsTools: true,
         supportsVision: false
+      },
+      "deepseek/deepseek-v4-flash-vision-exp": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: false,
+        supportsVision: true
       },
       "deepseek/deepseek-v4-pro": {
         contextWindow: 1048576,
@@ -45428,6 +45533,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
+      "google/gemini-3.8-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
       "minimax/minimax-m2.7": {
         contextWindow: 204800,
         maxOutputTokens: 16384,
@@ -45452,6 +45563,13 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         maxOutputTokens: 16384,
         supportsTools: false,
         supportsVision: true
+      },
+      "nvidia/muse-glimmer-30b": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
       },
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
         // override: The catalog tags this model "vision", but a correctly sized probe does not hold up (ClawRouter, 2026-08-31): a 64x64 solid-red PNG was named correctly 1 of 4 times on Base, and on Solana the image was silently dropped and a text model answered "white". An HTTP 200 with a confident wrong answer gives the caller nothing to branch on, so image turns must not be routed here. It is ecoTiers.SIMPLE.fallback[0] since nemotron-3-nano-30b was delisted (2026-09-08); remove once a probe of this size comes back right on both chains.
@@ -45515,6 +45633,12 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         maxOutputTokens: 128e3,
         supportsTools: true,
         supportsVision: false
+      },
+      "openai/gpt-5.1": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
       },
       "openai/gpt-5.2": {
         contextWindow: 4e5,
@@ -45610,6 +45734,24 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
+      "openai/gpt-6-astra": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-6-luna": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-6-sol": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
       "openai/o1": {
         contextWindow: 2e5,
         maxOutputTokens: 1e5,
@@ -45632,6 +45774,13 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         contextWindow: 128e3,
         maxOutputTokens: 1e5,
         supportsTools: true,
+        supportsVision: false
+      },
+      "poolside/laguna-s-2.1": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 131072,
+        supportsTools: false,
         supportsVision: false
       },
       "poolside/laguna-xs-2.1": {
@@ -45659,10 +45808,24 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: false
       },
-      "tencent/hy3": {
-        contextWindow: 262144,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
+      "qwen/qwen3.8-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "qwen/qwen3.8-max": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "tencent/hy4-preview": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 64e3,
+        supportsTools: false,
         supportsVision: false
       },
       "xai/grok-4.3": {
@@ -45677,11 +45840,29 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         supportsTools: true,
         supportsVision: true
       },
+      "xai/grok-4.6": {
+        contextWindow: 5e5,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "xai/grok-4.7": {
+        contextWindow: 5e5,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
       "xai/grok-build-0.1": {
         contextWindow: 256e3,
         maxOutputTokens: 16384,
         supportsTools: true,
         supportsVision: false
+      },
+      "xiaomi/mimo-v2.5": {
+        contextWindow: 1048576,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: true
       },
       "xiaomi/mimo-v2.5-pro": {
         contextWindow: 1048576,
@@ -46331,6 +46512,19 @@ ${value.slice(-(scanLimit - prefixLength))}`;
       latencySensitiveSpeedBoost: 0.08,
       affinityFloorGap: { auto: 0.1, eco: 0.22, premium: 0.05 }
     };
+    VERIFIED_TOOL_FALLBACKS = [
+      "anthropic/claude-fable-5.1",
+      "anthropic/claude-opus-5.5",
+      "anthropic/claude-sonnet-5.5",
+      "google/gemini-3.8-flash",
+      "openai/gpt-5.1",
+      "openai/gpt-6-astra",
+      "openai/gpt-6-luna",
+      "openai/gpt-6-sol",
+      "xai/grok-4.6",
+      "xai/grok-4.7",
+      "xiaomi/mimo-v2.5"
+    ];
     PortfolioStrategy = class {
       name = "portfolio";
       route(prompt, systemPrompt, maxOutputTokens, options) {
@@ -46345,8 +46539,17 @@ ${value.slice(-(scanLimit - prefixLength))}`;
         const tierConfig = tierConfigs[targetTier];
         const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
         const unavailable = new Set(options.unavailableModels ?? []);
+        const verifiedToolFallbacks = features.needsTools ? VERIFIED_TOOL_FALLBACKS.filter((model2) => options.modelPricing.has(model2)) : [];
+        if (options.routingProfile !== "premium") {
+          const fallbackCost = (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens);
+          verifiedToolFallbacks.sort((a, b) => fallbackCost(a) - fallbackCost(b));
+        }
         const chain3 = [
-          .../* @__PURE__ */ new Set([...configuredCandidates, ...evidenceCandidates(features.taskType)])
+          .../* @__PURE__ */ new Set([
+            ...configuredCandidates,
+            ...evidenceCandidates(features.taskType),
+            ...verifiedToolFallbacks
+          ])
         ].filter(
           (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
         );
@@ -164378,7 +164581,7 @@ var require_version2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.version = void 0;
-    exports.version = "2.56.9";
+    exports.version = "2.57.5";
   }
 });
 
@@ -165888,7 +166091,7 @@ var require_normalizeSignature = __commonJS({
           continue;
         }
         if (char === " ") {
-          if (signature3[i - 1] !== "," && current !== "," && current !== ",(") {
+          if (!current.endsWith(",") && !current.endsWith("(")) {
             current = "";
             active = false;
           }
@@ -168715,7 +168918,7 @@ var require_getContractError = __commonJS({
     var rpc_js_1 = require_rpc();
     var EXECUTION_REVERTED_ERROR_CODE2 = 3;
     function getContractError2(err, { abi: abi2, address: address2, args, docsPath: docsPath8, functionName, sender }) {
-      const error = err instanceof contract_js_1.RawContractError ? err : err instanceof base_js_1.BaseError ? err.walk((err2) => "data" in err2) || err.walk() : {};
+      const error = err instanceof contract_js_1.RawContractError ? err : err instanceof base_js_1.BaseError ? err.walk((err2) => typeof err2 === "object" && err2 !== null && "data" in err2) || err.walk() : {};
       const { code, data, details, message, shortMessage } = error;
       const cause = (() => {
         if (err instanceof abi_js_1.AbiDecodingZeroDataError)
@@ -179619,7 +179822,7 @@ var require_sendCalls = __commonJS({
         return response;
       } catch (err) {
         const error = err;
-        if (experimental_fallback && (error.name === "MethodNotFoundRpcError" || error.name === "MethodNotSupportedRpcError" || error.name === "UnknownRpcError" || error.details.toLowerCase().includes("does not exist / is not available") || error.details.toLowerCase().includes("missing or invalid. request()") || error.details.toLowerCase().includes("did not match any variant of untagged enum") || error.details.toLowerCase().includes("account upgraded to unsupported contract") || error.details.toLowerCase().includes("eip-7702 not supported") || error.details.toLowerCase().includes("unsupported wc_ method") || error.details.toLowerCase().includes("feature toggled misconfigured") || error.details.toLowerCase().includes("jsonrpcengine: response has no error or result for request"))) {
+        if (experimental_fallback && (error.name === "MethodNotFoundRpcError" || error.name === "MethodNotSupportedRpcError" || error.name === "UnknownRpcError" || error.details.toLowerCase() === "this request method is not supported" || error.details.toLowerCase().includes("does not exist / is not available") || error.details.toLowerCase().includes("missing or invalid. request()") || error.details.toLowerCase().includes("did not match any variant of untagged enum") || error.details.toLowerCase().includes("account upgraded to unsupported contract") || error.details.toLowerCase().includes("eip-7702 not supported") || error.details.toLowerCase().includes("unsupported wc_ method") || error.details.toLowerCase().includes("feature toggled misconfigured") || error.details.toLowerCase().includes("jsonrpcengine: response has no error or result for request"))) {
           if (capabilities) {
             const hasNonOptionalCapability = Object.values(capabilities).some((capability) => !capability.optional);
             if (hasNonOptionalCapability) {
@@ -179769,9 +179972,30 @@ var require_waitForCallsStatus = __commonJS({
     var withRetry_js_1 = require_withRetry();
     var stringify_js_1 = require_stringify();
     var getCallsStatus_js_1 = require_getCallsStatus();
+    var functionIds2 = /* @__PURE__ */ new WeakMap();
+    var functionCount2 = 0;
+    function getFunctionId2(fn) {
+      let fnId = functionIds2.get(fn);
+      if (fnId === void 0) {
+        fnId = ++functionCount2;
+        functionIds2.set(fn, fnId);
+      }
+      return fnId;
+    }
     async function waitForCallsStatus2(client, parameters) {
       const { id: id2, pollingInterval = client.pollingInterval, status: status2 = ({ statusCode }) => statusCode === 200 || statusCode >= 300, retryCount = 4, retryDelay: retryDelay2 = ({ count }) => ~~(1 << count) * 200, timeout = 6e4, throwOnFailure = false } = parameters;
-      const observerId = (0, stringify_js_1.stringify)(["waitForCallsStatus", client.uid, id2]);
+      const observerId = (0, stringify_js_1.stringify)([
+        "waitForCallsStatus",
+        client.uid,
+        id2,
+        {
+          pollingInterval,
+          retryCount,
+          retryDelay: typeof parameters.retryDelay === "function" ? ["function", getFunctionId2(parameters.retryDelay)] : parameters.retryDelay,
+          status: parameters.status ? getFunctionId2(parameters.status) : void 0,
+          throwOnFailure
+        }
+      ]);
       const { promise, resolve: resolve2, reject } = (0, withResolvers_js_1.withResolvers)();
       let timer2;
       const unobserve = (0, observe_js_1.observe)(observerId, { resolve: resolve2, reject }, (emit) => {
@@ -179809,7 +180033,7 @@ var require_waitForCallsStatus = __commonJS({
         clearTimeout(timer2);
         reject(new WaitForCallsStatusTimeoutError2({ id: id2 }));
       }, timeout) : void 0;
-      return await promise;
+      return await promise.finally(() => unobserve());
     }
     var WaitForCallsStatusTimeoutError2 = class extends base_js_1.BaseError {
       constructor({ id: id2 }) {
@@ -179934,6 +180158,54 @@ var require_createClient = __commonJS({
     function rpcSchema() {
       return null;
     }
+  }
+});
+
+// node_modules/viem/_cjs/clients/createClientResolver.js
+var require_createClientResolver = __commonJS({
+  "node_modules/viem/_cjs/clients/createClientResolver.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TransportNotConfiguredError = exports.ChainNotConfiguredError = void 0;
+    exports.createClientResolver = createClientResolver;
+    var base_js_1 = require_base();
+    var createClient_js_1 = require_createClient();
+    function createClientResolver(options) {
+      const { chains, transport, ...rest } = options;
+      const clients = /* @__PURE__ */ new Map();
+      return {
+        getClient({ chainId }) {
+          const cached = clients.get(chainId);
+          if (cached)
+            return cached;
+          const chain3 = chains.find((chain4) => chain4.id === chainId);
+          if (!chain3)
+            throw new ChainNotConfiguredError({ chainId });
+          const transport_ = typeof transport === "function" ? transport({ chainId }) : transport[chainId];
+          if (!transport_)
+            throw new TransportNotConfiguredError({ chainId });
+          const client = (0, createClient_js_1.createClient)({ ...rest, chain: chain3, transport: transport_ });
+          clients.set(chainId, client);
+          return client;
+        }
+      };
+    }
+    var ChainNotConfiguredError = class extends base_js_1.BaseError {
+      constructor({ chainId }) {
+        super(`Chain with id ${chainId} is not configured.`, {
+          name: "createClientResolver.ChainNotConfiguredError"
+        });
+      }
+    };
+    exports.ChainNotConfiguredError = ChainNotConfiguredError;
+    var TransportNotConfiguredError = class extends base_js_1.BaseError {
+      constructor({ chainId }) {
+        super(`Transport for chain with id ${chainId} is not configured.`, {
+          name: "createClientResolver.TransportNotConfiguredError"
+        });
+      }
+    };
+    exports.TransportNotConfiguredError = TransportNotConfiguredError;
   }
 });
 
@@ -182581,41 +182853,52 @@ var require_http = __commonJS({
           };
           const { headers, method, signal: signal_ } = fetchOptions;
           try {
-            const response = await (0, withTimeout_js_1.withTimeout)(async ({ signal }) => {
-              const init2 = {
-                ...fetchOptions,
-                body: Array.isArray(body) ? (0, stringify_js_1.stringify)(body.map((body2) => ({
-                  jsonrpc: "2.0",
-                  id: body2.id ?? id_js_1.idCache.take(),
-                  ...body2
-                }))) : (0, stringify_js_1.stringify)({
-                  jsonrpc: "2.0",
-                  id: body.id ?? id_js_1.idCache.take(),
-                  ...body
-                }),
-                headers: {
-                  ...headers_url,
-                  "Content-Type": "application/json",
-                  ...headers
-                },
-                method: method || "POST",
-                signal: signal_ || (timeout > 0 ? signal : null)
-              };
-              const request2 = new Request(url2, init2);
-              const args = await onRequest?.(request2, init2) ?? { ...init2, url: url2 };
-              const response2 = await fetchFn(args.url ?? url2, args);
-              return response2;
+            const { response, responseBody } = await (0, withTimeout_js_1.withTimeout)(async ({ signal: timeoutSignal }) => {
+              const { signal, cleanup } = anySignal2([
+                signal_,
+                timeout > 0 ? timeoutSignal : null
+              ]);
+              try {
+                const init2 = {
+                  ...fetchOptions,
+                  body: Array.isArray(body) ? (0, stringify_js_1.stringify)(body.map((body2) => ({
+                    jsonrpc: "2.0",
+                    id: body2.id ?? id_js_1.idCache.take(),
+                    ...body2
+                  }))) : (0, stringify_js_1.stringify)({
+                    jsonrpc: "2.0",
+                    id: body.id ?? id_js_1.idCache.take(),
+                    ...body
+                  }),
+                  headers: {
+                    ...headers_url,
+                    "Content-Type": "application/json",
+                    ...headers
+                  },
+                  method: method || "POST",
+                  signal
+                };
+                const request2 = new Request(url2, init2);
+                const args = await onRequest?.(request2, init2) ?? {
+                  ...init2,
+                  url: url2
+                };
+                const response2 = await fetchFn(args.url ?? url2, args);
+                if (onResponse)
+                  await onResponse(response2);
+                const responseBody2 = await readResponseBody2(response2, {
+                  maxResponseBodySize
+                });
+                return { response: response2, responseBody: responseBody2 };
+              } finally {
+                cleanup();
+              }
             }, {
               errorInstance: new request_js_1.TimeoutError({ body, url: url2 }),
               timeout,
               signal: true
             });
-            if (onResponse)
-              await onResponse(response);
             let data;
-            const responseBody = await readResponseBody2(response, {
-              maxResponseBodySize
-            });
             if (response.headers.get("Content-Type")?.startsWith("application/json"))
               data = JSON.parse(responseBody);
             else {
@@ -182659,6 +182942,30 @@ var require_http = __commonJS({
           }
         }
       };
+    }
+    function anySignal2(signals) {
+      const signals_ = signals.filter((signal) => !!signal);
+      if (signals_.length < 2)
+        return { signal: signals_[0] ?? null, cleanup: () => {
+        } };
+      const controller = new AbortController();
+      const onAbort = () => {
+        cleanup();
+        controller.abort(signals_.find((signal) => signal.aborted)?.reason);
+      };
+      const cleanup = () => {
+        for (const signal of signals_)
+          signal.removeEventListener("abort", onAbort);
+      };
+      for (const signal of signals_) {
+        if (signal.aborted) {
+          cleanup();
+          controller.abort(signal.reason);
+          break;
+        }
+        signal.addEventListener("abort", onAbort);
+      }
+      return { signal: controller.signal, cleanup };
     }
     async function readResponseBody2(response, { maxResponseBodySize }) {
       if (maxResponseBodySize === false)
@@ -182862,7 +183169,7 @@ var require_socket = __commonJS({
                   return;
                 if (body.method === "eth_subscribe" && typeof response.result === "string")
                   subscriptions.set(response.result, {
-                    onResponse: callback,
+                    onResponse,
                     onError,
                     body
                   });
@@ -182884,14 +183191,15 @@ var require_socket = __commonJS({
               }
             },
             requestAsync({ body, timeout = 1e4 }) {
+              const id3 = body.id ?? id_js_1.idCache.take();
               return (0, withTimeout_js_1.withTimeout)(() => new Promise((onResponse, onError) => this.request({
-                body,
+                body: { ...body, id: id3 },
                 onError,
                 onResponse
               })), {
                 errorInstance: new request_js_1.TimeoutError({ body, url: url2 }),
                 timeout
-              });
+              }).finally(() => requests.delete(id3));
             },
             requests,
             subscriptions,
@@ -195126,6 +195434,7 @@ var require_waitForTransactionReceipt = __commonJS({
     exports.waitForTransactionReceipt = waitForTransactionReceipt2;
     var block_js_1 = require_block();
     var transaction_js_1 = require_transaction();
+    var isAddressEqual_js_1 = require_isAddressEqual();
     var getAction_js_1 = require_getAction();
     var observe_js_1 = require_observe();
     var withResolvers_js_1 = require_withResolvers();
@@ -195137,7 +195446,6 @@ var require_waitForTransactionReceipt = __commonJS({
     var watchBlockNumber_js_1 = require_watchBlockNumber();
     async function waitForTransactionReceipt2(client, parameters) {
       const { checkReplacement = client.chain?.supportsTransactionReplacementDetection ?? true, confirmations = 1, hash: hash5, onReplaced, retryCount = 6, retryDelay: retryDelay2 = ({ count }) => ~~(1 << count) * 200, timeout = 18e4 } = parameters;
-      const observerId = (0, stringify_js_1.stringify)(["waitForTransactionReceipt", client.uid, hash5]);
       const pollingInterval = (() => {
         if (parameters.pollingInterval)
           return parameters.pollingInterval;
@@ -195145,6 +195453,18 @@ var require_waitForTransactionReceipt = __commonJS({
           return client.chain.experimental_preconfirmationTime;
         return client.pollingInterval;
       })();
+      const observerId = (0, stringify_js_1.stringify)([
+        "waitForTransactionReceipt",
+        client.uid,
+        hash5,
+        {
+          checkReplacement,
+          confirmations,
+          pollingInterval,
+          retryCount,
+          timeout
+        }
+      ]);
       let transaction;
       let replacedTransaction;
       let receipt;
@@ -195221,7 +195541,7 @@ var require_waitForTransactionReceipt = __commonJS({
                     shouldRetry: ({ error }) => error instanceof block_js_1.BlockNotFoundError
                   });
                   retrying = false;
-                  const replacementTransaction = block.transactions.find(({ from: from16, nonce }) => from16 === replacedTransaction.from && nonce === replacedTransaction.nonce);
+                  const replacementTransaction = block.transactions.find(({ from: from16, hash: hash6, nonce }) => (0, isAddressEqual_js_1.isAddressEqual)(from16, replacedTransaction.from) && hash6 !== replacedTransaction.hash && nonce === replacedTransaction.nonce);
                   if (!replacementTransaction)
                     return;
                   receipt = await (0, getAction_js_1.getAction)(client, getTransactionReceipt_js_1.getTransactionReceipt, "getTransactionReceipt")({
@@ -195230,7 +195550,7 @@ var require_waitForTransactionReceipt = __commonJS({
                   if (confirmations > 1 && (!receipt.blockNumber || blockNumber - receipt.blockNumber + 1n < confirmations))
                     return;
                   let reason = "replaced";
-                  if (replacementTransaction.to === replacedTransaction.to && replacementTransaction.value === replacedTransaction.value && replacementTransaction.input === replacedTransaction.input) {
+                  if ((replacementTransaction.to && replacedTransaction.to ? (0, isAddressEqual_js_1.isAddressEqual)(replacementTransaction.to, replacedTransaction.to) : replacementTransaction.to === replacedTransaction.to) && replacementTransaction.value === replacedTransaction.value && replacementTransaction.input === replacedTransaction.input) {
                     reason = "repriced";
                   } else if (replacementTransaction.from === replacementTransaction.to && replacementTransaction.value === 0n) {
                     reason = "cancelled";
@@ -195741,8 +196061,8 @@ var require_parseSiweMessage = __commonJS({
     }
     function parseSiweMessage2(message) {
       const { scheme, statement, ...prefix } = message.match(prefixRegex2)?.groups ?? {};
-      const { chainId, expirationTime, issuedAt, notBefore, requestId, ...suffix } = message.match(suffixRegex2)?.groups ?? {};
-      const resources = message.split("Resources:")[1]?.split("\n- ").slice(1);
+      const { chainId, expirationTime, issuedAt, notBefore, requestId, resources: resources_, ...suffix } = message.match(suffixRegex2)?.groups ?? {};
+      const resources = resources_?.split("\n- ").slice(1);
       return {
         ...prefix,
         ...suffix,
@@ -195757,7 +196077,7 @@ var require_parseSiweMessage = __commonJS({
       };
     }
     var prefixRegex2 = /^(?:(?<scheme>[a-zA-Z][a-zA-Z0-9+\-.]*):\/\/)?(?<domain>[a-zA-Z0-9+-.]*(?::[0-9]{1,5})?) (?:wants you to sign in with your Ethereum account:\n)(?<address>0x[a-fA-F0-9]{40})\n\n(?:(?<statement>.*)\n\n)?/;
-    var suffixRegex2 = /(?:URI: (?<uri>.+))\n(?:Version: (?<version>.+))\n(?:Chain ID: (?<chainId>\d+))\n(?:Nonce: (?<nonce>[a-zA-Z0-9]+))\n(?:Issued At: (?<issuedAt>.+))(?:\nExpiration Time: (?<expirationTime>.+))?(?:\nNot Before: (?<notBefore>.+))?(?:\nRequest ID: (?<requestId>.+))?/;
+    var suffixRegex2 = /(?:URI: (?<uri>.+))\n(?:Version: (?<version>.+))\n(?:Chain ID: (?<chainId>\d+))\n(?:Nonce: (?<nonce>[a-zA-Z0-9]+))\n(?:Issued At: (?<issuedAt>.+))(?:\nExpiration Time: (?<expirationTime>.+))?(?:\nNot Before: (?<notBefore>.+))?(?:\nRequest ID: (?<requestId>.*))?(?:\nResources:(?<resources>(?:\n- .+)*))?/;
   }
 });
 
@@ -198261,7 +198581,19 @@ var require_webSocket2 = __commonJS({
           },
           async subscribe({ params, onData, onError }) {
             const rpcClient = await (0, webSocket_js_1.getWebSocketRpcClient)(url_, wsRpcClientOpts);
-            const { result: subscriptionId } = await new Promise((resolve2, reject) => rpcClient.request({
+            let subscriptionId;
+            let unsubscribed = false;
+            function unsubscribe() {
+              unsubscribed = true;
+              return new Promise((resolve2) => rpcClient.request({
+                body: {
+                  method: "eth_unsubscribe",
+                  params: [subscriptionId]
+                },
+                onResponse: resolve2
+              }));
+            }
+            await new Promise((resolve2, reject) => rpcClient.request({
               body: {
                 method: "eth_subscribe",
                 params
@@ -198278,6 +198610,9 @@ var require_webSocket2 = __commonJS({
                   return;
                 }
                 if (typeof response.id === "number") {
+                  subscriptionId = response.result;
+                  if (unsubscribed)
+                    unsubscribe();
                   resolve2(response);
                   return;
                 }
@@ -198287,16 +198622,10 @@ var require_webSocket2 = __commonJS({
               }
             }));
             return {
-              subscriptionId,
-              async unsubscribe() {
-                return new Promise((resolve2) => rpcClient.request({
-                  body: {
-                    method: "eth_unsubscribe",
-                    params: [subscriptionId]
-                  },
-                  onResponse: resolve2
-                }));
-              }
+              get subscriptionId() {
+                return subscriptionId;
+              },
+              unsubscribe
             };
           }
         });
@@ -198664,15 +198993,15 @@ var require_cjs2 = __commonJS({
   "node_modules/viem/_cjs/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.maxInt8 = exports.universalSignatureValidatorByteCode = exports.erc6492SignatureValidatorByteCode = exports.deploylessCallViaFactoryBytecode = exports.deploylessCallViaBytecodeBytecode = exports.zeroHash = exports.zeroAddress = exports.ethAddress = exports.multicall3Abi = exports.universalSignatureValidatorAbi = exports.erc6492SignatureValidatorAbi = exports.erc4626Abi = exports.erc1155Abi = exports.erc721Abi = exports.erc20Abi_bytes32 = exports.erc20Abi = exports.webSocket = exports.http = exports.shouldThrow = exports.fallback = exports.custom = exports.createTransport = exports.walletActions = exports.testActions = exports.publicActions = exports.createWalletClient = exports.createTestClient = exports.createPublicClient = exports.rpcSchema = exports.createClient = exports.WaitForCallsStatusTimeoutError = exports.getContract = exports.UnknownTypeError = exports.UnknownSignatureError = exports.SolidityProtectedKeywordError = exports.parseAbiParameters = exports.parseAbiParameter = exports.parseAbiItem = exports.parseAbi = exports.InvalidStructSignatureError = exports.InvalidSignatureError = exports.InvalidParenthesisError = exports.InvalidParameterError = exports.InvalidModifierError = exports.InvalidFunctionModifierError = exports.InvalidAbiTypeParameterError = exports.InvalidAbiParametersError = exports.InvalidAbiParameterError = exports.InvalidAbiItemError = exports.CircularReferenceError = void 0;
-    exports.maxUint152 = exports.maxUint144 = exports.maxUint136 = exports.maxUint128 = exports.maxUint120 = exports.maxUint112 = exports.maxUint104 = exports.maxUint96 = exports.maxUint88 = exports.maxUint80 = exports.maxUint72 = exports.maxUint64 = exports.maxUint56 = exports.maxUint48 = exports.maxUint40 = exports.maxUint32 = exports.maxUint24 = exports.maxUint16 = exports.maxUint8 = exports.maxInt256 = exports.maxInt248 = exports.maxInt240 = exports.maxInt232 = exports.maxInt224 = exports.maxInt216 = exports.maxInt208 = exports.maxInt200 = exports.maxInt192 = exports.maxInt184 = exports.maxInt176 = exports.maxInt168 = exports.maxInt160 = exports.maxInt152 = exports.maxInt144 = exports.maxInt136 = exports.maxInt128 = exports.maxInt120 = exports.maxInt112 = exports.maxInt104 = exports.maxInt96 = exports.maxInt88 = exports.maxInt80 = exports.maxInt72 = exports.maxInt64 = exports.maxInt56 = exports.maxInt48 = exports.maxInt40 = exports.maxInt32 = exports.maxInt24 = exports.maxInt16 = void 0;
-    exports.AbiConstructorNotFoundError = exports.weiUnits = exports.gweiUnits = exports.etherUnits = exports.presignMessagePrefix = exports.minInt256 = exports.minInt248 = exports.minInt240 = exports.minInt232 = exports.minInt224 = exports.minInt216 = exports.minInt208 = exports.minInt200 = exports.minInt192 = exports.minInt184 = exports.minInt176 = exports.minInt168 = exports.minInt160 = exports.minInt152 = exports.minInt144 = exports.minInt136 = exports.minInt128 = exports.minInt120 = exports.minInt112 = exports.minInt104 = exports.minInt96 = exports.minInt88 = exports.minInt80 = exports.minInt72 = exports.minInt64 = exports.minInt56 = exports.minInt48 = exports.minInt40 = exports.minInt32 = exports.minInt24 = exports.minInt16 = exports.minInt8 = exports.maxUint256 = exports.maxUint248 = exports.maxUint240 = exports.maxUint232 = exports.maxUint224 = exports.maxUint216 = exports.maxUint208 = exports.maxUint200 = exports.maxUint192 = exports.maxUint184 = exports.maxUint176 = exports.maxUint168 = exports.maxUint160 = void 0;
-    exports.SizeOverflowError = exports.RlpTrailingBytesError = exports.RlpListBoundaryExceededError = exports.RlpDepthLimitExceededError = exports.InvalidHexValueError = exports.InvalidHexBooleanError = exports.InvalidBytesBooleanError = exports.IntegerOutOfRangeError = exports.SliceOffsetOutOfBoundsError = exports.SizeExceedsPaddingSizeError = exports.RawContractError = exports.CounterfactualDeploymentFailedError = exports.ContractFunctionZeroDataError = exports.ContractFunctionRevertedError = exports.ContractFunctionExecutionError = exports.CallExecutionError = exports.InvalidChainIdError = exports.ClientChainNotConfiguredError = exports.ChainNotFoundError = exports.ChainMismatchError = exports.ChainDoesNotSupportContract = exports.BundleFailedError = exports.BlockNotFoundError = exports.setErrorConfig = exports.BaseError = exports.InvalidAddressError = exports.UnsupportedPackedAbiType = exports.InvalidDefinitionTypeError = exports.InvalidArrayError = exports.InvalidAbiEncodingTypeError = exports.InvalidAbiDecodingTypeError = exports.DecodeLogTopicsMismatch = exports.DecodeLogDataMismatch = exports.BytesSizeMismatchError = exports.AbiFunctionSignatureNotFoundError = exports.AbiFunctionOutputsNotFoundError = exports.AbiFunctionNotFoundError = exports.AbiEventSignatureNotFoundError = exports.AbiEventSignatureEmptyTopicsError = exports.AbiEventNotFoundError = exports.AbiErrorSignatureNotFoundError = exports.AbiErrorNotFoundError = exports.AbiErrorInputsNotFoundError = exports.AbiEncodingLengthMismatchError = exports.AbiEncodingBytesSizeMismatchError = exports.AbiEncodingArrayLengthMismatchError = exports.AbiDecodingZeroDataError = exports.AbiDecodingDataSizeTooSmallError = exports.AbiDecodingDataSizeInvalidError = exports.AbiConstructorParamsNotFoundError = void 0;
-    exports.UnknownBundleIdError = exports.UnauthorizedProviderError = exports.TransactionRejectedRpcError = exports.SwitchChainError = exports.RpcError = exports.ResourceUnavailableRpcError = exports.ResourceNotFoundRpcError = exports.ProviderRpcError = exports.ProviderDisconnectedError = exports.ParseRpcError = exports.MethodNotSupportedRpcError = exports.MethodNotFoundRpcError = exports.LimitExceededRpcError = exports.JsonRpcVersionUnsupportedError = exports.InvalidRequestRpcError = exports.InvalidParamsRpcError = exports.InvalidInputRpcError = exports.InternalRpcError = exports.DuplicateIdError = exports.ChainDisconnectedError = exports.BundleTooLargeError = exports.AtomicReadyWalletRejectedUpgradeError = exports.AtomicityNotSupportedError = exports.WebSocketRequestError = exports.TimeoutError = exports.SocketClosedError = exports.RpcRequestError = exports.ResponseBodyTooLargeError = exports.HttpRequestError = exports.UnknownNodeError = exports.TransactionTypeNotSupportedError = exports.TipAboveFeeCapError = exports.NonceTooLowError = exports.NonceTooHighError = exports.NonceMaxValueError = exports.IntrinsicGasTooLowError = exports.IntrinsicGasTooHighError = exports.InsufficientFundsError = exports.FeeCapTooLowError = exports.FeeCapTooHighError = exports.ExecutionRevertedError = exports.FilterTypeNotSupportedError = exports.MaxFeePerGasTooLowError = exports.Eip1559FeesNotSupportedError = exports.BaseFeeScalarError = exports.EstimateGasExecutionError = exports.EnsInvalidChainIdError = exports.EnsAvatarUriResolutionError = exports.EnsAvatarUnsupportedNamespaceError = exports.EnsAvatarInvalidNftUriError = void 0;
-    exports.blobsToCommitments = exports.isAddressEqual = exports.isAddress = exports.getCreateAddress = exports.getCreate2Address = exports.getContractAddress = exports.getAddress = exports.checksumAddress = exports.prepareEncodeFunctionData = exports.parseEventLogs = exports.getAbiItem = exports.encodePacked = exports.encodeFunctionResult = exports.encodeFunctionData = exports.encodeEventTopics = exports.encodeErrorResult = exports.encodeDeployData = exports.encodeAbiParameters = exports.decodeFunctionResult = exports.decodeFunctionData = exports.decodeEventLog = exports.decodeErrorResult = exports.decodeDeployData = exports.decodeAbiParameters = exports.EIP1193ProviderRpcError = exports.InvalidDecimalNumberError = exports.InvalidTypedDataTypeError = exports.InvalidStructTypeError = exports.InvalidPrimaryTypeError = exports.InvalidDomainError = exports.UrlRequiredError = exports.WaitForTransactionReceiptTimeoutError = exports.TransactionReceiptNotFoundError = exports.TransactionNotFoundError = exports.TransactionExecutionError = exports.InvalidYParityError = exports.InvalidStorageKeySizeError = exports.InvalidSerializedTransactionTypeError = exports.InvalidSerializedTransactionError = exports.InvalidSerializableTransactionError = exports.InvalidLegacyVError = exports.FeePayerNonceMismatchError = exports.FeeConflictError = exports.StateAssignmentConflictError = exports.AccountStateConflictError = exports.UserRejectedRequestError = exports.UnsupportedProviderMethodError = exports.UnsupportedNonOptionalCapabilityError = exports.UnsupportedChainIdError = exports.UnknownRpcError = void 0;
-    exports.numberToHex = exports.bytesToHex = exports.boolToHex = exports.toBytes = exports.stringToBytes = exports.numberToBytes = exports.hexToBytes = exports.boolToBytes = exports.fromRlp = exports.hexToString = exports.hexToNumber = exports.hexToBool = exports.hexToBigInt = exports.fromHex = exports.fromBytes = exports.bytesToString = exports.bytesToNumber = exports.bytesToBool = exports.bytesToBigInt = exports.trim = exports.sliceHex = exports.sliceBytes = exports.slice = exports.size = exports.padHex = exports.padBytes = exports.pad = exports.isHex = exports.isBytes = exports.concatHex = exports.concatBytes = exports.concat = exports.getChainContractAddress = exports.extractChain = exports.extendSchema = exports.defineChain = exports.assertCurrentChain = exports.ccipReadTunnel = exports.offchainLookupSignature = exports.offchainLookupAbiItem = exports.offchainLookup = exports.ccipFetch = exports.ccipRequest = exports.toBlobs = exports.toBlobSidecars = exports.sidecarsToVersionedHashes = exports.fromBlobs = exports.commitmentToVersionedHash = exports.commitmentsToVersionedHashes = exports.blobsToProofs = void 0;
-    exports.parseCompactSignature = exports.hexToCompactSignature = exports.isErc8010Signature = exports.isErc6492Signature = exports.hashTypedData = exports.hashStruct = exports.hashDomain = exports.hashMessage = exports.compactSignatureToSignature = exports.withTimeout = exports.withRetry = exports.withCache = exports.nonceManager = exports.createNonceManager = exports.setupKzg = exports.defineKzg = exports.getFunctionSignature = exports.toFunctionSignature = exports.getFunctionSelector = exports.toFunctionSelector = exports.toFunctionHash = exports.getEventSignature = exports.toEventSignature = exports.getEventSelector = exports.toEventSelector = exports.toEventHash = exports.sha256 = exports.ripemd160 = exports.keccak256 = exports.isHash = exports.rpcTransactionType = exports.formatTransactionRequest = exports.defineTransactionRequest = exports.formatTransactionReceipt = exports.defineTransactionReceipt = exports.transactionType = exports.formatTransaction = exports.defineTransaction = exports.formatLog = exports.formatBlock = exports.defineBlock = exports.getContractError = exports.toCoinType = exports.namehash = exports.labelhash = exports.toRlp = exports.hexToRlp = exports.bytesToRlp = exports.toHex = exports.stringToHex = void 0;
-    exports.parseUnits = exports.parseGwei = exports.parseEther = exports.formatUnits = exports.formatGwei = exports.formatEther = exports.validateTypedData = exports.serializeTypedData = exports.getTypesForEIP712Domain = exports.domainSeparator = exports.serializeTransaction = exports.serializeAccessList = exports.parseTransaction = exports.getTransactionType = exports.getSerializedTransactionType = exports.assertTransactionLegacy = exports.assertTransactionEIP2930 = exports.assertTransactionEIP1559 = exports.assertRequest = exports.stringify = exports.verifyTypedData = exports.verifyMessage = exports.verifyHash = exports.toPrefixedMessage = exports.signatureToCompactSignature = exports.serializeSignature = exports.signatureToHex = exports.serializeErc8010Signature = exports.serializeErc6492Signature = exports.serializeCompactSignature = exports.compactSignatureToHex = exports.recoverTypedDataAddress = exports.recoverTransactionAddress = exports.recoverPublicKey = exports.recoverMessageAddress = exports.recoverAddress = exports.parseSignature = exports.hexToSignature = exports.parseErc8010Signature = exports.parseErc6492Signature = void 0;
+    exports.deploylessCallViaFactoryBytecode = exports.deploylessCallViaBytecodeBytecode = exports.zeroHash = exports.zeroAddress = exports.ethAddress = exports.multicall3Abi = exports.universalSignatureValidatorAbi = exports.erc6492SignatureValidatorAbi = exports.erc4626Abi = exports.erc1155Abi = exports.erc721Abi = exports.erc20Abi_bytes32 = exports.erc20Abi = exports.webSocket = exports.http = exports.shouldThrow = exports.fallback = exports.custom = exports.createTransport = exports.walletActions = exports.testActions = exports.publicActions = exports.createWalletClient = exports.createTestClient = exports.createPublicClient = exports.TransportNotConfiguredError = exports.createClientResolver = exports.ChainNotConfiguredError = exports.rpcSchema = exports.createClient = exports.WaitForCallsStatusTimeoutError = exports.getContract = exports.UnknownTypeError = exports.UnknownSignatureError = exports.SolidityProtectedKeywordError = exports.parseAbiParameters = exports.parseAbiParameter = exports.parseAbiItem = exports.parseAbi = exports.InvalidStructSignatureError = exports.InvalidSignatureError = exports.InvalidParenthesisError = exports.InvalidParameterError = exports.InvalidModifierError = exports.InvalidFunctionModifierError = exports.InvalidAbiTypeParameterError = exports.InvalidAbiParametersError = exports.InvalidAbiParameterError = exports.InvalidAbiItemError = exports.CircularReferenceError = void 0;
+    exports.maxUint128 = exports.maxUint120 = exports.maxUint112 = exports.maxUint104 = exports.maxUint96 = exports.maxUint88 = exports.maxUint80 = exports.maxUint72 = exports.maxUint64 = exports.maxUint56 = exports.maxUint48 = exports.maxUint40 = exports.maxUint32 = exports.maxUint24 = exports.maxUint16 = exports.maxUint8 = exports.maxInt256 = exports.maxInt248 = exports.maxInt240 = exports.maxInt232 = exports.maxInt224 = exports.maxInt216 = exports.maxInt208 = exports.maxInt200 = exports.maxInt192 = exports.maxInt184 = exports.maxInt176 = exports.maxInt168 = exports.maxInt160 = exports.maxInt152 = exports.maxInt144 = exports.maxInt136 = exports.maxInt128 = exports.maxInt120 = exports.maxInt112 = exports.maxInt104 = exports.maxInt96 = exports.maxInt88 = exports.maxInt80 = exports.maxInt72 = exports.maxInt64 = exports.maxInt56 = exports.maxInt48 = exports.maxInt40 = exports.maxInt32 = exports.maxInt24 = exports.maxInt16 = exports.maxInt8 = exports.universalSignatureValidatorByteCode = exports.erc6492SignatureValidatorByteCode = void 0;
+    exports.etherUnits = exports.presignMessagePrefix = exports.minInt256 = exports.minInt248 = exports.minInt240 = exports.minInt232 = exports.minInt224 = exports.minInt216 = exports.minInt208 = exports.minInt200 = exports.minInt192 = exports.minInt184 = exports.minInt176 = exports.minInt168 = exports.minInt160 = exports.minInt152 = exports.minInt144 = exports.minInt136 = exports.minInt128 = exports.minInt120 = exports.minInt112 = exports.minInt104 = exports.minInt96 = exports.minInt88 = exports.minInt80 = exports.minInt72 = exports.minInt64 = exports.minInt56 = exports.minInt48 = exports.minInt40 = exports.minInt32 = exports.minInt24 = exports.minInt16 = exports.minInt8 = exports.maxUint256 = exports.maxUint248 = exports.maxUint240 = exports.maxUint232 = exports.maxUint224 = exports.maxUint216 = exports.maxUint208 = exports.maxUint200 = exports.maxUint192 = exports.maxUint184 = exports.maxUint176 = exports.maxUint168 = exports.maxUint160 = exports.maxUint152 = exports.maxUint144 = exports.maxUint136 = void 0;
+    exports.RlpDepthLimitExceededError = exports.InvalidHexValueError = exports.InvalidHexBooleanError = exports.InvalidBytesBooleanError = exports.IntegerOutOfRangeError = exports.SliceOffsetOutOfBoundsError = exports.SizeExceedsPaddingSizeError = exports.RawContractError = exports.CounterfactualDeploymentFailedError = exports.ContractFunctionZeroDataError = exports.ContractFunctionRevertedError = exports.ContractFunctionExecutionError = exports.CallExecutionError = exports.InvalidChainIdError = exports.ClientChainNotConfiguredError = exports.ChainNotFoundError = exports.ChainMismatchError = exports.ChainDoesNotSupportContract = exports.BundleFailedError = exports.BlockNotFoundError = exports.setErrorConfig = exports.BaseError = exports.InvalidAddressError = exports.UnsupportedPackedAbiType = exports.InvalidDefinitionTypeError = exports.InvalidArrayError = exports.InvalidAbiEncodingTypeError = exports.InvalidAbiDecodingTypeError = exports.DecodeLogTopicsMismatch = exports.DecodeLogDataMismatch = exports.BytesSizeMismatchError = exports.AbiFunctionSignatureNotFoundError = exports.AbiFunctionOutputsNotFoundError = exports.AbiFunctionNotFoundError = exports.AbiEventSignatureNotFoundError = exports.AbiEventSignatureEmptyTopicsError = exports.AbiEventNotFoundError = exports.AbiErrorSignatureNotFoundError = exports.AbiErrorNotFoundError = exports.AbiErrorInputsNotFoundError = exports.AbiEncodingLengthMismatchError = exports.AbiEncodingBytesSizeMismatchError = exports.AbiEncodingArrayLengthMismatchError = exports.AbiDecodingZeroDataError = exports.AbiDecodingDataSizeTooSmallError = exports.AbiDecodingDataSizeInvalidError = exports.AbiConstructorParamsNotFoundError = exports.AbiConstructorNotFoundError = exports.weiUnits = exports.gweiUnits = void 0;
+    exports.SwitchChainError = exports.RpcError = exports.ResourceUnavailableRpcError = exports.ResourceNotFoundRpcError = exports.ProviderRpcError = exports.ProviderDisconnectedError = exports.ParseRpcError = exports.MethodNotSupportedRpcError = exports.MethodNotFoundRpcError = exports.LimitExceededRpcError = exports.JsonRpcVersionUnsupportedError = exports.InvalidRequestRpcError = exports.InvalidParamsRpcError = exports.InvalidInputRpcError = exports.InternalRpcError = exports.DuplicateIdError = exports.ChainDisconnectedError = exports.BundleTooLargeError = exports.AtomicReadyWalletRejectedUpgradeError = exports.AtomicityNotSupportedError = exports.WebSocketRequestError = exports.TimeoutError = exports.SocketClosedError = exports.RpcRequestError = exports.ResponseBodyTooLargeError = exports.HttpRequestError = exports.UnknownNodeError = exports.TransactionTypeNotSupportedError = exports.TipAboveFeeCapError = exports.NonceTooLowError = exports.NonceTooHighError = exports.NonceMaxValueError = exports.IntrinsicGasTooLowError = exports.IntrinsicGasTooHighError = exports.InsufficientFundsError = exports.FeeCapTooLowError = exports.FeeCapTooHighError = exports.ExecutionRevertedError = exports.FilterTypeNotSupportedError = exports.MaxFeePerGasTooLowError = exports.Eip1559FeesNotSupportedError = exports.BaseFeeScalarError = exports.EstimateGasExecutionError = exports.EnsInvalidChainIdError = exports.EnsAvatarUriResolutionError = exports.EnsAvatarUnsupportedNamespaceError = exports.EnsAvatarInvalidNftUriError = exports.SizeOverflowError = exports.RlpTrailingBytesError = exports.RlpListBoundaryExceededError = void 0;
+    exports.getCreateAddress = exports.getCreate2Address = exports.getContractAddress = exports.getAddress = exports.checksumAddress = exports.prepareEncodeFunctionData = exports.parseEventLogs = exports.getAbiItem = exports.encodePacked = exports.encodeFunctionResult = exports.encodeFunctionData = exports.encodeEventTopics = exports.encodeErrorResult = exports.encodeDeployData = exports.encodeAbiParameters = exports.decodeFunctionResult = exports.decodeFunctionData = exports.decodeEventLog = exports.decodeErrorResult = exports.decodeDeployData = exports.decodeAbiParameters = exports.EIP1193ProviderRpcError = exports.InvalidDecimalNumberError = exports.InvalidTypedDataTypeError = exports.InvalidStructTypeError = exports.InvalidPrimaryTypeError = exports.InvalidDomainError = exports.UrlRequiredError = exports.WaitForTransactionReceiptTimeoutError = exports.TransactionReceiptNotFoundError = exports.TransactionNotFoundError = exports.TransactionExecutionError = exports.InvalidYParityError = exports.InvalidStorageKeySizeError = exports.InvalidSerializedTransactionTypeError = exports.InvalidSerializedTransactionError = exports.InvalidSerializableTransactionError = exports.InvalidLegacyVError = exports.FeePayerNonceMismatchError = exports.FeeConflictError = exports.StateAssignmentConflictError = exports.AccountStateConflictError = exports.UserRejectedRequestError = exports.UnsupportedProviderMethodError = exports.UnsupportedNonOptionalCapabilityError = exports.UnsupportedChainIdError = exports.UnknownRpcError = exports.UnknownBundleIdError = exports.UnauthorizedProviderError = exports.TransactionRejectedRpcError = void 0;
+    exports.toBytes = exports.stringToBytes = exports.numberToBytes = exports.hexToBytes = exports.boolToBytes = exports.fromRlp = exports.hexToString = exports.hexToNumber = exports.hexToBool = exports.hexToBigInt = exports.fromHex = exports.fromBytes = exports.bytesToString = exports.bytesToNumber = exports.bytesToBool = exports.bytesToBigInt = exports.trim = exports.sliceHex = exports.sliceBytes = exports.slice = exports.size = exports.padHex = exports.padBytes = exports.pad = exports.isHex = exports.isBytes = exports.concatHex = exports.concatBytes = exports.concat = exports.getChainContractAddress = exports.extractChain = exports.extendSchema = exports.defineChain = exports.assertCurrentChain = exports.ccipReadTunnel = exports.offchainLookupSignature = exports.offchainLookupAbiItem = exports.offchainLookup = exports.ccipFetch = exports.ccipRequest = exports.toBlobs = exports.toBlobSidecars = exports.sidecarsToVersionedHashes = exports.fromBlobs = exports.commitmentToVersionedHash = exports.commitmentsToVersionedHashes = exports.blobsToProofs = exports.blobsToCommitments = exports.isAddressEqual = exports.isAddress = void 0;
+    exports.isErc6492Signature = exports.hashTypedData = exports.hashStruct = exports.hashDomain = exports.hashMessage = exports.compactSignatureToSignature = exports.withTimeout = exports.withRetry = exports.withCache = exports.nonceManager = exports.createNonceManager = exports.setupKzg = exports.defineKzg = exports.getFunctionSignature = exports.toFunctionSignature = exports.getFunctionSelector = exports.toFunctionSelector = exports.toFunctionHash = exports.getEventSignature = exports.toEventSignature = exports.getEventSelector = exports.toEventSelector = exports.toEventHash = exports.sha256 = exports.ripemd160 = exports.keccak256 = exports.isHash = exports.rpcTransactionType = exports.formatTransactionRequest = exports.defineTransactionRequest = exports.formatTransactionReceipt = exports.defineTransactionReceipt = exports.transactionType = exports.formatTransaction = exports.defineTransaction = exports.formatLog = exports.formatBlock = exports.defineBlock = exports.getContractError = exports.toCoinType = exports.namehash = exports.labelhash = exports.toRlp = exports.hexToRlp = exports.bytesToRlp = exports.toHex = exports.stringToHex = exports.numberToHex = exports.bytesToHex = exports.boolToHex = void 0;
+    exports.parseUnits = exports.parseGwei = exports.parseEther = exports.formatUnits = exports.formatGwei = exports.formatEther = exports.validateTypedData = exports.serializeTypedData = exports.getTypesForEIP712Domain = exports.domainSeparator = exports.serializeTransaction = exports.serializeAccessList = exports.parseTransaction = exports.getTransactionType = exports.getSerializedTransactionType = exports.assertTransactionLegacy = exports.assertTransactionEIP2930 = exports.assertTransactionEIP1559 = exports.assertRequest = exports.stringify = exports.verifyTypedData = exports.verifyMessage = exports.verifyHash = exports.toPrefixedMessage = exports.signatureToCompactSignature = exports.serializeSignature = exports.signatureToHex = exports.serializeErc8010Signature = exports.serializeErc6492Signature = exports.serializeCompactSignature = exports.compactSignatureToHex = exports.recoverTypedDataAddress = exports.recoverTransactionAddress = exports.recoverPublicKey = exports.recoverMessageAddress = exports.recoverAddress = exports.parseSignature = exports.hexToSignature = exports.parseErc8010Signature = exports.parseErc6492Signature = exports.parseCompactSignature = exports.hexToCompactSignature = exports.isErc8010Signature = void 0;
     var abitype_1 = require_exports();
     Object.defineProperty(exports, "CircularReferenceError", { enumerable: true, get: function() {
       return abitype_1.CircularReferenceError;
@@ -198742,6 +199071,16 @@ var require_cjs2 = __commonJS({
     } });
     Object.defineProperty(exports, "rpcSchema", { enumerable: true, get: function() {
       return createClient_js_1.rpcSchema;
+    } });
+    var createClientResolver_js_1 = require_createClientResolver();
+    Object.defineProperty(exports, "ChainNotConfiguredError", { enumerable: true, get: function() {
+      return createClientResolver_js_1.ChainNotConfiguredError;
+    } });
+    Object.defineProperty(exports, "createClientResolver", { enumerable: true, get: function() {
+      return createClientResolver_js_1.createClientResolver;
+    } });
+    Object.defineProperty(exports, "TransportNotConfiguredError", { enumerable: true, get: function() {
+      return createClientResolver_js_1.TransportNotConfiguredError;
     } });
     var createPublicClient_js_1 = require_createPublicClient();
     Object.defineProperty(exports, "createPublicClient", { enumerable: true, get: function() {
@@ -201735,21 +202074,24 @@ var require_arcTestnet = __commonJS({
       rpcUrls: {
         default: {
           http: [
-            "https://rpc.testnet.arc.network",
-            "https://rpc.quicknode.testnet.arc.network",
-            "https://rpc.blockdaemon.testnet.arc.network"
+            "https://rpc.testnet.arc.io",
+            "https://rpc.blockdaemon.testnet.arc.io",
+            "https://rpc.drpc.testnet.arc.io",
+            "https://rpc.quicknode.testnet.arc.io"
           ],
           webSocket: [
-            "wss://rpc.testnet.arc.network",
-            "wss://rpc.quicknode.testnet.arc.network"
+            "wss://rpc.testnet.arc.io",
+            "wss://rpc.blockdaemon.testnet.arc.io:443/websocket",
+            "wss://rpc.drpc.testnet.arc.io",
+            "wss://rpc.quicknode.testnet.arc.io"
           ]
         }
       },
       blockExplorers: {
         default: {
-          name: "ArcScan",
-          url: "https://testnet.arcscan.app",
-          apiUrl: "https://testnet.arcscan.app/api"
+          name: "Arc Explorer",
+          url: "https://explorer.testnet.arc.io",
+          apiUrl: "https://explorer.testnet.arc.io/api"
         }
       },
       contracts: {
@@ -203526,6 +203868,34 @@ var require_blastSepolia = __commonJS({
   }
 });
 
+// node_modules/viem/_cjs/chains/definitions/blockdag.js
+var require_blockdag = __commonJS({
+  "node_modules/viem/_cjs/chains/definitions/blockdag.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.blockdag = void 0;
+    var defineChain_js_1 = require_defineChain();
+    exports.blockdag = (0, defineChain_js_1.defineChain)({
+      id: 1404,
+      name: "BlockDAG",
+      nativeCurrency: {
+        decimals: 18,
+        name: "BlockDAG",
+        symbol: "BDAG"
+      },
+      rpcUrls: {
+        default: { http: ["https://rpc.bdagexplorer.com/"] }
+      },
+      blockExplorers: {
+        default: {
+          name: "BDAG Explorer",
+          url: "https://explorer.bdagexplorer.com"
+        }
+      }
+    });
+  }
+});
+
 // node_modules/viem/_cjs/chains/definitions/bob.js
 var require_bob = __commonJS({
   "node_modules/viem/_cjs/chains/definitions/bob.js"(exports) {
@@ -204171,6 +204541,40 @@ var require_bxnTestnet = __commonJS({
         }
       },
       testnet: true
+    });
+  }
+});
+
+// node_modules/viem/_cjs/chains/definitions/candyChain.js
+var require_candyChain = __commonJS({
+  "node_modules/viem/_cjs/chains/definitions/candyChain.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.candyChain = void 0;
+    var defineChain_js_1 = require_defineChain();
+    exports.candyChain = (0, defineChain_js_1.defineChain)({
+      id: 2828,
+      name: "CandyChain",
+      nativeCurrency: {
+        decimals: 18,
+        name: "CANDY",
+        symbol: "CANDY"
+      },
+      rpcUrls: {
+        default: { http: ["https://publicrpc.candychain.io"] }
+      },
+      blockExplorers: {
+        default: {
+          name: "CandyChain Explorer",
+          url: "https://streams.candychain.io"
+        }
+      },
+      contracts: {
+        multicall3: {
+          address: "0xca11bde05977b3631167028862be2a173976ca11",
+          blockCreated: 2039339
+        }
+      }
     });
   }
 });
@@ -205377,6 +205781,12 @@ var require_creditCoin3Devnet = __commonJS({
           apiUrl: "https://creditcoin3-dev.subscan.io"
         }
       },
+      contracts: {
+        multicall3: {
+          address: "0x47b51dC7b7Bbb3d9eB12080e3DA6E26125e8D75e",
+          blockCreated: 16352786
+        }
+      },
       testnet: true
     });
   }
@@ -205406,6 +205816,12 @@ var require_creditCoin3Mainnet = __commonJS({
           apiUrl: "https://creditcoin.blockscout.com/api"
         }
       },
+      contracts: {
+        multicall3: {
+          address: "0x47b51dC7b7Bbb3d9eB12080e3DA6E26125e8D75e",
+          blockCreated: 4373631
+        }
+      },
       testnet: false
     });
   }
@@ -205433,6 +205849,12 @@ var require_creditCoin3Testnet = __commonJS({
           name: "Blockscout",
           url: "https://creditcoin-testnet.blockscout.com",
           apiUrl: "https://creditcoin-testnet.blockscout.com/api"
+        }
+      },
+      contracts: {
+        multicall3: {
+          address: "0x47b51dC7b7Bbb3d9eB12080e3DA6E26125e8D75e",
+          blockCreated: 5566188
         }
       },
       testnet: true
@@ -205635,6 +206057,81 @@ var require_crossfi = __commonJS({
         }
       },
       testnet: false
+    });
+  }
+});
+
+// node_modules/viem/_cjs/chains/definitions/crymad.js
+var require_crymad = __commonJS({
+  "node_modules/viem/_cjs/chains/definitions/crymad.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.crymad = void 0;
+    var defineChain_js_1 = require_defineChain();
+    exports.crymad = (0, defineChain_js_1.defineChain)({
+      id: 1475,
+      name: "CRYMAD Chain",
+      nativeCurrency: {
+        name: "CryMadX",
+        symbol: "CMX-R",
+        decimals: 18
+      },
+      rpcUrls: {
+        default: {
+          http: ["https://rpc.cmxofficial.com"]
+        }
+      },
+      blockExplorers: {
+        default: {
+          name: "CRYMAD Chain Explorer",
+          url: "https://explorer.cmxofficial.com",
+          apiUrl: "https://explorer.cmxofficial.com/api/v2"
+        }
+      },
+      contracts: {
+        multicall3: {
+          address: "0xcA11bde05977b3631167028862bE2a173976CA11",
+          blockCreated: 834292
+        }
+      }
+    });
+  }
+});
+
+// node_modules/viem/_cjs/chains/definitions/crymadL2.js
+var require_crymadL2 = __commonJS({
+  "node_modules/viem/_cjs/chains/definitions/crymadL2.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.crymadL2 = void 0;
+    var defineChain_js_1 = require_defineChain();
+    exports.crymadL2 = (0, defineChain_js_1.defineChain)({
+      id: 7373,
+      name: "CRYMAD Chain L2",
+      nativeCurrency: {
+        name: "CryMadX",
+        symbol: "CMX-R",
+        decimals: 18
+      },
+      rpcUrls: {
+        default: {
+          http: ["https://rpcl2.cmxofficial.com"]
+        }
+      },
+      blockExplorers: {
+        default: {
+          name: "CRYMAD Chain L2 Explorer",
+          url: "https://explorer-l2.cmxofficial.com",
+          apiUrl: "https://explorer-l2.cmxofficial.com/api/v2"
+        }
+      },
+      contracts: {
+        multicall3: {
+          address: "0xcA11bde05977b3631167028862bE2a173976CA11",
+          blockCreated: 0
+        }
+      },
+      sourceId: 1475
     });
   }
 });
@@ -211298,8 +211795,15 @@ var require_jasmyChain = __commonJS({
       nativeCurrency: { name: "JasmyCoin", symbol: "JASMY", decimals: 18 },
       rpcUrls: {
         default: {
-          http: ["https://rpc.jasmychain.io"],
-          webSocket: ["wss://rpc.jasmychain.io"]
+          http: ["https://rpc.jasmyscan.net"],
+          webSocket: ["wss://rpc.jasmyscan.net/ws"]
+        }
+      },
+      blockExplorers: {
+        default: {
+          name: "JasmyScan",
+          url: "https://explorer.jasmyscan.net",
+          apiUrl: "https://explorer.jasmyscan.net/api"
         }
       },
       testnet: false
@@ -211321,8 +211825,15 @@ var require_jasmyChainTestnet = __commonJS({
       nativeCurrency: { name: "JasmyCoin", symbol: "JASMY", decimals: 18 },
       rpcUrls: {
         default: {
-          http: ["https://rpc_testnet.jasmychain.io"],
-          webSocket: ["wss://rpc_testnet.jasmychain.io"]
+          http: ["https://jasmy-chain-testnet.alt.technology"],
+          webSocket: ["wss://jasmy-chain-testnet.alt.technology/ws"]
+        }
+      },
+      blockExplorers: {
+        default: {
+          name: "Jasmy Chain Testnet Explorer",
+          url: "https://jasmy-chain-testnet-explorer.alt.technology",
+          apiUrl: "https://jasmy-chain-testnet-explorer.alt.technology/api"
         }
       },
       testnet: true
@@ -212440,6 +212951,34 @@ var require_koi = __commonJS({
         }
       },
       testnet: true
+    });
+  }
+});
+
+// node_modules/viem/_cjs/chains/definitions/kortana.js
+var require_kortana = __commonJS({
+  "node_modules/viem/_cjs/chains/definitions/kortana.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.kortana = void 0;
+    var defineChain_js_1 = require_defineChain();
+    exports.kortana = (0, defineChain_js_1.defineChain)({
+      id: 9002,
+      name: "Kortana",
+      nativeCurrency: {
+        decimals: 18,
+        name: "Dinar",
+        symbol: "DNR"
+      },
+      rpcUrls: {
+        default: { http: ["https://zeus-rpc.mainnet.kortana.xyz"] }
+      },
+      blockExplorers: {
+        default: {
+          name: "Kortana Explorer",
+          url: "https://explorer.mainnet.kortana.xyz"
+        }
+      }
     });
   }
 });
@@ -217959,6 +218498,41 @@ var require_qMainnet = __commonJS({
   }
 });
 
+// node_modules/viem/_cjs/chains/definitions/qmsTestnet.js
+var require_qmsTestnet = __commonJS({
+  "node_modules/viem/_cjs/chains/definitions/qmsTestnet.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.qmsTestnet = void 0;
+    var defineChain_js_1 = require_defineChain();
+    exports.qmsTestnet = (0, defineChain_js_1.defineChain)({
+      id: 19480,
+      name: "QMS Testnet",
+      nativeCurrency: { name: "QMS", symbol: "QMS", decimals: 18 },
+      rpcUrls: {
+        default: {
+          http: ["https://rpc.testnet.qms.finance"],
+          webSocket: ["wss://rpc.testnet.qms.finance"]
+        }
+      },
+      blockExplorers: {
+        default: {
+          name: "QMS Testnet Explorer",
+          url: "https://testnet.qmsscan.io",
+          apiUrl: "https://testnet.qmsscan.io/api"
+        }
+      },
+      contracts: {
+        multicall3: {
+          address: "0xcA11bde05977b3631167028862bE2a173976CA11",
+          blockCreated: 0
+        }
+      },
+      testnet: true
+    });
+  }
+});
+
 // node_modules/viem/_cjs/chains/definitions/qTestnet.js
 var require_qTestnet = __commonJS({
   "node_modules/viem/_cjs/chains/definitions/qTestnet.js"(exports) {
@@ -222390,6 +222964,272 @@ var require_telosTestnet = __commonJS({
   }
 });
 
+// node_modules/ox/_cjs/core/ContractAddress.js
+var require_ContractAddress = __commonJS({
+  "node_modules/ox/_cjs/core/ContractAddress.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.from = from16;
+    exports.fromCreate = fromCreate;
+    exports.fromCreate2 = fromCreate2;
+    var Address = require_Address();
+    var Bytes = require_Bytes();
+    var Hash5 = require_Hash();
+    var Hex = require_Hex();
+    var Rlp = require_Rlp();
+    function from16(options) {
+      if (options.salt)
+        return fromCreate2(options);
+      return fromCreate(options);
+    }
+    function fromCreate(options) {
+      const from17 = Bytes.fromHex(Address.from(options.from));
+      let nonce = Bytes.fromNumber(options.nonce);
+      if (nonce[0] === 0)
+        nonce = new Uint8Array([]);
+      return Address.from(`0x${Hash5.keccak256(Rlp.fromBytes([from17, nonce], { as: "Hex" })).slice(26)}`);
+    }
+    function fromCreate2(options) {
+      const from17 = Bytes.fromHex(Address.from(options.from));
+      const salt = Bytes.padLeft(Bytes.validate(options.salt) ? options.salt : Bytes.fromHex(options.salt), 32);
+      const bytecodeHash = (() => {
+        if ("bytecodeHash" in options) {
+          if (Bytes.validate(options.bytecodeHash))
+            return options.bytecodeHash;
+          return Bytes.fromHex(options.bytecodeHash);
+        }
+        return Hash5.keccak256(options.bytecode, { as: "Bytes" });
+      })();
+      return Address.from(Hex.slice(Hash5.keccak256(Bytes.concat(Bytes.fromHex("0xff"), from17, salt, bytecodeHash), { as: "Hex" }), 12));
+    }
+  }
+});
+
+// node_modules/ox/_cjs/tempo/AccountConfig.js
+var require_AccountConfig = __commonJS({
+  "node_modules/ox/_cjs/tempo/AccountConfig.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InvalidConfigError = exports.zeroSalt = exports.signatureTypeByte = exports.maxVersion = exports.maxThreshold = exports.maxSignatures = exports.maxOwners = exports.maxOwnerSignatureBytes = void 0;
+    exports.assert = assert10;
+    exports.from = from16;
+    exports.fromRpc = fromRpc4;
+    exports.fromTuple = fromTuple2;
+    exports.getAddress = getAddress3;
+    exports.getCommitment = getCommitment;
+    exports.getSignPayload = getSignPayload2;
+    exports.toRpc = toRpc4;
+    exports.toTuple = toTuple3;
+    exports.update = update2;
+    exports.validate = validate10;
+    var Address = require_Address();
+    var ContractAddress = require_ContractAddress();
+    var Errors = require_Errors();
+    var Hash5 = require_Hash();
+    var Hex = require_Hex();
+    exports.maxOwnerSignatureBytes = 2049;
+    exports.maxOwners = 48;
+    exports.maxSignatures = 8;
+    exports.maxThreshold = 255;
+    exports.maxVersion = 2n ** 64n - 1n;
+    exports.signatureTypeByte = "0x05";
+    exports.zeroSalt = `0x${"00".repeat(32)}`;
+    var accountDomain = "tempo:multisig:account";
+    var configDomain = "tempo:multisig:config";
+    var recoveryWalletInitCodeHash = "0x583cc63a2e37f645b43eac911b1a6d6de08b83abdc308c61364edda8cfc3bd37";
+    var signatureDomain = "tempo:multisig:signature";
+    function assert10(config) {
+      const { owners, salt, threshold, version: version30 = 0n } = config;
+      if (typeof salt !== "undefined" && Hex.size(salt) !== 32)
+        throw new InvalidConfigError({ reason: "salt must be 32 bytes" });
+      assertVersion(version30);
+      if (owners.length === 0)
+        throw new InvalidConfigError({ reason: "owners cannot be empty" });
+      if (owners.length > exports.maxOwners)
+        throw new InvalidConfigError({ reason: "too many owners" });
+      if (!Number.isInteger(Number(threshold)))
+        throw new InvalidConfigError({ reason: "threshold must be an integer" });
+      if (Number(threshold) < 1)
+        throw new InvalidConfigError({ reason: "threshold cannot be zero" });
+      if (Number(threshold) > exports.maxThreshold)
+        throw new InvalidConfigError({ reason: "threshold exceeds max threshold" });
+      let totalWeight = 0;
+      const weights = [];
+      let previous;
+      for (const owner of owners) {
+        if (!Address.validate(owner.owner) || Hex.toBigInt(owner.owner) === 0n)
+          throw new InvalidConfigError({ reason: "owner cannot be zero" });
+        if (!Number.isInteger(Number(owner.weight)))
+          throw new InvalidConfigError({
+            reason: "owner weight must be an integer"
+          });
+        if (Number(owner.weight) < 1)
+          throw new InvalidConfigError({ reason: "owner weight cannot be zero" });
+        const current = Hex.toBigInt(owner.owner);
+        if (typeof previous !== "undefined" && previous >= current)
+          throw new InvalidConfigError({
+            reason: "owners must be strictly ascending"
+          });
+        previous = current;
+        const weight = Number(owner.weight);
+        totalWeight += weight;
+        weights.push(weight);
+      }
+      if (totalWeight > 255)
+        throw new InvalidConfigError({
+          reason: "total owner weight exceeds u8 max"
+        });
+      if (Number(threshold) > totalWeight)
+        throw new InvalidConfigError({
+          reason: "threshold exceeds total owner weight"
+        });
+      const reachableWeight = weights.sort((a, b) => b - a).slice(0, exports.maxSignatures).reduce((sum, weight) => sum + weight, 0);
+      if (Number(threshold) > reachableWeight)
+        throw new InvalidConfigError({
+          reason: `threshold exceeds weight reachable by ${exports.maxSignatures} owner signatures`
+        });
+    }
+    function from16(config) {
+      const version30 = config.version ?? 0n;
+      assertVersion(version30);
+      const owners = [...config.owners].sort((a, b) => Hex.toBigInt(a.owner) < Hex.toBigInt(b.owner) ? -1 : 1);
+      const normalized = {
+        owners,
+        salt: config.salt ? Hex.padLeft(config.salt, 32) : exports.zeroSalt,
+        threshold: config.threshold,
+        version: BigInt(version30)
+      };
+      assert10(normalized);
+      return normalized;
+    }
+    function fromRpc4(config) {
+      return from16({
+        ...config,
+        version: Hex.toBigInt(config.version)
+      });
+    }
+    function fromTuple2(tuple) {
+      const [salt, version30, threshold, owners] = tuple;
+      if (tuple.length !== 4 || typeof salt !== "string" || Hex.size(salt) !== 32 || typeof version30 !== "string" || Hex.size(version30) > 8 || version30.startsWith("0x00") || typeof threshold !== "string" || Hex.size(threshold) > 1 || threshold.startsWith("0x00") || !Array.isArray(owners) || owners.some((owner) => !Array.isArray(owner) || owner.length !== 2 || typeof owner[0] !== "string" || !Address.validate(owner[0]) || typeof owner[1] !== "string" || Hex.size(owner[1]) > 1 || owner[1].startsWith("0x00")))
+        throw new InvalidConfigError({ reason: "invalid config RLP tuple" });
+      const config = {
+        salt: salt && salt !== "0x" ? Hex.padLeft(salt, 32) : exports.zeroSalt,
+        version: version30 === "0x" ? 0n : Hex.toBigInt(version30),
+        threshold: threshold === "0x" ? 0 : Hex.toNumber(threshold),
+        owners: owners.map((owner) => {
+          const [ownerAddress, weight] = owner;
+          return {
+            owner: ownerAddress,
+            weight: !weight || weight === "0x" ? 0 : Hex.toNumber(weight)
+          };
+        })
+      };
+      assert10(config);
+      return config;
+    }
+    function getAddress3(config, options) {
+      Address.assert(options.factory);
+      assert10(config);
+      if (BigInt(config.version ?? 0) !== 0n)
+        throw new InvalidConfigError({
+          reason: "account address requires version zero"
+        });
+      const accountSalt = Hash5.keccak256(Hex.concat(Hex.fromString(accountDomain), Hex.padLeft(config.salt ?? exports.zeroSalt, 32), Hex.fromNumber(config.threshold, { size: 1 }), Hex.fromNumber(config.owners.length, { size: 1 }), ...config.owners.flatMap((owner) => [
+        owner.owner,
+        Hex.fromNumber(owner.weight, { size: 1 })
+      ])));
+      const account = ContractAddress.fromCreate2({
+        bytecodeHash: recoveryWalletInitCodeHash,
+        from: options.factory,
+        salt: accountSalt
+      });
+      if (Hex.toBigInt(account) === 0n)
+        throw new InvalidConfigError({ reason: "derived account cannot be zero" });
+      if (config.owners.some((owner) => Address.isEqual(owner.owner, account)))
+        throw new InvalidConfigError({
+          reason: "derived account cannot be an owner"
+        });
+      return account;
+    }
+    function getCommitment(config) {
+      assert10(config);
+      return Hash5.keccak256(Hex.concat(Hex.fromString(configDomain), Hex.padLeft(config.salt ?? exports.zeroSalt, 32), Hex.fromNumber(config.version ?? 0n, { size: 8 }), Hex.fromNumber(config.threshold, { size: 1 }), Hex.fromNumber(config.owners.length, { size: 1 }), ...config.owners.flatMap((owner) => [
+        owner.owner,
+        Hex.fromNumber(owner.weight, { size: 1 })
+      ])));
+    }
+    function getSignPayload2(value) {
+      const { account, config, payload } = value;
+      assertVersion(config.version);
+      Address.assert(account);
+      if (Hex.size(Hex.from(payload)) !== 32)
+        throw new InvalidConfigError({ reason: "payload must be 32 bytes" });
+      return Hash5.keccak256(Hex.concat(Hex.fromString(signatureDomain), Hex.from(payload), account, Hex.fromNumber(config.version ?? 0n, { size: 8 })));
+    }
+    function toRpc4(config) {
+      const value = from16(config);
+      return {
+        owners: value.owners.map((owner) => ({
+          owner: owner.owner,
+          weight: Number(owner.weight)
+        })),
+        salt: value.salt,
+        threshold: Number(value.threshold),
+        version: Hex.fromNumber(value.version)
+      };
+    }
+    function toTuple3(config) {
+      assert10(config);
+      const owners = config.owners.map((owner) => [owner.owner, Hex.fromNumber(owner.weight)]);
+      const salt = config.salt ? Hex.padLeft(config.salt, 32) : exports.zeroSalt;
+      const version30 = BigInt(config.version ?? 0);
+      return [
+        salt,
+        version30 === 0n ? "0x" : Hex.fromNumber(version30),
+        Hex.fromNumber(config.threshold),
+        owners
+      ];
+    }
+    function update2(config, options) {
+      const current = from16(config);
+      if (current.version === exports.maxVersion)
+        throw new InvalidConfigError({ reason: "version overflow" });
+      return from16({
+        owners: options.owners,
+        salt: current.salt,
+        threshold: options.threshold,
+        version: current.version + 1n
+      });
+    }
+    function validate10(config) {
+      try {
+        assert10(config);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    var InvalidConfigError = class extends Errors.BaseError {
+      constructor({ reason }) {
+        super(`Invalid account config: ${reason}.`);
+        Object.defineProperty(this, "name", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: "AccountConfig.InvalidConfigError"
+        });
+      }
+    };
+    exports.InvalidConfigError = InvalidConfigError;
+    function assertVersion(version30) {
+      if (typeof version30 !== "bigint" && typeof version30 !== "number" || typeof version30 === "number" && !Number.isSafeInteger(version30) || BigInt(version30) < 0n || BigInt(version30) > exports.maxVersion)
+        throw new InvalidConfigError({
+          reason: "version must be an unsigned 64-bit integer"
+        });
+    }
+  }
+});
+
 // node_modules/ox/node_modules/@noble/curves/nist.js
 var require_nist = __commonJS({
   "node_modules/ox/node_modules/@noble/curves/nist.js"(exports) {
@@ -224298,266 +225138,12 @@ var require_WebAuthnP256 = __commonJS({
   }
 });
 
-// node_modules/ox/_cjs/core/ContractAddress.js
-var require_ContractAddress = __commonJS({
-  "node_modules/ox/_cjs/core/ContractAddress.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.from = from16;
-    exports.fromCreate = fromCreate;
-    exports.fromCreate2 = fromCreate2;
-    var Address = require_Address();
-    var Bytes = require_Bytes();
-    var Hash5 = require_Hash();
-    var Hex = require_Hex();
-    var Rlp = require_Rlp();
-    function from16(options) {
-      if (options.salt)
-        return fromCreate2(options);
-      return fromCreate(options);
-    }
-    function fromCreate(options) {
-      const from17 = Bytes.fromHex(Address.from(options.from));
-      let nonce = Bytes.fromNumber(options.nonce);
-      if (nonce[0] === 0)
-        nonce = new Uint8Array([]);
-      return Address.from(`0x${Hash5.keccak256(Rlp.fromBytes([from17, nonce], { as: "Hex" })).slice(26)}`);
-    }
-    function fromCreate2(options) {
-      const from17 = Bytes.fromHex(Address.from(options.from));
-      const salt = Bytes.padLeft(Bytes.validate(options.salt) ? options.salt : Bytes.fromHex(options.salt), 32);
-      const bytecodeHash = (() => {
-        if ("bytecodeHash" in options) {
-          if (Bytes.validate(options.bytecodeHash))
-            return options.bytecodeHash;
-          return Bytes.fromHex(options.bytecodeHash);
-        }
-        return Hash5.keccak256(options.bytecode, { as: "Bytes" });
-      })();
-      return Address.from(Hex.slice(Hash5.keccak256(Bytes.concat(Bytes.fromHex("0xff"), from17, salt, bytecodeHash), { as: "Hex" }), 12));
-    }
-  }
-});
-
-// node_modules/ox/_cjs/tempo/MultisigConfig.js
-var require_MultisigConfig = __commonJS({
-  "node_modules/ox/_cjs/tempo/MultisigConfig.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.InvalidConfigError = exports.zeroSalt = exports.signatureTypeByte = exports.maxVersion = exports.maxThreshold = exports.maxSignatures = exports.maxOwners = exports.maxOwnerSignatureBytes = void 0;
-    exports.assert = assert10;
-    exports.from = from16;
-    exports.fromRpc = fromRpc4;
-    exports.fromTuple = fromTuple2;
-    exports.getAddress = getAddress3;
-    exports.getCommitment = getCommitment;
-    exports.getSignPayload = getSignPayload2;
-    exports.toRpc = toRpc4;
-    exports.toTuple = toTuple3;
-    exports.validate = validate10;
-    var Address = require_Address();
-    var ContractAddress = require_ContractAddress();
-    var Errors = require_Errors();
-    var Hash5 = require_Hash();
-    var Hex = require_Hex();
-    exports.maxOwnerSignatureBytes = 2049;
-    exports.maxOwners = 48;
-    exports.maxSignatures = 8;
-    exports.maxThreshold = 8;
-    exports.maxVersion = 2n ** 64n - 1n;
-    exports.signatureTypeByte = "0x05";
-    exports.zeroSalt = `0x${"00".repeat(32)}`;
-    var accountDomain = "tempo:multisig:account";
-    var configDomain = "tempo:multisig:config";
-    var recoveryWalletInitCodeHash = "0x583cc63a2e37f645b43eac911b1a6d6de08b83abdc308c61364edda8cfc3bd37";
-    var signatureDomain = "tempo:multisig:signature";
-    function assert10(config) {
-      const { owners, salt, threshold, version: version30 = 0n } = config;
-      if (typeof salt !== "undefined" && Hex.size(salt) !== 32)
-        throw new InvalidConfigError({ reason: "salt must be 32 bytes" });
-      assertVersion(version30);
-      if (owners.length === 0)
-        throw new InvalidConfigError({ reason: "owners cannot be empty" });
-      if (owners.length > exports.maxOwners)
-        throw new InvalidConfigError({ reason: "too many owners" });
-      if (!Number.isInteger(Number(threshold)))
-        throw new InvalidConfigError({ reason: "threshold must be an integer" });
-      if (Number(threshold) < 1)
-        throw new InvalidConfigError({ reason: "threshold cannot be zero" });
-      if (Number(threshold) > exports.maxThreshold)
-        throw new InvalidConfigError({ reason: "threshold exceeds max threshold" });
-      let totalWeight = 0;
-      const weights = [];
-      let previous;
-      for (const owner of owners) {
-        if (!Address.validate(owner.owner) || Hex.toBigInt(owner.owner) === 0n)
-          throw new InvalidConfigError({ reason: "owner cannot be zero" });
-        if (!Number.isInteger(Number(owner.weight)))
-          throw new InvalidConfigError({
-            reason: "owner weight must be an integer"
-          });
-        if (Number(owner.weight) < 1)
-          throw new InvalidConfigError({ reason: "owner weight cannot be zero" });
-        const current = Hex.toBigInt(owner.owner);
-        if (typeof previous !== "undefined" && previous >= current)
-          throw new InvalidConfigError({
-            reason: "owners must be strictly ascending"
-          });
-        previous = current;
-        const weight = Number(owner.weight);
-        totalWeight += weight;
-        weights.push(weight);
-      }
-      if (totalWeight > 255)
-        throw new InvalidConfigError({
-          reason: "total owner weight exceeds u8 max"
-        });
-      if (Number(threshold) > totalWeight)
-        throw new InvalidConfigError({
-          reason: "threshold exceeds total owner weight"
-        });
-      const reachableWeight = weights.sort((a, b) => b - a).slice(0, exports.maxSignatures).reduce((sum, weight) => sum + weight, 0);
-      if (Number(threshold) > reachableWeight)
-        throw new InvalidConfigError({
-          reason: `threshold exceeds weight reachable by ${exports.maxSignatures} owner signatures`
-        });
-    }
-    function from16(config) {
-      const version30 = config.version ?? 0n;
-      assertVersion(version30);
-      const owners = [...config.owners].sort((a, b) => Hex.toBigInt(a.owner) < Hex.toBigInt(b.owner) ? -1 : 1);
-      const normalized = {
-        owners,
-        salt: config.salt ? Hex.padLeft(config.salt, 32) : exports.zeroSalt,
-        threshold: config.threshold,
-        version: BigInt(version30)
-      };
-      assert10(normalized);
-      return normalized;
-    }
-    function fromRpc4(config) {
-      return from16({
-        ...config,
-        version: Hex.toBigInt(config.version)
-      });
-    }
-    function fromTuple2(tuple) {
-      const [salt, version30, threshold, owners] = tuple;
-      if (tuple.length !== 4 || typeof salt !== "string" || Hex.size(salt) !== 32 || typeof version30 !== "string" || Hex.size(version30) > 8 || version30.startsWith("0x00") || typeof threshold !== "string" || Hex.size(threshold) > 1 || threshold.startsWith("0x00") || !Array.isArray(owners) || owners.some((owner) => !Array.isArray(owner) || owner.length !== 2 || typeof owner[0] !== "string" || !Address.validate(owner[0]) || typeof owner[1] !== "string" || Hex.size(owner[1]) > 1 || owner[1].startsWith("0x00")))
-        throw new InvalidConfigError({ reason: "invalid config RLP tuple" });
-      const config = {
-        salt: salt && salt !== "0x" ? Hex.padLeft(salt, 32) : exports.zeroSalt,
-        version: version30 === "0x" ? 0n : Hex.toBigInt(version30),
-        threshold: threshold === "0x" ? 0 : Hex.toNumber(threshold),
-        owners: owners.map((owner) => {
-          const [ownerAddress, weight] = owner;
-          return {
-            owner: ownerAddress,
-            weight: !weight || weight === "0x" ? 0 : Hex.toNumber(weight)
-          };
-        })
-      };
-      assert10(config);
-      return config;
-    }
-    function getAddress3(config, options) {
-      Address.assert(options.factory);
-      assert10(config);
-      if (BigInt(config.version ?? 0) !== 0n)
-        throw new InvalidConfigError({
-          reason: "account address requires version zero"
-        });
-      const accountSalt = Hash5.keccak256(Hex.concat(Hex.fromString(accountDomain), Hex.padLeft(config.salt ?? exports.zeroSalt, 32), Hex.fromNumber(config.threshold, { size: 1 }), Hex.fromNumber(config.owners.length, { size: 1 }), ...config.owners.flatMap((owner) => [
-        owner.owner,
-        Hex.fromNumber(owner.weight, { size: 1 })
-      ])));
-      const account = ContractAddress.fromCreate2({
-        bytecodeHash: recoveryWalletInitCodeHash,
-        from: options.factory,
-        salt: accountSalt
-      });
-      if (Hex.toBigInt(account) === 0n)
-        throw new InvalidConfigError({ reason: "derived account cannot be zero" });
-      if (config.owners.some((owner) => Address.isEqual(owner.owner, account)))
-        throw new InvalidConfigError({
-          reason: "derived account cannot be an owner"
-        });
-      return account;
-    }
-    function getCommitment(config) {
-      assert10(config);
-      return Hash5.keccak256(Hex.concat(Hex.fromString(configDomain), Hex.padLeft(config.salt ?? exports.zeroSalt, 32), Hex.fromNumber(config.version ?? 0n, { size: 8 }), Hex.fromNumber(config.threshold, { size: 1 }), Hex.fromNumber(config.owners.length, { size: 1 }), ...config.owners.flatMap((owner) => [
-        owner.owner,
-        Hex.fromNumber(owner.weight, { size: 1 })
-      ])));
-    }
-    function getSignPayload2(value) {
-      const { account, config, payload } = value;
-      assertVersion(config.version);
-      Address.assert(account);
-      if (Hex.size(Hex.from(payload)) !== 32)
-        throw new InvalidConfigError({ reason: "payload must be 32 bytes" });
-      return Hash5.keccak256(Hex.concat(Hex.fromString(signatureDomain), Hex.from(payload), account, Hex.fromNumber(config.version ?? 0n, { size: 8 })));
-    }
-    function toRpc4(config) {
-      const value = from16(config);
-      return {
-        owners: value.owners.map((owner) => ({
-          owner: owner.owner,
-          weight: Number(owner.weight)
-        })),
-        salt: value.salt,
-        threshold: Number(value.threshold),
-        version: Hex.fromNumber(value.version)
-      };
-    }
-    function toTuple3(config) {
-      assert10(config);
-      const owners = config.owners.map((owner) => [owner.owner, Hex.fromNumber(owner.weight)]);
-      const salt = config.salt ? Hex.padLeft(config.salt, 32) : exports.zeroSalt;
-      const version30 = BigInt(config.version ?? 0);
-      return [
-        salt,
-        version30 === 0n ? "0x" : Hex.fromNumber(version30),
-        Hex.fromNumber(config.threshold),
-        owners
-      ];
-    }
-    function validate10(config) {
-      try {
-        assert10(config);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    var InvalidConfigError = class extends Errors.BaseError {
-      constructor({ reason }) {
-        super(`Invalid native multisig config: ${reason}.`);
-        Object.defineProperty(this, "name", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: "MultisigConfig.InvalidConfigError"
-        });
-      }
-    };
-    exports.InvalidConfigError = InvalidConfigError;
-    function assertVersion(version30) {
-      if (typeof version30 !== "bigint" && typeof version30 !== "number" || typeof version30 === "number" && !Number.isSafeInteger(version30) || BigInt(version30) < 0n || BigInt(version30) > exports.maxVersion)
-        throw new InvalidConfigError({
-          reason: "version must be an unsigned 64-bit integer"
-        });
-    }
-  }
-});
-
 // node_modules/ox/_cjs/tempo/SignatureEnvelope.js
 var require_SignatureEnvelope = __commonJS({
   "node_modules/ox/_cjs/tempo/SignatureEnvelope.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.VerificationError = exports.InvalidMultisigApprovalError = exports.InvalidSerializedError = exports.MissingPropertiesError = exports.CoercionError = exports.types = exports.magicBytes = void 0;
+    exports.VerificationError = exports.InvalidApprovalError = exports.InvalidSerializedError = exports.MissingPropertiesError = exports.CoercionError = exports.types = exports.magicBytes = void 0;
     exports.assert = assert10;
     exports.extractAddress = extractAddress;
     exports.extractPublicKey = extractPublicKey;
@@ -224566,7 +225152,7 @@ var require_SignatureEnvelope = __commonJS({
     exports.fromRpc = fromRpc4;
     exports.getType = getType;
     exports.serialize = serialize3;
-    exports.sortMultisigApprovals = sortMultisigApprovals;
+    exports.sortApprovals = sortApprovals;
     exports.toRpc = toRpc4;
     exports.validate = validate10;
     exports.verify = verify3;
@@ -224579,12 +225165,12 @@ var require_SignatureEnvelope = __commonJS({
     var ox_Secp256k1 = require_Secp256k1();
     var Signature2 = require_Signature();
     var ox_WebAuthnP256 = require_WebAuthnP256();
-    var MultisigConfig = require_MultisigConfig();
+    var AccountConfig = require_AccountConfig();
     var serializedP256Type = "0x01";
     var serializedWebAuthnType = "0x02";
     var serializedKeychainType = "0x03";
     var serializedKeychainV2Type = "0x04";
-    var serializedMultisigType = "0x05";
+    var serializedConfigurableType = "0x05";
     exports.magicBytes = "0x7777777777777777777777777777777777777777777777777777777777777777";
     exports.types = ["secp256k1", "p256", "webAuthn"];
     function assert10(envelope) {
@@ -224648,9 +225234,9 @@ var require_SignatureEnvelope = __commonJS({
         assert10(keychain.inner);
         return;
       }
-      if (type === "multisig") {
-        const multisig = envelope;
-        assertMultisig(multisig);
+      if (type === "configurable") {
+        const configurable = envelope;
+        assertConfigurable(configurable);
         return;
       }
     }
@@ -224660,12 +225246,12 @@ var require_SignatureEnvelope = __commonJS({
       let inner = keychain.inner;
       while (getType(inner) === "keychain")
         inner = inner.inner;
-      if (getType(inner) === "multisig")
-        throw new InvalidMultisigApprovalError({
-          reason: "multisig access keys require keychain V2"
+      if (getType(inner) === "configurable")
+        throw new InvalidApprovalError({
+          reason: "configurable access keys require keychain V2"
         });
     }
-    function assertMultisig(envelope) {
+    function assertConfigurable(envelope) {
       const missing2 = [];
       if (!envelope.account)
         missing2.push("account");
@@ -224677,39 +225263,39 @@ var require_SignatureEnvelope = __commonJS({
         throw new MissingPropertiesError2({
           envelope,
           missing: missing2,
-          type: "multisig"
+          type: "configurable"
         });
       if (!Address.validate(envelope.account))
-        throw new InvalidMultisigApprovalError({
-          reason: "multisig account is invalid"
+        throw new InvalidApprovalError({
+          reason: "configurable account is invalid"
         });
       if (Hex.toBigInt(envelope.account) === 0n)
-        throw new InvalidMultisigApprovalError({
-          reason: "multisig account cannot be zero"
+        throw new InvalidApprovalError({
+          reason: "configurable account cannot be zero"
         });
       if (envelope.signatures.length === 0)
-        throw new InvalidMultisigApprovalError({
-          reason: "multisig signatures cannot be empty"
+        throw new InvalidApprovalError({
+          reason: "configurable signatures cannot be empty"
         });
-      if (envelope.signatures.length > MultisigConfig.maxSignatures)
-        throw new InvalidMultisigApprovalError({
-          reason: `multisig signatures exceed ${MultisigConfig.maxSignatures}`
+      if (envelope.signatures.length > AccountConfig.maxSignatures)
+        throw new InvalidApprovalError({
+          reason: `configurable signatures exceed ${AccountConfig.maxSignatures}`
         });
-      MultisigConfig.assert(envelope.config);
+      AccountConfig.assert(envelope.config);
       if ((envelope.config.version ?? 0n) === 0n && envelope.config.owners.some((owner) => Address.isEqual(owner.owner, envelope.account)))
-        throw new InvalidMultisigApprovalError({
+        throw new InvalidApprovalError({
           reason: "initial account cannot be an owner"
         });
       for (const inner of envelope.signatures) {
         const type = getType(inner);
-        if (type === "keychain" || type === "multisig")
-          throw new InvalidMultisigApprovalError({
+        if (type === "keychain" || type === "configurable")
+          throw new InvalidApprovalError({
             reason: "owner approvals must be primitive signatures"
           });
         assert10(inner);
-        if (Hex.size(serialize3(inner)) > MultisigConfig.maxOwnerSignatureBytes)
-          throw new InvalidMultisigApprovalError({
-            reason: `multisig owner signature exceeds ${MultisigConfig.maxOwnerSignatureBytes} bytes`
+        if (Hex.size(serialize3(inner)) > AccountConfig.maxOwnerSignatureBytes)
+          throw new InvalidApprovalError({
+            reason: `configurable owner signature exceeds ${AccountConfig.maxOwnerSignatureBytes} bytes`
           });
       }
     }
@@ -224720,7 +225306,7 @@ var require_SignatureEnvelope = __commonJS({
           return signature3.userAddress;
         return extractAddress({ ...options, signature: signature3.inner });
       }
-      if (signature3.type === "multisig")
+      if (signature3.type === "configurable")
         return signature3.account;
       return Address.fromPublicKey(extractPublicKey(options));
     }
@@ -224737,7 +225323,7 @@ var require_SignatureEnvelope = __commonJS({
           return signature3.publicKey;
         case "keychain":
           return extractPublicKey({ payload, signature: signature3.inner });
-        case "multisig":
+        case "configurable":
           throw new CoercionError({ envelope: signature3 });
       }
     }
@@ -224831,37 +225417,37 @@ var require_SignatureEnvelope = __commonJS({
         assert10(envelope);
         return envelope;
       }
-      if (typeId === serializedMultisigType) {
+      if (typeId === serializedConfigurableType) {
         const decoded = Rlp.toHex(data);
         if (!Array.isArray(decoded) || decoded.length !== 3)
           throw new InvalidSerializedError({
-            reason: "invalid multisig wire shape: expected exactly three fields",
+            reason: "invalid configurable wire shape: expected exactly three fields",
             serialized
           });
         const [account, config, signatures] = decoded;
         if (typeof account !== "string" || !Address.validate(account))
           throw new InvalidSerializedError({
-            reason: "invalid multisig account",
+            reason: "invalid configurable account",
             serialized
           });
         if (!Array.isArray(config))
           throw new InvalidSerializedError({
-            reason: "invalid multisig config",
+            reason: "invalid account config",
             serialized
           });
-        if (!Array.isArray(signatures) || signatures.length === 0 || signatures.length > MultisigConfig.maxSignatures)
+        if (!Array.isArray(signatures) || signatures.length === 0 || signatures.length > AccountConfig.maxSignatures)
           throw new InvalidSerializedError({
-            reason: "invalid multisig signatures list",
+            reason: "invalid configurable signatures list",
             serialized
           });
         const envelope = {
-          type: "multisig",
+          type: "configurable",
           account,
-          config: MultisigConfig.fromTuple(config),
+          config: AccountConfig.fromTuple(config),
           signatures: signatures.map((signature3) => {
-            if (!Hex.validate(signature3) || Hex.size(signature3) > MultisigConfig.maxOwnerSignatureBytes)
+            if (!Hex.validate(signature3) || Hex.size(signature3) > AccountConfig.maxOwnerSignatureBytes)
               throw new InvalidSerializedError({
-                reason: "invalid multisig owner signature",
+                reason: "invalid configurable owner signature",
                 serialized
               });
             if (Hex.size(signature3) !== 65 && !["0x01", "0x02"].includes(Hex.slice(signature3, 0, 1)))
@@ -224872,11 +225458,11 @@ var require_SignatureEnvelope = __commonJS({
             return deserialize(signature3);
           })
         };
-        assertMultisig(envelope);
+        assertConfigurable(envelope);
         return envelope;
       }
       throw new InvalidSerializedError({
-        reason: `Unknown signature type identifier: ${typeId}. Expected ${serializedP256Type} (P256), ${serializedWebAuthnType} (WebAuthn), ${serializedKeychainType} (Keychain V1), ${serializedKeychainV2Type} (Keychain V2), or ${serializedMultisigType} (Multisig)`,
+        reason: `Unknown signature type identifier: ${typeId}. Expected ${serializedP256Type} (P256), ${serializedWebAuthnType} (WebAuthn), ${serializedKeychainType} (Keychain V1), ${serializedKeychainV2Type} (Keychain V2), or ${serializedConfigurableType} (Configurable)`,
         serialized
       });
     }
@@ -224886,12 +225472,12 @@ var require_SignatureEnvelope = __commonJS({
       if (typeof value === "object" && value !== null && "r" in value && "s" in value && "yParity" in value)
         return { signature: value, type: "secp256k1" };
       const type = getType(value);
-      if (type === "multisig") {
-        const multisig = value;
+      if (type === "configurable") {
+        const configurable = value;
         return {
-          ...multisig,
-          config: MultisigConfig.from(multisig.config),
-          signatures: multisig.signatures.map((signature3) => from16(signature3)),
+          ...configurable,
+          config: AccountConfig.from(configurable.config),
+          signatures: configurable.signatures.map((signature3) => from16(signature3)),
           type
         };
       }
@@ -224919,8 +225505,8 @@ var require_SignatureEnvelope = __commonJS({
     }
     function fromRpc4(envelope) {
       if (typeof envelope === "string") {
-        const signature3 = deserialize(Hex.concat(serializedMultisigType, envelope));
-        if (signature3.type !== "multisig")
+        const signature3 = deserialize(Hex.concat(serializedConfigurableType, envelope));
+        if (signature3.type !== "configurable")
           throw new CoercionError({ envelope });
         return signature3;
       }
@@ -225013,7 +225599,7 @@ var require_SignatureEnvelope = __commonJS({
       if ("userAddress" in envelope && "inner" in envelope)
         return "keychain";
       if ("account" in envelope && "config" in envelope && "signatures" in envelope)
-        return "multisig";
+        return "configurable";
       throw new CoercionError({
         envelope
       });
@@ -225039,20 +225625,20 @@ var require_SignatureEnvelope = __commonJS({
         const keychainTypeId = keychain.version === "v1" ? serializedKeychainType : serializedKeychainV2Type;
         return Hex.concat(keychainTypeId, keychain.userAddress, serialize3(keychain.inner), options.magic ? exports.magicBytes : "0x");
       }
-      if (type === "multisig") {
-        const multisig = envelope;
-        assert10(multisig);
-        return Hex.concat(serializedMultisigType, Rlp.fromHex([
-          multisig.account,
-          MultisigConfig.toTuple(multisig.config),
-          multisig.signatures.map((signature3) => serialize3(signature3))
+      if (type === "configurable") {
+        const configurable = envelope;
+        assert10(configurable);
+        return Hex.concat(serializedConfigurableType, Rlp.fromHex([
+          configurable.account,
+          AccountConfig.toTuple(configurable.config),
+          configurable.signatures.map((signature3) => serialize3(signature3))
         ]), options.magic ? exports.magicBytes : "0x");
       }
       throw new CoercionError({ envelope });
     }
-    function sortMultisigApprovals(value) {
+    function sortApprovals(value) {
       const { signatures } = value;
-      const digest = MultisigConfig.getSignPayload(value);
+      const digest = AccountConfig.getSignPayload(value);
       return signatures.map((signature3) => ({
         key: Hex.toBigInt(extractAddress({ payload: digest, signature: signature3 })),
         signature: signature3
@@ -225101,7 +225687,7 @@ var require_SignatureEnvelope = __commonJS({
           ...keychain.version ? { version: keychain.version } : {}
         };
       }
-      if (type === "multisig")
+      if (type === "configurable")
         return Hex.slice(serialize3(envelope), 1);
       throw new CoercionError({ envelope });
     }
@@ -225198,18 +225784,18 @@ Provided: ${Json.stringify(envelope)}`);
       }
     };
     exports.InvalidSerializedError = InvalidSerializedError;
-    var InvalidMultisigApprovalError = class extends Errors.BaseError {
+    var InvalidApprovalError = class extends Errors.BaseError {
       constructor({ reason }) {
-        super(`Invalid native multisig owner approval: ${reason}.`);
+        super(`Invalid owner approval: ${reason}.`);
         Object.defineProperty(this, "name", {
           enumerable: true,
           configurable: true,
           writable: true,
-          value: "SignatureEnvelope.InvalidMultisigApprovalError"
+          value: "SignatureEnvelope.InvalidApprovalError"
         });
       }
     };
-    exports.InvalidMultisigApprovalError = InvalidMultisigApprovalError;
+    exports.InvalidApprovalError = InvalidApprovalError;
     var VerificationError2 = class extends Errors.BaseError {
       constructor() {
         super(...arguments);
@@ -225275,301 +225861,6 @@ var require_TempoAddress = __commonJS({
       }
     };
     exports.InvalidPrefixError = InvalidPrefixError2;
-  }
-});
-
-// node_modules/ox/_cjs/tempo/AuthorizationTempo.js
-var require_AuthorizationTempo = __commonJS({
-  "node_modules/ox/_cjs/tempo/AuthorizationTempo.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.from = from16;
-    exports.fromRpc = fromRpc4;
-    exports.fromRpcList = fromRpcList;
-    exports.fromTuple = fromTuple2;
-    exports.fromTupleList = fromTupleList;
-    exports.getSignPayload = getSignPayload2;
-    exports.hash = hash5;
-    exports.toRpc = toRpc4;
-    exports.toRpcList = toRpcList;
-    exports.toTuple = toTuple3;
-    exports.toTupleList = toTupleList;
-    var Hash5 = require_Hash();
-    var Hex = require_Hex();
-    var Rlp = require_Rlp();
-    var SignatureEnvelope = require_SignatureEnvelope();
-    var TempoAddress = require_TempoAddress();
-    function from16(authorization, options = {}) {
-      if (typeof authorization.chainId === "string")
-        return fromRpc4(authorization);
-      const resolved = {
-        ...authorization,
-        address: TempoAddress.resolve(authorization.address)
-      };
-      if (options.signature) {
-        return { ...resolved, signature: options.signature };
-      }
-      return resolved;
-    }
-    function fromRpc4(authorization) {
-      const { address: address2, chainId, nonce } = authorization;
-      const signature3 = SignatureEnvelope.fromRpc(authorization.signature);
-      return {
-        address: address2,
-        chainId: Number(chainId),
-        nonce: BigInt(nonce),
-        signature: signature3
-      };
-    }
-    function fromRpcList(authorizationList) {
-      return authorizationList.map((x) => fromRpc4(x));
-    }
-    function fromTuple2(tuple) {
-      const [chainId, address2, nonce, signatureSerialized] = tuple;
-      const args = {
-        address: address2,
-        chainId: chainId === "0x" ? 0 : Number(chainId),
-        nonce: nonce === "0x" ? 0n : BigInt(nonce)
-      };
-      if (signatureSerialized)
-        args.signature = SignatureEnvelope.deserialize(signatureSerialized);
-      return from16(args);
-    }
-    function fromTupleList(tupleList) {
-      const list = [];
-      for (const tuple of tupleList)
-        list.push(fromTuple2(tuple));
-      return list;
-    }
-    function getSignPayload2(authorization) {
-      return hash5(authorization, { presign: true });
-    }
-    function hash5(authorization, options = {}) {
-      const { presign } = options;
-      return Hash5.keccak256(Hex.concat("0x05", Rlp.fromHex(toTuple3(presign ? {
-        address: authorization.address,
-        chainId: authorization.chainId,
-        nonce: authorization.nonce
-      } : authorization))));
-    }
-    function toRpc4(authorization) {
-      const { address: address2, chainId, nonce, signature: signature3 } = authorization;
-      return {
-        address: address2,
-        chainId: Hex.fromNumber(chainId),
-        nonce: Hex.fromNumber(nonce),
-        signature: SignatureEnvelope.toRpc(signature3)
-      };
-    }
-    function toRpcList(authorizationList) {
-      return authorizationList.map((x) => toRpc4(x));
-    }
-    function toTuple3(authorization) {
-      const { address: address2, chainId, nonce } = authorization;
-      const signature3 = authorization.signature ? SignatureEnvelope.serialize(authorization.signature) : void 0;
-      return [
-        chainId ? Hex.fromNumber(chainId) : "0x",
-        address2,
-        nonce ? Hex.fromNumber(nonce) : "0x",
-        ...signature3 ? [signature3] : []
-      ];
-    }
-    function toTupleList(list) {
-      if (!list || list.length === 0)
-        return [];
-      const tupleList = [];
-      for (const authorization of list)
-        tupleList.push(toTuple3(authorization));
-      return tupleList;
-    }
-  }
-});
-
-// node_modules/ox/_cjs/tempo/TokenId.js
-var require_TokenId = __commonJS({
-  "node_modules/ox/_cjs/tempo/TokenId.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.from = from16;
-    exports.fromAddress = fromAddress;
-    exports.toAddress = toAddress;
-    exports.compute = compute;
-    var AbiParameters = require_AbiParameters();
-    var Address = require_Address();
-    var Hash5 = require_Hash();
-    var Hex = require_Hex();
-    var TempoAddress = require_TempoAddress();
-    var tip20Prefix = "0x20c0";
-    function from16(tokenIdOrAddress) {
-      if (typeof tokenIdOrAddress === "bigint" || typeof tokenIdOrAddress === "number")
-        return BigInt(tokenIdOrAddress);
-      return fromAddress(tokenIdOrAddress);
-    }
-    function fromAddress(address2) {
-      const resolved = TempoAddress.resolve(address2);
-      if (!resolved.toLowerCase().startsWith(tip20Prefix))
-        throw new Error("invalid tip20 address.");
-      return Hex.toBigInt(Hex.slice(resolved, tip20Prefix.length));
-    }
-    function toAddress(tokenId) {
-      if (typeof tokenId === "string") {
-        const resolved = TempoAddress.resolve(tokenId);
-        Address.assert(resolved);
-        return resolved;
-      }
-      const tokenIdHex = Hex.fromNumber(tokenId, { size: 18 });
-      return Hex.concat(tip20Prefix, tokenIdHex);
-    }
-    function compute(value) {
-      const hash5 = Hash5.keccak256(AbiParameters.encode(AbiParameters.from("address, bytes32"), [
-        TempoAddress.resolve(value.sender),
-        value.salt
-      ]));
-      return Hex.toBigInt(Hex.slice(hash5, 0, 8));
-    }
-  }
-});
-
-// node_modules/ox/_cjs/tempo/Channel.js
-var require_Channel = __commonJS({
-  "node_modules/ox/_cjs/tempo/Channel.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.voucherTypehash = exports.closeGracePeriod = exports.address = void 0;
-    exports.from = from16;
-    exports.computeId = computeId;
-    exports.domainSeparator = domainSeparator;
-    exports.getVoucherSignPayload = getVoucherSignPayload;
-    var AbiParameters = require_AbiParameters();
-    var Address = require_Address();
-    var Hash5 = require_Hash();
-    var Hex = require_Hex();
-    var TokenId = require_TokenId();
-    var channelIdParameters = AbiParameters.from("address, address, address, address, bytes32, address, bytes32, address, uint256");
-    var domainSeparatorParameters = AbiParameters.from("bytes32, bytes32, bytes32, uint256, address");
-    var voucherHashParameters = AbiParameters.from("bytes32, bytes32, uint96");
-    var eip712DomainTypehash = Hash5.keccak256(Hex.fromString("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"));
-    var nameHash = Hash5.keccak256(Hex.fromString("TIP20 Channel Reserve"));
-    var versionHash = Hash5.keccak256(Hex.fromString("1"));
-    var zeroAddress2 = "0x0000000000000000000000000000000000000000";
-    exports.address = "0x4d50500000000000000000000000000000000000";
-    exports.closeGracePeriod = 900n;
-    exports.voucherTypehash = Hash5.keccak256(Hex.fromString("Voucher(bytes32 channelId,uint96 cumulativeAmount)"));
-    function from16(value) {
-      const { authorizedSigner = zeroAddress2, expiringNonceHash, operator = zeroAddress2, payee, payer, salt, token } = value;
-      return {
-        authorizedSigner: resolveAddress(authorizedSigner),
-        expiringNonceHash,
-        operator: resolveAddress(operator),
-        payee: resolveAddress(payee),
-        payer: resolveAddress(payer),
-        salt,
-        token: typeof token === "string" ? resolveAddress(token) : TokenId.toAddress(token)
-      };
-    }
-    function computeId(channel, options) {
-      const channel_ = from16(channel);
-      return Hash5.keccak256(AbiParameters.encode(channelIdParameters, [
-        channel_.payer,
-        channel_.payee,
-        channel_.operator,
-        channel_.token,
-        channel_.salt,
-        channel_.authorizedSigner,
-        channel_.expiringNonceHash,
-        exports.address,
-        BigInt(options.chainId)
-      ]));
-    }
-    function domainSeparator(value) {
-      return Hash5.keccak256(AbiParameters.encode(domainSeparatorParameters, [
-        eip712DomainTypehash,
-        nameHash,
-        versionHash,
-        BigInt(value.chainId),
-        exports.address
-      ]));
-    }
-    function getVoucherSignPayload(value) {
-      const voucherHash = Hash5.keccak256(AbiParameters.encode(voucherHashParameters, [
-        exports.voucherTypehash,
-        value.channelId,
-        value.cumulativeAmount
-      ]));
-      return Hash5.keccak256(Hex.concat("0x1901", domainSeparator({ chainId: value.chainId }), voucherHash));
-    }
-    function resolveAddress(address2) {
-      return Address.from(address2);
-    }
-  }
-});
-
-// node_modules/ox/_cjs/tempo/EarnShares.js
-var require_EarnShares = __commonJS({
-  "node_modules/ox/_cjs/tempo/EarnShares.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.InvalidSlippageError = exports.InvalidExpectedOutputError = exports.basisPointScale = void 0;
-    exports.toAmount = toAmount2;
-    exports.toAmountUp = toAmountUp;
-    exports.toVenueAmount = toVenueAmount;
-    exports.feeShares = feeShares;
-    exports.minimumOutput = minimumOutput;
-    var Errors = require_Errors();
-    exports.basisPointScale = 1e4;
-    function toAmount2(anchor, venueShareAmount) {
-      return venueShareAmount * anchor.shareSupply / anchor.engineShares;
-    }
-    function toAmountUp(anchor, venueShareAmount) {
-      const { engineShares, shareSupply } = anchor;
-      return (venueShareAmount * shareSupply + engineShares - 1n) / engineShares;
-    }
-    function toVenueAmount(anchor, shareAmount) {
-      return shareAmount * anchor.engineShares / anchor.shareSupply;
-    }
-    function feeShares(options) {
-      const { activeAssets, shareSupply, totalFeeAssets } = options;
-      if (totalFeeAssets === 0n || totalFeeAssets >= activeAssets)
-        return 0n;
-      return totalFeeAssets * shareSupply / (activeAssets - totalFeeAssets);
-    }
-    function minimumOutput(expectedAmount, slippageBps) {
-      if (expectedAmount <= 0n)
-        throw new InvalidExpectedOutputError({ expectedAmount });
-      if (!Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps >= exports.basisPointScale)
-        throw new InvalidSlippageError({ slippageBps });
-      const scale = BigInt(exports.basisPointScale);
-      const bounded = expectedAmount * (scale - BigInt(slippageBps)) / scale;
-      return bounded === 0n ? 1n : bounded;
-    }
-    var InvalidExpectedOutputError = class extends Errors.BaseError {
-      constructor(options) {
-        super(`Expected output \`${options.expectedAmount}\` must be greater than zero.`);
-        Object.defineProperty(this, "name", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: "EarnShares.InvalidExpectedOutputError"
-        });
-      }
-    };
-    exports.InvalidExpectedOutputError = InvalidExpectedOutputError;
-    var InvalidSlippageError = class extends Errors.BaseError {
-      constructor(options) {
-        super(`Slippage tolerance \`${options.slippageBps}\` is invalid.`, {
-          metaMessages: [
-            `Slippage must be a whole number from 0 through ${exports.basisPointScale - 1} basis points.`
-          ]
-        });
-        Object.defineProperty(this, "name", {
-          enumerable: true,
-          configurable: true,
-          writable: true,
-          value: "EarnShares.InvalidSlippageError"
-        });
-      }
-    };
-    exports.InvalidSlippageError = InvalidSlippageError;
   }
 });
 
@@ -225639,7 +225930,8 @@ var require_KeyAuthorization = __commonJS({
       const witness = authorization.witness ?? void 0;
       const isAdmin = authorization.isAdmin ?? void 0;
       const account = authorization.account ?? void 0;
-      assertAccountBinding(keyType, account);
+      const type = keyType === "multisig" ? "configurable" : keyType;
+      assertAccountBinding(type, account);
       const signature3 = SignatureEnvelope.fromRpc(authorization.signature);
       assertSignature(signature3);
       if (witness !== void 0)
@@ -225664,7 +225956,7 @@ var require_KeyAuthorization = __commonJS({
         })),
         ...scopes ? { scopes } : {},
         signature: signature3,
-        ...keyType === "multisig" ? { account, type: keyType } : { type: keyType },
+        ...type === "configurable" ? { account, type } : { type },
         ...witness !== void 0 ? { witness } : {},
         ...account !== void 0 ? { account } : {},
         ...isAdmin ? { isAdmin: true } : {}
@@ -225683,14 +225975,14 @@ var require_KeyAuthorization = __commonJS({
           case "0x02":
             return "webAuthn";
           case "0x03":
-            return "multisig";
+            return "configurable";
           default:
             throw new Error(`Invalid key type: ${keyType_hex}`);
         }
       })();
       const [rawExpiry, rawLimits, rawScopes, rawWitness, rawIsAdmin, rawAccount] = trailing;
       const expiry = isAbsent(rawExpiry) ? void 0 : hexToNumber5(rawExpiry) || void 0;
-      const limits = Array.isArray(rawLimits) && rawLimits.length > 0 ? rawLimits.map((limitTuple) => {
+      const limits = Array.isArray(rawLimits) ? rawLimits.map((limitTuple) => {
         const [token, limit, period] = limitTuple;
         return {
           token,
@@ -225726,7 +226018,7 @@ var require_KeyAuthorization = __commonJS({
       const args = {
         address: keyId,
         chainId: chainId === "0x" ? 0n : Hex.toBigInt(chainId),
-        ...keyType === "multisig" ? { account, type: keyType } : { type: keyType },
+        ...keyType === "configurable" ? { account, type: keyType } : { type: keyType },
         ...expiry !== void 0 ? { expiry } : {},
         ...limits !== void 0 ? { limits } : {},
         ...scopes !== void 0 ? { scopes } : {},
@@ -225787,7 +226079,7 @@ var require_KeyAuthorization = __commonJS({
         chainId: chainId === 0n ? "0x" : Hex.fromNumber(chainId),
         expiry: typeof expiry === "number" ? Hex.fromNumber(expiry) : null,
         keyId: TempoAddress.resolve(address2),
-        ...type === "multisig" ? { account, keyType: type } : { keyType: type },
+        ...type === "configurable" ? { account, keyType: "multisig" } : { keyType: type },
         limits: limits?.map(({ token, limit, period }) => ({
           token,
           limit: Hex.fromNumber(limit),
@@ -225820,7 +226112,7 @@ var require_KeyAuthorization = __commonJS({
             return "0x01";
           case "webAuthn":
             return "0x02";
-          case "multisig":
+          case "configurable":
             return "0x03";
           default:
             throw new Error(`Invalid key type: ${keyType}`);
@@ -225852,7 +226144,6 @@ var require_KeyAuthorization = __commonJS({
           selectorRules.map(([selector, recipients]) => [selector, recipients])
         ]);
       })();
-      const hasTip1053Plus = witness !== void 0 || isAdmin || account !== void 0;
       const optionals = [
         {
           value: expiry !== null && expiry !== void 0 && expiry !== 0 ? numberToHex2(expiry) : void 0,
@@ -225860,7 +226151,7 @@ var require_KeyAuthorization = __commonJS({
         },
         {
           value: limitsValue,
-          placeholder: hasTip1053Plus ? "0x" : []
+          placeholder: "0x"
         },
         { value: callsValue, placeholder: "0x" },
         { value: witness, placeholder: "0x" },
@@ -225904,7 +226195,7 @@ var require_KeyAuthorization = __commonJS({
       return AbiItem.getSelector(selector);
     }
     function assertAccountBinding(type, account) {
-      if (type === "multisig" && account == null)
+      if (type === "configurable" && account == null)
         throw new MissingAccountError();
     }
     function assertWitness(witness) {
@@ -225944,7 +226235,7 @@ var require_KeyAuthorization = __commonJS({
     exports.InvalidAdminMarkerError = InvalidAdminMarkerError;
     var InvalidSignatureTypeError = class extends Error {
       constructor(type) {
-        super(`Signature type \`${type}\` is invalid for key authorizations; expected \`secp256k1\`, \`p256\`, \`webAuthn\`, or \`multisig\`.`);
+        super(`Signature type \`${type}\` is invalid for key authorizations; expected \`secp256k1\`, \`p256\`, \`webAuthn\`, or \`configurable\`.`);
         Object.defineProperty(this, "name", {
           enumerable: true,
           configurable: true,
@@ -225956,7 +226247,7 @@ var require_KeyAuthorization = __commonJS({
     exports.InvalidSignatureTypeError = InvalidSignatureTypeError;
     var MissingAccountError = class extends Error {
       constructor() {
-        super("Multisig key grants require a parent account binding.");
+        super("Configurable account key grants require a parent account binding.");
         Object.defineProperty(this, "name", {
           enumerable: true,
           configurable: true,
@@ -226194,6 +226485,158 @@ var require_TxEnvelope = __commonJS({
       }
     };
     exports.TipAboveFeeCapError = TipAboveFeeCapError2;
+  }
+});
+
+// node_modules/ox/_cjs/tempo/AuthorizationTempo.js
+var require_AuthorizationTempo = __commonJS({
+  "node_modules/ox/_cjs/tempo/AuthorizationTempo.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.from = from16;
+    exports.fromRpc = fromRpc4;
+    exports.fromRpcList = fromRpcList;
+    exports.fromTuple = fromTuple2;
+    exports.fromTupleList = fromTupleList;
+    exports.getSignPayload = getSignPayload2;
+    exports.hash = hash5;
+    exports.toRpc = toRpc4;
+    exports.toRpcList = toRpcList;
+    exports.toTuple = toTuple3;
+    exports.toTupleList = toTupleList;
+    var Hash5 = require_Hash();
+    var Hex = require_Hex();
+    var Rlp = require_Rlp();
+    var SignatureEnvelope = require_SignatureEnvelope();
+    var TempoAddress = require_TempoAddress();
+    function from16(authorization, options = {}) {
+      if (typeof authorization.chainId === "string")
+        return fromRpc4(authorization);
+      const resolved = {
+        ...authorization,
+        address: TempoAddress.resolve(authorization.address)
+      };
+      if (options.signature) {
+        return { ...resolved, signature: options.signature };
+      }
+      return resolved;
+    }
+    function fromRpc4(authorization) {
+      const { address: address2, chainId, nonce } = authorization;
+      const signature3 = SignatureEnvelope.fromRpc(authorization.signature);
+      return {
+        address: address2,
+        chainId: Number(chainId),
+        nonce: BigInt(nonce),
+        signature: signature3
+      };
+    }
+    function fromRpcList(authorizationList) {
+      return authorizationList.map((x) => fromRpc4(x));
+    }
+    function fromTuple2(tuple) {
+      const [chainId, address2, nonce, signatureSerialized] = tuple;
+      const args = {
+        address: address2,
+        chainId: chainId === "0x" ? 0 : Number(chainId),
+        nonce: nonce === "0x" ? 0n : BigInt(nonce)
+      };
+      if (signatureSerialized)
+        args.signature = SignatureEnvelope.deserialize(signatureSerialized);
+      return from16(args);
+    }
+    function fromTupleList(tupleList) {
+      const list = [];
+      for (const tuple of tupleList)
+        list.push(fromTuple2(tuple));
+      return list;
+    }
+    function getSignPayload2(authorization) {
+      return hash5(authorization, { presign: true });
+    }
+    function hash5(authorization, options = {}) {
+      const { presign } = options;
+      return Hash5.keccak256(Hex.concat("0x05", Rlp.fromHex(toTuple3(presign ? {
+        address: authorization.address,
+        chainId: authorization.chainId,
+        nonce: authorization.nonce
+      } : authorization))));
+    }
+    function toRpc4(authorization) {
+      const { address: address2, chainId, nonce, signature: signature3 } = authorization;
+      return {
+        address: address2,
+        chainId: Hex.fromNumber(chainId),
+        nonce: Hex.fromNumber(nonce),
+        signature: SignatureEnvelope.toRpc(signature3)
+      };
+    }
+    function toRpcList(authorizationList) {
+      return authorizationList.map((x) => toRpc4(x));
+    }
+    function toTuple3(authorization) {
+      const { address: address2, chainId, nonce } = authorization;
+      const signature3 = authorization.signature ? SignatureEnvelope.serialize(authorization.signature) : void 0;
+      return [
+        chainId ? Hex.fromNumber(chainId) : "0x",
+        address2,
+        nonce ? Hex.fromNumber(nonce) : "0x",
+        ...signature3 ? [signature3] : []
+      ];
+    }
+    function toTupleList(list) {
+      if (!list || list.length === 0)
+        return [];
+      const tupleList = [];
+      for (const authorization of list)
+        tupleList.push(toTuple3(authorization));
+      return tupleList;
+    }
+  }
+});
+
+// node_modules/ox/_cjs/tempo/TokenId.js
+var require_TokenId = __commonJS({
+  "node_modules/ox/_cjs/tempo/TokenId.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.from = from16;
+    exports.fromAddress = fromAddress;
+    exports.toAddress = toAddress;
+    exports.compute = compute;
+    var AbiParameters = require_AbiParameters();
+    var Address = require_Address();
+    var Hash5 = require_Hash();
+    var Hex = require_Hex();
+    var TempoAddress = require_TempoAddress();
+    var tip20Prefix = "0x20c0";
+    function from16(tokenIdOrAddress) {
+      if (typeof tokenIdOrAddress === "bigint" || typeof tokenIdOrAddress === "number")
+        return BigInt(tokenIdOrAddress);
+      return fromAddress(tokenIdOrAddress);
+    }
+    function fromAddress(address2) {
+      const resolved = TempoAddress.resolve(address2);
+      if (!resolved.toLowerCase().startsWith(tip20Prefix))
+        throw new Error("invalid tip20 address.");
+      return Hex.toBigInt(Hex.slice(resolved, tip20Prefix.length));
+    }
+    function toAddress(tokenId) {
+      if (typeof tokenId === "string") {
+        const resolved = TempoAddress.resolve(tokenId);
+        Address.assert(resolved);
+        return resolved;
+      }
+      const tokenIdHex = Hex.fromNumber(tokenId, { size: 18 });
+      return Hex.concat(tip20Prefix, tokenIdHex);
+    }
+    function compute(value) {
+      const hash5 = Hash5.keccak256(AbiParameters.encode(AbiParameters.from("address, bytes32"), [
+        TempoAddress.resolve(value.sender),
+        value.salt
+      ]));
+      return Hex.toBigInt(Hex.slice(hash5, 0, 8));
+    }
   }
 });
 
@@ -226485,9 +226928,9 @@ var require_TxEnvelopeTempo = __commonJS({
   }
 });
 
-// node_modules/ox/_cjs/tempo/MultisigOperation.js
-var require_MultisigOperation = __commonJS({
-  "node_modules/ox/_cjs/tempo/MultisigOperation.js"(exports) {
+// node_modules/ox/_cjs/tempo/AccountOperation.js
+var require_AccountOperation = __commonJS({
+  "node_modules/ox/_cjs/tempo/AccountOperation.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.InvalidOperationError = exports.InvalidApprovalError = void 0;
@@ -226502,14 +226945,14 @@ var require_MultisigOperation = __commonJS({
     var Errors = require_Errors();
     var Hash5 = require_Hash();
     var Hex = require_Hex();
+    var AccountConfig = require_AccountConfig();
     var KeyAuthorization_ = require_KeyAuthorization();
-    var MultisigConfig = require_MultisigConfig();
     var SignatureEnvelope = require_SignatureEnvelope();
     var TxEnvelopeTempo = require_TxEnvelopeTempo();
     function getHash3(options) {
       const { account, config } = options;
       const payload = options.type === "transaction" ? TxEnvelopeTempo.getSignPayload(TxEnvelopeTempo.deserialize(options.transaction)) : KeyAuthorization_.getSignPayload(KeyAuthorization_.deserialize(options.keyAuthorization));
-      return MultisigConfig.getSignPayload({
+      return AccountConfig.getSignPayload({
         account,
         config,
         payload
@@ -226521,7 +226964,7 @@ var require_MultisigOperation = __commonJS({
         throw new InvalidApprovalError({ reason: "account is invalid" });
       if (!Hash5.validate(hash5))
         throw new InvalidApprovalError({ reason: "hash is invalid" });
-      const config = MultisigConfig.from(options.config);
+      const config = AccountConfig.from(options.config);
       return selectApprovals_internal({
         account,
         approvals,
@@ -226539,8 +226982,8 @@ var require_MultisigOperation = __commonJS({
         throw new InvalidOperationError({
           reason: "keyAuthorization is not canonically serialized"
         });
-      const config = MultisigConfig.from(options.config);
-      const signatures = SignatureEnvelope.sortMultisigApprovals({
+      const config = AccountConfig.from(options.config);
+      const signatures = SignatureEnvelope.sortApprovals({
         account: options.account,
         config,
         payload: KeyAuthorization_.getSignPayload(authorization),
@@ -226559,7 +227002,7 @@ var require_MultisigOperation = __commonJS({
       const envelope = TxEnvelopeTempo.deserialize(value.transaction);
       const approvals = options.approvals.map((approval) => assertApproval(value.account, approval, value.config));
       assertRetainedApprovals(value, approvals);
-      const signatures = SignatureEnvelope.sortMultisigApprovals({
+      const signatures = SignatureEnvelope.sortApprovals({
         account: value.account,
         config: value.config,
         payload: TxEnvelopeTempo.getSignPayload(envelope),
@@ -226578,7 +227021,7 @@ var require_MultisigOperation = __commonJS({
     }
     function from16(operation) {
       try {
-        const config = MultisigConfig.from(operation.config);
+        const config = AccountConfig.from(operation.config);
         if (typeof config.threshold !== "number" || config.owners.some((owner) => typeof owner.weight !== "number"))
           throw new InvalidOperationError({
             reason: "config threshold and owner weights must be numbers"
@@ -226612,7 +227055,7 @@ var require_MultisigOperation = __commonJS({
           });
         return from16({
           ...operation,
-          config: MultisigConfig.fromRpc(operation.config)
+          config: AccountConfig.fromRpc(operation.config)
         });
       } catch (cause) {
         if (cause instanceof InvalidOperationError)
@@ -226624,7 +227067,7 @@ var require_MultisigOperation = __commonJS({
       const value = from16(operation);
       return {
         ...value,
-        config: MultisigConfig.toRpc(value.config)
+        config: AccountConfig.toRpc(value.config)
       };
     }
     async function selectApprovals_internal(options) {
@@ -226635,9 +227078,9 @@ var require_MultisigOperation = __commonJS({
       const groups = /* @__PURE__ */ new Map();
       for (const serialized of options.approvals) {
         const signature3 = SignatureEnvelope.from(serialized);
-        if (signature3.type === "keychain" || signature3.type === "multisig")
+        if (signature3.type === "keychain" || signature3.type === "configurable")
           throw new InvalidApprovalError({
-            reason: "only primitive signatures can approve a multisig operation"
+            reason: "only primitive signatures can approve an account operation"
           });
         const address2 = SignatureEnvelope.extractAddress({
           payload: options.hash,
@@ -226683,7 +227126,7 @@ var require_MultisigOperation = __commonJS({
       const ranked = valid.sort((a, b) => b.weight - a.weight || compareApprovalAddress(a, b));
       const selected = [];
       let weight = 0;
-      for (const approval of ranked.slice(0, MultisigConfig.maxSignatures)) {
+      for (const approval of ranked.slice(0, AccountConfig.maxSignatures)) {
         if (weight >= Number(options.config.threshold))
           break;
         selected.push(approval);
@@ -226730,7 +227173,7 @@ var require_MultisigOperation = __commonJS({
         });
       if (operation.weight > 255)
         throw new InvalidOperationError({ reason: "weight exceeds u8 max" });
-      if (operation.signatureCount > MultisigConfig.maxSignatures)
+      if (operation.signatureCount > AccountConfig.maxSignatures)
         throw new InvalidOperationError({ reason: "too many selected signatures" });
       if (!Array.isArray(operation.approvals))
         throw new InvalidOperationError({ reason: "approvals must be an array" });
@@ -226864,9 +227307,9 @@ var require_MultisigOperation = __commonJS({
           reason: "pending key authorizations must be unsigned"
         });
       if (operation.status === "success") {
-        if (signature3?.type !== "multisig")
+        if (signature3?.type !== "configurable")
           throw new InvalidOperationError({
-            reason: "successful key authorizations require a multisig signature"
+            reason: "successful key authorizations require a configurable account signature"
           });
         if (signature3.account.toLowerCase() !== operation.account.toLowerCase())
           throw new InvalidOperationError({
@@ -226890,7 +227333,7 @@ var require_MultisigOperation = __commonJS({
     }
     function assertApproval(account, serialized, config) {
       const approval = SignatureEnvelope.deserialize(serialized);
-      if (approval.type === "keychain" || approval.type === "multisig")
+      if (approval.type === "keychain" || approval.type === "configurable")
         throw new InvalidOperationError({
           reason: "only primitive owner approvals are allowed"
         });
@@ -226898,7 +227341,7 @@ var require_MultisigOperation = __commonJS({
         account,
         config,
         signatures: [approval],
-        type: "multisig"
+        type: "configurable"
       });
       if (SignatureEnvelope.serialize(approval).toLowerCase() !== serialized.toLowerCase())
         throw new InvalidOperationError({ reason: "approval is not canonical" });
@@ -226925,7 +227368,7 @@ var require_MultisigOperation = __commonJS({
           });
         retained.splice(index2, 1);
       }
-      const digest = MultisigConfig.getSignPayload({
+      const digest = AccountConfig.getSignPayload({
         account: operation.account,
         config: operation.config,
         payload: KeyAuthorization_.getSignPayload(authorization)
@@ -226954,7 +227397,7 @@ var require_MultisigOperation = __commonJS({
       return reachable[signatureCount].has(weight);
     }
     function assertOperationHash(operation, payload) {
-      const hash5 = MultisigConfig.getSignPayload({
+      const hash5 = AccountConfig.getSignPayload({
         account: operation.account,
         config: operation.config,
         payload
@@ -226971,33 +227414,33 @@ var require_MultisigOperation = __commonJS({
         });
     }
     function sameConfig(a, b) {
-      const configA = MultisigConfig.from(a);
-      const configB = MultisigConfig.from(b);
-      return Hex.isEqual(configA.salt ?? MultisigConfig.zeroSalt, configB.salt ?? MultisigConfig.zeroSalt) && configA.threshold === configB.threshold && configA.version === configB.version && configA.owners.length === configB.owners.length && configA.owners.every((owner, index2) => {
+      const configA = AccountConfig.from(a);
+      const configB = AccountConfig.from(b);
+      return Hex.isEqual(configA.salt ?? AccountConfig.zeroSalt, configB.salt ?? AccountConfig.zeroSalt) && configA.threshold === configB.threshold && configA.version === configB.version && configA.owners.length === configB.owners.length && configA.owners.every((owner, index2) => {
         const other = configB.owners[index2];
         return Address.isEqual(owner.owner, other.owner) && owner.weight === other.weight;
       });
     }
     var InvalidApprovalError = class extends Errors.BaseError {
       constructor(options = {}) {
-        super(options.reason ? `Invalid multisig approval: ${options.reason}.` : "Invalid multisig approval.", { cause: options.cause });
+        super(options.reason ? `Invalid operation approval: ${options.reason}.` : "Invalid operation approval.", { cause: options.cause });
         Object.defineProperty(this, "name", {
           enumerable: true,
           configurable: true,
           writable: true,
-          value: "MultisigOperation.InvalidApprovalError"
+          value: "AccountOperation.InvalidApprovalError"
         });
       }
     };
     exports.InvalidApprovalError = InvalidApprovalError;
     var InvalidOperationError = class extends Errors.BaseError {
       constructor(options = {}) {
-        super(options.reason ? `Invalid multisig operation: ${options.reason}.` : "Invalid multisig operation.", { cause: options.cause });
+        super(options.reason ? `Invalid account operation: ${options.reason}.` : "Invalid account operation.", { cause: options.cause });
         Object.defineProperty(this, "name", {
           enumerable: true,
           configurable: true,
           writable: true,
-          value: "MultisigOperation.InvalidOperationError"
+          value: "AccountOperation.InvalidOperationError"
         });
       }
     };
@@ -227005,9 +227448,9 @@ var require_MultisigOperation = __commonJS({
   }
 });
 
-// node_modules/ox/_cjs/tempo/MultisigSimulation.js
-var require_MultisigSimulation = __commonJS({
-  "node_modules/ox/_cjs/tempo/MultisigSimulation.js"(exports) {
+// node_modules/ox/_cjs/tempo/AccountSimulation.js
+var require_AccountSimulation = __commonJS({
+  "node_modules/ox/_cjs/tempo/AccountSimulation.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.InvalidSimulationError = void 0;
@@ -227017,7 +227460,7 @@ var require_MultisigSimulation = __commonJS({
     var Errors = require_Errors();
     var Hex = require_Hex();
     var Rlp = require_Rlp();
-    var MultisigConfig = require_MultisigConfig();
+    var AccountConfig = require_AccountConfig();
     function fromRpc4(spec) {
       const { approvals, config } = spec;
       assertApprovals(approvals);
@@ -227040,9 +227483,9 @@ var require_MultisigSimulation = __commonJS({
         throw new InvalidSimulationError({
           reason: "only untagged primitive owner approvals are allowed"
         });
-      if (approvals.length > MultisigConfig.maxSignatures)
+      if (approvals.length > AccountConfig.maxSignatures)
         throw new InvalidSimulationError({
-          reason: `approval count exceeds ${MultisigConfig.maxSignatures}`
+          reason: `approval count exceeds ${AccountConfig.maxSignatures}`
         });
     }
     function deserializeConfig(config) {
@@ -227052,14 +227495,14 @@ var require_MultisigSimulation = __commonJS({
       const [salt, version30, threshold, owners] = tuple;
       if (Array.isArray(salt) || Hex.size(salt) !== 32 || Array.isArray(version30) || Hex.size(version30) > 8 || version30 !== "0x" && Hex.slice(version30, 0, 1) === "0x00" || Array.isArray(threshold) || Hex.size(threshold) > 1 || !Array.isArray(owners) || owners.some((owner) => !Array.isArray(owner) || owner.length !== 2 || owner.some(Array.isArray) || !Address.validate(owner[0]) || Hex.size(owner[1]) > 1))
         throw new InvalidSimulationError({ reason: "invalid config encoding" });
-      const value = MultisigConfig.fromTuple(tuple);
-      MultisigConfig.assert(value);
+      const value = AccountConfig.fromTuple(tuple);
+      AccountConfig.assert(value);
       if (!Hex.isEqual(config, serializeConfig(value)))
         throw new InvalidSimulationError({ reason: "noncanonical config encoding" });
       return value;
     }
     function serializeConfig(config) {
-      return Rlp.fromHex(MultisigConfig.toTuple(config));
+      return Rlp.fromHex(AccountConfig.toTuple(config));
     }
     function shimKeyData(data) {
       const size5 = Hex.size(data);
@@ -227069,16 +227512,159 @@ var require_MultisigSimulation = __commonJS({
     }
     var InvalidSimulationError = class extends Errors.BaseError {
       constructor(options) {
-        super(`Invalid multisig simulation: ${options.reason}.`);
+        super(`Invalid account simulation: ${options.reason}.`);
         Object.defineProperty(this, "name", {
           enumerable: true,
           configurable: true,
           writable: true,
-          value: "MultisigSimulation.InvalidSimulationError"
+          value: "AccountSimulation.InvalidSimulationError"
         });
       }
     };
     exports.InvalidSimulationError = InvalidSimulationError;
+  }
+});
+
+// node_modules/ox/_cjs/tempo/Channel.js
+var require_Channel = __commonJS({
+  "node_modules/ox/_cjs/tempo/Channel.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.voucherTypehash = exports.closeGracePeriod = exports.address = void 0;
+    exports.from = from16;
+    exports.computeId = computeId;
+    exports.domainSeparator = domainSeparator;
+    exports.getVoucherSignPayload = getVoucherSignPayload;
+    var AbiParameters = require_AbiParameters();
+    var Address = require_Address();
+    var Hash5 = require_Hash();
+    var Hex = require_Hex();
+    var TokenId = require_TokenId();
+    var channelIdParameters = AbiParameters.from("address, address, address, address, bytes32, address, bytes32, address, uint256");
+    var domainSeparatorParameters = AbiParameters.from("bytes32, bytes32, bytes32, uint256, address");
+    var voucherHashParameters = AbiParameters.from("bytes32, bytes32, uint96");
+    var eip712DomainTypehash = Hash5.keccak256(Hex.fromString("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"));
+    var nameHash = Hash5.keccak256(Hex.fromString("TIP20 Channel Reserve"));
+    var versionHash = Hash5.keccak256(Hex.fromString("1"));
+    var zeroAddress2 = "0x0000000000000000000000000000000000000000";
+    exports.address = "0x4d50500000000000000000000000000000000000";
+    exports.closeGracePeriod = 900n;
+    exports.voucherTypehash = Hash5.keccak256(Hex.fromString("Voucher(bytes32 channelId,uint96 cumulativeAmount)"));
+    function from16(value) {
+      const { authorizedSigner = zeroAddress2, expiringNonceHash, operator = zeroAddress2, payee, payer, salt, token } = value;
+      return {
+        authorizedSigner: resolveAddress(authorizedSigner),
+        expiringNonceHash,
+        operator: resolveAddress(operator),
+        payee: resolveAddress(payee),
+        payer: resolveAddress(payer),
+        salt,
+        token: typeof token === "string" ? resolveAddress(token) : TokenId.toAddress(token)
+      };
+    }
+    function computeId(channel, options) {
+      const channel_ = from16(channel);
+      return Hash5.keccak256(AbiParameters.encode(channelIdParameters, [
+        channel_.payer,
+        channel_.payee,
+        channel_.operator,
+        channel_.token,
+        channel_.salt,
+        channel_.authorizedSigner,
+        channel_.expiringNonceHash,
+        exports.address,
+        BigInt(options.chainId)
+      ]));
+    }
+    function domainSeparator(value) {
+      return Hash5.keccak256(AbiParameters.encode(domainSeparatorParameters, [
+        eip712DomainTypehash,
+        nameHash,
+        versionHash,
+        BigInt(value.chainId),
+        exports.address
+      ]));
+    }
+    function getVoucherSignPayload(value) {
+      const voucherHash = Hash5.keccak256(AbiParameters.encode(voucherHashParameters, [
+        exports.voucherTypehash,
+        value.channelId,
+        value.cumulativeAmount
+      ]));
+      return Hash5.keccak256(Hex.concat("0x1901", domainSeparator({ chainId: value.chainId }), voucherHash));
+    }
+    function resolveAddress(address2) {
+      return Address.from(address2);
+    }
+  }
+});
+
+// node_modules/ox/_cjs/tempo/EarnShares.js
+var require_EarnShares = __commonJS({
+  "node_modules/ox/_cjs/tempo/EarnShares.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InvalidSlippageError = exports.InvalidExpectedOutputError = exports.basisPointScale = void 0;
+    exports.toAmount = toAmount2;
+    exports.toAmountUp = toAmountUp;
+    exports.toVenueAmount = toVenueAmount;
+    exports.feeShares = feeShares;
+    exports.minimumOutput = minimumOutput;
+    var Errors = require_Errors();
+    exports.basisPointScale = 1e4;
+    function toAmount2(anchor, venueShareAmount) {
+      return venueShareAmount * anchor.shareSupply / anchor.engineShares;
+    }
+    function toAmountUp(anchor, venueShareAmount) {
+      const { engineShares, shareSupply } = anchor;
+      return (venueShareAmount * shareSupply + engineShares - 1n) / engineShares;
+    }
+    function toVenueAmount(anchor, shareAmount) {
+      return shareAmount * anchor.engineShares / anchor.shareSupply;
+    }
+    function feeShares(options) {
+      const { activeAssets, shareSupply, totalFeeAssets } = options;
+      if (totalFeeAssets === 0n || totalFeeAssets >= activeAssets)
+        return 0n;
+      return totalFeeAssets * shareSupply / (activeAssets - totalFeeAssets);
+    }
+    function minimumOutput(expectedAmount, slippageBps) {
+      if (expectedAmount <= 0n)
+        throw new InvalidExpectedOutputError({ expectedAmount });
+      if (!Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps >= exports.basisPointScale)
+        throw new InvalidSlippageError({ slippageBps });
+      const scale = BigInt(exports.basisPointScale);
+      const bounded = expectedAmount * (scale - BigInt(slippageBps)) / scale;
+      return bounded === 0n ? 1n : bounded;
+    }
+    var InvalidExpectedOutputError = class extends Errors.BaseError {
+      constructor(options) {
+        super(`Expected output \`${options.expectedAmount}\` must be greater than zero.`);
+        Object.defineProperty(this, "name", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: "EarnShares.InvalidExpectedOutputError"
+        });
+      }
+    };
+    exports.InvalidExpectedOutputError = InvalidExpectedOutputError;
+    var InvalidSlippageError = class extends Errors.BaseError {
+      constructor(options) {
+        super(`Slippage tolerance \`${options.slippageBps}\` is invalid.`, {
+          metaMessages: [
+            `Slippage must be a whole number from 0 through ${exports.basisPointScale - 1} basis points.`
+          ]
+        });
+        Object.defineProperty(this, "name", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: "EarnShares.InvalidSlippageError"
+        });
+      }
+    };
+    exports.InvalidSlippageError = InvalidSlippageError;
   }
 });
 
@@ -227322,20 +227908,455 @@ var require_TokenRole = __commonJS({
       "pause",
       "unpause",
       "issuer",
-      "burnBlocked"
+      "burnBlocked",
+      "burnAt"
     ];
     exports.toPreHashed = {
       defaultAdmin: "DEFAULT_ADMIN_ROLE",
       pause: "PAUSE_ROLE",
       unpause: "UNPAUSE_ROLE",
       issuer: "ISSUER_ROLE",
-      burnBlocked: "BURN_BLOCKED_ROLE"
+      burnBlocked: "BURN_BLOCKED_ROLE",
+      burnAt: "BURN_AT_ROLE"
     };
     function serialize3(role) {
       if (role === "defaultAdmin")
         return "0x0000000000000000000000000000000000000000000000000000000000000000";
       return Hash5.keccak256(Hex.fromString(exports.toPreHashed[role] ?? role));
     }
+  }
+});
+
+// node_modules/ox/_cjs/core/internal/quantity.js
+var require_quantity = __commonJS({
+  "node_modules/ox/_cjs/core/internal/quantity.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.fromNumberish = fromNumberish;
+    var Hex = require_Hex();
+    function fromNumberish(value, options) {
+      if (typeof value === "string")
+        return value;
+      return Hex.fromNumber(value, options);
+    }
+  }
+});
+
+// node_modules/ox/_cjs/core/Frame.js
+var require_Frame = __commonJS({
+  "node_modules/ox/_cjs/core/Frame.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InvalidError = exports.flags = exports.modes = void 0;
+    exports.assert = assert10;
+    exports.from = from16;
+    exports.fromRpc = fromRpc4;
+    exports.toRpc = toRpc4;
+    exports.fromTuple = fromTuple2;
+    exports.toTuple = toTuple3;
+    exports.validate = validate10;
+    var Address = require_Address();
+    var Bytes = require_Bytes();
+    var Errors = require_Errors();
+    var Hex = require_Hex();
+    var Quantity = require_quantity();
+    exports.modes = { default: 0, sender: 2, verify: 1 };
+    exports.flags = {
+      approveExecution: 2,
+      approveExecutionAndPayment: 3,
+      approvePayment: 1,
+      atomicBatch: 4,
+      none: 0
+    };
+    function assert10(frame) {
+      const { data = "0x", executionGas = 0n, flags: flagsValue = 0, mode: modeValue = 0, stateGas = 0n, value = 0n } = frame;
+      const mode = typeof modeValue === "string" ? exports.modes[modeValue] : modeValue;
+      if (!Number.isInteger(mode) || mode < 0 || mode > 2)
+        throw new InvalidError2("mode must be a supported name or 0, 1, or 2.");
+      const flags_ = typeof flagsValue === "string" ? exports.flags[flagsValue] : flagsValue;
+      if (!Number.isInteger(flags_) || flags_ < 0 || flags_ > 7)
+        throw new InvalidError2("flags must be a supported name or an integer from 0 to 7.");
+      if (flags_ & exports.flags.atomicBatch) {
+        if (mode === exports.modes.verify)
+          throw new InvalidError2("VERIFY frames cannot belong to an atomic batch.");
+        if (flags_ & exports.flags.approveExecutionAndPayment)
+          throw new InvalidError2("Atomic batch frames cannot approve execution or payment.");
+      }
+      if (frame.to !== void 0)
+        Address.assert(frame.to, { strict: false });
+      for (const [field, limit] of [
+        ["executionGas", executionGas],
+        ["stateGas", stateGas]
+      ])
+        if (typeof limit !== "bigint" || limit < 0n || limit >= 2n ** 64n)
+          throw new InvalidError2(`${field} must be an unsigned 64-bit integer.`);
+      if (executionGas + stateGas >= 2n ** 64n)
+        throw new InvalidError2("Combined frame gas must be less than 2^64.");
+      if (typeof value !== "bigint" || value < 0n || value >= 2n ** 256n)
+        throw new InvalidError2("value must be an unsigned 256-bit integer.");
+      if (mode !== exports.modes.sender && value !== 0n)
+        throw new InvalidError2("Only SENDER frames can transfer value.");
+      Hex.assert(data, { strict: true });
+      if (data.length % 2 !== 0)
+        throw new InvalidError2("data must contain whole bytes.");
+    }
+    function from16(frame) {
+      assert10(frame);
+      return { ...frame };
+    }
+    function fromRpc4(frame) {
+      return from16({
+        data: frame.data,
+        executionGas: Hex.toBigInt(frame.executionGas),
+        flags: Hex.toNumber(frame.flags),
+        mode: Hex.toNumber(frame.mode),
+        stateGas: Hex.toBigInt(frame.stateGas),
+        ...frame.target == null ? {} : { to: frame.target },
+        value: Hex.toBigInt(frame.value)
+      });
+    }
+    function toRpc4(frame) {
+      const { flags: flags_ = 0, mode = 0 } = frame;
+      return {
+        data: frame.data ?? "0x",
+        executionGas: Quantity.fromNumberish(frame.executionGas ?? 0n),
+        flags: Hex.fromNumber(typeof flags_ === "string" ? exports.flags[flags_] : flags_),
+        mode: Hex.fromNumber(typeof mode === "string" ? exports.modes[mode] : mode),
+        stateGas: Quantity.fromNumberish(frame.stateGas ?? 0n),
+        ...frame.to === void 0 ? {} : { target: frame.to },
+        value: Quantity.fromNumberish(frame.value ?? 0n)
+      };
+    }
+    function fromTuple2(tuple) {
+      if (!Array.isArray(tuple) || tuple.length !== 6 || !Array.isArray(tuple[3]) || tuple[3].length !== 2)
+        throw new InvalidError2("Expected [mode, flags, target, [execution, state], value, data].");
+      const [mode, flags, target, [execution, state], value, data] = tuple;
+      Hex.assert(target, { strict: true });
+      Hex.assert(data, { strict: true });
+      const quantities = [mode, flags, execution, state, value];
+      for (const quantity of quantities) {
+        Hex.assert(quantity, { strict: true });
+        if (quantity.length % 2 !== 0 || quantity.startsWith("0x00"))
+          throw new InvalidError2("Integers must use minimal whole-byte encodings, with empty bytes for zero.");
+      }
+      const frame = {
+        ...target === "0x" ? {} : { to: target },
+        data,
+        executionGas: execution === "0x" ? 0n : Hex.toBigInt(execution),
+        flags: flags === "0x" ? 0 : Hex.toNumber(flags),
+        mode: mode === "0x" ? 0 : Hex.toNumber(mode),
+        stateGas: state === "0x" ? 0n : Hex.toBigInt(state),
+        value: value === "0x" ? 0n : Hex.toBigInt(value)
+      };
+      assert10(frame);
+      return frame;
+    }
+    function toTuple3(frame) {
+      assert10(frame);
+      const mode = typeof frame.mode === "string" ? exports.modes[frame.mode] : frame.mode ?? 0;
+      const flags_ = typeof frame.flags === "string" ? exports.flags[frame.flags] : frame.flags ?? 0;
+      return [
+        mode ? Hex.fromBytes(Bytes.fromNumber(mode)) : "0x",
+        flags_ ? Hex.fromBytes(Bytes.fromNumber(flags_)) : "0x",
+        frame.to ?? "0x",
+        [
+          frame.executionGas ? Hex.fromBytes(Bytes.fromNumber(frame.executionGas)) : "0x",
+          frame.stateGas ? Hex.fromBytes(Bytes.fromNumber(frame.stateGas)) : "0x"
+        ],
+        frame.value ? Hex.fromBytes(Bytes.fromNumber(frame.value)) : "0x",
+        frame.data ?? "0x"
+      ];
+    }
+    function validate10(frame) {
+      try {
+        assert10(frame);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    var InvalidError2 = class extends Errors.BaseError {
+      constructor(details) {
+        super("Invalid frame.", { details });
+        Object.defineProperty(this, "name", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: "Frame.InvalidError"
+        });
+      }
+    };
+    exports.InvalidError = InvalidError2;
+  }
+});
+
+// node_modules/ox/_cjs/core/internal/curves.js
+var require_curves = __commonJS({
+  "node_modules/ox/_cjs/core/internal/curves.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.secp256k1N = exports.p256N = void 0;
+    exports.p256N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+    exports.secp256k1N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+  }
+});
+
+// node_modules/ox/_cjs/core/FrameSignature.js
+var require_FrameSignature = __commonJS({
+  "node_modules/ox/_cjs/core/FrameSignature.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InvalidError = exports.schemes = void 0;
+    exports.assert = assert10;
+    exports.from = from16;
+    exports.fromRpc = fromRpc4;
+    exports.toRpc = toRpc4;
+    exports.fromTuple = fromTuple2;
+    exports.toTuple = toTuple3;
+    exports.validate = validate10;
+    var Address = require_Address();
+    var Errors = require_Errors();
+    var Hex = require_Hex();
+    var curves_js_1 = require_curves();
+    var PublicKey = require_PublicKey();
+    var Signature2 = require_Signature();
+    exports.schemes = { arbitrary: 0, p256: 2, secp256k1: 1 };
+    function assert10(entry, options = {}) {
+      const scheme = typeof entry.scheme === "string" ? exports.schemes[entry.scheme] : entry.scheme;
+      if (!Number.isInteger(scheme) || scheme < 0 || scheme > 2)
+        throw new InvalidError2("Unsupported signature scheme.");
+      if (scheme === 0 && entry.signer !== void 0)
+        throw new InvalidError2("Arbitrary signatures cannot specify a signer.");
+      if (entry.signer !== void 0)
+        Address.assert(entry.signer, { strict: false });
+      const payload = entry.payload ?? "0x";
+      Hex.assert(payload, { strict: true });
+      if (payload !== "0x" && (payload.length !== 66 || Hex.toBigInt(payload) === 0n))
+        throw new InvalidError2("payload must be empty or a nonzero 32-byte digest.");
+      switch (entry.scheme) {
+        case 0:
+        case "arbitrary":
+          Hex.assert(entry.signature, { strict: true });
+          if (entry.signature.length % 2 !== 0)
+            throw new InvalidError2("signature must contain whole bytes.");
+          return;
+      }
+      if (entry.scheme === 2 || entry.scheme === "p256") {
+        if (entry.publicKey !== void 0) {
+          PublicKey.assert(entry.publicKey, { compressed: false });
+          for (const coordinate of [entry.publicKey.x, entry.publicKey.y]) {
+            if (typeof coordinate !== "bigint" || coordinate < 0n || coordinate >= 2n ** 256n)
+              throw new InvalidError2("Public key coordinates must fit in 32 bytes.");
+          }
+        }
+        if (entry.signature !== void 0 && entry.signature !== "0x" && entry.publicKey === void 0)
+          throw new InvalidError2("P-256 signatures require a public key.");
+      }
+      if (entry.signature === void 0 || entry.signature === "0x") {
+        if (options.signed)
+          throw new InvalidError2("Signature is required.");
+        return;
+      }
+      if (typeof entry.signature === "string")
+        Hex.assert(entry.signature, { strict: true });
+      const signature3 = typeof entry.signature === "string" ? Signature2.fromHex(entry.signature) : entry.signature;
+      if (typeof signature3.r !== "bigint" || typeof signature3.s !== "bigint")
+        throw new InvalidError2("Signature scalars must be bigint.");
+      if ((scheme === 1 || signature3.yParity !== void 0) && signature3.yParity !== 0 && signature3.yParity !== 1)
+        throw new InvalidError2("Signature parity must be 0 or 1.");
+      Signature2.assert(signature3, { recovered: scheme === 1 });
+      const r2 = signature3.r;
+      const s3 = signature3.s;
+      const order = scheme === 1 ? curves_js_1.secp256k1N : curves_js_1.p256N;
+      if (r2 === 0n || r2 >= order || s3 === 0n || s3 >= order || scheme === 1 && s3 > order / 2n)
+        throw new InvalidError2("Signature scalars must be in range; secp256k1 requires low-s.");
+    }
+    function from16(entry) {
+      const result = typeof entry === "string" ? { payload: "0x", scheme: "arbitrary", signature: entry } : {
+        ...entry,
+        payload: entry.payload ?? "0x",
+        scheme: entry.scheme ?? "arbitrary"
+      };
+      assert10(result);
+      return result;
+    }
+    function fromRpc4(entry) {
+      return fromTuple2([
+        entry.scheme === "0x0" ? "0x" : Hex.fromNumber(Hex.toNumber(entry.scheme), { size: 1 }),
+        entry.signer ?? "0x",
+        entry.msg ?? "0x",
+        entry.signature ?? "0x"
+      ]);
+    }
+    function toRpc4(entry) {
+      const [scheme, signer, msg, signature3] = toTuple3(entry);
+      return {
+        msg,
+        scheme: scheme === "0x" ? "0x0" : Hex.fromNumber(Hex.toNumber(scheme)),
+        ...signature3 === "0x" && scheme !== "0x" ? {} : { signature: signature3 },
+        ...signer === "0x" ? {} : { signer }
+      };
+    }
+    function fromTuple2(tuple) {
+      if (!Array.isArray(tuple) || tuple.length !== 4)
+        throw new InvalidError2("Expected [scheme, signer, payload, signature].");
+      const [scheme, signer, payload, signature3] = tuple;
+      Hex.assert(signer, { strict: true });
+      Hex.assert(signature3, { strict: true });
+      if (signature3.length % 2 !== 0)
+        throw new InvalidError2("signature must contain whole bytes.");
+      if (scheme !== "0x" && scheme !== "0x01" && scheme !== "0x02")
+        throw new InvalidError2("Expected a canonical scheme encoding: empty bytes, 0x01, or 0x02.");
+      const metadata = { ...signer === "0x" ? {} : { signer }, payload };
+      if (scheme === "0x") {
+        if (signer !== "0x")
+          throw new InvalidError2("Arbitrary signatures cannot specify a signer.");
+        return from16({ payload, scheme: "arbitrary", signature: signature3 });
+      }
+      if (signature3 === "0x")
+        return scheme === "0x01" ? from16({ ...metadata, scheme: "secp256k1" }) : from16({ ...metadata, scheme: "p256" });
+      if (Hex.size(signature3) !== (scheme === "0x01" ? 65 : 128))
+        throw new InvalidError2("Invalid protocol signature length.");
+      if (scheme === "0x01") {
+        if (Hex.toNumber(Hex.slice(signature3, 0, 1)) > 1)
+          throw new InvalidError2("Recovery parity must be 0 or 1.");
+        return from16({
+          ...metadata,
+          scheme: "secp256k1",
+          signature: {
+            r: Hex.toBigInt(Hex.slice(signature3, 1, 33)),
+            s: Hex.toBigInt(Hex.slice(signature3, 33, 65)),
+            yParity: Hex.toNumber(Hex.slice(signature3, 0, 1))
+          }
+        });
+      }
+      const s3 = Hex.toBigInt(Hex.slice(signature3, 32, 64));
+      if (s3 > curves_js_1.p256N / 2n)
+        throw new InvalidError2("P-256 wire signatures require low-s.");
+      return from16({
+        ...metadata,
+        publicKey: {
+          prefix: 4,
+          x: Hex.toBigInt(Hex.slice(signature3, 64, 96)),
+          y: Hex.toBigInt(Hex.slice(signature3, 96, 128))
+        },
+        scheme: "p256",
+        signature: { r: Hex.toBigInt(Hex.slice(signature3, 0, 32)), s: s3 }
+      });
+    }
+    function toTuple3(entry) {
+      assert10(entry);
+      const scheme = typeof entry.scheme === "string" ? exports.schemes[entry.scheme] : entry.scheme;
+      const signature3 = (() => {
+        switch (entry.scheme) {
+          case 0:
+          case "arbitrary":
+            return entry.signature;
+          case 1:
+          case "secp256k1": {
+            if (entry.signature === void 0 || entry.signature === "0x")
+              return "0x";
+            const signature4 = typeof entry.signature === "string" ? Signature2.fromHex(entry.signature) : entry.signature;
+            return Hex.concat(Hex.fromNumber(signature4.yParity, { size: 1 }), Hex.fromNumber(signature4.r, { size: 32 }), Hex.fromNumber(signature4.s, { size: 32 }));
+          }
+          case 2:
+          case "p256": {
+            if (entry.signature === void 0 || entry.signature === "0x")
+              return "0x";
+            const publicKey = entry.publicKey;
+            const signature4 = typeof entry.signature === "string" ? Signature2.fromHex(entry.signature) : entry.signature;
+            const s3 = signature4.s;
+            return Hex.concat(Hex.fromNumber(signature4.r, { size: 32 }), Hex.fromNumber(s3 > curves_js_1.p256N / 2n ? curves_js_1.p256N - s3 : s3, { size: 32 }), Hex.fromNumber(publicKey.x, { size: 32 }), Hex.fromNumber(publicKey.y, { size: 32 }));
+          }
+        }
+      })();
+      return [
+        scheme ? Hex.fromNumber(scheme, { size: 1 }) : "0x",
+        entry.signer ?? "0x",
+        entry.payload ?? "0x",
+        signature3
+      ];
+    }
+    function validate10(entry, options = {}) {
+      try {
+        assert10(entry, options);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    var InvalidError2 = class extends Errors.BaseError {
+      constructor(details) {
+        super("Invalid frame signature.", { details });
+        Object.defineProperty(this, "name", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: "FrameSignature.InvalidError"
+        });
+      }
+    };
+    exports.InvalidError = InvalidError2;
+  }
+});
+
+// node_modules/ox/_cjs/core/internal/frameNonce.js
+var require_frameNonce = __commonJS({
+  "node_modules/ox/_cjs/core/internal/frameNonce.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InvalidError = void 0;
+    exports.assert = assert10;
+    exports.fromRpc = fromRpc4;
+    exports.toRpc = toRpc4;
+    var Errors = require_Errors();
+    var Hex = require_Hex();
+    var Quantity = require_quantity();
+    function assert10(keys, nonce) {
+      if (!Array.isArray(keys) || keys.length < 1 || keys.length > 16)
+        throw new InvalidError2("Expected between 1 and 16 nonce keys.");
+      for (const [index2, key3] of keys.entries()) {
+        if (typeof key3 !== "bigint" || key3 < 0n || key3 >= 2n ** 256n)
+          throw new InvalidError2("Nonce keys must be unsigned 256-bit integers.");
+        if (index2 > 0 && key3 <= keys[index2 - 1])
+          throw new InvalidError2("Nonce keys must be strictly increasing.");
+      }
+      if (keys.length > 1 && keys[0] === 0n)
+        throw new InvalidError2("The zero nonce key cannot be combined with other keys.");
+      if (nonce !== void 0 && (typeof nonce !== "bigint" || nonce < 0n || nonce >= 2n ** 64n - 1n))
+        throw new InvalidError2("Nonce must be less than 2^64 - 1 and nonnegative.");
+    }
+    function fromRpc4(keys, nonce) {
+      if (!Array.isArray(keys))
+        throw new InvalidError2("Expected a nonce key list.");
+      const integer = (value) => {
+        if (typeof value !== "string" || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value))
+          throw new InvalidError2("Expected a canonical RPC nonce quantity.");
+        return Hex.toBigInt(value);
+      };
+      const decoded = keys.map(integer);
+      assert10(decoded, nonce === void 0 ? void 0 : integer(nonce));
+      return decoded;
+    }
+    function toRpc4(keys, nonce) {
+      if (!Array.isArray(keys))
+        throw new InvalidError2("Expected a nonce key list.");
+      const encoded = keys.map((key3) => Quantity.fromNumberish(key3));
+      fromRpc4(encoded, nonce === void 0 ? void 0 : Quantity.fromNumberish(nonce));
+      return encoded;
+    }
+    var InvalidError2 = class extends Errors.BaseError {
+      constructor() {
+        super(...arguments);
+        Object.defineProperty(this, "name", {
+          enumerable: true,
+          configurable: true,
+          writable: true,
+          value: "FrameNonce.InvalidError"
+        });
+      }
+    };
+    exports.InvalidError = InvalidError2;
   }
 });
 
@@ -227348,26 +228369,31 @@ var require_Transaction = __commonJS({
     exports.fromRpc = fromRpc4;
     exports.toRpc = toRpc4;
     var Authorization = require_Authorization();
+    var Frame = require_Frame();
+    var FrameSignature = require_FrameSignature();
     var Hex = require_Hex();
+    var FrameNonce = require_frameNonce();
     var Signature2 = require_Signature();
     exports.toRpcType = {
       legacy: "0x0",
       eip2930: "0x1",
       eip1559: "0x2",
       eip4844: "0x3",
-      eip7702: "0x4"
+      eip7702: "0x4",
+      eip8141: "0x6"
     };
     exports.fromRpcType = {
       "0x0": "legacy",
       "0x1": "eip2930",
       "0x2": "eip1559",
       "0x3": "eip4844",
-      "0x4": "eip7702"
+      "0x4": "eip7702",
+      "0x6": "eip8141"
     };
     function fromRpc4(transaction, _options = {}) {
       if (!transaction)
         return null;
-      const signature3 = Signature2.extract(transaction);
+      const signature3 = transaction.type === "0x6" ? void 0 : Signature2.extract(transaction);
       const transaction_ = {
         ...transaction,
         ...signature3
@@ -227380,10 +228406,19 @@ var require_Transaction = __commonJS({
       transaction_.nonce = BigInt(transaction.nonce ?? 0n);
       transaction_.transactionIndex = transaction.transactionIndex ? Number(transaction.transactionIndex) : null;
       transaction_.value = BigInt(transaction.value ?? 0n);
+      if (transaction.type === "0x6" && transaction.nonceKeys !== void 0) {
+        if (transaction.nonce === void 0)
+          throw new FrameNonce.InvalidError("A keyed transaction result requires nonce.");
+        transaction_.nonceKeys = FrameNonce.fromRpc(transaction.nonceKeys, transaction.nonce);
+      }
+      if (transaction.frames)
+        transaction_.frames = transaction.frames.map(Frame.fromRpc);
+      if (transaction.signatures)
+        transaction_.signatures = transaction.signatures.map(FrameSignature.fromRpc);
       if (transaction.authorizationList)
         transaction_.authorizationList = Authorization.fromRpcList(transaction.authorizationList);
       if (transaction.chainId)
-        transaction_.chainId = Number(transaction.chainId);
+        transaction_.chainId = transaction.type === "0x6" && BigInt(transaction.chainId) > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(transaction.chainId) : Number(transaction.chainId);
       if (transaction.gasPrice)
         transaction_.gasPrice = BigInt(transaction.gasPrice);
       if (transaction.maxFeePerBlobGas)
@@ -227415,6 +228450,12 @@ var require_Transaction = __commonJS({
       rpc.transactionIndex = transaction.transactionIndex ? Hex.fromNumber(transaction.transactionIndex) : null;
       rpc.type = exports.toRpcType[transaction.type] ?? transaction.type;
       rpc.value = Hex.fromNumber(transaction.value ?? 0n);
+      if (transaction.type === "eip8141" && transaction.nonceKeys !== void 0)
+        rpc.nonceKeys = FrameNonce.toRpc(transaction.nonceKeys, transaction.nonce);
+      if (transaction.frames)
+        rpc.frames = transaction.frames.map(Frame.toRpc);
+      if (transaction.signatures)
+        rpc.signatures = transaction.signatures.map(FrameSignature.toRpc);
       if (transaction.accessList)
         rpc.accessList = transaction.accessList;
       if (transaction.authorizationList)
@@ -227514,6 +228555,8 @@ var require_Transaction2 = __commonJS({
         rpc.feeToken = transaction.feeToken;
       if (transaction.keyAuthorization)
         rpc.keyAuthorization = KeyAuthorization.toRpc(transaction.keyAuthorization);
+      if (typeof transaction.nonceKey === "bigint")
+        rpc.nonceKey = Hex.fromNumber(transaction.nonceKey);
       if (transaction.feePayerSignature) {
         rpc.feePayerSignature = Signature2.toRpc(transaction.feePayerSignature);
         rpc.feePayerSignature.v = Hex.fromNumber(Signature2.yParityToV(transaction.feePayerSignature?.yParity));
@@ -227525,6 +228568,47 @@ var require_Transaction2 = __commonJS({
       if (typeof transaction.validBefore === "number")
         rpc.validBefore = Hex.fromNumber(transaction.validBefore);
       return rpc;
+    }
+  }
+});
+
+// node_modules/ox/_cjs/core/FrameReceipt.js
+var require_FrameReceipt = __commonJS({
+  "node_modules/ox/_cjs/core/FrameReceipt.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.toRpcStatus = exports.fromRpcStatus = void 0;
+    exports.fromRpc = fromRpc4;
+    exports.toRpc = toRpc4;
+    var Hex = require_Hex();
+    var Quantity = require_quantity();
+    exports.fromRpcStatus = {
+      "0x0": "reverted",
+      "0x1": "success",
+      "0x2": "skipped"
+    };
+    exports.toRpcStatus = {
+      reverted: "0x0",
+      skipped: "0x2",
+      success: "0x1"
+    };
+    function fromRpc4(receipt) {
+      return {
+        executionGasUsed: Hex.toBigInt(receipt.executionGasUsed),
+        gasUsed: Hex.toBigInt(receipt.gasUsed),
+        logs: receipt.logs,
+        stateGasUsed: Hex.toBigInt(receipt.stateGasUsed),
+        status: exports.fromRpcStatus[receipt.status]
+      };
+    }
+    function toRpc4(receipt) {
+      return {
+        executionGasUsed: Quantity.fromNumberish(receipt.executionGasUsed),
+        gasUsed: Quantity.fromNumberish(receipt.gasUsed),
+        logs: receipt.logs,
+        stateGasUsed: Quantity.fromNumberish(receipt.stateGasUsed),
+        status: exports.toRpcStatus[receipt.status]
+      };
     }
   }
 });
@@ -227569,6 +228653,7 @@ var require_TransactionReceipt = __commonJS({
     exports.toRpcType = exports.fromRpcType = exports.toRpcStatus = exports.fromRpcStatus = void 0;
     exports.fromRpc = fromRpc4;
     exports.toRpc = toRpc4;
+    var FrameReceipt = require_FrameReceipt();
     var Hex = require_Hex();
     var Log = require_Log();
     exports.fromRpcStatus = {
@@ -227584,20 +228669,23 @@ var require_TransactionReceipt = __commonJS({
       "0x1": "eip2930",
       "0x2": "eip1559",
       "0x3": "eip4844",
-      "0x4": "eip7702"
+      "0x4": "eip7702",
+      "0x6": "eip8141"
     };
     exports.toRpcType = {
       legacy: "0x0",
       eip2930: "0x1",
       eip1559: "0x2",
       eip4844: "0x3",
-      eip7702: "0x4"
+      eip7702: "0x4",
+      eip8141: "0x6"
     };
     function fromRpc4(receipt) {
       if (!receipt)
         return null;
       return {
         ...receipt,
+        ...receipt.frameReceipts ? { frameReceipts: receipt.frameReceipts.map(FrameReceipt.fromRpc) } : {},
         blobGasPrice: receipt.blobGasPrice ? BigInt(receipt.blobGasPrice) : void 0,
         blobGasUsed: receipt.blobGasUsed ? BigInt(receipt.blobGasUsed) : void 0,
         blockNumber: BigInt(receipt.blockNumber ?? 0n),
@@ -227612,6 +228700,8 @@ var require_TransactionReceipt = __commonJS({
     }
     function toRpc4(receipt) {
       return {
+        ...receipt.frameReceipts ? { frameReceipts: receipt.frameReceipts.map(FrameReceipt.toRpc) } : {},
+        ...receipt.payer ? { payer: receipt.payer } : {},
         blobGasPrice: receipt.blobGasPrice ? Hex.fromNumber(receipt.blobGasPrice) : void 0,
         blobGasUsed: receipt.blobGasUsed ? Hex.fromNumber(receipt.blobGasUsed) : void 0,
         blockHash: receipt.blockHash,
@@ -227665,6 +228755,40 @@ var require_TransactionReceipt2 = __commonJS({
   }
 });
 
+// node_modules/ox/_cjs/core/FrameRequest.js
+var require_FrameRequest = __commonJS({
+  "node_modules/ox/_cjs/core/FrameRequest.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.fromRpc = fromRpc4;
+    exports.toRpc = toRpc4;
+    var Frame = require_Frame();
+    function fromRpc4(frame) {
+      const { executionGas, stateGas, ...rest } = Frame.fromRpc({
+        ...frame,
+        data: frame.data ?? "0x",
+        executionGas: frame.executionGas ?? "0x0",
+        flags: frame.flags ?? "0x0",
+        stateGas: frame.stateGas ?? "0x0",
+        value: frame.value ?? "0x0"
+      });
+      return {
+        ...rest,
+        ...frame.executionGas === void 0 ? {} : { executionGas },
+        ...frame.stateGas === void 0 ? {} : { stateGas }
+      };
+    }
+    function toRpc4(frame) {
+      const { executionGas, stateGas, ...rest } = Frame.toRpc(frame);
+      return {
+        ...rest,
+        ...frame.executionGas === void 0 ? {} : { executionGas },
+        ...frame.stateGas === void 0 ? {} : { stateGas }
+      };
+    }
+  }
+});
+
 // node_modules/ox/_cjs/core/TransactionRequest.js
 var require_TransactionRequest = __commonJS({
   "node_modules/ox/_cjs/core/TransactionRequest.js"(exports) {
@@ -227673,14 +228797,21 @@ var require_TransactionRequest = __commonJS({
     exports.fromRpc = fromRpc4;
     exports.toRpc = toRpc4;
     var Authorization = require_Authorization();
+    var FrameRequest = require_FrameRequest();
+    var FrameSignature = require_FrameSignature();
     var Hex = require_Hex();
+    var FrameNonce = require_frameNonce();
     var Transaction = require_Transaction();
     function fromRpc4(request2) {
-      const request_ = request2;
+      const request_ = { ...request2 };
       if (typeof request2.authorizationList !== "undefined")
         request_.authorizationList = Authorization.fromRpcList(request2.authorizationList);
       if (typeof request2.chainId !== "undefined")
         request_.chainId = Hex.toNumber(request2.chainId);
+      if (request2.frames)
+        request_.frames = request2.frames.map(FrameRequest.fromRpc);
+      if (request2.signatures)
+        request_.signatures = request2.signatures.map(FrameSignature.fromRpc);
       if (typeof request2.gas !== "undefined")
         request_.gas = Hex.toBigInt(request2.gas);
       if (typeof request2.gasPrice !== "undefined")
@@ -227693,6 +228824,8 @@ var require_TransactionRequest = __commonJS({
         request_.maxPriorityFeePerGas = Hex.toBigInt(request2.maxPriorityFeePerGas);
       if (typeof request2.nonce !== "undefined")
         request_.nonce = Hex.toBigInt(request2.nonce);
+      if (request2.nonceKeys !== void 0)
+        request_.nonceKeys = FrameNonce.fromRpc(request2.nonceKeys, request2.nonce);
       if (typeof request2.type !== "undefined")
         request_.type = Transaction.fromRpcType[request2.type] || request2.type;
       if (typeof request2.value !== "undefined")
@@ -227720,6 +228853,10 @@ var require_TransactionRequest = __commonJS({
       }
       if (typeof request2.from !== "undefined")
         request_rpc.from = request2.from;
+      if (request2.frames)
+        request_rpc.frames = request2.frames.map(FrameRequest.toRpc);
+      if (request2.signatures)
+        request_rpc.signatures = request2.signatures.map(FrameSignature.toRpc);
       if (typeof request2.gas !== "undefined")
         request_rpc.gas = Hex.fromNumber(request2.gas);
       if (typeof request2.gasPrice !== "undefined")
@@ -227734,6 +228871,8 @@ var require_TransactionRequest = __commonJS({
         request_rpc.maxPriorityFeePerGas = Hex.fromNumber(request2.maxPriorityFeePerGas);
       if (typeof request2.nonce !== "undefined")
         request_rpc.nonce = Hex.fromNumber(request2.nonce);
+      if (request2.nonceKeys !== void 0)
+        request_rpc.nonceKeys = FrameNonce.toRpc(request2.nonceKeys, request2.nonce);
       if (typeof request2.to !== "undefined")
         request_rpc.to = request2.to;
       if (typeof request2.type !== "undefined")
@@ -227754,14 +228893,14 @@ var require_TransactionRequest2 = __commonJS({
     exports.toRpc = toRpc4;
     var Hex = require_Hex();
     var ox_TransactionRequest = require_TransactionRequest();
+    var AccountSimulation = require_AccountSimulation();
     var AuthorizationTempo = require_AuthorizationTempo();
     var KeyAuthorization = require_KeyAuthorization();
-    var MultisigSimulation = require_MultisigSimulation();
     var TempoAddress = require_TempoAddress();
     var TokenId = require_TokenId();
     var Transaction = require_Transaction2();
     function fromRpc4(request2) {
-      const { authorizationList: _, multisigSimulation: __, keyAuthorizationSimulation: ___, ...rest } = request2;
+      const { authorizationList: _, keyAuthorizationSimulation: __, keyType: ___, multisigSimulation: ____, ...rest } = request2;
       const request_ = ox_TransactionRequest.fromRpc(rest);
       if (typeof request2.type !== "undefined")
         request_.type = Transaction.fromRpcType[request2.type] || request_.type;
@@ -227782,9 +228921,11 @@ var require_TransactionRequest2 = __commonJS({
       if (request2.keyAuthorization)
         request_.keyAuthorization = KeyAuthorization.fromRpc(request2.keyAuthorization);
       if (request2.keyAuthorizationSimulation)
-        request_.keyAuthorizationSimulation = MultisigSimulation.fromRpc(request2.keyAuthorizationSimulation);
+        request_.keyAuthorizationSimulation = AccountSimulation.fromRpc(request2.keyAuthorizationSimulation);
+      if (typeof request2.keyType !== "undefined")
+        request_.keyType = request2.keyType === "multisig" ? "configurable" : request2.keyType;
       if (request2.multisigSimulation)
-        request_.multisigSimulation = MultisigSimulation.fromRpc(request2.multisigSimulation);
+        request_.accountSimulation = AccountSimulation.fromRpc(request2.multisigSimulation);
       if (typeof request2.validBefore !== "undefined")
         request_.validBefore = Hex.toNumber(request2.validBefore);
       if (typeof request2.validAfter !== "undefined")
@@ -227819,9 +228960,9 @@ var require_TransactionRequest2 = __commonJS({
       if (request2.keyAuthorization)
         request_rpc.keyAuthorization = KeyAuthorization.toRpc(request2.keyAuthorization);
       if (request2.keyAuthorizationSimulation)
-        request_rpc.keyAuthorizationSimulation = MultisigSimulation.toRpc(request2.keyAuthorizationSimulation);
-      if (request2.multisigSimulation)
-        request_rpc.multisigSimulation = MultisigSimulation.toRpc(request2.multisigSimulation);
+        request_rpc.keyAuthorizationSimulation = AccountSimulation.toRpc(request2.keyAuthorizationSimulation);
+      if (request2.accountSimulation)
+        request_rpc.multisigSimulation = AccountSimulation.toRpc(request2.accountSimulation);
       if (typeof request2.validBefore !== "undefined")
         request_rpc.validBefore = Hex.fromNumber(request2.validBefore);
       if (typeof request2.validAfter !== "undefined")
@@ -227835,7 +228976,7 @@ var require_TransactionRequest2 = __commonJS({
       })();
       if (nonceKey)
         request_rpc.nonceKey = nonceKey;
-      if (typeof request2.calls !== "undefined" || typeof request2.feePayer !== "undefined" || typeof request2.feeToken !== "undefined" || typeof request2.keyAuthorization !== "undefined" || typeof request2.multisigSimulation !== "undefined" || typeof request2.nonceKey !== "undefined" || typeof request2.validBefore !== "undefined" || typeof request2.validAfter !== "undefined" || request2.type === "tempo") {
+      if (typeof request2.accountSimulation !== "undefined" || typeof request2.calls !== "undefined" || typeof request2.feePayer !== "undefined" || typeof request2.feeToken !== "undefined" || typeof request2.keyAuthorization !== "undefined" || typeof request2.nonceKey !== "undefined" || typeof request2.validBefore !== "undefined" || typeof request2.validAfter !== "undefined" || request2.type === "tempo") {
         request_rpc.type = Transaction.toRpcType.tempo;
         delete request_rpc.data;
         delete request_rpc.input;
@@ -228564,14 +229705,14 @@ var require_tempo = __commonJS({
   "node_modules/ox/_cjs/tempo/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ZoneRpcAuthentication = exports.ZoneId = exports.VirtualMaster = exports.VirtualAddress = exports.TxEnvelopeTempo = exports.TransactionRequest = exports.TransactionReceipt = exports.Transaction = exports.TokenRole = exports.TokenId = exports.Tick = exports.TempoAddress = exports.SignatureEnvelope = exports.RpcSchemaTempo = exports.ReceivePolicyReceipt = exports.PoolId = exports.Period = exports.MultisigSimulation = exports.MultisigOperation = exports.MultisigConfig = exports.KeyAuthorization = exports.EarnShares = exports.Channel = exports.AuthorizationTempo = void 0;
+    exports.ZoneRpcAuthentication = exports.ZoneId = exports.VirtualMaster = exports.VirtualAddress = exports.TxEnvelopeTempo = exports.TransactionRequest = exports.TransactionReceipt = exports.Transaction = exports.TokenRole = exports.TokenId = exports.Tick = exports.TempoAddress = exports.SignatureEnvelope = exports.RpcSchemaTempo = exports.ReceivePolicyReceipt = exports.PoolId = exports.Period = exports.KeyAuthorization = exports.EarnShares = exports.Channel = exports.AuthorizationTempo = exports.AccountSimulation = exports.AccountOperation = exports.AccountConfig = void 0;
+    exports.AccountConfig = require_AccountConfig();
+    exports.AccountOperation = require_AccountOperation();
+    exports.AccountSimulation = require_AccountSimulation();
     exports.AuthorizationTempo = require_AuthorizationTempo();
     exports.Channel = require_Channel();
     exports.EarnShares = require_EarnShares();
     exports.KeyAuthorization = require_KeyAuthorization();
-    exports.MultisigConfig = require_MultisigConfig();
-    exports.MultisigOperation = require_MultisigOperation();
-    exports.MultisigSimulation = require_MultisigSimulation();
     exports.Period = require_Period();
     exports.PoolId = require_PoolId();
     exports.ReceivePolicyReceipt = require_ReceivePolicyReceipt();
@@ -228597,7 +229738,7 @@ var require_Abis = __commonJS({
   "node_modules/viem/_cjs/tempo/Abis.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.all = exports.propAmm = exports.zone = exports.earn = exports.core = exports.directPropAmm = exports.zoneMessenger = exports.zoneOutbox = exports.earnRouterCallbackData = exports.vedaEngine = exports.erc4626EngineFactory = exports.erc4626Engine = exports.earnVault = exports.earnRouter = exports.earnRewardsFactory = exports.earnMerkleRewardDistributor = exports.earnFees = exports.earnFactory = exports.earnEngineInKindDeposit = exports.earnEngineAsyncRedeem = exports.earnEngine = exports.earnContributionController = exports.zoneVerifier = exports.zonePortal = exports.zoneFactory = exports.validatorConfig = exports.validatorConfigV2 = exports.tip403Registry = exports.tip20 = exports.tip20Factory = exports.tip20ChannelReserve = exports.feeAmm = exports.feeManager = exports.storageCredits = exports.stablecoinDex = exports.signatureVerifier = exports.receivePolicyGuard = exports.nonce = exports.currentCommittee = exports.nativeMultisig = exports.addressRegistry = exports.accountKeychain = void 0;
+    exports.all = exports.propAmm = exports.zone = exports.earn = exports.core = exports.directPropAmm = exports.zoneInbox = exports.zoneMessenger = exports.zoneOutbox = exports.zonePortalPreT13Retired = exports.earnRouterCallbackData = exports.vedaEngine = exports.erc4626EngineFactory = exports.erc4626Engine = exports.earnVault = exports.earnRouter = exports.earnRewardsFactory = exports.earnMerkleRewardDistributor = exports.earnFees = exports.earnFactory = exports.earnEngineInKindDeposit = exports.earnEngineAsyncRedeem = exports.earnEngine = exports.earnContributionController = exports.zoneVerifier = exports.zonePortal = exports.zoneFactory = exports.validatorConfig = exports.validatorConfigV2 = exports.tip403Registry = exports.tip20 = exports.tip20Factory = exports.tip20ChannelReserve = exports.feeAmm = exports.feeManager = exports.storageCredits = exports.stablecoinDex = exports.signatureVerifier = exports.receivePolicyGuard = exports.nonce = exports.currentCommittee = exports.nativeMultisig = exports.addressRegistry = exports.accountKeychain = void 0;
     exports.accountKeychain = [
       {
         name: "authorizeKey",
@@ -230527,6 +231668,16 @@ var require_Abis = __commonJS({
         outputs: []
       },
       {
+        name: "burnAt",
+        type: "function",
+        stateMutability: "nonpayable",
+        inputs: [
+          { type: "address", name: "from" },
+          { type: "uint256", name: "amount" }
+        ],
+        outputs: []
+      },
+      {
         name: "mintWithMemo",
         type: "function",
         stateMutability: "nonpayable",
@@ -230635,6 +231786,13 @@ var require_Abis = __commonJS({
       },
       {
         name: "BURN_BLOCKED_ROLE",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "bytes32" }]
+      },
+      {
+        name: "BURN_AT_ROLE",
         type: "function",
         stateMutability: "view",
         inputs: [],
@@ -230767,6 +231925,15 @@ var require_Abis = __commonJS({
         inputs: [
           { type: "address", name: "from", indexed: true },
           { type: "uint256", name: "amount" }
+        ]
+      },
+      {
+        name: "BurnAt",
+        type: "event",
+        inputs: [
+          { type: "address", name: "burner", indexed: true },
+          { type: "address", name: "from", indexed: true },
+          { type: "uint256", name: "amount", indexed: true }
         ]
       },
       {
@@ -232275,6 +233442,20 @@ var require_Abis = __commonJS({
         outputs: [{ type: "uint64" }]
       },
       {
+        name: "MAX_UNPROCESSED_DEPOSITS",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
+        name: "MAX_UNPROCESSED_TOKEN_ENABLEMENTS",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
         name: "MAX_WITHDRAWAL_GAS_LIMIT",
         type: "function",
         stateMutability: "view",
@@ -232370,6 +233551,47 @@ var require_Abis = __commonJS({
               { type: "bytes32", name: "nextProcessedHash" },
               { type: "uint64", name: "prevDepositNumber" },
               { type: "uint64", name: "nextDepositNumber" }
+            ]
+          },
+          { type: "bytes32", name: "withdrawalQueueHash" },
+          { type: "bytes", name: "verifierConfig" },
+          { type: "bytes", name: "proof" },
+          { type: "uint256", name: "nextZoneHeight" },
+          { type: "bytes[]", name: "signatures" }
+        ],
+        outputs: []
+      },
+      {
+        name: "submitBatch",
+        type: "function",
+        stateMutability: "nonpayable",
+        inputs: [
+          { type: "uint64", name: "tempoBlockNumber" },
+          { type: "uint64", name: "recentTempoBlockNumber" },
+          {
+            type: "tuple",
+            name: "blockTransition",
+            components: [
+              { type: "bytes32", name: "prevBlockHash" },
+              { type: "bytes32", name: "nextBlockHash" }
+            ]
+          },
+          {
+            type: "tuple",
+            name: "depositQueueTransition",
+            components: [
+              { type: "bytes32", name: "prevProcessedHash" },
+              { type: "bytes32", name: "nextProcessedHash" },
+              { type: "uint64", name: "prevDepositNumber" },
+              { type: "uint64", name: "nextDepositNumber" }
+            ]
+          },
+          {
+            type: "tuple",
+            name: "tokenEnablementTransition",
+            components: [
+              { type: "uint64", name: "prevProcessedTokenCount" },
+              { type: "uint64", name: "nextProcessedTokenCount" }
             ]
           },
           { type: "bytes32", name: "withdrawalQueueHash" },
@@ -232522,6 +233744,20 @@ var require_Abis = __commonJS({
         stateMutability: "view",
         inputs: [],
         outputs: [{ type: "uint256" }]
+      },
+      {
+        name: "lastProcessedEnabledTokenCount",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
+        name: "tokenEnablementCursorInitialized",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "bool" }]
       },
       {
         name: "enabledTokenAt",
@@ -232714,6 +233950,19 @@ var require_Abis = __commonJS({
         ]
       },
       {
+        name: "BatchSubmitted",
+        type: "event",
+        inputs: [
+          { type: "uint64", name: "withdrawalBatchIndex", indexed: true },
+          { type: "uint256", name: "withdrawalQueueIndex", indexed: true },
+          { type: "bytes32", name: "nextProcessedDepositQueueHash" },
+          { type: "bytes32", name: "nextBlockHash" },
+          { type: "bytes32", name: "withdrawalQueueHash" },
+          { type: "uint64", name: "lastProcessedDepositNumber" },
+          { type: "uint64", name: "lastProcessedEnabledTokenCount" }
+        ]
+      },
+      {
         name: "WithdrawalProcessed",
         type: "event",
         inputs: [
@@ -232860,7 +234109,9 @@ var require_Abis = __commonJS({
       { name: "DepositsNotActive", type: "error", inputs: [] },
       { name: "TokenAlreadyEnabled", type: "error", inputs: [] },
       { name: "TokenTransferPolicyNotSet", type: "error", inputs: [] },
+      { name: "TokenEnablementCursorNotInitialized", type: "error", inputs: [] },
       { name: "InvalidDepositTransition", type: "error", inputs: [] },
+      { name: "InvalidTokenEnablementTransition", type: "error", inputs: [] },
       { name: "InvalidSequencerSet", type: "error", inputs: [] },
       { name: "SequencerConfigurationUnchanged", type: "error", inputs: [] },
       { name: "InvalidQuorumCertificate", type: "error", inputs: [] },
@@ -232939,40 +234190,6 @@ var require_Abis = __commonJS({
             components: [
               { type: "uint64", name: "prevProcessedTokenCount" },
               { type: "uint64", name: "nextProcessedTokenCount" }
-            ]
-          },
-          { type: "bytes32", name: "withdrawalQueueHash" },
-          { type: "bytes", name: "verifierConfig" },
-          { type: "bytes", name: "proof" }
-        ],
-        outputs: [{ type: "bool" }]
-      },
-      {
-        name: "verify",
-        type: "function",
-        stateMutability: "view",
-        inputs: [
-          { type: "uint32", name: "zoneId" },
-          { type: "uint64", name: "tempoBlockNumber" },
-          { type: "uint64", name: "anchorBlockNumber" },
-          { type: "bytes32", name: "anchorBlockHash" },
-          { type: "uint64", name: "expectedWithdrawalBatchIndex" },
-          {
-            type: "tuple",
-            name: "blockTransition",
-            components: [
-              { type: "bytes32", name: "prevBlockHash" },
-              { type: "bytes32", name: "nextBlockHash" }
-            ]
-          },
-          {
-            type: "tuple",
-            name: "depositQueueTransition",
-            components: [
-              { type: "bytes32", name: "prevProcessedHash" },
-              { type: "bytes32", name: "nextProcessedHash" },
-              { type: "uint64", name: "prevDepositNumber" },
-              { type: "uint64", name: "nextDepositNumber" }
             ]
           },
           { type: "bytes32", name: "withdrawalQueueHash" },
@@ -236881,6 +238098,67 @@ var require_Abis = __commonJS({
         type: "tuple"
       }
     ];
+    exports.zonePortalPreT13Retired = [
+      {
+        name: "MAX_DEPOSITS_PER_TEMPO_BLOCK",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
+        name: "MAX_TOKENS_ENABLED_PER_TEMPO_BLOCK",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
+        name: "submitBatch",
+        type: "function",
+        stateMutability: "nonpayable",
+        inputs: [
+          { type: "uint64", name: "tempoBlockNumber" },
+          { type: "uint64", name: "recentTempoBlockNumber" },
+          {
+            type: "tuple",
+            name: "blockTransition",
+            components: [
+              { type: "bytes32", name: "prevBlockHash" },
+              { type: "bytes32", name: "nextBlockHash" }
+            ]
+          },
+          {
+            type: "tuple",
+            name: "depositQueueTransition",
+            components: [
+              { type: "bytes32", name: "prevProcessedHash" },
+              { type: "bytes32", name: "nextProcessedHash" },
+              { type: "uint64", name: "prevDepositNumber" },
+              { type: "uint64", name: "nextDepositNumber" }
+            ]
+          },
+          { type: "bytes32", name: "withdrawalQueueHash" },
+          { type: "bytes", name: "verifierConfig" },
+          { type: "bytes", name: "proof" },
+          { type: "uint256", name: "nextZoneHeight" },
+          { type: "bytes[]", name: "signatures" }
+        ],
+        outputs: []
+      },
+      {
+        name: "BatchSubmitted",
+        type: "event",
+        inputs: [
+          { type: "uint64", name: "withdrawalBatchIndex", indexed: true },
+          { type: "uint256", name: "withdrawalQueueIndex", indexed: true },
+          { type: "bytes32", name: "nextProcessedDepositQueueHash" },
+          { type: "bytes32", name: "nextBlockHash" },
+          { type: "bytes32", name: "withdrawalQueueHash" },
+          { type: "uint64", name: "lastProcessedDepositNumber" }
+        ]
+      }
+    ];
     exports.zoneOutbox = [
       {
         name: "tempoGasRate",
@@ -237152,6 +238430,220 @@ var require_Abis = __commonJS({
         ],
         outputs: []
       }
+    ];
+    exports.zoneInbox = [
+      {
+        name: "processedDepositQueueHash",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "bytes32" }]
+      },
+      {
+        name: "processedDepositNumber",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
+        name: "processedTokenEnablementHash",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "bytes32" }]
+      },
+      {
+        name: "processedEnabledTokenCount",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint64" }]
+      },
+      {
+        name: "tempoPortal",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "address" }]
+      },
+      {
+        name: "tempoState",
+        type: "function",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "address" }]
+      },
+      {
+        name: "refunds",
+        type: "function",
+        stateMutability: "view",
+        inputs: [
+          { type: "address", name: "token" },
+          { type: "address", name: "owner" }
+        ],
+        outputs: [{ type: "uint128" }]
+      },
+      {
+        name: "claimRefund",
+        type: "function",
+        stateMutability: "nonpayable",
+        inputs: [{ type: "address", name: "token" }],
+        outputs: [{ type: "uint128", name: "amount" }]
+      },
+      {
+        name: "advanceTempo",
+        type: "function",
+        stateMutability: "nonpayable",
+        inputs: [
+          { type: "bytes", name: "header" },
+          {
+            type: "tuple[]",
+            name: "deposits",
+            components: [
+              { type: "uint8", name: "depositType" },
+              { type: "bytes", name: "depositData" },
+              { type: "bool", name: "rejected" }
+            ]
+          },
+          {
+            type: "tuple[]",
+            name: "decryptions",
+            components: [
+              { type: "bytes32", name: "sharedSecret" },
+              { type: "uint8", name: "sharedSecretYParity" },
+              {
+                type: "tuple",
+                name: "cpProof",
+                components: [
+                  { type: "bytes32", name: "s" },
+                  { type: "bytes32", name: "c" }
+                ]
+              }
+            ]
+          },
+          {
+            type: "tuple[]",
+            name: "enabledTokens",
+            components: [
+              { type: "address", name: "token" },
+              { type: "string", name: "name" },
+              { type: "string", name: "symbol" },
+              { type: "string", name: "currency" }
+            ]
+          }
+        ],
+        outputs: []
+      },
+      {
+        name: "advanceTempoHeaders",
+        type: "function",
+        stateMutability: "nonpayable",
+        inputs: [{ type: "bytes[]", name: "headers" }],
+        outputs: []
+      },
+      {
+        name: "TempoAdvanced",
+        type: "event",
+        inputs: [
+          { type: "bytes32", name: "tempoBlockHash", indexed: true },
+          { type: "uint64", name: "tempoBlockNumber", indexed: true },
+          { type: "uint256", name: "depositsProcessed" },
+          { type: "bytes32", name: "newProcessedDepositQueueHash" },
+          { type: "uint64", name: "lastProcessedDepositNumber" }
+        ]
+      },
+      {
+        name: "TempoAdvanced",
+        type: "event",
+        inputs: [
+          { type: "bytes32", name: "tempoBlockHash", indexed: true },
+          { type: "uint64", name: "tempoBlockNumber", indexed: true },
+          { type: "uint256", name: "depositsProcessed" },
+          { type: "bytes32", name: "newProcessedDepositQueueHash" },
+          { type: "uint64", name: "lastProcessedDepositNumber" },
+          { type: "uint64", name: "lastProcessedEnabledTokenCount" }
+        ]
+      },
+      {
+        name: "DepositProcessed",
+        type: "event",
+        inputs: [
+          { type: "bytes32", name: "depositHash", indexed: true },
+          { type: "address", name: "sender", indexed: true },
+          { type: "address", name: "to", indexed: true },
+          { type: "address", name: "token" },
+          { type: "uint128", name: "amount" },
+          { type: "bytes32", name: "memo" }
+        ]
+      },
+      {
+        name: "DepositFailed",
+        type: "event",
+        inputs: [
+          { type: "bytes32", name: "depositHash", indexed: true },
+          { type: "address", name: "sender", indexed: true },
+          { type: "address", name: "token" },
+          { type: "uint128", name: "amount" }
+        ]
+      },
+      {
+        name: "DepositRejected",
+        type: "event",
+        inputs: [
+          { type: "bytes32", name: "depositHash", indexed: true },
+          { type: "address", name: "sender", indexed: true },
+          { type: "uint8", name: "depositType" },
+          { type: "address", name: "token" },
+          { type: "uint128", name: "amount" },
+          { type: "address", name: "tempoRefundRecipient" }
+        ]
+      },
+      {
+        name: "WithdrawalBounceBackProcessed",
+        type: "event",
+        inputs: [
+          { type: "address", name: "zoneFallbackRecipient", indexed: true },
+          { type: "address", name: "token" },
+          { type: "uint128", name: "amount" }
+        ]
+      },
+      {
+        name: "WithdrawalBounceBackPending",
+        type: "event",
+        inputs: [
+          { type: "address", name: "zoneFallbackRecipient", indexed: true },
+          { type: "address", name: "token" },
+          { type: "uint128", name: "amount" }
+        ]
+      },
+      {
+        name: "RefundClaimed",
+        type: "event",
+        inputs: [
+          { type: "address", name: "recipient", indexed: true },
+          { type: "address", name: "token", indexed: true },
+          { type: "uint128", name: "amount" }
+        ]
+      },
+      {
+        name: "TokenEnabled",
+        type: "event",
+        inputs: [
+          { type: "address", name: "token", indexed: true },
+          { type: "string", name: "name" },
+          { type: "string", name: "symbol" },
+          { type: "string", name: "currency" }
+        ]
+      },
+      { name: "OnlySequencer", type: "error", inputs: [] },
+      { name: "InvalidDepositQueueHash", type: "error", inputs: [] },
+      { name: "InvalidWithdrawalBounceBack", type: "error", inputs: [] },
+      { name: "InvalidTokenEnablementHash", type: "error", inputs: [] },
+      { name: "MissingDecryptionData", type: "error", inputs: [] },
+      { name: "ExtraDecryptionData", type: "error", inputs: [] },
+      { name: "InvalidSharedSecretProof", type: "error", inputs: [] },
+      { name: "Unauthorized", type: "error", inputs: [] }
     ];
     exports.directPropAmm = [
       {
@@ -238094,7 +239586,12 @@ var require_Abis = __commonJS({
       ...exports.erc4626EngineFactory,
       ...exports.vedaEngine
     ];
-    exports.zone = [...exports.zoneMessenger, ...exports.zoneOutbox];
+    exports.zone = [
+      ...exports.zoneInbox,
+      ...exports.zoneMessenger,
+      ...exports.zoneOutbox,
+      ...exports.zonePortalPreT13Retired
+    ];
     exports.propAmm = [...exports.directPropAmm];
     exports.all = [...exports.core, ...exports.earn, ...exports.zone, ...exports.propAmm];
   }
@@ -238186,7 +239683,7 @@ var require_Addresses = __commonJS({
   "node_modules/viem/_cjs/tempo/Addresses.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.zoneVerifier = exports.zonePortalImplementation = exports.zoneOutbox = exports.zoneMessenger = exports.zoneFactory = exports.validatorV2 = exports.validator = exports.tip403Registry = exports.tip20Factory = exports.tip20ChannelReserve = exports.storageCredits = exports.stablecoinDex = exports.signatureVerifier = exports.receivePolicyGuard = exports.pathUsd = exports.nonceManager = exports.nativeMultisigFactory = exports.nativeMultisig = exports.feeManager = exports.currentCommittee = exports.addressRegistry = exports.accountRegistrar = exports.accountKeychain = exports.accountImplementation = void 0;
+    exports.zoneVerifier = exports.zonePortalImplementation = exports.zoneOutbox = exports.zoneInbox = exports.zoneMessenger = exports.zoneFactory = exports.validatorV2 = exports.validator = exports.tip403Registry = exports.tip20Factory = exports.tip20ChannelReserve = exports.storageCredits = exports.stablecoinDex = exports.signatureVerifier = exports.receivePolicyGuard = exports.pathUsd = exports.nonceManager = exports.nativeMultisigFactory = exports.nativeMultisig = exports.feeManager = exports.currentCommittee = exports.addressRegistry = exports.accountRegistrar = exports.accountKeychain = exports.accountImplementation = void 0;
     exports.zonePortal = zonePortal;
     var Hex = require_Hex();
     var tempo_1 = require_tempo();
@@ -238216,6 +239713,7 @@ var require_Addresses = __commonJS({
     exports.validatorV2 = "0xcccccccc00000000000000000000000000000001";
     exports.zoneFactory = "0x5aF2000000000000000000000000000000000000";
     exports.zoneMessenger = "0x5A4d000000000000000000000000000000000000";
+    exports.zoneInbox = "0x1c00000000000000000000000000000000000001";
     exports.zoneOutbox = "0x1c00000000000000000000000000000000000002";
     exports.zonePortalImplementation = "0x5AD1000000000000000000000000000000000000";
     exports.zoneVerifier = "0x5a56000000000000000000000000000000000000";
@@ -238240,17 +239738,17 @@ var require_Addresses = __commonJS({
   }
 });
 
-// node_modules/viem/_cjs/tempo/multisig/Signature.js
+// node_modules/viem/_cjs/tempo/accounts/Signature.js
 var require_Signature2 = __commonJS({
-  "node_modules/viem/_cjs/tempo/multisig/Signature.js"(exports) {
+  "node_modules/viem/_cjs/tempo/accounts/Signature.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.parseApproval = parseApproval;
     var tempo_1 = require_tempo();
     function parseApproval(signature3) {
       const approval = tempo_1.SignatureEnvelope.from(signature3);
-      if (approval.type === "multisig" || approval.type === "keychain")
-        throw new Error("Multisig owners must use primitive signatures.");
+      if (approval.type === "configurable" || approval.type === "keychain")
+        throw new Error("Configurable account owners must use primitive signatures.");
       return approval;
     }
   }
@@ -238275,7 +239773,7 @@ var require_Transaction3 = __commonJS({
     var Signature_js_1 = require_Signature2();
     function getType(transaction) {
       const account = transaction.account;
-      if (account?.keyType && account.keyType !== "secp256k1" || account?.source === "accessKey" || account?.source === "multisig" || typeof transaction.calls !== "undefined" || typeof transaction.feePayer !== "undefined" || typeof transaction.feePayerSignature !== "undefined" || typeof transaction.feeToken !== "undefined" || typeof transaction.keyAuthorization !== "undefined" || typeof transaction.multisigSimulation !== "undefined" || typeof transaction.nonceKey !== "undefined" || typeof transaction.owner !== "undefined" || typeof transaction.signature !== "undefined" || typeof transaction.signatures !== "undefined" || typeof transaction.validBefore !== "undefined" || typeof transaction.validAfter !== "undefined")
+      if (account?.keyType && account.keyType !== "secp256k1" || account?.source === "accessKey" || account?.source === "configurable" || typeof transaction.calls !== "undefined" || typeof transaction.feePayer !== "undefined" || typeof transaction.feePayerSignature !== "undefined" || typeof transaction.feeToken !== "undefined" || typeof transaction.keyAuthorization !== "undefined" || typeof transaction.accountSimulation !== "undefined" || typeof transaction.nonceKey !== "undefined" || typeof transaction.owner !== "undefined" || typeof transaction.signature !== "undefined" || typeof transaction.signatures !== "undefined" || typeof transaction.validBefore !== "undefined" || typeof transaction.validAfter !== "undefined")
         return "tempo";
       if (transaction.type)
         return transaction.type;
@@ -238340,7 +239838,7 @@ var require_Transaction3 = __commonJS({
           });
         return void 0;
       })();
-      const { chainId, feePayer, multisigSimulation, nonce, owner: _owner, ...rest } = transaction;
+      const { chainId, feePayer, accountSimulation, nonce, owner: _owner, ...rest } = transaction;
       const feePayerSignature = (() => {
         const feePayerSignature2 = transaction.feePayerSignature;
         if (feePayerSignature2)
@@ -238354,7 +239852,7 @@ var require_Transaction3 = __commonJS({
         return void 0;
       })();
       const hasPrefilledFeePayerSignature = typeof transaction.feePayerSignature !== "undefined" && transaction.feePayerSignature !== null;
-      const hasSenderSignature = typeof signature_provided !== "undefined" || Boolean(multisigSimulation && transaction.signatures);
+      const hasSenderSignature = typeof signature_provided !== "undefined" || Boolean(accountSimulation && transaction.signatures);
       const shouldStripFeeTokenForSponsorship = feePayer === true && (!hasSenderSignature || !feePayerSignature) || typeof feePayer === "object" && !hasSenderSignature || !hasSenderSignature && hasPrefilledFeePayerSignature;
       const transaction_ox = {
         ...rest,
@@ -238376,15 +239874,15 @@ var require_Transaction3 = __commonJS({
       const signature3 = (() => {
         if (signature_provided)
           return signature_provided;
-        if (!multisigSimulation || !transaction.signatures)
+        if (!accountSimulation || !transaction.signatures)
           return void 0;
         const payload = tempo_1.TxEnvelopeTempo.getSignPayload(tempo_1.TxEnvelopeTempo.from(transaction_sender_ox));
         const signatures = transaction.signatures.map((approval) => (0, Signature_js_1.parseApproval)(approval));
-        const config = tempo_1.MultisigConfig.from(multisigSimulation.config);
+        const config = tempo_1.AccountConfig.from(accountSimulation.config);
         const account = transaction.from;
         if (!account)
-          throw new Error("A multisig sender is required for signing.");
-        const sorted = tempo_1.SignatureEnvelope.sortMultisigApprovals({
+          throw new Error("A configurable account sender is required for signing.");
+        const sorted = tempo_1.SignatureEnvelope.sortApprovals({
           account,
           config,
           payload,
@@ -238458,7 +239956,7 @@ var require_Account = __commonJS({
     exports.fromHeadlessWebAuthn = fromHeadlessWebAuthn;
     exports.fromP256 = fromP256;
     exports.fromSecp256k1 = fromSecp256k1;
-    exports.fromMultisig = fromMultisig;
+    exports.fromConfig = fromConfig;
     exports.fromWebAuthnP256 = fromWebAuthnP256;
     exports.fromWebCryptoP256 = fromWebCryptoP256;
     exports.signVoucher = signVoucher;
@@ -238550,7 +240048,7 @@ var require_Account = __commonJS({
         }
       });
     }
-    function fromMultisig(value) {
+    function fromConfig(value) {
       const configInput = (() => {
         if (typeof value === "string")
           return void 0;
@@ -238561,7 +240059,7 @@ var require_Account = __commonJS({
         if (!configInput)
           return void 0;
         const ownerEntries = configInput.owners.map((value2) => typeof value2 === "string" || "address" in value2 ? { owner: value2, weight: 1 } : value2);
-        return tempo_1.MultisigConfig.from({
+        return tempo_1.AccountConfig.from({
           ...configInput,
           owners: ownerEntries.map(({ owner, weight }) => ({
             owner: typeof owner === "string" ? owner : owner.address,
@@ -238572,15 +240070,15 @@ var require_Account = __commonJS({
       })();
       if (typeof value !== "string") {
         if ((value.address === void 0 || value.address === "infer") && config.version !== 0n)
-          throw new Error("An initial multisig config must have version zero.");
+          throw new Error("An initial account config must have version zero.");
         if (value.address !== void 0 && value.address !== "infer" && config.version === 0n)
-          throw new Error("A current multisig config must have a version.");
+          throw new Error("A current account config must have a version.");
       }
       const address2 = Address.checksum((() => {
         if (typeof value === "string")
           return value;
         if (value.address === void 0 || value.address === "infer")
-          return tempo_1.MultisigConfig.getAddress(config, {
+          return tempo_1.AccountConfig.getAddress(config, {
             factory: Addresses_js_1.nativeMultisigFactory
           });
         return value.address;
@@ -238593,8 +240091,8 @@ var require_Account = __commonJS({
           return typeof owner === "string" ? [] : [(0, parseAccount_js_1.parseAccount)(owner)];
         });
       })();
-      if (ownerAccounts.some((owner) => owner.source === "multisig" || isAccessKeyAccount(owner)))
-        throw new Error("Multisig owners must use primitive signatures.");
+      if (ownerAccounts.some((owner) => owner.source === "configurable" || isAccessKeyAccount(owner)))
+        throw new Error("Configurable account owners must use primitive signatures.");
       const owners = config?.owners.flatMap(({ owner }) => {
         const account2 = ownerAccounts.find((account3) => Address.isEqual(account3.address, owner));
         return account2 ? [account2] : [];
@@ -238604,13 +240102,13 @@ var require_Account = __commonJS({
         config,
         owners,
         publicKey: "0x",
-        source: "multisig",
+        source: "configurable",
         type: "local",
         async sign({ hash: hash5 }) {
-          return tempo_1.SignatureEnvelope.serialize(await signMultisig(account, { payload: hash5 }));
+          return tempo_1.SignatureEnvelope.serialize(await signConfigurable(account, { payload: hash5 }));
         },
         async signMessage() {
-          throw new Error("`signMessage` is not supported for multisig accounts.");
+          throw new Error("`signMessage` is not supported for configurable accounts.");
         },
         async signTransaction(transaction, options) {
           const { serializer = Transaction.serialize } = options ?? {};
@@ -238618,9 +240116,9 @@ var require_Account = __commonJS({
           if (request2.owner) {
             const owner = (0, parseAccount_js_1.parseAccount)(request2.owner);
             if (owner.type !== "local")
-              throw new Error("A local owner account is required to approve a multisig transaction.");
+              throw new Error("A local owner account is required to approve a configurable account transaction.");
             if (owner.source !== "root")
-              throw new Error("A Tempo owner account is required to approve a multisig transaction.");
+              throw new Error("A Tempo owner account is required to approve a configurable account transaction.");
             const { owner: _, ...ownerRequest } = request2;
             return await owner.signTransaction(ownerRequest, options);
           }
@@ -238632,10 +240130,10 @@ var require_Account = __commonJS({
             ...request2.feePayerSignature === void 0 ? {} : { feePayerSignature: null }
           };
           const payload = (0, keccak256_js_1.keccak256)(await serializer(presign));
-          const simulation = request2.multisigSimulation;
+          const simulation = request2.accountSimulation;
           if (request2.from && !Address.isEqual(request2.from, address2))
-            throw new Error("Multisig account does not match the transaction sender.");
-          const signature3 = await signMultisig(account, {
+            throw new Error("Configurable account does not match the transaction sender.");
+          const signature3 = await signConfigurable(account, {
             config: simulation?.config,
             payload,
             signatures: request2.signatures?.map((signature4) => (0, Signature_js_1.parseApproval)(signature4))
@@ -238643,20 +240141,20 @@ var require_Account = __commonJS({
           return await serializer(transaction, signature3);
         },
         async signTypedData() {
-          throw new Error("`signTypedData` is not supported for multisig accounts.");
+          throw new Error("`signTypedData` is not supported for configurable accounts.");
         }
       };
       return account;
     }
-    function isMultisigAccount(account) {
-      return account.source === "multisig";
+    function isConfigurableAccount(account) {
+      return account.source === "configurable";
     }
-    async function signMultisig(account, parameters) {
+    async function signConfigurable(account, parameters) {
       const { config, payload, signatures: providedSignatures = [] } = parameters;
       const currentConfig = config ?? account.config;
       if (!currentConfig)
-        throw new Error("A current multisig config is required for local signing.");
-      const digest = tempo_1.MultisigConfig.getSignPayload({
+        throw new Error("A current account config is required for local signing.");
+      const digest = tempo_1.AccountConfig.getSignPayload({
         account: account.address,
         config: currentConfig,
         payload
@@ -238686,7 +240184,7 @@ var require_Account = __commonJS({
         if (!ownerAccount)
           continue;
         if (!ownerAccount.sign)
-          throw new Error("Multisig owner account cannot sign.");
+          throw new Error("Configurable account owner account cannot sign.");
         signatures.push((0, Signature_js_1.parseApproval)(await ownerAccount.sign({ hash: digest })));
         signedOwners.add(address2);
         weight += Number(owner.weight);
@@ -238694,11 +240192,11 @@ var require_Account = __commonJS({
           break;
       }
       if (weight < Number(currentConfig.threshold))
-        throw new Error("Local multisig owners do not meet the threshold.");
+        throw new Error("Local owners do not meet the threshold.");
       return tempo_1.SignatureEnvelope.from({
         account: account.address,
         config: currentConfig,
-        signatures: tempo_1.SignatureEnvelope.sortMultisigApprovals({
+        signatures: tempo_1.SignatureEnvelope.sortApprovals({
           account: account.address,
           config: currentConfig,
           payload,
@@ -238769,7 +240267,7 @@ var require_Account = __commonJS({
     function getKeyAuthorizationSignPayload(account, parameters) {
       const { admin, chainId, expiry, key: key3, limits, scopes, witness } = parameters;
       const { accessKeyAddress, keyType: type } = resolveAccessKey(key3);
-      const boundFields = isAccessKeyAccount(account) || isMultisigAccount(account) ? { account: account.address } : {};
+      const boundFields = isAccessKeyAccount(account) || isConfigurableAccount(account) ? { account: account.address } : {};
       const restrictions = admin ? {} : { expiry, limits, scopes };
       return tempo_1.KeyAuthorization.getSignPayload({
         address: accessKeyAddress,
@@ -238782,21 +240280,21 @@ var require_Account = __commonJS({
       });
     }
     async function signKeyAuthorization(account, parameters) {
-      const { admin, chainId, expiry, key: key3, limits, multisig: multisigState, scopes, signatures, witness } = parameters;
+      const { admin, chainId, expiry, key: key3, limits, configurable: configurableState, scopes, signatures, witness } = parameters;
       const { accessKeyAddress, keyType: type } = resolveAccessKey(key3);
       const isAccessKey = isAccessKeyAccount(account);
-      const isMultisig = isMultisigAccount(account);
-      const boundFields = isAccessKey || isMultisig ? { account: account.address } : {};
+      const isConfigurable = isConfigurableAccount(account);
+      const boundFields = isAccessKey || isConfigurable ? { account: account.address } : {};
       const restrictions = admin ? {} : { expiry, limits, scopes };
       const hash5 = getKeyAuthorizationSignPayload(account, parameters);
       const signature3 = await (async () => {
         if (isAccessKey)
           return account.sign({ hash: hash5, raw: true });
-        if (isMultisig) {
-          if (!multisigState)
-            throw new Error("Multisig state is required to sign a key authorization.");
-          return tempo_1.SignatureEnvelope.serialize(await signMultisig(account, {
-            config: multisigState.config,
+        if (isConfigurable) {
+          if (!configurableState)
+            throw new Error("Configurable account state is required to sign a key authorization.");
+          return tempo_1.SignatureEnvelope.serialize(await signConfigurable(account, {
+            config: configurableState.config,
             payload: hash5,
             signatures: signatures?.map((signature4) => (0, Signature_js_1.parseApproval)(signature4))
           }));
@@ -238869,12 +240367,12 @@ var require_Account = __commonJS({
             return transaction;
           })();
           const payload = (0, keccak256_js_1.keccak256)(await serializer(presign));
-          const { multisigSimulation, from: from17 } = transaction;
-          if (multisigSimulation) {
+          const { accountSimulation, from: from17 } = transaction;
+          if (accountSimulation) {
             if (!from17)
-              throw new Error("A multisig sender is required for signing.");
-            const config = tempo_1.MultisigConfig.from(multisigSimulation.config);
-            const digest = tempo_1.MultisigConfig.getSignPayload({
+              throw new Error("A configurable account sender is required for signing.");
+            const config = tempo_1.AccountConfig.from(accountSimulation.config);
+            const digest = tempo_1.AccountConfig.getSignPayload({
               account: from17,
               config,
               payload
@@ -239153,9 +240651,9 @@ var require_utils15 = __commonJS({
   }
 });
 
-// node_modules/viem/_cjs/tempo/actions/multisig.js
-var require_multisig = __commonJS({
-  "node_modules/viem/_cjs/tempo/actions/multisig.js"(exports) {
+// node_modules/viem/_cjs/tempo/actions/accounts.js
+var require_accounts = __commonJS({
+  "node_modules/viem/_cjs/tempo/actions/accounts.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getConfig = getConfig;
@@ -239174,10 +240672,10 @@ var require_multisig = __commonJS({
     var utils_js_1 = require_utils15();
     async function getConfig(client, parameters) {
       const config = await client.request({
-        method: "multisig_getConfig",
+        method: "account_getConfig",
         params: [{ address: parameters.address }]
       });
-      return config ? tempo_1.MultisigConfig.fromRpc(config) : null;
+      return config ? tempo_1.AccountConfig.fromRpc(config) : null;
     }
     async function getConfigCommitment(client, parameters) {
       const { account, ...rest } = parameters;
@@ -239199,10 +240697,10 @@ var require_multisig = __commonJS({
     })(getConfigCommitment || (exports.getConfigCommitment = getConfigCommitment = {}));
     async function getOperation(client, parameters) {
       const operation = await client.request({
-        method: "multisig_getOperation",
+        method: "account_getOperation",
         params: [parameters.hash]
       });
-      return operation ? tempo_1.MultisigOperation.fromRpc(operation) : null;
+      return operation ? tempo_1.AccountOperation.fromRpc(operation) : null;
     }
     async function updateConfig(client, parameters) {
       return updateConfig.inner(writeContract_js_1.writeContract, client, parameters);
@@ -239212,7 +240710,7 @@ var require_multisig = __commonJS({
         const { account: account_, currentConfig: currentConfig_, nextConfig, ...rest } = parameters;
         const accountValue = account_ ?? client.account;
         const account = (() => {
-          if (typeof accountValue === "object" && accountValue.source === "multisig")
+          if (typeof accountValue === "object" && accountValue.source === "configurable")
             return accountValue;
           return void 0;
         })();
@@ -239234,12 +240732,12 @@ var require_multisig = __commonJS({
         })();
         const currentConfig = await (async () => {
           if (config)
-            return tempo_1.MultisigConfig.from(config);
+            return tempo_1.AccountConfig.from(config);
           if (!address2)
-            throw new Error("A multisig account address or current config is required.");
+            throw new Error("A configurable account address or current config is required.");
           const cachedConfig = await getConfig(client, { address: address2 });
           if (!cachedConfig)
-            throw new Error(`No current multisig config is cached for account ${address2}. Provide the current config.`);
+            throw new Error(`No current account config is cached for account ${address2}. Provide the current config.`);
           return cachedConfig;
         })();
         const resolvedAccount = (() => {
@@ -239248,7 +240746,7 @@ var require_multisig = __commonJS({
           if (typeof accountValue === "object")
             return accountValue;
           if (address2)
-            return (0, Account_js_1.fromMultisig)({ address: address2, ...currentConfig });
+            return (0, Account_js_1.fromConfig)({ address: address2, ...currentConfig });
           return void 0;
         })();
         return await action(client, {
@@ -239259,13 +240757,8 @@ var require_multisig = __commonJS({
       }
       updateConfig2.inner = inner;
       function call2(args) {
-        const currentConfig = tempo_1.MultisigConfig.from(args.currentConfig);
-        const nextConfig = tempo_1.MultisigConfig.from({
-          owners: args.nextConfig.owners,
-          salt: currentConfig.salt,
-          threshold: args.nextConfig.threshold,
-          version: currentConfig.version + 1n
-        });
+        const currentConfig = tempo_1.AccountConfig.from(args.currentConfig);
+        const nextConfig = tempo_1.AccountConfig.update(currentConfig, args.nextConfig);
         return (0, utils_js_1.defineCall)({
           address: Addresses.nativeMultisig,
           abi: Abis.nativeMultisig,
@@ -239298,7 +240791,7 @@ var require_multisig = __commonJS({
       const { args } = updateConfig.extractEvent(receipt.logs);
       return {
         account: args.account,
-        config: tempo_1.MultisigConfig.from({
+        config: tempo_1.AccountConfig.from({
           owners: args.owners,
           salt: args.salt,
           threshold: args.threshold,
@@ -239326,6 +240819,7 @@ var require_accessKey = __commonJS({
     exports.revoke = revoke;
     exports.revokeSync = revokeSync;
     exports.prepareAuthorization = prepareAuthorization2;
+    exports.saveAuthorization = saveAuthorization;
     exports.signAuthorization = signAuthorization3;
     exports.updateLimit = updateLimit;
     exports.updateLimitSync = updateLimitSync;
@@ -239341,15 +240835,16 @@ var require_accessKey = __commonJS({
     var sendTransactionSync_js_1 = require_sendTransactionSync();
     var writeContract_js_1 = require_writeContract();
     var writeContractSync_js_1 = require_writeContractSync();
+    var rpc_js_1 = require_rpc();
     var parseEventLogs_js_1 = require_parseEventLogs();
     var isAddressEqual_js_1 = require_isAddressEqual();
     var Abis = require_Abis();
     var Account_js_1 = require_Account();
     var Addresses = require_Addresses();
+    var Signature_js_1 = require_Signature2();
     var Hardfork = require_Hardfork();
     var utils_js_1 = require_utils15();
-    var Signature_js_1 = require_Signature2();
-    var multisig_js_1 = require_multisig();
+    var accounts_js_1 = require_accounts();
     var signatureTypes = {
       0: "secp256k1",
       1: "p256",
@@ -239370,7 +240865,7 @@ var require_accessKey = __commonJS({
           throw new Error("account is required.");
         if (!chainId)
           throw new Error("chainId is required.");
-        const keyAuthorization = await signAuthorization3(client, {
+        const keyAuthorization = await signLocal(client, {
           account: account_,
           accessKey,
           chainId,
@@ -239642,14 +241137,14 @@ var require_accessKey = __commonJS({
       if (!chainId)
         throw new Error("chainId is required.");
       const parsed = (0, parseAccount_js_1.parseAccount)(account_);
-      const multisigState = await (async () => {
-        if ("multisig" in parameters)
-          return parameters.multisig;
-        if (parsed.source !== "multisig")
+      const configurableState = await (async () => {
+        if ("configurable" in parameters)
+          return parameters.configurable;
+        if (parsed.source !== "configurable")
           return void 0;
         const account = parsed;
         if (!account.config)
-          throw new Error("A multisig config is required to prepare a key authorization.");
+          throw new Error("An account config is required to prepare a key authorization.");
         return { config: account.config };
       })();
       const authorizationSignPayload = (0, Account_js_1.getKeyAuthorizationSignPayload)(parsed, {
@@ -239657,18 +241152,25 @@ var require_accessKey = __commonJS({
         chainId: BigInt(chainId),
         key: parameters.accessKey
       });
-      const signPayload = parsed.source === "multisig" && multisigState ? tempo_1.MultisigConfig.getSignPayload({
+      const signPayload = parsed.source === "configurable" && configurableState ? tempo_1.AccountConfig.getSignPayload({
         account: parsed.address,
-        config: multisigState.config,
+        config: configurableState.config,
         payload: authorizationSignPayload
       }) : authorizationSignPayload;
       return {
         ...parameters,
         account: parsed,
         chainId,
-        multisig: multisigState,
+        configurable: configurableState,
         signPayload
       };
+    }
+    async function saveAuthorization(client, parameters) {
+      const { keyAuthorization } = parameters;
+      await client.request({
+        method: "relay_saveKeyAuthorization",
+        params: [tempo_1.KeyAuthorization.toRpc(keyAuthorization)]
+      });
     }
     async function signAuthorization3(client, parameters) {
       const coordinated = "hash" in parameters && parameters.hash || "owner" in parameters && parameters.owner;
@@ -239676,45 +241178,45 @@ var require_accessKey = __commonJS({
         const parameters_ = parameters;
         const owner_ = parameters_.owner;
         if (!owner_ || typeof owner_ === "string")
-          throw new Error("A local owner account is required to approve a multisig key authorization.");
+          throw new Error("A local owner account is required to approve a configurable account key authorization.");
         const owner = (0, parseAccount_js_1.parseAccount)(owner_);
         const sign4 = owner.sign;
         if (!sign4)
-          throw new Error("A local owner account is required to approve a multisig key authorization.");
+          throw new Error("A local owner account is required to approve a configurable account key authorization.");
         const request2 = await (async () => {
           if ("hash" in parameters_ && parameters_.hash) {
             const signature4 = tempo_1.SignatureEnvelope.serialize(tempo_1.SignatureEnvelope.from(await sign4({ hash: parameters_.hash })));
             return { hash: parameters_.hash, signature: signature4 };
           }
-          const { account: account_2, owner: _2, ...authorization } = parameters_;
-          const address2 = typeof account_2 === "string" ? account_2 : account_2.address;
+          const { account: account_, owner: _, ...authorization } = parameters_;
+          const address2 = typeof account_ === "string" ? account_ : account_.address;
           const config = await (async () => {
-            if (typeof account_2 !== "string" && account_2.config)
-              return account_2.config;
-            const config2 = await (0, multisig_js_1.getConfig)(client, { address: address2 });
+            if (typeof account_ !== "string" && account_.config)
+              return account_.config;
+            const config2 = await (0, accounts_js_1.getConfig)(client, { address: address2 });
             if (config2)
               return config2;
-            throw new Error(`No current multisig config is cached for account ${address2}. Provide the current config.`);
+            throw new Error(`No current account config is cached for account ${address2}. Provide the current config.`);
           })();
           const account = (() => {
             if (config.version !== 0n)
-              return (0, Account_js_1.fromMultisig)({ address: address2, ...config });
-            const { version: _3, ...initialConfig } = config;
-            return (0, Account_js_1.fromMultisig)({ address: "infer", ...initialConfig });
+              return (0, Account_js_1.fromConfig)({ address: address2, ...config });
+            const { version: _2, ...initialConfig } = config;
+            return (0, Account_js_1.fromConfig)({ address: "infer", ...initialConfig });
           })();
           if (!(0, isAddressEqual_js_1.isAddressEqual)(account.address, address2))
-            throw new Error("Initial multisig config does not match the account.");
-          const prepared2 = await prepareAuthorization2(client, {
+            throw new Error("Initial account config does not match the account.");
+          const prepared = await prepareAuthorization2(client, {
             ...authorization,
             account
           });
-          const signature3 = tempo_1.SignatureEnvelope.serialize(tempo_1.SignatureEnvelope.from(await sign4({ hash: prepared2.signPayload })));
-          const { accessKey: accessKey2, admin, chainId: chainId2, expiry, limits, scopes, witness } = prepared2;
-          const { accessKeyAddress, keyType: type } = (0, Account_js_1.resolveAccessKey)(accessKey2);
-          const keyAuthorization2 = tempo_1.KeyAuthorization.from({
+          const signature3 = tempo_1.SignatureEnvelope.serialize(tempo_1.SignatureEnvelope.from(await sign4({ hash: prepared.signPayload })));
+          const { accessKey, admin, chainId, expiry, limits, scopes, witness } = prepared;
+          const { accessKeyAddress, keyType: type } = (0, Account_js_1.resolveAccessKey)(accessKey);
+          const keyAuthorization3 = tempo_1.KeyAuthorization.from({
             account: account.address,
             address: accessKeyAddress,
-            chainId: BigInt(chainId2),
+            chainId: BigInt(chainId),
             signature: tempo_1.SignatureEnvelope.from({
               account: account.address,
               config,
@@ -239724,43 +241226,54 @@ var require_accessKey = __commonJS({
             ...witness ? { witness } : {},
             ...admin ? { isAdmin: true } : { expiry, limits, scopes }
           });
-          return { keyAuthorization: tempo_1.KeyAuthorization.toRpc(keyAuthorization2) };
+          return { keyAuthorization: tempo_1.KeyAuthorization.toRpc(keyAuthorization3) };
         })();
         const operation = await client.request({
-          method: "multisig_approveKeyAuthorization",
+          method: "account_approveKeyAuthorization",
           params: [request2]
         });
-        const multisig = tempo_1.MultisigOperation.fromRpc(operation);
-        const keyAuthorization = tempo_1.KeyAuthorization.deserialize(await (async () => {
-          if (multisig.status === "success")
-            return multisig.keyAuthorization;
-          const approvals = await tempo_1.MultisigOperation.selectApprovals({
-            account: multisig.account,
-            approvals: multisig.approvals,
-            config: multisig.config,
-            hash: multisig.hash
+        const operation_ = tempo_1.AccountOperation.fromRpc(operation);
+        const keyAuthorization2 = tempo_1.KeyAuthorization.deserialize(await (async () => {
+          if (operation_.status === "success")
+            return operation_.keyAuthorization;
+          const approvals = await tempo_1.AccountOperation.selectApprovals({
+            account: operation_.account,
+            approvals: operation_.approvals,
+            config: operation_.config,
+            hash: operation_.hash
           });
-          return tempo_1.MultisigOperation.serializeKeyAuthorization(multisig.keyAuthorization, {
-            account: multisig.account,
+          return tempo_1.AccountOperation.serializeKeyAuthorization(operation_.keyAuthorization, {
+            account: operation_.account,
             approvals: approvals.selectedApprovals.length > 0 ? approvals.selectedApprovals : approvals.approvals.slice(0, 1),
-            config: multisig.config
+            config: operation_.config
           });
         })());
-        if (!keyAuthorization.signature)
-          throw new Error("Expected a signed multisig key authorization.");
+        if (!keyAuthorization2.signature)
+          throw new Error("Expected a signed configurable account key authorization.");
         return {
-          ...keyAuthorization,
-          hash: multisig.hash,
-          multisig,
-          status: multisig.status
+          ...keyAuthorization2,
+          hash: operation_.hash,
+          operation: operation_,
+          status: operation_.status
         };
       }
+      const keyAuthorization = await signLocal(client, parameters);
+      const signer = parameters.account ?? client.account;
+      if (client.transport.keyAuthorization && signer && (0, parseAccount_js_1.parseAccount)(signer).source !== "accessKey")
+        await saveAuthorization(client, { keyAuthorization }).catch((error) => {
+          if (error instanceof rpc_js_1.MethodNotFoundRpcError || error instanceof rpc_js_1.MethodNotSupportedRpcError)
+            return;
+          throw error;
+        });
+      return keyAuthorization;
+    }
+    async function signLocal(client, parameters) {
       const prepared = "signPayload" in parameters ? parameters : await prepareAuthorization2(client, parameters);
-      const { accessKey, account: account_, chainId, multisig: multisigState, signPayload: _, ...rest } = prepared;
+      const { accessKey, account: account_, chainId, configurable: configurableState, signPayload: _, ...rest } = prepared;
       return (0, Account_js_1.signKeyAuthorization)(account_, {
         chainId: BigInt(chainId),
         key: accessKey,
-        multisig: multisigState,
+        configurable: configurableState,
         ...rest
       });
     }
@@ -239905,7 +241418,7 @@ var require_Formatters = __commonJS({
       if (!(0, Transaction_js_1.isTempo)(transaction))
         return (0, transaction_js_1.formatTransaction)(transaction);
       const blockTimestamp = transaction.blockTimestamp == null ? void 0 : BigInt(transaction.blockTimestamp);
-      const multisig = transaction.multisig;
+      const operation = transaction.operation;
       const { feePayerSignature, gasPrice: _, nonce, ...tx } = tempo_1.Transaction.fromRpc(transaction);
       return {
         ...tx,
@@ -239917,8 +241430,8 @@ var require_Formatters = __commonJS({
           v: BigInt(feePayerSignature.v ?? 27),
           yParity: feePayerSignature.yParity
         } : void 0,
-        multisig: formatMultisig(multisig),
         nonce: Number(nonce),
+        operation: formatOperation(operation),
         typeHex: tempo_1.Transaction.toRpcType[tx.type],
         type: tx.type
       };
@@ -239927,16 +241440,16 @@ var require_Formatters = __commonJS({
       const transactionReceipt = (0, transactionReceipt_js_1.formatTransactionReceipt)(receipt);
       return {
         ...transactionReceipt,
-        multisig: formatMultisig(receipt.multisig),
+        operation: formatOperation(receipt.operation),
         ...receipt.status === "pending" ? { status: "pending", type: "tempo" } : {}
       };
     }
-    function formatMultisig(value) {
+    function formatOperation(value) {
       if (!value)
         return void 0;
-      const operation = tempo_1.MultisigOperation.fromRpc(value);
+      const operation = tempo_1.AccountOperation.fromRpc(value);
       if (operation.type !== "transaction")
-        throw new Error("Expected a multisig transaction operation.");
+        throw new Error("Expected an account transaction operation.");
       return operation;
     }
     function formatTransactionRequest2(r2, action) {
@@ -239944,7 +241457,7 @@ var require_Formatters = __commonJS({
       const account = request2.account ? (0, parseAccount_js_1.parseAccount)(request2.account) : void 0;
       const owner = request2.owner ? (0, parseAccount_js_1.parseAccount)(request2.owner) : void 0;
       if (owner?.type === "json-rpc")
-        throw new Error("A local owner account is required to approve a multisig transaction.");
+        throw new Error("A local owner account is required to approve a configurable account transaction.");
       if (!(0, Transaction_js_1.isTempo)(request2))
         return (0, transactionRequest_js_1.formatTransactionRequest)(r2, action);
       if (action)
@@ -239989,6 +241502,7 @@ var require_Formatters = __commonJS({
         ...keyData ? { keyData } : {},
         ...keyId ? { keyId } : {},
         ...keyType ? { keyType } : {},
+        ...request2.accountSimulation ? { accountSimulation: void 0 } : {},
         ...request2.owner ? { owner: void 0 } : {},
         ...typeof request2.feePayer !== "undefined" ? {
           feePayer: typeof request2.feePayer === "object" ? (0, parseAccount_js_1.parseAccount)(request2.feePayer) : request2.feePayer
@@ -240050,7 +241564,7 @@ var require_chainConfig5 = __commonJS({
     var getAction_js_1 = require_getAction();
     var keccak256_js_1 = require_keccak256();
     var accessKey_js_1 = require_accessKey();
-    var multisig_js_1 = require_multisig();
+    var accounts_js_1 = require_accounts();
     var Formatters = require_Formatters();
     var Concurrent = require_concurrent();
     var Transaction = require_Transaction3();
@@ -240075,32 +241589,35 @@ var require_chainConfig5 = __commonJS({
         async (r2, { client, phase }) => {
           const request2 = r2;
           if (request2.hash) {
-            if (!request2.account || typeof request2.account === "string" || request2.account.source !== "multisig")
-              throw new Error("A local multisig account is required to approve a stored multisig transaction.");
+            if (!request2.account || typeof request2.account === "string" || request2.account.source !== "configurable")
+              throw new Error("A local configurable account is required to approve a stored configurable account transaction.");
             if (!request2.owner || typeof request2.owner === "string")
-              throw new Error("A local owner account is required to approve a stored multisig transaction.");
+              throw new Error("A local owner account is required to approve a stored configurable account transaction.");
             if (request2.owner.source !== "root")
-              throw new Error("A Tempo owner account is required to approve a stored multisig transaction.");
+              throw new Error("A Tempo owner account is required to approve a stored configurable account transaction.");
             const transaction = await (0, getAction_js_1.getAction)(client, getTransaction_js_1.getTransaction, "getTransaction")({ hash: request2.hash });
-            const operation = "multisig" in transaction ? transaction.multisig : void 0;
+            const operation = "operation" in transaction ? transaction.operation : void 0;
             if (!operation)
-              throw new Error("Expected a multisig operation transaction.");
+              throw new Error("Expected an account operation transaction.");
             if (!(0, isAddressEqual_js_1.isAddressEqual)(operation.account, request2.account.address))
-              throw new Error("Multisig operation account does not match the requested account.");
+              throw new Error("Account operation account does not match the requested account.");
             const storedTransaction = Transaction.deserialize(operation.transaction);
-            const hash5 = tempo_1.MultisigOperation.getHash({
+            const hash5 = tempo_1.AccountOperation.getHash({
               account: operation.account,
               config: operation.config,
               transaction: operation.transaction,
               type: "transaction"
             });
             if (hash5.toLowerCase() !== request2.hash.toLowerCase())
-              throw new Error("Multisig operation hash does not match transaction.");
+              throw new Error("Account operation hash does not match transaction.");
             return {
               ...storedTransaction,
+              gas: storedTransaction.gas ?? 0n,
+              maxFeePerGas: storedTransaction.maxFeePerGas ?? 0n,
+              maxPriorityFeePerGas: storedTransaction.maxPriorityFeePerGas ?? 0n,
               account: request2.account,
               from: operation.account,
-              multisigSimulation: getMultisigSimulation({
+              accountSimulation: getAccountSimulation({
                 config: operation.config,
                 local: request2.account
               }),
@@ -240116,8 +241633,8 @@ var require_chainConfig5 = __commonJS({
             }
             return request2;
           }
-          const multisigIdentity = (() => {
-            if (request2.account?.source === "multisig")
+          const configurableIdentity = (() => {
+            if (request2.account?.source === "configurable")
               return {
                 account: request2.account.address,
                 config: request2.account.config,
@@ -240125,31 +241642,31 @@ var require_chainConfig5 = __commonJS({
               };
             return void 0;
           })();
-          if (request2.owner && !multisigIdentity)
-            throw new Error("A multisig account is required when an owner is provided.");
+          if (request2.owner && !configurableIdentity)
+            throw new Error("A configurable account is required when an owner is provided.");
           if (request2.owner && typeof request2.owner === "string")
-            throw new Error("A local owner account is required to approve a multisig transaction.");
+            throw new Error("A local owner account is required to approve a configurable account transaction.");
           if (request2.owner && request2.owner.source !== "root")
-            throw new Error("A Tempo owner account is required to approve a multisig transaction.");
-          const coordinatedMultisig = !!multisigIdentity && !!request2.owner && client.transport.multisig === true;
-          if (multisigIdentity) {
-            const { account, local } = multisigIdentity;
+            throw new Error("A Tempo owner account is required to approve a configurable account transaction.");
+          const coordinated = !!configurableIdentity && !!request2.owner && client.transport.accounts === true;
+          if (configurableIdentity) {
+            const { account, local } = configurableIdentity;
             if (!account)
-              throw new Error("A multisig account address is required with a current config.");
+              throw new Error("A configurable account address is required with a current config.");
             const config = await (async () => {
-              if (multisigIdentity.config)
-                return multisigIdentity.config;
-              if (!coordinatedMultisig)
+              if (configurableIdentity.config)
+                return configurableIdentity.config;
+              if (!coordinated)
                 return void 0;
-              const cachedConfig = await (0, getAction_js_1.getAction)(client, multisig_js_1.getConfig, "getConfig")({ address: account });
+              const cachedConfig = await (0, getAction_js_1.getAction)(client, accounts_js_1.getConfig, "getConfig")({ address: account });
               if (!cachedConfig)
-                throw new Error(`No current multisig config is cached for account ${account}. Provide the current config.`);
+                throw new Error(`No current account config is cached for account ${account}. Provide the current config.`);
               return cachedConfig;
             })();
             if (!config)
-              throw new Error("A multisig config is required to prepare a transaction.");
+              throw new Error("An account config is required to prepare a transaction.");
             request2.from = account;
-            request2.multisigSimulation = getMultisigSimulation({
+            request2.accountSimulation = getAccountSimulation({
               config,
               local
             });
@@ -240159,7 +241676,7 @@ var require_chainConfig5 = __commonJS({
               return true;
             if (typeof request2.nonceKey !== "undefined")
               return false;
-            if (multisigIdentity)
+            if (configurableIdentity)
               return false;
             if (request2.feePayer && typeof request2.nonceKey === "undefined")
               return true;
@@ -240169,12 +241686,12 @@ var require_chainConfig5 = __commonJS({
               return await Concurrent.detect(address2.toLowerCase());
             return false;
           })();
-          if (coordinatedMultisig && typeof request2.nonceKey === "undefined") {
+          if (coordinated && typeof request2.nonceKey === "undefined") {
             request2.nonceKey = Hex.toBigInt(Hex.random(31)) + 1n;
             request2.nonce = 0;
           } else if (useExpiringNonce) {
             request2.nonceKey = number_js_1.maxUint256;
-            request2.nonce = 0;
+            request2.nonce ??= 0;
             if (typeof request2.validAfter === "undefined")
               request2.validAfter = randomValidAfter();
             if (typeof request2.validBefore === "undefined")
@@ -240216,15 +241733,15 @@ var require_chainConfig5 = __commonJS({
         transaction: serializeTransaction3,
         async transactionEnvelope({ serializedTransaction, transaction }) {
           const request2 = transaction;
-          if (!request2.multisigSimulation)
+          if (!request2.accountSimulation)
             return serializedTransaction;
           try {
             tempo_1.SignatureEnvelope.deserialize(serializedTransaction);
           } catch {
             const transaction2 = Transaction.deserialize(serializedTransaction);
-            if (transaction2.signature?.type === "multisig")
+            if (transaction2.signature?.type === "configurable")
               return serializedTransaction;
-            throw new Error("A Tempo owner account is required to approve a multisig transaction.");
+            throw new Error("A Tempo owner account is required to approve a configurable account transaction.");
           }
           return await serializeTransaction3({
             ...request2,
@@ -240293,7 +241810,7 @@ var require_chainConfig5 = __commonJS({
         return await (0, getAction_js_1.getAction)(client, verifyHash_js_1.verifyHash, "verifyHash")({ ...parameters, chain: null });
       }
     };
-    function getMultisigSimulation(options) {
+    function getAccountSimulation(options) {
       const { config, local } = options;
       return {
         approvals: selectOwners(config).map((owner) => {
@@ -240329,7 +241846,7 @@ var require_chainConfig5 = __commonJS({
       const owners = [...config.owners].sort((a, b) => Number(b.weight) - Number(a.weight) || a.owner.toLowerCase().localeCompare(b.owner.toLowerCase()));
       const selected = [];
       let weight = 0;
-      for (const owner of owners.slice(0, tempo_1.MultisigConfig.maxSignatures)) {
+      for (const owner of owners.slice(0, tempo_1.AccountConfig.maxSignatures)) {
         if (weight >= Number(config.threshold))
           break;
         selected.push(owner);
@@ -240359,7 +241876,7 @@ var require_tempo2 = __commonJS({
       },
       contracts: {
         earnFactory: {
-          address: "0xb5889A96114014d4C032ebD76772c10bF3b97137"
+          address: "0x3085A8003f340CD51C72D9e1a1298CDafB171B02"
         },
         erc4626EngineFactory: {
           address: "0xd43D00981222a8db444A528E69f19E3cE5A7D2Ff"
@@ -240461,10 +241978,10 @@ var require_tempoModerato = __commonJS({
       },
       contracts: {
         earnFactory: {
-          address: "0xb5889A96114014d4C032ebD76772c10bF3b97137"
+          address: "0x1de6B233984583F4d936ae4265f3b60282b70cc6"
         },
         erc4626EngineFactory: {
-          address: "0xd43D00981222a8db444A528E69f19E3cE5A7D2Ff"
+          address: "0x0d57c10249eb3a92b7d81bBA6221F80F2865448A"
         }
       },
       name: "Tempo Testnet (Moderato)",
@@ -243819,20 +245336,20 @@ var require_chains = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.avalancheFuji = exports.avalanche = exports.autheoTestnet = exports.auroria = exports.auroraTestnet = exports.aurora = exports.atletaOlympia = exports.astarZkyoto = exports.astarZkEVM = exports.astar = exports.assetChainTestnet = exports.assetChain = exports.artheraTestnet = exports.arthera = exports.artelaTestnet = exports.areum = exports.areonNetworkTestnet = exports.areonNetwork = exports.arenaz = exports.arcTestnet = exports.arc = exports.arbitrumSepolia = exports.arbitrumNova = exports.arbitrumGoerli = exports.arbitrum = exports.apollo = exports.apexTestnet = exports.apeChain = exports.anvil = exports.ancient8Sepolia = exports.ancient8 = exports.alpenTestnet = exports.alienxHalTestnet = exports.alienx = exports.alephZeroTestnet = exports.alephZero = exports.aioz = exports.agungTestnet = exports.adi = exports.adf = exports.acria = exports.acala = exports.abstractTestnet = exports.abstract = exports.abey = exports.fireChain = exports.zeroGTestnet = exports.zeroGMainnet = exports.zeroGGalileoTestnet = exports.zeroG = void 0;
-    exports.btrTestnet = exports.btr = exports.bsquaredTestnet = exports.bsquared = exports.bscTestnet = exports.bscGreenfield = exports.bsc = exports.bronosTestnet = exports.bronos = exports.bounceBitTestnet = exports.bounceBit = exports.botanixTestnet = exports.botanix = exports.boolBetaMainnet = exports.bobSepolia = exports.bobaSepolia = exports.boba = exports.bob = exports.blastSepolia = exports.blast = exports.bitTorrentTestnet = exports.bitTorrent = exports.bitrock = exports.bitlayerTestnet = exports.bitlayer = exports.bitkubTestnet = exports.bitkub = exports.bitgert = exports.birdlayer = exports.bifrost = exports.bevmMainnet = exports.berachainTestnetbArtio = exports.berachainTestnet = exports.berachainBepolia = exports.berachain = exports.bearNetworkChainTestnet = exports.bearNetworkChainMainnet = exports.beamTestnet = exports.beam = exports.battlechainTestnet = exports.battlechain = exports.baseSepoliaPreconf = exports.baseSepolia = exports.baseGoerli = exports.basecampTestnet = exports.basePreconf = exports.base = exports.bahamut = exports.b3Sepolia = exports.b3 = void 0;
-    exports.defiOracleMetaMainnet = exports.defichainEvmTestnet = exports.defichainEvm = exports.dchainTestnet = exports.dchain = exports.dbkchain = exports.datahavenTestnet = exports.darwinia = exports.dailyNetworkTestnet = exports.dailyNetwork = exports.cyberTestnet = exports.cyber = exports.curtis = exports.crossfi = exports.crossbell = exports.cronoszkEVMTestnet = exports.cronoszkEVM = exports.cronosTestnet = exports.cronos = exports.creditCoin3Testnet = exports.creditCoin3Mainnet = exports.creditCoin3Devnet = exports.creatorTestnet = exports.crab = exports.cpchain = exports.cornTestnet = exports.corn = exports.coreTestnet2 = exports.coreTestnet1 = exports.coreDao = exports.confluxESpaceTestnet = exports.confluxESpace = exports.coinex = exports.coinbit = exports.codexTestnet = exports.codex = exports.classic = exports.citreaTestnet = exports.citrea = exports.citrate = exports.chips = exports.chiliz = exports.chang = exports.celoSepolia = exports.celoAlfajores = exports.celo = exports.canto = exports.cannon = exports.bxnTestnet = exports.bxn = void 0;
-    exports.fantom = exports.exsatTestnet = exports.exsat = exports.expanse = exports.excelonMainnet = exports.evmosTestnet = exports.evmos = exports.etp = exports.ethernity = exports.etherlinkTestnet = exports.etherlinkShadownetTestnet = exports.etherlink = exports.eteria = exports.eosTestnet = exports.eos = exports.eon = exports.enuls = exports.eniTestnet = exports.eni = exports.energy = exports.elysiumTestnet = exports.electroneumTestnet = exports.electroneum = exports.elastosTestnet = exports.elastos = exports.eduChainTestnet = exports.eduChain = exports.edgewareTestnet = exports.edgeware = exports.edgelessTestnet = exports.edgeless = exports.edexaTestnet = exports.edexa = exports.eden = exports.eCannaTestnet = exports.eCanna = exports.dymension = exports.dustboyIoT = exports.dreyerxTestnet = exports.dreyerxMainnet = exports.dosChainTestnet = exports.dosChain = exports.donatuz = exports.domaTestnet = exports.dogechain = exports.dodochainTestnet = exports.disChain = exports.diode = exports.dfk = exports.degen = void 0;
-    exports.grav = exports.graphiteTestnet = exports.graphite = exports.goerli = exports.godwoken = exports.goChain = exports.gobi = exports.goat = exports.gnosisChiado = exports.gnosis = exports.glideL2Protocol = exports.glideL1Protocol = exports.giwaSepoliaPreconf = exports.giwaSepolia = exports.gensyn = exports.genesys = exports.geist = exports.gatechain = exports.garnet = exports.fusionTestnet = exports.fusion = exports.fuseSparknet = exports.fuse = exports.funkiSepolia = exports.funkiMainnet = exports.fraxtalTestnet = exports.fraxtal = exports.foundry = exports.forta = exports.formTestnet = exports.forma = exports.form = exports.fluentTestnet = exports.fluentDevnet = exports.fluent = exports.fluenceTestnet = exports.fluenceStage = exports.fluence = exports.flowTestnet = exports.flowPreviewnet = exports.flowMainnet = exports.flareTestnet = exports.flare = exports.flame = exports.filecoinHyperspace = exports.filecoinCalibration = exports.filecoin = exports.fibo = exports.fantomTestnet = exports.fantomSonicTestnet = void 0;
-    exports.injectiveTestnet = exports.injective = exports.initVerseGenesis = exports.initVerse = exports.inEVM = exports.immutableZkEvmTestnet = exports.immutableZkEvm = exports.igra = exports.idchain = exports.icbNetwork = exports.hyveChain = exports.hyperliquidEvmTestnet = exports.hyperliquid = exports.hyperEvm = exports.hychainTestnet = exports.hychain = exports.humanodeTestnet5 = exports.humanode = exports.humanityTestnet = exports.humanity = exports.huddle01Testnet = exports.huddle01Mainnet = exports.hppSepolia = exports.hpp = exports.hpb = exports.horizenTestnet = exports.hoodi = exports.holesky = exports.henesys = exports.hemiSepolia = exports.hemi = exports.heliosTestnet = exports.hela = exports.hederaTestnet = exports.hederaPreviewnet = exports.hedera = exports.haustTestnet = exports.hausTestnet = exports.hashkeyTestnet = exports.hashkey = exports.harmonyOne = exports.hardhat = exports.haqqTestedge2 = exports.haqqMainnet = exports.happychainTestnet = exports.ham = exports.guruTestnet = exports.guruNetwork = exports.gunz = exports.gravity = void 0;
-    exports.ladyChain = exports.l3xTestnet = exports.l3x = exports.krown = exports.kromaSepolia = exports.kroma = exports.koi = exports.klaytnBaobab = exports.klaytn = exports.kinto = exports.kiiTestnetOro = exports.kii = exports.kcc = exports.kavaTestnet = exports.kava = exports.katana = exports.karura = exports.kardiaChain = exports.kakarotStarknetSepolia = exports.kakarotSepolia = exports.kairos = exports.kaia = exports.juneoUSDT1Chain = exports.juneoUSD1Chain = exports.juneoSocotraTestnet = exports.juneoSGD1Chain = exports.juneomBTC1Chain = exports.juneoLTC1Chain = exports.juneoLINK1Chain = exports.juneoGLD1Chain = exports.juneoEUR1Chain = exports.juneoDOGE1Chain = exports.juneoDAI1Chain = exports.juneoBCH1Chain = exports.juneo = exports.jovaySepolia = exports.jovay = exports.jocTestnet = exports.jocMainnet = exports.jbcTestnet = exports.jbc = exports.jasmyChainTestnet = exports.jasmyChain = exports.iSunCoin = exports.iotexTestnet = exports.iotex = exports.iotaTestnet = exports.iota = exports.inkSepolia = exports.ink = void 0;
-    exports.metachainIstanbul = exports.metachain = exports.merlinErigonTestnet = exports.merlin = exports.formicarium = exports.memecore = exports.meld = exports.mekong = exports.megaethTestnet = exports.megaeth = exports.mchVerse = exports.matchainTestnet = exports.matchain = exports.marsCredit = exports.marooTestnet = exports.mapProtocol = exports.mantraEVM = exports.mantraDuKongEVMTestnet = exports.mantleTestnet = exports.mantleSepoliaTestnet = exports.mantle = exports.mantaTestnet = exports.mantaSepoliaTestnet = exports.manta = exports.mandala = exports.mainnet = exports.lyra = exports.lycan = exports.luxeports = exports.lumozTestnet = exports.lumoz = exports.lumiaTestnet = exports.lumiaMainnet = exports.luksoTestnet = exports.lukso = exports.loop = exports.localhost = exports.loadAlphanet = exports.liskSepolia = exports.lisk = exports.lineaTestnet = exports.lineaSepolia = exports.lineaGoerli = exports.linea = exports.lightlinkPhoenix = exports.lightlinkPegasus = exports.lestnet = exports.lensTestnet = exports.lens = exports.lavita = void 0;
-    exports.oneWorld = exports.omniOmega = exports.omni = exports.omax = exports.okc = exports.odysseyTestnet = exports.oasys = exports.oasisTestnet = exports.nomina = exports.nitrographTestnet = exports.nibiru = exports.nexilix = exports.nexi = exports.newton = exports.neoxT4 = exports.neoxMainnet = exports.neonMainnet = exports.neonDevnet = exports.nearTestnet = exports.near = exports.nautilus = exports.nahmii = exports.morphTachyonTestnet = exports.morphTachyon = exports.morphSepolia = exports.morphHolesky = exports.morph = exports.moonriver = exports.moonbeamDev = exports.moonbeam = exports.moonbaseAlpha = exports.monadTestnet = exports.monad = exports.modeTestnet = exports.mode = exports.mizuhikiTestnetAwaji = exports.mitosisTestnet = exports.mintSepoliaTestnet = exports.mint = exports.mezoTestnet = exports.mezo = exports.mevTestnet = exports.mev = exports.metisSepolia = exports.metisGoerli = exports.metis = exports.meterTestnet = exports.meter = exports.metalL2 = exports.metadium = void 0;
-    exports.quai = exports.qTestnet = exports.qMainnet = exports.ql1 = exports.pyrope = exports.pumpfiTestnet = exports.pulsechainV4 = exports.pulsechain = exports.premiumBlockTestnet = exports.potosTestnet = exports.potos = exports.polynomialSepolia = exports.polynomial = exports.polygonZkEvmTestnet = exports.polygonZkEvmCardona = exports.polygonZkEvm = exports.polygonMumbai = exports.polygonAmoy = exports.polygon = exports.polterTestnet = exports.plumeTestnet = exports.plumeSepolia = exports.plumeMainnet = exports.plumeDevnet = exports.plume = exports.plinga = exports.playfiAlbireo = exports.plasmaTestnet = exports.plasmaDevnet = exports.plasma = exports.planq = exports.phoenix = exports.pgnTestnet = exports.pgn = exports.peaq = exports.paseoPassetHub = exports.palmTestnet = exports.palm = exports.otimDevnet = exports.orderlySepolia = exports.orderly = exports.optopiaTestnet = exports.optopia = exports.optimismSepolia = exports.optimismGoerli = exports.optimism = exports.openledger = exports.opBNBTestnet = exports.opBNB = exports.oortMainnetDev = void 0;
-    exports.shimmer = exports.shiden = exports.shibariumTestnet = exports.shibarium = exports.shardeumSphinx = exports.shardeum = exports.shapeSepolia = exports.shape = exports.sepolia = exports.sentrixTestnet = exports.sentrix = exports.seiTestnet = exports.seismicDevnet = exports.sei = exports.scrollSepolia = exports.satoshiVMTestnet = exports.satoshiVM = exports.sapphireTestnet = exports.sapphire = exports.sanko = exports.saigon = exports.saga = exports.saakuru = exports.rss3Sepolia = exports.rss3 = exports.rootstockTestnet = exports.rootstock = exports.rootPorcini = exports.root = exports.ronin = exports.rolluxTestnet = exports.rollux = exports.robinhoodTestnet = exports.robinhood = exports.rivalz = exports.riseTestnet = exports.rise = exports.reyaNetwork = exports.rei = exports.redstone = exports.reddioSepolia = exports.reddio = exports.redbellyTestnet = exports.redbellyMainnet = exports.real = exports.reactiveTestnet = exports.radiusTestnet = exports.radius = exports.rabbitChainTestnet = exports.quaiTestnet = void 0;
-    exports.subtensorEvm = exports.stratis = exports.storyTestnet = exports.storyOdyssey = exports.storyAeneid = exports.story = exports.step = exports.statusNetworkSepolia = exports.statusSepolia = exports.stableTestnet = exports.stable = exports.spicy = exports.sovaSepolia = exports.sova = exports.sophonTestnet = exports.sophon = exports.sonicTestnet = exports.sonicBlazeTestnet = exports.sonic = exports.songbirdTestnet = exports.songbird = exports.soneiumMinato = exports.soneium = exports.somniaTestnet = exports.somnia = exports.snaxTestnet = exports.snax = exports.sketchpad = exports.skaleTitanTestnet = exports.skaleTitan = exports.skaleBaseSepoliaTestnet = exports.skaleBase = exports.skaleRazor = exports.skaleNebulaTestnet = exports.skaleNebula = exports.skaleHumanProtocol = exports.skaleExorde = exports.skaleEuropaTestnet = exports.skaleEuropa = exports.skaleCryptoColosseum = exports.skaleCryptoBlades = exports.skaleCalypsoTestnet = exports.skaleCalypso = exports.skaleBlockBrawlers = exports.sixProtocol = exports.siliconSepolia = exports.silicon = exports.silentData = exports.sidraChain = exports.shimmerTestnet = void 0;
-    exports.ultra = exports.ubiq = exports.tronShasta = exports.tronNile = exports.tron = exports.treasureTopaz = exports.treasure = exports.tomb = exports.tiktrixTestnet = exports.thunderTestnet = exports.thunderCore = exports.thetaTestnet = exports.theta = exports.that = exports.thaiChain = exports.ternoa = exports.tenet = exports.tempoTestnet = exports.tempoModerato = exports.tempoLocalnet = exports.tempoDevnet = exports.tempoMainnet = exports.tempo = exports.telosTestnet = exports.telos = exports.telcoinTestnet = exports.teaSepolia = exports.taraxaTestnet = exports.taraxa = exports.taikoTestnetSepolia = exports.taikoKatla = exports.taikoJolnir = exports.taikoHoodi = exports.taikoHekla = exports.taiko = exports.tacSPB = exports.tac = exports.syscoinTestnet = exports.syscoin = exports.swissdlt = exports.swellchainTestnet = exports.swellchain = exports.swanSaturnTestnet = exports.swanProximaTestnet = exports.swan = exports.surgeTestnet = exports.superseedSepolia = exports.superseed = exports.superposition = exports.superlumio = void 0;
-    exports.xrplevmDevnet = exports.xrplevm = exports.xrOne = exports.xpla = exports.xphereTestnet = exports.xphereMainnet = exports.xoneTestnet = exports.xoneMainnet = exports.xLayerTestnet = exports.x1Testnet = exports.xLayer = exports.xgrTestnet = exports.xgr = exports.xdcTestnet = exports.xdc = exports.xaiTestnet = exports.xai = exports.worldLand = exports.worldchainSepolia = exports.worldchain = exports.wmcTestnet = exports.whitechainTestnet = exports.whitechainSepolia = exports.whitechain = exports.westendAssetHub = exports.wemixTestnet = exports.wemix = exports.weaveVMAlphanet = exports.wanchainTestnet = exports.wanchain = exports.visionTestnet = exports.vision = exports.victionTestnet = exports.viction = exports.velas = exports.vechain = exports.vanar = exports.vanaMoksha = exports.vana = exports.valygoSmartchain = exports.valygoNft = exports.unreal = exports.uniqueQuartz = exports.uniqueOpal = exports.unique = exports.unichainSepolia = exports.unichain = exports.ultronTestnet = exports.ultron = exports.ultraTestnet = void 0;
-    exports.zoraTestnet = exports.zoraSepolia = exports.zora = exports.zkXPLATestnet = exports.zkXPLA = exports.zksyncSepoliaTestnet = exports.zkSyncSepoliaTestnet = exports.zksyncLocalNode = exports.zkSyncLocalNode = exports.zksyncLocalHyperchainL1 = exports.zksyncLocalHyperchain = exports.zksyncLocalCustomHyperchain = exports.zksyncInMemoryNode = exports.zkSyncInMemoryNode = exports.zksync = exports.zkSync = exports.zkLinkNovaSepoliaTestnet = exports.zkLinkNova = exports.zkFairTestnet = exports.zkFair = exports.zircuitGarfieldTestnet = exports.zircuit = exports.zilliqaTestnet = exports.zilliqa = exports.zhejiang = exports.zetachainAthensTestnet = exports.zetachain = exports.zeroNetwork = exports.zeniq = exports.zenchainTestnet = exports.zagros = exports.yooldoVerseTestnet = exports.yooldoVerse = exports.ynxTestnet = exports.xrSepolia = exports.xrplevmTestnet = void 0;
+    exports.btr = exports.bsquaredTestnet = exports.bsquared = exports.bscTestnet = exports.bscGreenfield = exports.bsc = exports.bronosTestnet = exports.bronos = exports.bounceBitTestnet = exports.bounceBit = exports.botanixTestnet = exports.botanix = exports.boolBetaMainnet = exports.bobSepolia = exports.bobaSepolia = exports.boba = exports.bob = exports.blockdag = exports.blastSepolia = exports.blast = exports.bitTorrentTestnet = exports.bitTorrent = exports.bitrock = exports.bitlayerTestnet = exports.bitlayer = exports.bitkubTestnet = exports.bitkub = exports.bitgert = exports.birdlayer = exports.bifrost = exports.bevmMainnet = exports.berachainTestnetbArtio = exports.berachainTestnet = exports.berachainBepolia = exports.berachain = exports.bearNetworkChainTestnet = exports.bearNetworkChainMainnet = exports.beamTestnet = exports.beam = exports.battlechainTestnet = exports.battlechain = exports.baseSepoliaPreconf = exports.baseSepolia = exports.baseGoerli = exports.basecampTestnet = exports.basePreconf = exports.base = exports.bahamut = exports.b3Sepolia = exports.b3 = void 0;
+    exports.dchain = exports.dbkchain = exports.datahavenTestnet = exports.darwinia = exports.dailyNetworkTestnet = exports.dailyNetwork = exports.cyberTestnet = exports.cyber = exports.curtis = exports.crymadL2 = exports.crymad = exports.crossfi = exports.crossbell = exports.cronoszkEVMTestnet = exports.cronoszkEVM = exports.cronosTestnet = exports.cronos = exports.creditCoin3Testnet = exports.creditCoin3Mainnet = exports.creditCoin3Devnet = exports.creatorTestnet = exports.crab = exports.cpchain = exports.cornTestnet = exports.corn = exports.coreTestnet2 = exports.coreTestnet1 = exports.coreDao = exports.confluxESpaceTestnet = exports.confluxESpace = exports.coinex = exports.coinbit = exports.codexTestnet = exports.codex = exports.classic = exports.citreaTestnet = exports.citrea = exports.citrate = exports.chips = exports.chiliz = exports.chang = exports.celoSepolia = exports.celoAlfajores = exports.celo = exports.canto = exports.cannon = exports.candyChain = exports.bxnTestnet = exports.bxn = exports.btrTestnet = void 0;
+    exports.excelonMainnet = exports.evmosTestnet = exports.evmos = exports.etp = exports.ethernity = exports.etherlinkTestnet = exports.etherlinkShadownetTestnet = exports.etherlink = exports.eteria = exports.eosTestnet = exports.eos = exports.eon = exports.enuls = exports.eniTestnet = exports.eni = exports.energy = exports.elysiumTestnet = exports.electroneumTestnet = exports.electroneum = exports.elastosTestnet = exports.elastos = exports.eduChainTestnet = exports.eduChain = exports.edgewareTestnet = exports.edgeware = exports.edgelessTestnet = exports.edgeless = exports.edexaTestnet = exports.edexa = exports.eden = exports.eCannaTestnet = exports.eCanna = exports.dymension = exports.dustboyIoT = exports.dreyerxTestnet = exports.dreyerxMainnet = exports.dosChainTestnet = exports.dosChain = exports.donatuz = exports.domaTestnet = exports.dogechain = exports.dodochainTestnet = exports.disChain = exports.diode = exports.dfk = exports.degen = exports.defiOracleMetaMainnet = exports.defichainEvmTestnet = exports.defichainEvm = exports.dchainTestnet = void 0;
+    exports.godwoken = exports.goChain = exports.gobi = exports.goat = exports.gnosisChiado = exports.gnosis = exports.glideL2Protocol = exports.glideL1Protocol = exports.giwaSepoliaPreconf = exports.giwaSepolia = exports.gensyn = exports.genesys = exports.geist = exports.gatechain = exports.garnet = exports.fusionTestnet = exports.fusion = exports.fuseSparknet = exports.fuse = exports.funkiSepolia = exports.funkiMainnet = exports.fraxtalTestnet = exports.fraxtal = exports.foundry = exports.forta = exports.formTestnet = exports.forma = exports.form = exports.fluentTestnet = exports.fluentDevnet = exports.fluent = exports.fluenceTestnet = exports.fluenceStage = exports.fluence = exports.flowTestnet = exports.flowPreviewnet = exports.flowMainnet = exports.flareTestnet = exports.flare = exports.flame = exports.filecoinHyperspace = exports.filecoinCalibration = exports.filecoin = exports.fibo = exports.fantomTestnet = exports.fantomSonicTestnet = exports.fantom = exports.exsatTestnet = exports.exsat = exports.expanse = void 0;
+    exports.inEVM = exports.immutableZkEvmTestnet = exports.immutableZkEvm = exports.igra = exports.idchain = exports.icbNetwork = exports.hyveChain = exports.hyperliquidEvmTestnet = exports.hyperliquid = exports.hyperEvm = exports.hychainTestnet = exports.hychain = exports.humanodeTestnet5 = exports.humanode = exports.humanityTestnet = exports.humanity = exports.huddle01Testnet = exports.huddle01Mainnet = exports.hppSepolia = exports.hpp = exports.hpb = exports.horizenTestnet = exports.hoodi = exports.holesky = exports.henesys = exports.hemiSepolia = exports.hemi = exports.heliosTestnet = exports.hela = exports.hederaTestnet = exports.hederaPreviewnet = exports.hedera = exports.haustTestnet = exports.hausTestnet = exports.hashkeyTestnet = exports.hashkey = exports.harmonyOne = exports.hardhat = exports.haqqTestedge2 = exports.haqqMainnet = exports.happychainTestnet = exports.ham = exports.guruTestnet = exports.guruNetwork = exports.gunz = exports.gravity = exports.grav = exports.graphiteTestnet = exports.graphite = exports.goerli = void 0;
+    exports.kroma = exports.kortana = exports.koi = exports.klaytnBaobab = exports.klaytn = exports.kinto = exports.kiiTestnetOro = exports.kii = exports.kcc = exports.kavaTestnet = exports.kava = exports.katana = exports.karura = exports.kardiaChain = exports.kakarotStarknetSepolia = exports.kakarotSepolia = exports.kairos = exports.kaia = exports.juneoUSDT1Chain = exports.juneoUSD1Chain = exports.juneoSocotraTestnet = exports.juneoSGD1Chain = exports.juneomBTC1Chain = exports.juneoLTC1Chain = exports.juneoLINK1Chain = exports.juneoGLD1Chain = exports.juneoEUR1Chain = exports.juneoDOGE1Chain = exports.juneoDAI1Chain = exports.juneoBCH1Chain = exports.juneo = exports.jovaySepolia = exports.jovay = exports.jocTestnet = exports.jocMainnet = exports.jbcTestnet = exports.jbc = exports.jasmyChainTestnet = exports.jasmyChain = exports.iSunCoin = exports.iotexTestnet = exports.iotex = exports.iotaTestnet = exports.iota = exports.inkSepolia = exports.ink = exports.injectiveTestnet = exports.injective = exports.initVerseGenesis = exports.initVerse = void 0;
+    exports.memecore = exports.meld = exports.mekong = exports.megaethTestnet = exports.megaeth = exports.mchVerse = exports.matchainTestnet = exports.matchain = exports.marsCredit = exports.marooTestnet = exports.mapProtocol = exports.mantraEVM = exports.mantraDuKongEVMTestnet = exports.mantleTestnet = exports.mantleSepoliaTestnet = exports.mantle = exports.mantaTestnet = exports.mantaSepoliaTestnet = exports.manta = exports.mandala = exports.mainnet = exports.lyra = exports.lycan = exports.luxeports = exports.lumozTestnet = exports.lumoz = exports.lumiaTestnet = exports.lumiaMainnet = exports.luksoTestnet = exports.lukso = exports.loop = exports.localhost = exports.loadAlphanet = exports.liskSepolia = exports.lisk = exports.lineaTestnet = exports.lineaSepolia = exports.lineaGoerli = exports.linea = exports.lightlinkPhoenix = exports.lightlinkPegasus = exports.lestnet = exports.lensTestnet = exports.lens = exports.lavita = exports.ladyChain = exports.l3xTestnet = exports.l3x = exports.krown = exports.kromaSepolia = void 0;
+    exports.odysseyTestnet = exports.oasys = exports.oasisTestnet = exports.nomina = exports.nitrographTestnet = exports.nibiru = exports.nexilix = exports.nexi = exports.newton = exports.neoxT4 = exports.neoxMainnet = exports.neonMainnet = exports.neonDevnet = exports.nearTestnet = exports.near = exports.nautilus = exports.nahmii = exports.morphTachyonTestnet = exports.morphTachyon = exports.morphSepolia = exports.morphHolesky = exports.morph = exports.moonriver = exports.moonbeamDev = exports.moonbeam = exports.moonbaseAlpha = exports.monadTestnet = exports.monad = exports.modeTestnet = exports.mode = exports.mizuhikiTestnetAwaji = exports.mitosisTestnet = exports.mintSepoliaTestnet = exports.mint = exports.mezoTestnet = exports.mezo = exports.mevTestnet = exports.mev = exports.metisSepolia = exports.metisGoerli = exports.metis = exports.meterTestnet = exports.meter = exports.metalL2 = exports.metadium = exports.metachainIstanbul = exports.metachain = exports.merlinErigonTestnet = exports.merlin = exports.formicarium = void 0;
+    exports.pumpfiTestnet = exports.pulsechainV4 = exports.pulsechain = exports.premiumBlockTestnet = exports.potosTestnet = exports.potos = exports.polynomialSepolia = exports.polynomial = exports.polygonZkEvmTestnet = exports.polygonZkEvmCardona = exports.polygonZkEvm = exports.polygonMumbai = exports.polygonAmoy = exports.polygon = exports.polterTestnet = exports.plumeTestnet = exports.plumeSepolia = exports.plumeMainnet = exports.plumeDevnet = exports.plume = exports.plinga = exports.playfiAlbireo = exports.plasmaTestnet = exports.plasmaDevnet = exports.plasma = exports.planq = exports.phoenix = exports.pgnTestnet = exports.pgn = exports.peaq = exports.paseoPassetHub = exports.palmTestnet = exports.palm = exports.otimDevnet = exports.orderlySepolia = exports.orderly = exports.optopiaTestnet = exports.optopia = exports.optimismSepolia = exports.optimismGoerli = exports.optimism = exports.openledger = exports.opBNBTestnet = exports.opBNB = exports.oortMainnetDev = exports.oneWorld = exports.omniOmega = exports.omni = exports.omax = exports.okc = void 0;
+    exports.shapeSepolia = exports.shape = exports.sepolia = exports.sentrixTestnet = exports.sentrix = exports.seiTestnet = exports.seismicDevnet = exports.sei = exports.scrollSepolia = exports.satoshiVMTestnet = exports.satoshiVM = exports.sapphireTestnet = exports.sapphire = exports.sanko = exports.saigon = exports.saga = exports.saakuru = exports.rss3Sepolia = exports.rss3 = exports.rootstockTestnet = exports.rootstock = exports.rootPorcini = exports.root = exports.ronin = exports.rolluxTestnet = exports.rollux = exports.robinhoodTestnet = exports.robinhood = exports.rivalz = exports.riseTestnet = exports.rise = exports.reyaNetwork = exports.rei = exports.redstone = exports.reddioSepolia = exports.reddio = exports.redbellyTestnet = exports.redbellyMainnet = exports.real = exports.reactiveTestnet = exports.radiusTestnet = exports.radius = exports.rabbitChainTestnet = exports.quaiTestnet = exports.quai = exports.qTestnet = exports.qmsTestnet = exports.qMainnet = exports.ql1 = exports.pyrope = void 0;
+    exports.step = exports.statusNetworkSepolia = exports.statusSepolia = exports.stableTestnet = exports.stable = exports.spicy = exports.sovaSepolia = exports.sova = exports.sophonTestnet = exports.sophon = exports.sonicTestnet = exports.sonicBlazeTestnet = exports.sonic = exports.songbirdTestnet = exports.songbird = exports.soneiumMinato = exports.soneium = exports.somniaTestnet = exports.somnia = exports.snaxTestnet = exports.snax = exports.sketchpad = exports.skaleTitanTestnet = exports.skaleTitan = exports.skaleBaseSepoliaTestnet = exports.skaleBase = exports.skaleRazor = exports.skaleNebulaTestnet = exports.skaleNebula = exports.skaleHumanProtocol = exports.skaleExorde = exports.skaleEuropaTestnet = exports.skaleEuropa = exports.skaleCryptoColosseum = exports.skaleCryptoBlades = exports.skaleCalypsoTestnet = exports.skaleCalypso = exports.skaleBlockBrawlers = exports.sixProtocol = exports.siliconSepolia = exports.silicon = exports.silentData = exports.sidraChain = exports.shimmerTestnet = exports.shimmer = exports.shiden = exports.shibariumTestnet = exports.shibarium = exports.shardeumSphinx = exports.shardeum = void 0;
+    exports.treasure = exports.tomb = exports.tiktrixTestnet = exports.thunderTestnet = exports.thunderCore = exports.thetaTestnet = exports.theta = exports.that = exports.thaiChain = exports.ternoa = exports.tenet = exports.tempoTestnet = exports.tempoModerato = exports.tempoLocalnet = exports.tempoDevnet = exports.tempoMainnet = exports.tempo = exports.telosTestnet = exports.telos = exports.telcoinTestnet = exports.teaSepolia = exports.taraxaTestnet = exports.taraxa = exports.taikoTestnetSepolia = exports.taikoKatla = exports.taikoJolnir = exports.taikoHoodi = exports.taikoHekla = exports.taiko = exports.tacSPB = exports.tac = exports.syscoinTestnet = exports.syscoin = exports.swissdlt = exports.swellchainTestnet = exports.swellchain = exports.swanSaturnTestnet = exports.swanProximaTestnet = exports.swan = exports.surgeTestnet = exports.superseedSepolia = exports.superseed = exports.superposition = exports.superlumio = exports.subtensorEvm = exports.stratis = exports.storyTestnet = exports.storyOdyssey = exports.storyAeneid = exports.story = void 0;
+    exports.xoneTestnet = exports.xoneMainnet = exports.xLayerTestnet = exports.x1Testnet = exports.xLayer = exports.xgrTestnet = exports.xgr = exports.xdcTestnet = exports.xdc = exports.xaiTestnet = exports.xai = exports.worldLand = exports.worldchainSepolia = exports.worldchain = exports.wmcTestnet = exports.whitechainTestnet = exports.whitechainSepolia = exports.whitechain = exports.westendAssetHub = exports.wemixTestnet = exports.wemix = exports.weaveVMAlphanet = exports.wanchainTestnet = exports.wanchain = exports.visionTestnet = exports.vision = exports.victionTestnet = exports.viction = exports.velas = exports.vechain = exports.vanar = exports.vanaMoksha = exports.vana = exports.valygoSmartchain = exports.valygoNft = exports.unreal = exports.uniqueQuartz = exports.uniqueOpal = exports.unique = exports.unichainSepolia = exports.unichain = exports.ultronTestnet = exports.ultron = exports.ultraTestnet = exports.ultra = exports.ubiq = exports.tronShasta = exports.tronNile = exports.tron = exports.treasureTopaz = void 0;
+    exports.zoraTestnet = exports.zoraSepolia = exports.zora = exports.zkXPLATestnet = exports.zkXPLA = exports.zksyncSepoliaTestnet = exports.zkSyncSepoliaTestnet = exports.zksyncLocalNode = exports.zkSyncLocalNode = exports.zksyncLocalHyperchainL1 = exports.zksyncLocalHyperchain = exports.zksyncLocalCustomHyperchain = exports.zksyncInMemoryNode = exports.zkSyncInMemoryNode = exports.zksync = exports.zkSync = exports.zkLinkNovaSepoliaTestnet = exports.zkLinkNova = exports.zkFairTestnet = exports.zkFair = exports.zircuitGarfieldTestnet = exports.zircuit = exports.zilliqaTestnet = exports.zilliqa = exports.zhejiang = exports.zetachainAthensTestnet = exports.zetachain = exports.zeroNetwork = exports.zeniq = exports.zenchainTestnet = exports.zagros = exports.yooldoVerseTestnet = exports.yooldoVerse = exports.ynxTestnet = exports.xrSepolia = exports.xrplevmTestnet = exports.xrplevmDevnet = exports.xrplevm = exports.xrOne = exports.xpla = exports.xphereTestnet = exports.xphereMainnet = void 0;
     var _0g_js_1 = require_g();
     Object.defineProperty(exports, "zeroG", { enumerable: true, get: function() {
       return _0g_js_1.zeroG;
@@ -244159,6 +245676,10 @@ var require_chains = __commonJS({
     Object.defineProperty(exports, "blastSepolia", { enumerable: true, get: function() {
       return blastSepolia_js_1.blastSepolia;
     } });
+    var blockdag_js_1 = require_blockdag();
+    Object.defineProperty(exports, "blockdag", { enumerable: true, get: function() {
+      return blockdag_js_1.blockdag;
+    } });
     var bob_js_1 = require_bob();
     Object.defineProperty(exports, "bob", { enumerable: true, get: function() {
       return bob_js_1.bob;
@@ -244238,6 +245759,10 @@ var require_chains = __commonJS({
     var bxnTestnet_js_1 = require_bxnTestnet();
     Object.defineProperty(exports, "bxnTestnet", { enumerable: true, get: function() {
       return bxnTestnet_js_1.bxnTestnet;
+    } });
+    var candyChain_js_1 = require_candyChain();
+    Object.defineProperty(exports, "candyChain", { enumerable: true, get: function() {
+      return candyChain_js_1.candyChain;
     } });
     var cannon_js_1 = require_cannon();
     Object.defineProperty(exports, "cannon", { enumerable: true, get: function() {
@@ -244378,6 +245903,14 @@ var require_chains = __commonJS({
     var crossfi_js_1 = require_crossfi();
     Object.defineProperty(exports, "crossfi", { enumerable: true, get: function() {
       return crossfi_js_1.crossfi;
+    } });
+    var crymad_js_1 = require_crymad();
+    Object.defineProperty(exports, "crymad", { enumerable: true, get: function() {
+      return crymad_js_1.crymad;
+    } });
+    var crymadL2_js_1 = require_crymadL2();
+    Object.defineProperty(exports, "crymadL2", { enumerable: true, get: function() {
+      return crymadL2_js_1.crymadL2;
     } });
     var curtis_js_1 = require_curtis();
     Object.defineProperty(exports, "curtis", { enumerable: true, get: function() {
@@ -245205,6 +246738,10 @@ var require_chains = __commonJS({
     Object.defineProperty(exports, "koi", { enumerable: true, get: function() {
       return koi_js_1.koi;
     } });
+    var kortana_js_1 = require_kortana();
+    Object.defineProperty(exports, "kortana", { enumerable: true, get: function() {
+      return kortana_js_1.kortana;
+    } });
     var kroma_js_1 = require_kroma();
     Object.defineProperty(exports, "kroma", { enumerable: true, get: function() {
       return kroma_js_1.kroma;
@@ -245820,6 +247357,10 @@ var require_chains = __commonJS({
     var qMainnet_js_1 = require_qMainnet();
     Object.defineProperty(exports, "qMainnet", { enumerable: true, get: function() {
       return qMainnet_js_1.qMainnet;
+    } });
+    var qmsTestnet_js_1 = require_qmsTestnet();
+    Object.defineProperty(exports, "qmsTestnet", { enumerable: true, get: function() {
+      return qmsTestnet_js_1.qmsTestnet;
     } });
     var qTestnet_js_1 = require_qTestnet();
     Object.defineProperty(exports, "qTestnet", { enumerable: true, get: function() {
