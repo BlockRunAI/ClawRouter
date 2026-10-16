@@ -91,7 +91,7 @@
     "@blockrun/llm": "^3.23.1",
     "@noble/hashes": "^2.2.0",
     "@polymarket/builder-relayer-client": "^0.0.10",
-    "@polymarket/builder-signing-sdk": "0.0.8",
+    "@polymarket/builder-signing-sdk": "1.0.0",
     "@polymarket/clob-client-v2": "1.0.8",
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^1.5.0",
