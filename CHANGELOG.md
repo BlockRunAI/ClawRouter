@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.292 — October 18, 2026
+
+### router-core 0.3.0: routing reads the request, not the host's instructions
+
+`@blockrun/router-core` moves from 27125a3 to 0.3.0 (65a92c8). Auto now
+reads only the user turn for structured-output, stakes, latency and language
+cues. Before, a system prompt that listed tool schemas (every agent host) or
+said "be quick" lifted each request off the cheapest tier; "what is the
+capital of France?" went to MEDIUM. CJK input is sized at about one token per
+character instead of a quarter, so a long Chinese document now reaches the
+long-context models rather than a window that cannot hold it. Keyword scoring
+matches whole words ("classic" is not code, "history" is not creative,
+"credit" is not an edit), a stale speed probe fades toward neutral instead of
+toward zero (which had been ranking every unmeasured model above every
+measured one), and a model with no catalog price no longer reports 100%
+savings. On the core's 88-request decision snapshot, one tool-less prose
+prompt moves from MEDIUM to SIMPLE; primaries are otherwise unchanged.
+
 ## v0.12.291 — October 16, 2026
 
 ### router-core 0.2.0: more models can recover a tool turn
