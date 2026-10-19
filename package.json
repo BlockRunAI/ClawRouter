@@ -92,7 +92,7 @@
     "@noble/hashes": "^2.2.0",
     "@polymarket/builder-relayer-client": "^0.0.10",
     "@polymarket/builder-signing-sdk": "0.0.8",
-    "@polymarket/clob-client-v2": "1.0.8",
+    "@polymarket/clob-client-v2": "1.2.0",
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^1.5.0",
     "@solana/kit": "^8.4.0",
