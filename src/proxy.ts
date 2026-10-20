@@ -2055,6 +2055,9 @@ const VIDEO_PRICING: Record<
   }
 > = {
   "xai/grok-imagine-video": { pricePerSecond: 0.05, defaultDurationSeconds: 8 },
+  // Grok Imagine Video 1.5: $0.08/s at 480p (the default), 8s default clip.
+  // 720p/1080p ($0.14/$0.25) are not modeled — telemetry-only, as above.
+  "xai/grok-imagine-video-1.5": { pricePerSecond: 0.08, defaultDurationSeconds: 8 },
   // Seedance rates re-synced 2026-08-08 from blockrun's models.ts after the
   // family reprice (blockrun #351/#354). All three were carrying pre-reprice
   // numbers, which only ever skewed the usage log — the charge comes from the

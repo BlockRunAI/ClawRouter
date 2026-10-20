@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   BLOCKRUN_MODELS,
+  MODEL_ALIASES,
   OPENCLAW_MODELS,
   VISIBLE_OPENCLAW_MODELS,
   resolveModelAlias,
@@ -427,5 +428,127 @@ describe("2026-10 gateway catalog sync (blockrun #781)", () => {
     expect(hy3).toMatchObject({ deprecated: true, fallbackModel: "qwen/qwen3.7-flash" });
     expect(TOP_MODELS).not.toContain("tencent/hy3");
     expect(resolveModelAlias("hy3")).toBe("tencent/hy3");
+  });
+});
+
+describe("2026-10-20 live catalog sync", () => {
+  // Rates, context and max output from blockrun.ai/api/v1/models on 2026-10-20;
+  // capability flags from the gateway's own categories (src/lib/models.ts).
+  const expected: Array<[string, number, number, number, number, boolean, boolean]> = [
+    ["openai/gpt-6.1-sol", 2, 10, 1_050_000, 128_000, true, true],
+    ["qwen/qwen3.8-max", 2, 6, 1_000_000, 131_072, true, false],
+    ["tencent/hy4-preview", 0.834, 2.501, 1_048_576, 64_000, true, false],
+    ["mistral/mistral-large-4", 0.68, 2.09, 524_288, 262_144, true, true],
+    ["poolside/laguna-s-2.1", 0.09, 0.18, 1_048_576, 131_072, false, false],
+    ["free/muse-glimmer-30b", 0, 0, 131_072, 16_384, true, false],
+  ];
+
+  it.each(expected)(
+    "carries %s at gateway pricing",
+    (id, input, output, ctx, maxOut, reasoning, vision) => {
+      const m = BLOCKRUN_MODELS.find((x) => x.id === id);
+      expect(m).toMatchObject({
+        inputPrice: input,
+        outputPrice: output,
+        contextWindow: ctx,
+        maxOutput: maxOut,
+      });
+      expect(m?.reasoning ?? false).toBe(reasoning);
+      expect(m?.vision ?? false).toBe(vision);
+      expect(m?.deprecated).toBeUndefined();
+      // Catalog ids must not be alias keys — a key shadows the entry.
+      expect(resolveModelAlias(id)).toBe(id);
+      expect(TOP_MODELS).toContain(id);
+    },
+  );
+
+  it("sets toolCalling only where the gateway recorded a structured tool_calls probe", () => {
+    const tools = (id: string) => BLOCKRUN_MODELS.find((m) => m.id === id)?.toolCalling;
+    expect(tools("openai/gpt-6.1-sol")).toBe(true);
+    expect(tools("mistral/mistral-large-4")).toBe(true);
+    expect(tools("qwen/qwen3.8-max")).toBeUndefined();
+    expect(tools("tencent/hy4-preview")).toBeUndefined();
+    expect(tools("poolside/laguna-s-2.1")).toBeUndefined();
+    expect(tools("free/muse-glimmer-30b")).toBeUndefined();
+  });
+
+  it("resolves the explicit pins", () => {
+    const pins: Record<string, string> = {
+      "gpt-6.1-sol": "openai/gpt-6.1-sol",
+      "qwen3.8-max": "qwen/qwen3.8-max",
+      "qwen-3.8-max": "qwen/qwen3.8-max",
+      hy4: "tencent/hy4-preview",
+      "hy4-preview": "tencent/hy4-preview",
+      "mistral-large-4": "mistral/mistral-large-4",
+      "laguna-s": "poolside/laguna-s-2.1",
+      muse: "free/muse-glimmer-30b",
+      "nvidia/muse-glimmer-30b": "free/muse-glimmer-30b",
+      "grok-video-1.5": "xai/grok-imagine-video-1.5",
+    };
+    for (const [alias, target] of Object.entries(pins)) {
+      expect(resolveModelAlias(alias), alias).toBe(target);
+    }
+  });
+
+  it("does not move a short name that named a free or cheaper model", () => {
+    expect(resolveModelAlias("laguna")).toBe("free/laguna-xs-2.1");
+    expect(resolveModelAlias("mistral-large")).toBe("free/mistral-large-3-675b");
+    expect(resolveModelAlias("tencent")).toBe("tencent/hy3");
+    expect(resolveModelAlias("qwen")).toBe("qwen");
+  });
+
+  it("marks the ids the gateway retired with its own redirect target", () => {
+    const retired: Record<string, string> = {
+      "openai/gpt-5.3": "openai/gpt-5.2",
+      "xai/grok-3": "xai/grok-4-1-fast-non-reasoning",
+      "xai/grok-3-mini": "xai/grok-4-1-fast-non-reasoning",
+      "xai/grok-4-fast-reasoning": "xai/grok-4-1-fast-reasoning",
+      "xai/grok-4-fast-non-reasoning": "xai/grok-4-1-fast-non-reasoning",
+      "xai/grok-2-vision": "xai/grok-4.3",
+    };
+    for (const [id, fallbackModel] of Object.entries(retired)) {
+      expect(
+        BLOCKRUN_MODELS.find((m) => m.id === id),
+        id,
+      ).toMatchObject({
+        deprecated: true,
+        fallbackModel,
+      });
+      expect(TOP_MODELS).not.toContain(id);
+    }
+    // The generic shorthand follows the redirect instead of chaining through it.
+    expect(resolveModelAlias("grok-fast")).toBe("xai/grok-4-1-fast-reasoning");
+  });
+
+  it("keeps the EOL gpt-oss-120b off every default", () => {
+    expect(resolveModelAlias("free")).toBe("free/nemotron-3.5-lightning");
+    expect(TOP_MODELS).not.toContain("free/gpt-oss-120b");
+    const generic = Object.entries(MODEL_ALIASES).filter(
+      ([alias, target]) => target === "free/gpt-oss-120b" && !alias.includes("gpt"),
+    );
+    expect(generic).toEqual([]);
+  });
+});
+
+describe("DeepSeek V4.1 Flash (2026-10-20)", () => {
+  it("carries the paid id at the gateway's rate and pins it explicitly", () => {
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "deepseek/deepseek-v4.1-flash")).toMatchObject({
+      inputPrice: 0.14,
+      outputPrice: 0.28,
+      contextWindow: 1_048_576,
+      maxOutput: 65_536,
+      toolCalling: true,
+    });
+    expect(TOP_MODELS).toContain("deepseek/deepseek-v4.1-flash");
+    expect(resolveModelAlias("deepseek-v4.1-flash")).toBe("deepseek/deepseek-v4.1-flash");
+    expect(resolveModelAlias("deepseek")).toBe("deepseek/deepseek-chat");
+  });
+
+  it("never moves a free-tier deepseek name onto the paid model", () => {
+    for (const alias of ["deepseek-v4-flash", "v4-flash", "nvidia/deepseek-v4-flash"]) {
+      expect(resolveModelAlias(alias), alias).toBe("free/nemotron-3.5-lightning");
+    }
+    // The gateway 400s nvidia/deepseek-v4-flash since 2026-10-20: nothing may alias to it.
+    expect(Object.values(MODEL_ALIASES)).not.toContain("free/deepseek-v4-flash");
   });
 });

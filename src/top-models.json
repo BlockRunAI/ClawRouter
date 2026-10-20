@@ -15,6 +15,7 @@
   "anthropic/claude-haiku-4.5",
   "openai/gpt-6-astra",
   "openai/gpt-6-sol",
+  "openai/gpt-6.1-sol",
   "openai/gpt-6-luna",
   "openai/gpt-5.6-terra",
   "openai/gpt-5.6-sol",
@@ -50,12 +51,17 @@
   "zai/glm-5",
   "xiaomi/mimo-v2.5",
   "xiaomi/mimo-v2.5-pro",
+  "tencent/hy4-preview",
+  "mistral/mistral-large-4",
+  "poolside/laguna-s-2.1",
   "minimax/minimax-m3",
   "moonshot/kimi-k3",
   "qwen/qwen3.7-max",
+  "qwen/qwen3.8-max",
   "qwen/qwen3.8-flash",
   "deepseek/deepseek-v4-flash-vision-exp",
   "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4.1-flash",
   "deepseek/deepseek-chat",
   "deepseek/deepseek-reasoner",
   "free/nemotron-3.5-lightning",
@@ -63,5 +69,6 @@
   "free/north-mini-code",
   "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "free/nemotron-3-ultra-550b",
-  "free/llama-3.2-11b-vision"
+  "free/llama-3.2-11b-vision",
+  "free/muse-glimmer-30b"
 ]

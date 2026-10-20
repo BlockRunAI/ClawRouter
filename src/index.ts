@@ -565,6 +565,55 @@ function injectModelsConfig(
 }
 
 /**
+ * Add the runtime provider entry when the host exposes a mutable config.
+ *
+ * OpenClaw 2026.10.x freezes the plugin API config during registration. The
+ * persisted config has already been handled by injectModelsConfig(), and
+ * registerProvider() is the authoritative runtime registration path, so a
+ * frozen runtime config must not make plugin registration fail.
+ */
+function setRuntimeProviderConfig(
+  api: Pick<OpenClawPluginApi, "config" | "logger">,
+  runtimePort: number,
+): void {
+  try {
+    if (!api.config.models) {
+      api.config.models = { providers: {} };
+    }
+    if (!api.config.models.providers) {
+      api.config.models.providers = {};
+    }
+    api.config.models.providers.blockrun = {
+      baseUrl: `http://127.0.0.1:${runtimePort}/v1`,
+      api: "openai-completions",
+      // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
+      apiKey: "x402-proxy-handles-auth",
+      models: withPinnedModels(VISIBLE_OPENCLAW_MODELS, api.config),
+    };
+  } catch {
+    api.logger.debug?.(
+      "OpenClaw runtime config is read-only; using the persisted BlockRun provider config",
+    );
+  }
+}
+
+function removeRuntimeMcpConfig(api: Pick<OpenClawPluginApi, "config" | "logger">): boolean {
+  try {
+    return removeManagedBlockrunMcpServerConfig(api.config);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      error instanceof TypeError &&
+      /read only|not extensible|Cannot (?:add|assign|delete)/i.test(message)
+    ) {
+      api.logger.debug?.("OpenClaw runtime MCP config is read-only; skipping managed MCP cleanup");
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
  * Repair the per-agent model cache OpenClaw keeps at
  * `~/.openclaw/agents/<agent>/agent/models.json`.
  *
@@ -1461,7 +1510,9 @@ function buildMusicGenerationProvider(): MusicGenerationProviderPlugin {
     id: "blockrun",
     label: "BlockRun",
     defaultModel: "minimax/music-2.5+",
-    models: ["minimax/music-2.5+", "minimax/music-2.5"],
+    // minimax/music-2.5 left blockrun's catalog; the gateway remaps pinned
+    // callers to music-2.5+, so the picker offers only the model that is served.
+    models: ["minimax/music-2.5+"],
     capabilities: {
       maxTracks: 1,
       maxDurationSeconds: 240,
@@ -1543,6 +1594,9 @@ function buildVideoGenerationProvider(): VideoGenerationProviderPlugin {
     defaultModel: "xai/grok-imagine-video",
     models: [
       "xai/grok-imagine-video",
+      // Grok Imagine Video 1.5 (blockrun live catalog): native synced audio,
+      // 1–15s, $0.08/s at the 480p default — so 5/8/10s all fit.
+      "xai/grok-imagine-video-1.5",
       "bytedance/seedance-1.5-pro",
       "bytedance/seedance-2.0-fast",
       "bytedance/seedance-2.0",
@@ -2067,21 +2121,10 @@ const plugin: OpenClawPluginDefinition = {
     // OpenClaw's agent system looks for auth even if provider has auth: []
     injectAuthProfile(api.logger);
 
-    // Also set runtime config for immediate availability
+    // Also set runtime config for immediate availability when the host allows
+    // mutation. OpenClaw 2026.10.x freezes this object during registration.
     const runtimePort = getProxyPort();
-    if (!api.config.models) {
-      api.config.models = { providers: {} };
-    }
-    if (!api.config.models.providers) {
-      api.config.models.providers = {};
-    }
-    api.config.models.providers.blockrun = {
-      baseUrl: `http://127.0.0.1:${runtimePort}/v1`,
-      api: "openai-completions",
-      // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
-      apiKey: "x402-proxy-handles-auth",
-      models: withPinnedModels(VISIBLE_OPENCLAW_MODELS, api.config),
-    };
+    setRuntimeProviderConfig(api, runtimePort);
     // NOTE: tools.web.search.{provider,enabled} are NOT written to runtime
     // api.config here. OpenClaw 2026.5.4 appears to auto-inject the plugin's
     // registered provider id into config.tools.web.search.provider when it
@@ -2091,7 +2134,7 @@ const plugin: OpenClawPluginDefinition = {
     // path), which runs in gateway mode or under `clawrouter setup
     // --forceWrite`. The file write is gated to only set boolean `enabled`,
     // never the provider field, keeping the disk state validator-safe.
-    const runtimeMcpRemoved = removeManagedBlockrunMcpServerConfig(api.config);
+    const runtimeMcpRemoved = removeRuntimeMcpConfig(api);
 
     // Only log provider/tool registration on the first register() call.
     // OpenClaw calls register() 4+ times per gateway startup; logging every
@@ -2263,7 +2306,7 @@ const plugin: OpenClawPluginDefinition = {
         const parsed = parseGenArgs(ctx.args ?? "");
         if (!parsed.prompt) {
           return {
-            text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default — cheapest), `seedance-2-fast`, `seedance-2`, `seedance-2-mini` (720p + audio, half the flagship rate), `seedance-2.5` (720p + synced audio, long-form), `grok-video`.\n\n⏱️  Generation takes 60–180 seconds. Payment settles only on success.",
+            text: "Usage: `/videogen <prompt> [--model=<alias>] [--duration=5|8|10]`\n\nAliases: `seedance` (1.5-pro, default — cheapest), `seedance-2-fast`, `seedance-2`, `seedance-2-mini` (720p + audio, half the flagship rate), `seedance-2.5` (720p + synced audio, long-form), `grok-video`, `grok-video-1.5` (synced audio).\n\n⏱️  Generation takes 60–180 seconds. Payment settles only on success.",
           };
         }
         const model = resolveModelAlias(parsed.model ?? "seedance");
@@ -2694,7 +2737,14 @@ export default plugin;
 export { startProxy, getProxyPort } from "./proxy.js";
 
 // Re-export setup helpers for the `clawrouter setup` CLI command
-export { injectModelsConfig, injectAuthProfile, syncAgentModelCache, isBlockrunWebSearchDisabled };
+export {
+  injectModelsConfig,
+  injectAuthProfile,
+  syncAgentModelCache,
+  isBlockrunWebSearchDisabled,
+  setRuntimeProviderConfig,
+  removeRuntimeMcpConfig,
+};
 export type {
   ProxyOptions,
   ProxyHandle,

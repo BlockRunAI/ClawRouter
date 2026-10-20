@@ -4,6 +4,34 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.293 — October 20, 2026
+
+### OpenClaw 2026.10.x: BlockRun loads again on a frozen runtime config
+
+OpenClaw 2026.10.x hands plugins a read-only config object during
+registration. `register()` assigned `api.config.models.providers.blockrun`
+unconditionally, threw `TypeError: Cannot assign to read only property
+'blockrun'`, and the Gateway came up without BlockRun (one reported start
+took 111.6s to get there). The runtime provider write is now best-effort: a
+mutable host still gets it for immediate availability, and a frozen host
+falls back to the persisted provider config and `registerProvider()`.
+Managed-MCP cleanup skips a read-only config the same way, and still throws
+any unrelated error. Thanks to @0xCheetah1 for the fix and the clean-container
+repro (#476).
+
+### Dependencies
+
+- `undici` 8.11.2 → 8.12.2 (#481).
+- `@scure/bip32` 2.2.0 → 2.4.0 (#478). Lockfile only; it also drops two
+  nested `@noble/hashes` copies.
+- `@polymarket/clob-client-v2` 1.0.8 → 1.2.0 (#479). Orders by `tokenID`,
+  the only kind ClawRouter places, build and sign the same as before; the
+  new code paths are position-ID orders and request sharing. Polymarket has
+  deprecated this package at every version in favour of its unified SDK.
+- Dependabot now skips TypeScript major bumps (#484): typescript-eslint 8.x
+  does not accept TypeScript 7, and the bump made `npm ci` fail for the
+  whole dev-dependency group.
+
 ## v0.12.292 — October 18, 2026
 
 ### router-core 0.3.0: routing reads the request, not the host's instructions

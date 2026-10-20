@@ -127,6 +127,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-6-astra": "openai/gpt-6-astra",
   "gpt-6-sol": "openai/gpt-6-sol",
   "gpt-6-luna": "openai/gpt-6-luna",
+  // GPT-6.1 Sol (blockrun 2026-10-09): refreshed Sol at the same $2/$10, half
+  // gpt-6-sol's cached-input rate. Explicit pin only, same rule as above.
+  "gpt-6.1-sol": "openai/gpt-6.1-sol",
+  "gpt-6-1-sol": "openai/gpt-6.1-sol",
   "gpt-5.5": "openai/gpt-5.5",
   "gpt-5.5-pro": "openai/gpt-5.5-pro",
   // ChatGPT Instant. `chat-latest` is a rolling upstream id — pinning it means
@@ -154,6 +158,14 @@ export const MODEL_ALIASES: Record<string, string> = {
   deepseek: "deepseek/deepseek-chat",
   "deepseek-chat": "deepseek/deepseek-chat",
   reasoner: "deepseek/deepseek-reasoner",
+  // DeepSeek V4.1 Flash (blockrun 2026-10-20) — its own id now, PAID at the
+  // same $0.14/$0.28 as deepseek-chat (which the gateway serves from the same
+  // upstream). Explicit pins only: bare `deepseek` stays on deepseek-chat, and
+  // the free-tier `deepseek-v4-flash`/`v4-flash` shorthands below are NOT moved
+  // onto it — a caller who typed a free name must never start paying.
+  "deepseek-v4.1-flash": "deepseek/deepseek-v4.1-flash",
+  "deepseek-v4-1-flash": "deepseek/deepseek-v4.1-flash",
+  "v4.1-flash": "deepseek/deepseek-v4.1-flash",
 
   // Kimi / Moonshot — K3 is the featured flagship on BlockRun (added 2026-07-17; K2.7
   // hidden/superseded, K2.6 hidden, K2.5 hidden). K3 is ~5x K2.7's price ($3/$15 vs
@@ -180,6 +192,11 @@ export const MODEL_ALIASES: Record<string, string> = {
   // `kimi` on K2.7. (`grok` WAS promoted to 4.5, but only after the cost
   // tradeoff was argued explicitly; there's no such case for qwen yet.)
   "qwen3.7-max": "qwen/qwen3.7-max",
+  // Qwen3.8 Max (blockrun 2026-10-02) — the 3.8 generation's flagship, $2/$6.
+  // Explicit pins only; bare `qwen` stays unbound for the reason above.
+  "qwen3.8-max": "qwen/qwen3.8-max",
+  "qwen-3.8-max": "qwen/qwen3.8-max",
+  "qwen3-8-max": "qwen/qwen3.8-max",
   // Qwen3.8 Flash — newer generation than the whole 3.7 line, and cheaper than
   // the 3.7-plus tier it beats. Bare `qwen` stays UNBOUND (every other qwen*
   // shorthand resolves to a free model, so binding the short name to a paid
@@ -209,6 +226,13 @@ export const MODEL_ALIASES: Record<string, string> = {
   hy3: "tencent/hy3",
   tencent: "tencent/hy3",
   hunyuan: "tencent/hy3",
+  // Hy4 Preview (blockrun 2026-10-02) — 770B MoE at $0.834/$2.501. Explicit
+  // pins only: bare `tencent`/`hunyuan` are NOT moved onto it, because that
+  // would ~6x the quote for callers who never typed a version (the rule that
+  // keeps `kimi` on K2.7). Like hy3 it is a verbose reasoner — a small
+  // max_tokens can come back with no content.
+  hy4: "tencent/hy4-preview",
+  "hy4-preview": "tencent/hy4-preview",
   mimo: "xiaomi/mimo-v2.5-pro",
   "mimo-v2.5-pro": "xiaomi/mimo-v2.5-pro",
   // RETARGETED 2026-08-30, Pro -> the real thing. This key used to point at
@@ -261,13 +285,17 @@ export const MODEL_ALIASES: Record<string, string> = {
   "grok-4.6": "xai/grok-4.6",
   "grok-4-6": "xai/grok-4.6",
   "grok-4.3": "xai/grok-4.3",
-  "grok-fast": "xai/grok-4-fast-reasoning",
+  // grok-4-fast-* are redirected server-side to grok-4-1-fast-* (blockrun
+  // MODEL_REDIRECTS, Azure Foundry EOL'd the 4-fast line 2026-05-01). The
+  // generic shorthand follows the redirect rather than chaining through it;
+  // same $0.20/$0.50.
+  "grok-fast": "xai/grok-4-1-fast-reasoning",
   "grok-build": "xai/grok-build-0.1",
   "grok-code": "xai/grok-build-0.1", // xAI's agentic coding model (Build 0.1, 2026-06-04)
   // Delisted model redirects — full model IDs that were previously valid but removed
   "grok-code-fast-1": "deepseek/deepseek-chat", // bare alias (delisted SKU, kept on cheap chat)
   "xai/grok-code-fast-1": "deepseek/deepseek-chat", // delisted 2026-03-12
-  "xai/grok-3-fast": "xai/grok-4-fast-reasoning", // delisted (too expensive)
+  "xai/grok-3-fast": "xai/grok-4-1-fast-reasoning", // delisted (too expensive); follows the 4-fast → 4-1-fast redirect
 
   // NVIDIA — backward compat aliases (nvidia/xxx → free/xxx)
   // Default free model is nemotron-3.5-lightning — the same model
@@ -279,10 +307,12 @@ export const MODEL_ALIASES: Record<string, string> = {
   // We follow blockrun's own retarget of step-3.7-flash rather than picking a
   // different survivor, so the proxy and the gateway name the same model.
   //
-  // gpt-oss-120b/20b RECOVERED on the same probe run and are reachable again,
-  // but they stay withheld from blockrun's public catalog over NVIDIA's
-  // prompt-retention terms — so pins that NAME gpt-oss stay routable below and
-  // nothing generic may land on it.
+  // gpt-oss-120b recovered on that probe run, then hit NVIDIA's PUBLISHED EOL
+  // on 2026-09-03 (410 Gone with an end-of-life date). The gateway marks it
+  // available:false and redirects nvidia/gpt-oss-120b to nemotron-3-super-120b.
+  // gpt-oss-20b is still served but stays withheld from the public catalog over
+  // NVIDIA's prompt-retention terms. Pins that NAME gpt-oss keep the real id
+  // (the gateway redirects them); nothing generic may land on either.
   nvidia: "free/nemotron-3.5-lightning",
   "gpt-120b": "free/gpt-oss-120b", // names the model itself — gateway redirects
   "gpt-20b": "free/gpt-oss-20b",
@@ -292,14 +322,18 @@ export const MODEL_ALIASES: Record<string, string> = {
   // probe passes; prod gate fired [ALERT][free-model-dead] kind=gone twice that
   // morning). The whole nvidia/deepseek-* family is now dead upstream — blockrun
   // hid flash and retargeted v3.2/v4-pro (whose redirects chained through flash)
-  // straight to gpt-oss-120b. Ids naming v4-flash itself keep the real id (the
-  // gateway redirects them); the v3.2/v4-pro ids follow blockrun's retarget
+  // straight to gpt-oss-120b. The v3.2/v4-pro ids follow blockrun's retarget
   // rather than chaining through a second dead model.
+  // 2026-10-20: blockrun REMOVED nvidia/deepseek-v4-flash and its redirect —
+  // the gateway now answers 400 Unknown model for it (and for the bare
+  // `deepseek-v4-flash`). Its replacement is the PAID deepseek/deepseek-v4.1-
+  // flash, which a free-tier pin must not silently land on, so every alias
+  // that named the free v4-flash now follows the free default instead.
   "nvidia/deepseek-v3.2": "free/nemotron-3.5-lightning",
   "free/deepseek-v3.2": "free/nemotron-3.5-lightning",
   "nvidia/deepseek-v4-pro": "free/nemotron-3.5-lightning",
   "free/deepseek-v4-pro": "free/nemotron-3.5-lightning",
-  "nvidia/deepseek-v4-flash": "free/deepseek-v4-flash",
+  "nvidia/deepseek-v4-flash": "free/nemotron-3.5-lightning",
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   // qwen3-coder-480b retired (NVIDIA EOL 2026-06-14). Its server-side redirect used
   // to be seed-oss-36b, but that EOL'd too on 2026-08-03, so blockrun re-pointed it
@@ -336,20 +370,27 @@ export const MODEL_ALIASES: Record<string, string> = {
   "free/nemotron-ultra-253b": "free/nemotron-3.5-lightning",
   "free/devstral-2-123b": "free/nemotron-3.5-lightning",
   // Explicit-ish pins — dead upstream since 2026-07-28, gateway redirects to gpt-oss-120b
+  // (now nemotron-3-super-120b). Bare `mistral-large` deliberately stays here
+  // rather than moving to the paid Mistral Large 4 below: it has always named a
+  // free model, and a short name must not start billing silently.
   "mistral-large": "free/mistral-large-3-675b",
   "mistral-large-3-675b": "free/mistral-large-3-675b",
   "qwen3.5-122b": "free/qwen3.5-122b-a10b",
+  // Mistral Large 4 (blockrun 2026-10-07) — PAID, $0.68/$2.09 (a launch promo
+  // upstream; Mistral lists $1.36/$4.18). Explicit pins only.
+  "mistral-large-4": "mistral/mistral-large-4",
   "qwen3-122b": "free/qwen3.5-122b-a10b",
   // Free model shorthand aliases. v4-flash EOL'd 2026-08-12 — no free DeepSeek
   // is left anywhere, so the generic "a free deepseek" shorthand follows the
   // gateway's retarget (blockrun's /free-deepseek page points at gpt-oss-120b
-  // too). Shorthands naming v4-flash itself stay on the real id — the gateway
-  // redirects them, same treatment as seed-oss/mistral-large pins.
+  // too). Shorthands naming v4-flash itself followed the free id until the
+  // gateway stopped serving it (400 since 2026-10-20, see above); they now take
+  // the free default too, never the paid V4.1 Flash.
   "deepseek-free": "free/nemotron-3.5-lightning",
   "deepseek-v4-pro": "free/nemotron-3.5-lightning", // free shorthand; pro dead upstream (410)
-  "deepseek-v4-flash": "free/deepseek-v4-flash",
+  "deepseek-v4-flash": "free/nemotron-3.5-lightning",
   "v4-pro": "free/nemotron-3.5-lightning",
-  "v4-flash": "free/deepseek-v4-flash",
+  "v4-flash": "free/nemotron-3.5-lightning",
   // mistral-nemotron died 2026-08-30 and it was the LAST free Mistral anywhere —
   // blockrun's own /free-mistral page now says so plainly instead of naming one.
   // Point the generic shorthand at the free default rather than advertise a
@@ -438,6 +479,18 @@ export const MODEL_ALIASES: Record<string, string> = {
   "north-mini-code": "free/north-mini-code",
   laguna: "free/laguna-xs-2.1",
   "laguna-xs": "free/laguna-xs-2.1",
+  // Laguna S 2.1 is the PAID, much larger sibling ($0.09/$0.18, 1M ctx). Bare
+  // `laguna` stays on the free XS — moving it would bill callers who typed the
+  // short name expecting the free model.
+  "laguna-s": "poolside/laguna-s-2.1",
+  "laguna-s-2.1": "poolside/laguna-s-2.1",
+  // Muse Glimmer 30B (blockrun 2026-10-02) — Meta's open line after Llama,
+  // free on NVIDIA. A reasoning model: a small max_tokens is spent entirely in
+  // reasoning and returns empty content.
+  "nvidia/muse-glimmer-30b": "free/muse-glimmer-30b",
+  muse: "free/muse-glimmer-30b",
+  "muse-glimmer": "free/muse-glimmer-30b",
+  "muse-glimmer-30b": "free/muse-glimmer-30b",
   // `free` = the free-tier default. Must equal router-core's ecoTiers.SIMPLE
   // primary and the head of proxy.ts FREE_MODELS so `/model free`, the eco
   // profile and the budget-cap free fallback all agree on one live model.
@@ -499,6 +552,9 @@ export const MODEL_ALIASES: Record<string, string> = {
 
   // Video generation
   "grok-video": "xai/grok-imagine-video",
+  // Explicit pin; bare `grok-video` stays on the $0.05/s original.
+  "grok-video-1.5": "xai/grok-imagine-video-1.5",
+  "grok-video-1-5": "xai/grok-imagine-video-1.5",
   // Bare `seedance` deliberately stays on 1.5-pro. It is the cheapest of the
   // family ($0.070/s vs 2.5's $0.315/s) and `/videogen` documents it as
   // "default — cheapest"; repointing it at the newest tier would 4.5x the
@@ -724,6 +780,23 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "openai/gpt-6-sol",
     name: "GPT-6 Sol",
     version: "6",
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 1050000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    // GPT-6.1 Sol (blockrun 2026-10-09): the refreshed Sol. Same $2/$10 and
+    // 1.05M/128K envelope as gpt-6-sol; cached input is $0.10, half of Sol's.
+    // Vision confirmed upstream with a 64x64 PNG. Long tier as on the rest of
+    // the family (>272K prompt: $4/$15) — telemetry only, the charge is 402.
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    version: "6.1",
     inputPrice: 2.0,
     outputPrice: 10.0,
     contextWindow: 1050000,
@@ -962,6 +1035,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     vision: true,
     agentic: true,
     toolCalling: true,
+    // RETIRED 2026-08-29: OpenAI answers 404 model_not_found upstream. The
+    // gateway marks it available:false and redirects it to gpt-5.2 at the same
+    // $1.75/$14. Entry kept so explicit pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.2",
   },
 
   // OpenAI Codex Family
@@ -1438,13 +1516,14 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
 
   // DeepSeek — V4 family (2026-04-24). The legacy deepseek-chat/reasoner
-  // aliases are served upstream as V4 Flash non-thinking / thinking modes.
+  // aliases are served upstream as V4.1 Flash non-thinking / thinking modes
+  // (blockrun renamed them "(V4.1 Flash)" on 2026-10-20).
   // Repriced 0.20/0.40 → 0.14/0.28 (blockrun #354: DeepSeek's published
   // deepseek-v4-flash rate; the old numbers were 1.43x the real rate).
   {
     id: "deepseek/deepseek-chat",
-    name: "DeepSeek V4 Flash Chat",
-    version: "4-flash",
+    name: "DeepSeek Chat (V4.1 Flash)",
+    version: "4.1-flash",
     inputPrice: 0.14,
     outputPrice: 0.28,
     contextWindow: 1048576,
@@ -1453,13 +1532,29 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   {
     id: "deepseek/deepseek-reasoner",
-    name: "DeepSeek V4 Flash Reasoner",
-    version: "4-flash",
+    name: "DeepSeek Reasoner (V4.1 Flash)",
+    version: "4.1-flash",
     inputPrice: 0.14,
     outputPrice: 0.28,
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
+    toolCalling: true,
+  },
+  {
+    // DeepSeek V4.1 Flash (blockrun 2026-10-20). The gateway serves it from the
+    // SAME upstream as deepseek-chat, at the same price, in the same
+    // non-thinking mode (thinking is not caller-togglable; use
+    // deepseek-reasoner for it) — so the flags mirror deepseek-chat rather than
+    // the catalog's "reasoning" category, which would enrol it in the long
+    // reasoning timeout for a model that does not think.
+    id: "deepseek/deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    version: "4.1-flash",
+    inputPrice: 0.14,
+    outputPrice: 0.28,
+    contextWindow: 1048576,
+    maxOutput: 65536,
     toolCalling: true,
   },
   {
@@ -1622,6 +1717,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 16384,
     reasoning: true,
     toolCalling: true,
+    // Server-side redirect on blockrun (MODEL_REDIRECTS): Azure Foundry EOL'd
+    // this line 2026-05-01, so the gateway serves it as grok-4-1-fast-non-reasoning. Kept for pins.
+    deprecated: true,
+    fallbackModel: "xai/grok-4-1-fast-non-reasoning",
   },
   // grok-3-fast removed - too expensive ($5/$25), use grok-4-fast instead
   {
@@ -1633,6 +1732,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 131072,
     maxOutput: 16384,
     toolCalling: true,
+    // Server-side redirect on blockrun (MODEL_REDIRECTS): Azure Foundry EOL'd
+    // this line 2026-05-01, so the gateway serves it as grok-4-1-fast-non-reasoning. Kept for pins.
+    deprecated: true,
+    fallbackModel: "xai/grok-4-1-fast-non-reasoning",
   },
 
   // xAI Grok 4 Family - Ultra-cheap fast models
@@ -1646,6 +1749,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 16384,
     reasoning: true,
     toolCalling: true,
+    // Server-side redirect on blockrun (MODEL_REDIRECTS): Azure Foundry EOL'd
+    // this line 2026-05-01, so the gateway serves it as grok-4-1-fast-reasoning. Kept for pins.
+    deprecated: true,
+    fallbackModel: "xai/grok-4-1-fast-reasoning",
   },
   {
     id: "xai/grok-4-fast-non-reasoning",
@@ -1656,6 +1763,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 2000000,
     maxOutput: 16384,
     toolCalling: true,
+    // Server-side redirect on blockrun (MODEL_REDIRECTS): Azure Foundry EOL'd
+    // this line 2026-05-01, so the gateway serves it as grok-4-1-fast-non-reasoning. Kept for pins.
+    deprecated: true,
+    fallbackModel: "xai/grok-4-1-fast-non-reasoning",
   },
   {
     id: "xai/grok-4-1-fast-reasoning",
@@ -1701,6 +1812,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 16384,
     vision: true,
     toolCalling: true,
+    // Retired upstream 2026-07-07 (HTTP 400 on api.x.ai, no route anywhere);
+    // the gateway redirects it to grok-4.3. Kept for pins.
+    deprecated: true,
+    fallbackModel: "xai/grok-4.3",
   },
 
   // xAI Grok 4.20 Family (hidden in picker; explicit-only — mirrors BlockRun hidden:true)
@@ -1908,6 +2023,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   // 2026-04-21: slimmed to 8 models, retired nemotron family + mistral-large-3-675b
   //   + devstral-2-123b with successor redirects.
   {
+    // EOL 2026-09-03: NVIDIA publishes 410 Gone with an end-of-life date. The
+    // gateway lists nvidia/gpt-oss-120b as available:false and redirects it to
+    // nvidia/nemotron-3-super-120b. Entry kept so explicit pins stay routable;
+    // off the picker, the FREE_MODELS cascade and every default.
     id: "free/gpt-oss-120b",
     name: "[Free] GPT-OSS 120B",
     version: "120b",
@@ -1930,9 +2049,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     // published 410 Gone ("has reached its end of life") on both probe passes
     // and blockrun's prod gate fired [ALERT][free-model-dead] kind=gone twice
     // that morning. The whole nvidia/deepseek-* family is dead upstream; there
-    // is no free DeepSeek left anywhere. Blockrun hid it and redirects calls to
-    // gpt-oss-120b. Entry kept so explicit pins stay routable; off the picker,
-    // the FREE_MODELS cascade, and the router fallback chains.
+    // is no free DeepSeek left anywhere. Blockrun hid it and redirected calls,
+    // then on 2026-10-20 REMOVED it outright: the gateway answers 400 Unknown
+    // model, deliberately not moving pins onto the paid deepseek-v4.1-flash.
+    // Entry kept only so a direct pin is still classified free (never billed);
+    // no alias points here any more. Off the picker, the FREE_MODELS cascade,
+    // and the router fallback chains.
     id: "free/deepseek-v4-flash",
     name: "[Free] DeepSeek V4 Flash",
     version: "v4-flash",
@@ -2236,6 +2358,23 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 131072,
     maxOutput: 16384,
   },
+  {
+    // Meta Muse Glimmer 30B (blockrun 2026-10-02) — Meta's open line after
+    // Llama, 29.6B dense, free on NVIDIA as nvidia/muse-glimmer-30b. A
+    // REASONING model: at max_tokens 300 the gateway's probes spent the whole
+    // budget in reasoning_content and returned empty content. Text only — the
+    // gateway serves no image parts for it. Picker-listed, but NOT in the
+    // FREE_MODELS auto-pick cascade: an empty answer at a small budget is the
+    // wrong property for a fallback rung.
+    id: "free/muse-glimmer-30b",
+    name: "[Free] Muse Glimmer 30B",
+    version: "30b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
 
   // ── 2026-08-30 paid catalog refresh (blockrun #449) ─────────────────────
   // Three additions, each probe-verified upstream with a real completion AND a
@@ -2287,6 +2426,65 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
     vision: true,
     toolCalling: true,
+  },
+
+  // ── 2026-10 paid additions (blockrun live catalog, read 2026-10-20) ─────
+  // All four were listed upstream 2026-10-02..07 and are resold through
+  // blockrun's OpenRouter pool at cost; the fields below are the gateway's
+  // own numbers. `toolCalling` is set only where blockrun recorded a
+  // structured tool_calls probe (Mistral Large 4); the rest stay opt-in.
+  {
+    // The 3.8 generation's flagship. Upstream also takes image/video input,
+    // but blockrun lists it text-only until an image probe on its route.
+    id: "qwen/qwen3.8-max",
+    name: "Qwen3.8 Max",
+    version: "3.8-max",
+    inputPrice: 2.0,
+    outputPrice: 6.0,
+    contextWindow: 1000000,
+    maxOutput: 131072,
+    reasoning: true,
+  },
+  {
+    // 770B / 49B-active MoE, Apache 2.0. maxOutput is 64,000 — the smallest
+    // vendor ceiling in the routed pool, so a larger value would 400 on that
+    // vendor. Verbose reasoner: on a trivial prompt 4 of 8 probes spent a
+    // 2,048-token budget reasoning and returned no content.
+    id: "tencent/hy4-preview",
+    name: "Tencent Hy4 Preview",
+    version: "hy4-preview",
+    inputPrice: 0.834,
+    outputPrice: 2.501,
+    contextWindow: 1048576,
+    maxOutput: 64000,
+    reasoning: true,
+  },
+  {
+    // ⏰ $0.68/$2.09 is a LAUNCH PROMO upstream (Mistral lists $1.36/$4.18, no
+    // end date). Re-price here the day blockrun does. Probed by blockrun
+    // through OpenRouter: text, stream, tools (clean tool_calls) and image input
+    // all served; reasoning is on by default.
+    id: "mistral/mistral-large-4",
+    name: "Mistral Large 4",
+    version: "large-4",
+    inputPrice: 0.68,
+    outputPrice: 2.09,
+    contextWindow: 524288,
+    maxOutput: 262144,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // The PAID, far larger sibling of free/laguna-xs-2.1 (118B / 8B active).
+    // Not a substitute for it: different size, different conduit.
+    id: "poolside/laguna-s-2.1",
+    name: "Poolside Laguna S 2.1",
+    version: "s-2.1",
+    inputPrice: 0.09,
+    outputPrice: 0.18,
+    contextWindow: 1048576,
+    maxOutput: 131072,
   },
 
   // Z.AI GLM-5 Models

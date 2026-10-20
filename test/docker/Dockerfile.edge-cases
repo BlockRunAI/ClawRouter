@@ -1,5 +1,5 @@
 # Edge case testing for ClawRouter + OpenClaw integration
-FROM node:22-slim
+FROM node:24-slim
 
 # Install dependencies
 RUN apt-get update && \
