@@ -91,11 +91,13 @@ export function projectClawCatalog(state: CatalogState): ModelCatalogView {
     }
   }
   const byId = new Map(models.map((m) => [m.id, m]));
-  const openclaw = models.filter((m) => !Object.hasOwn(MODEL_ALIASES, m.id)).map(toOpenClawModel);
+  const openclaw = models
+    .filter((m) => !m.explicitOnly && !Object.hasOwn(MODEL_ALIASES, m.id))
+    .map(toOpenClawModel);
   // Existing aliases always resolve to the same product-owned target.
   for (const [alias, target] of Object.entries(MODEL_ALIASES)) {
     const model = byId.get(target);
-    if (!alias.includes("/") && model)
+    if (!alias.includes("/") && model && !model.explicitOnly)
       openclaw.push(toOpenClawModel({ ...model, id: alias, name: `${alias} → ${model.name}` }));
   }
   const definitions = new Map(openclaw.map((m) => [m.id, m]));

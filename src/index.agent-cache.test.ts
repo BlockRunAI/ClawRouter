@@ -61,6 +61,34 @@ describe("syncAgentModelCache", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("keeps an explicitly selected legacy MiniMax model in saved config and agent cache", async () => {
+    const { mod, cachePath } = await withCache({ providers: { blockrun: { models: [] } } });
+    const configPath = join(homeDir!, ".openclaw", "openclaw.json");
+    const selected = "blockrun/minimax/minimax-m2.7";
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        agents: { defaults: { model: { primary: selected }, models: { [selected]: {} } } },
+      }),
+    );
+    mod.injectModelsConfig({ info: vi.fn() }, { forceWrite: true });
+    mod.syncAgentModelCache({ info: vi.fn() }, { forceWrite: true });
+    const config = read(configPath);
+    expect(config.agents.defaults.model.primary).toBe(selected);
+    expect(config.agents.defaults.models[selected]).toEqual({});
+    expect(
+      config.models.providers.blockrun.models.some(
+        (m: { id: string }) => m.id === "minimax/minimax-m2.7",
+      ),
+    ).toBe(true);
+    expect(
+      read(cachePath).providers.blockrun.models.some(
+        (m: { id: string }) => m.id === "minimax/minimax-m2.7",
+      ),
+    ).toBe(true);
+    expect(mod.VISIBLE_OPENCLAW_MODELS.some((m) => m.id === "minimax/minimax-m2.7")).toBe(false);
+  });
+
   it("rewrites a set-equal but misordered cache (order is what the picker renders)", async () => {
     const homeSetup = await withCache({ providers: { blockrun: { models: [] } } });
     const expected = homeSetup.mod.VISIBLE_OPENCLAW_MODELS;

@@ -74,7 +74,7 @@ async function waitForProxyHealth(port: number, timeoutMs = 3000): Promise<boole
   }
   return false;
 }
-import { VISIBLE_OPENCLAW_MODELS, resolveModelAlias } from "./models.js";
+import { VISIBLE_OPENCLAW_MODELS, resolveModelAlias, withPinnedModels } from "./models.js";
 import {
   writeFileSync,
   existsSync,
@@ -215,8 +215,6 @@ function injectModelsConfig(
   logger: { info: (msg: string) => void },
   options: { forceWrite?: boolean; catalogModels?: typeof VISIBLE_OPENCLAW_MODELS } = {},
 ): void {
-  const visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
-  const visibleIds = visibleModels.map((model) => model.id);
   const configDir = join(homedir(), ".openclaw");
   const configPath = join(configDir, "openclaw.json");
 
@@ -270,6 +268,9 @@ function injectModelsConfig(
     logger.info("OpenClaw config not found, creating");
     needsWrite = true;
   }
+
+  const visibleModels = withPinnedModels(options.catalogModels ?? VISIBLE_OPENCLAW_MODELS, config);
+  const visibleIds = visibleModels.map((model) => model.id);
 
   // Initialize config structure
   if (!config.models) {
@@ -589,7 +590,16 @@ function syncAgentModelCache(
   options: { forceWrite?: boolean; catalogModels?: typeof VISIBLE_OPENCLAW_MODELS } = {},
 ): void {
   if (!isGatewayMode() && !options.forceWrite) return;
-  const visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
+  let visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
+  const configPath = join(homedir(), ".openclaw", "openclaw.json");
+  if (existsSync(configPath)) {
+    try {
+      visibleModels = withPinnedModels(visibleModels, JSON.parse(readTextFileSync(configPath)));
+    } catch {
+      // Keep existing caches if saved selections cannot be read safely.
+      return;
+    }
+  }
 
   const agentsDir = join(homedir(), ".openclaw", "agents");
   if (!existsSync(agentsDir)) return;
@@ -2070,7 +2080,7 @@ const plugin: OpenClawPluginDefinition = {
       api: "openai-completions",
       // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
       apiKey: "x402-proxy-handles-auth",
-      models: VISIBLE_OPENCLAW_MODELS,
+      models: withPinnedModels(VISIBLE_OPENCLAW_MODELS, api.config),
     };
     // NOTE: tools.web.search.{provider,enabled} are NOT written to runtime
     // api.config here. OpenClaw 2026.5.4 appears to auto-inject the plugin's

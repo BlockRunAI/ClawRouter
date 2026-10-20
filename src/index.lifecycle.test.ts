@@ -183,6 +183,7 @@ describe("plugin lifecycle", () => {
     vi.doMock("./models.js", () => ({
       OPENCLAW_MODELS: [],
       VISIBLE_OPENCLAW_MODELS: [],
+      withPinnedModels: (models: unknown[]) => models,
     }));
     vi.doMock("./web-search-provider.js", () => ({
       BLOCKRUN_EXA_PROVIDER_ID: "blockrun-exa",
@@ -321,6 +322,7 @@ describe("plugin lifecycle", () => {
     vi.doMock("./models.js", () => ({
       OPENCLAW_MODELS: [],
       VISIBLE_OPENCLAW_MODELS: [],
+      withPinnedModels: (models: unknown[]) => models,
     }));
     vi.doMock("./web-search-provider.js", () => ({
       BLOCKRUN_EXA_PROVIDER_ID: "blockrun-exa",
@@ -473,6 +475,7 @@ describe("plugin lifecycle", () => {
     vi.doMock("./models.js", () => ({
       OPENCLAW_MODELS: [],
       VISIBLE_OPENCLAW_MODELS: [],
+      withPinnedModels: (models: unknown[]) => models,
     }));
     vi.doMock("./web-search-provider.js", () => ({
       BLOCKRUN_EXA_PROVIDER_ID: "blockrun-exa",
@@ -617,6 +620,7 @@ describe("plugin lifecycle", () => {
     vi.doMock("./models.js", () => ({
       OPENCLAW_MODELS: [],
       VISIBLE_OPENCLAW_MODELS: [],
+      withPinnedModels: (models: unknown[]) => models,
     }));
     vi.doMock("./web-search-provider.js", () => ({
       BLOCKRUN_EXA_PROVIDER_ID: "blockrun-exa",
@@ -756,6 +760,7 @@ describe("plugin lifecycle", () => {
     vi.doMock("./models.js", () => ({
       OPENCLAW_MODELS: [],
       VISIBLE_OPENCLAW_MODELS: [],
+      withPinnedModels: (models: unknown[]) => models,
     }));
     vi.doMock("./web-search-provider.js", () => ({
       BLOCKRUN_EXA_PROVIDER_ID: "blockrun-exa",
@@ -869,6 +874,7 @@ describe("plugin lifecycle", () => {
     vi.doMock("./models.js", () => ({
       OPENCLAW_MODELS: [],
       VISIBLE_OPENCLAW_MODELS: [],
+      withPinnedModels: (models: unknown[]) => models,
     }));
     vi.doMock("./web-search-provider.js", () => ({
       BLOCKRUN_EXA_PROVIDER_ID: "blockrun-exa",

@@ -231326,7 +231326,6 @@ var top_models_default = [
   "xiaomi/mimo-v2.5",
   "xiaomi/mimo-v2.5-pro",
   "minimax/minimax-m3",
-  "minimax/minimax-m2.7",
   "moonshot/kimi-k3",
   "qwen/qwen3.7-max",
   "qwen/qwen3.8-flash",
@@ -233096,7 +233095,8 @@ var BLOCKRUN_MODELS = [
     reasoning: true,
     toolCalling: true
   },
-  // MiniMax
+  // MiniMax: M3 is the current verified gateway route. Flash is not listed
+  // on either public gateway; keep legacy metadata only for explicit pins.
   {
     id: "minimax/minimax-m3",
     name: "MiniMax M3",
@@ -233114,6 +233114,7 @@ var BLOCKRUN_MODELS = [
     id: "minimax/minimax-m2.7",
     name: "MiniMax M2.7",
     version: "m2.7",
+    explicitOnly: true,
     inputPrice: 0.3,
     outputPrice: 1.2,
     contextWindow: 204800,
@@ -233126,6 +233127,7 @@ var BLOCKRUN_MODELS = [
     id: "minimax/minimax-m2.5",
     name: "MiniMax M2.5",
     version: "m2.5",
+    explicitOnly: true,
     inputPrice: 0.3,
     outputPrice: 1.2,
     contextWindow: 204800,
@@ -233655,11 +233657,13 @@ function toOpenClawModel(m) {
 }
 var ALIAS_MODELS = Object.entries(MODEL_ALIASES).filter(([alias]) => !alias.includes("/")).map(([alias, targetId]) => {
   const target = BLOCKRUN_MODELS.find((m) => m.id === targetId);
-  if (!target) return null;
+  if (!target || target.explicitOnly) return null;
   return toOpenClawModel({ ...target, id: alias, name: `${alias} \u2192 ${target.name}` });
 }).filter((m) => m !== null);
 var OPENCLAW_MODELS = [
-  ...BLOCKRUN_MODELS.filter((m) => !(m.id in MODEL_ALIASES)).map(toOpenClawModel),
+  ...BLOCKRUN_MODELS.filter((m) => !m.explicitOnly && !(m.id in MODEL_ALIASES)).map(
+    toOpenClawModel
+  ),
   ...ALIAS_MODELS
 ];
 var OPENCLAW_MODEL_BY_ID = new Map(OPENCLAW_MODELS.map((m) => [m.id, m]));
@@ -233667,6 +233671,37 @@ var VISIBLE_OPENCLAW_MODELS = TOP_MODELS.flatMap((id2) => {
   const model = OPENCLAW_MODEL_BY_ID.get(id2);
   return model ? [model] : [];
 });
+function withPinnedModels(visible, config) {
+  const pinned = /* @__PURE__ */ new Map();
+  const add6 = (value) => {
+    if (typeof value !== "string" || !value.startsWith("blockrun/")) return;
+    const model = BLOCKRUN_MODELS.find((m) => m.id === resolveModelAlias(value));
+    if (model?.explicitOnly) {
+      const id2 = value.slice("blockrun/".length);
+      pinned.set(id2, toOpenClawModel({ ...model, id: id2 }));
+    }
+  };
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    for (const [key3, child] of Object.entries(value)) {
+      if (key3 === "models") {
+        if (child && typeof child === "object" && !Array.isArray(child)) {
+          for (const [id2, settings] of Object.entries(child)) {
+            if (settings && typeof settings === "object" && Object.keys(settings).length) add6(id2);
+          }
+        }
+        continue;
+      }
+      if (["model", "primary", "fallbacks"].includes(key3)) {
+        if (Array.isArray(child)) child.forEach(add6);
+        else add6(child);
+      }
+      visit(child);
+    }
+  };
+  visit(config);
+  return [...visible, ...[...pinned.values()].filter((m) => !visible.some((v) => v.id === m.id))];
+}
 function buildProviderModels(baseUrl) {
   return {
     baseUrl: `${baseUrl}/v1`,
@@ -233681,7 +233716,7 @@ function isAgenticModel(modelId) {
   return model?.agentic ?? false;
 }
 function getAgenticModels() {
-  return BLOCKRUN_MODELS.filter((m) => m.agentic).map((m) => m.id);
+  return BLOCKRUN_MODELS.filter((m) => m.agentic && !m.explicitOnly).map((m) => m.id);
 }
 function getModelContextWindow(modelId) {
   const normalized = modelId.replace("blockrun/", "");
@@ -240195,10 +240230,10 @@ function projectClawCatalog(state) {
     }
   }
   const byId = new Map(models.map((m) => [m.id, m]));
-  const openclaw = models.filter((m) => !Object.hasOwn(MODEL_ALIASES, m.id)).map(toOpenClawModel);
+  const openclaw = models.filter((m) => !m.explicitOnly && !Object.hasOwn(MODEL_ALIASES, m.id)).map(toOpenClawModel);
   for (const [alias, target] of Object.entries(MODEL_ALIASES)) {
     const model = byId.get(target);
-    if (!alias.includes("/") && model)
+    if (!alias.includes("/") && model && !model.explicitOnly)
       openclaw.push(toOpenClawModel({ ...model, id: alias, name: `${alias} \u2192 ${model.name}` }));
   }
   const definitions = new Map(openclaw.map((m) => [m.id, m]));
@@ -278536,8 +278571,6 @@ function legacyPackageIsBlockRun() {
   return false;
 }
 function injectModelsConfig(logger48, options = {}) {
-  const visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
-  const visibleIds = visibleModels.map((model2) => model2.id);
   const configDir = join20(homedir15(), ".openclaw");
   const configPath = join20(configDir, "openclaw.json");
   let config = {};
@@ -278579,6 +278612,8 @@ function injectModelsConfig(logger48, options = {}) {
     logger48.info("OpenClaw config not found, creating");
     needsWrite = true;
   }
+  const visibleModels = withPinnedModels(options.catalogModels ?? VISIBLE_OPENCLAW_MODELS, config);
+  const visibleIds = visibleModels.map((model2) => model2.id);
   if (!config.models) {
     config.models = {};
     needsWrite = true;
@@ -278760,7 +278795,15 @@ function injectModelsConfig(logger48, options = {}) {
 }
 function syncAgentModelCache(logger48, options = {}) {
   if (!isGatewayMode() && !options.forceWrite) return;
-  const visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
+  let visibleModels = options.catalogModels ?? VISIBLE_OPENCLAW_MODELS;
+  const configPath = join20(homedir15(), ".openclaw", "openclaw.json");
+  if (existsSync7(configPath)) {
+    try {
+      visibleModels = withPinnedModels(visibleModels, JSON.parse(readTextFileSync(configPath)));
+    } catch {
+      return;
+    }
+  }
   const agentsDir = join20(homedir15(), ".openclaw", "agents");
   if (!existsSync7(agentsDir)) return;
   let agentDirs;
@@ -279843,7 +279886,7 @@ var plugin = {
       api: "openai-completions",
       // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
       apiKey: "x402-proxy-handles-auth",
-      models: VISIBLE_OPENCLAW_MODELS
+      models: withPinnedModels(VISIBLE_OPENCLAW_MODELS, api.config)
     };
     const runtimeMcpRemoved = removeManagedBlockrunMcpServerConfig(api.config);
     const shouldLogRegistration = !proc.__clawrouterRegistrationLogged;

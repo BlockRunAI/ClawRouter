@@ -404,6 +404,8 @@ type BlockRunModel = {
      * Default: false (must opt-in to prevent silent regressions on new models).
      */
     toolCalling?: boolean;
+    /** Retain metadata for explicit pins without advertising the model in discovery. */
+    explicitOnly?: boolean;
     /** Model is deprecated — will be routed to fallbackModel if set */
     deprecated?: boolean;
     /** Model ID to route to when this model is deprecated */
@@ -425,8 +427,9 @@ type BlockRunModel = {
 };
 declare const BLOCKRUN_MODELS: BlockRunModel[];
 /**
- * All BlockRun models in OpenClaw format (including aliases).
- * Used for proxy-side resolution (alias → target ID), tool routing, etc.
+ * Discoverable BlockRun models in OpenClaw format (including aliases).
+ * Explicit-only pins retain their metadata in BLOCKRUN_MODELS and remain
+ * callable through resolveModelAlias without appearing in discovery.
  *
  * Catalog entries shadowed by an identically-keyed alias are excluded:
  * resolveModelAlias checks MODEL_ALIASES first, so those catalog entries are

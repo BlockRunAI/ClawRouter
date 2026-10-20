@@ -662,6 +662,31 @@ try {
   }
 
   const allowlist = config.agents.defaults.models;
+  // Keep explicitly selected legacy MiniMax models through allowlist refresh.
+  function preservePins(value) {
+    if (!value || typeof value !== 'object') return;
+    function add(id) {
+      if (typeof id === 'string' && /^blockrun\/(?:minimax\/)?minimax-m2\.[57]$/.test(id)) {
+        const model = id.slice('blockrun/'.length);
+        if (!TOP_MODELS.includes(model)) TOP_MODELS.push(model);
+      }
+    }
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'models') {
+        if (child && typeof child === 'object' && !Array.isArray(child)) {
+          for (const [id, settings] of Object.entries(child)) {
+            if (settings && typeof settings === 'object' && Object.keys(settings).length) add(id);
+          }
+        }
+        continue;
+      }
+      if (['model', 'primary', 'fallbacks'].includes(key)) {
+        if (Array.isArray(child)) child.forEach(add); else add(child);
+      }
+      preservePins(child);
+    }
+  }
+  preservePins(config);
   const currentKeys = new Set(TOP_MODELS.map(id => 'blockrun/' + id));
 
   // Remove any blockrun/* entries not in the current TOP_MODELS list

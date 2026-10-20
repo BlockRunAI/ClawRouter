@@ -517,14 +517,23 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | xiaomi/mimo-v2.5-pro                        |    $0.435 |      $0.87 |    $0.0007 | 1M      | reasoning (Xiaomi MiMo-V2.5 Pro)                    |
 | zai/glm-5-turbo                             |     $1.20 |      $4.00 |    $0.0026 | 200K    | tools                                               |
 | minimax/minimax-m3                          |     $0.30 |      $1.20 |    $0.0008 | 1M      | reasoning, agentic, tools                           |
-| minimax/minimax-m2.7                        |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                           |
-| minimax/minimax-m2.5                        |     $0.30 |      $1.20 |    $0.0008 | 205K    | reasoning, agentic, tools                           |
 | google/gemini-2.5-flash                     |     $0.30 |      $2.50 |    $0.0014 | 1M      | vision, tools                                       |
 | google/gemini-3.5-flash-lite                |     $0.30 |      $2.50 |    $0.0014 | 1M      | reasoning, tools (thinking built-in)                |
 | openai/gpt-4.1-mini                         |     $0.40 |      $1.60 |    $0.0010 | 128K    | tools                                               |
 | google/gemini-3-flash-preview               |     $0.50 |      $3.00 |    $0.0018 | 1M      | vision                                              |
 | moonshot/kimi-k2.5                          |     $0.60 |      $3.00 |    $0.0018 | 262K    | reasoning, vision, agentic, tools                   |
 | moonshot/kimi-k2.7                          |     $0.95 |      $4.00 |    $0.0025 | 262K    | reasoning, vision, agentic, tools                   |
+
+MiniMax's current advertised text option is `minimax/minimax-m3`. The
+[Base](https://blockrun.ai/api/v1/models) and
+[Solana](https://sol.blockrun.ai/api/v1/models) catalogs do not list a Flash
+route as of 2026-10-20, so ClawRouter does not invent one. M3 retains the
+gateway's 1,048,576-token context, 65,536-token maximum output, and $0.30/$1.20
+per-million input/output rates. Explicit legacy model IDs and aliases remain
+resolvable with their existing metadata; they are hidden from discovery and
+the default picker. Explicit saved selections and custom settings retain the
+required local entries when configuration and agent caches refresh. MiniMax
+music generation is unchanged.
 
 ### Mid-Range Models ($0.001–$0.01/request)
 

@@ -590,6 +590,8 @@ export type BlockRunModel = {
    * Default: false (must opt-in to prevent silent regressions on new models).
    */
   toolCalling?: boolean;
+  /** Retain metadata for explicit pins without advertising the model in discovery. */
+  explicitOnly?: boolean;
   /** Model is deprecated — will be routed to fallbackModel if set */
   deprecated?: boolean;
   /** Model ID to route to when this model is deprecated */
@@ -1847,7 +1849,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
 
-  // MiniMax
+  // MiniMax: M3 is the current verified gateway route. Flash is not listed
+  // on either public gateway; keep legacy metadata only for explicit pins.
   {
     id: "minimax/minimax-m3",
     name: "MiniMax M3",
@@ -1865,6 +1868,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "minimax/minimax-m2.7",
     name: "MiniMax M2.7",
     version: "m2.7",
+    explicitOnly: true,
     inputPrice: 0.3,
     outputPrice: 1.2,
     contextWindow: 204800,
@@ -1877,6 +1881,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "minimax/minimax-m2.5",
     name: "MiniMax M2.5",
     version: "m2.5",
+    explicitOnly: true,
     inputPrice: 0.3,
     outputPrice: 1.2,
     contextWindow: 204800,
@@ -2438,14 +2443,15 @@ const ALIAS_MODELS: ModelDefinitionConfig[] = Object.entries(MODEL_ALIASES)
   .filter(([alias]) => !alias.includes("/"))
   .map(([alias, targetId]) => {
     const target = BLOCKRUN_MODELS.find((m) => m.id === targetId);
-    if (!target) return null;
+    if (!target || target.explicitOnly) return null;
     return toOpenClawModel({ ...target, id: alias, name: `${alias} → ${target.name}` });
   })
   .filter((m): m is ModelDefinitionConfig => m !== null);
 
 /**
- * All BlockRun models in OpenClaw format (including aliases).
- * Used for proxy-side resolution (alias → target ID), tool routing, etc.
+ * Discoverable BlockRun models in OpenClaw format (including aliases).
+ * Explicit-only pins retain their metadata in BLOCKRUN_MODELS and remain
+ * callable through resolveModelAlias without appearing in discovery.
  *
  * Catalog entries shadowed by an identically-keyed alias are excluded:
  * resolveModelAlias checks MODEL_ALIASES first, so those catalog entries are
@@ -2454,7 +2460,9 @@ const ALIAS_MODELS: ModelDefinitionConfig[] = Object.entries(MODEL_ALIASES)
  * target's real metadata instead.
  */
 export const OPENCLAW_MODELS: ModelDefinitionConfig[] = [
-  ...BLOCKRUN_MODELS.filter((m) => !(m.id in MODEL_ALIASES)).map(toOpenClawModel),
+  ...BLOCKRUN_MODELS.filter((m) => !m.explicitOnly && !(m.id in MODEL_ALIASES)).map(
+    toOpenClawModel,
+  ),
   ...ALIAS_MODELS,
 ];
 
@@ -2468,6 +2476,43 @@ export const VISIBLE_OPENCLAW_MODELS: ModelDefinitionConfig[] = TOP_MODELS.flatM
   const model = OPENCLAW_MODEL_BY_ID.get(id);
   return model ? [model] : [];
 });
+
+/** Keep explicitly selected legacy models available when refreshing a saved picker. */
+export function withPinnedModels(
+  visible: ModelDefinitionConfig[],
+  config: unknown,
+): ModelDefinitionConfig[] {
+  const pinned = new Map<string, ModelDefinitionConfig>();
+  const add = (value: unknown) => {
+    if (typeof value !== "string" || !value.startsWith("blockrun/")) return;
+    const model = BLOCKRUN_MODELS.find((m) => m.id === resolveModelAlias(value));
+    if (model?.explicitOnly) {
+      const id = value.slice("blockrun/".length);
+      pinned.set(id, toOpenClawModel({ ...model, id }));
+    }
+  };
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    for (const [key, child] of Object.entries(value)) {
+      // Generated provider catalogs and empty allowlist entries are not user pins.
+      if (key === "models") {
+        if (child && typeof child === "object" && !Array.isArray(child)) {
+          for (const [id, settings] of Object.entries(child)) {
+            if (settings && typeof settings === "object" && Object.keys(settings).length) add(id);
+          }
+        }
+        continue;
+      }
+      if (["model", "primary", "fallbacks"].includes(key)) {
+        if (Array.isArray(child)) child.forEach(add);
+        else add(child);
+      }
+      visit(child);
+    }
+  };
+  visit(config);
+  return [...visible, ...[...pinned.values()].filter((m) => !visible.some((v) => v.id === m.id))];
+}
 
 /**
  * Build a ModelProviderConfig for BlockRun.
@@ -2501,7 +2546,7 @@ export function isAgenticModel(modelId: string): boolean {
  * Get all agentic-capable models.
  */
 export function getAgenticModels(): string[] {
-  return BLOCKRUN_MODELS.filter((m) => m.agentic).map((m) => m.id);
+  return BLOCKRUN_MODELS.filter((m) => m.agentic && !m.explicitOnly).map((m) => m.id);
 }
 
 /**
