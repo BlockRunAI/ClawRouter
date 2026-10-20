@@ -257437,10 +257437,9 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: false
   },
   "deepseek/deepseek-v4.1-flash": {
-    // supportsTools: not probed — fails closed
     contextWindow: 1048576,
     maxOutputTokens: 65536,
-    supportsTools: false,
+    supportsTools: true,
     supportsVision: false
   },
   "google/gemini-2.5-flash": {
@@ -257501,6 +257500,13 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     contextWindow: 1048576,
     maxOutputTokens: 65536,
     supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-4-argon": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
     supportsVision: true
   },
   "minimax/minimax-m2.7": {
@@ -257724,10 +257730,9 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: true
   },
   "openai/gpt-6.1-sol": {
-    // supportsTools: not probed — fails closed
     contextWindow: 105e4,
     maxOutputTokens: 128e3,
-    supportsTools: false,
+    supportsTools: true,
     supportsVision: true
   },
   "openai/o1": {
@@ -257979,6 +257984,14 @@ var model_profiles_generated_default = {
     latencyMs: 8781.2,
     p95LatencyMs: 9881.1,
     outputTokensPerSecond: 58.98,
+    errorRate: 0,
+    samples: 3
+  },
+  "deepseek/deepseek-v4.1-flash": {
+    measuredAt: "2026-10-20T18:12:51Z",
+    latencyMs: 2383.5,
+    p95LatencyMs: 2547.8,
+    outputTokensPerSecond: 216.53,
     errorRate: 0,
     samples: 3
   },
@@ -258267,6 +258280,14 @@ var model_profiles_generated_default = {
     latencyMs: 3574.1,
     p95LatencyMs: 4126.3,
     outputTokensPerSecond: 133.59,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-6.1-sol": {
+    measuredAt: "2026-10-20T18:12:51Z",
+    latencyMs: 11324,
+    p95LatencyMs: 12747.6,
+    outputTokensPerSecond: 45.11,
     errorRate: 0,
     samples: 3
   },
@@ -259085,11 +259106,13 @@ var VERIFIED_TOOL_FALLBACKS = [
   "anthropic/claude-fable-5.1",
   "anthropic/claude-opus-5.5",
   "anthropic/claude-sonnet-5.5",
+  "deepseek/deepseek-v4.1-flash",
   "google/gemini-3.8-flash",
   "openai/gpt-5.1",
   "openai/gpt-6-astra",
   "openai/gpt-6-luna",
   "openai/gpt-6-sol",
+  "openai/gpt-6.1-sol",
   "xai/grok-4.6",
   "xai/grok-4.7",
   "xiaomi/mimo-v2.5"

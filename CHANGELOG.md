@@ -4,6 +4,21 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.297 — October 20, 2026
+
+### Mistral Large 4 at its list price
+
+Mistral's launch promotion ended, and blockrun moved `mistral/mistral-large-4`
+from $0.68/$2.09 to $1.36/$4.18. The local price table follows, so a pin on it
+reserves the real rate against `maxCostPerRun` instead of half of it.
+
+### router-core 8773a99: two more verified tool fallbacks
+
+`@blockrun/router-core` moves to 8773a99. A live probe confirmed well-formed
+tool calls from `deepseek/deepseek-v4.1-flash` and `openai/gpt-6.1-sol`, so
+both join the verified tool fallbacks behind the configured chains. No primary
+changes on the core's 88-request decision snapshot.
+
 ## v0.12.296 — October 20, 2026
 
 ### Gemini 4 Argon in the catalog

@@ -1,6 +1,6 @@
 {
   "name": "@blockrun/clawrouter",
-  "version": "0.12.296",
+  "version": "0.12.297",
   "description": "Smart LLM router — save 84% on inference costs. 88 models (7 free). Pay by credit card (API key) or USDC (x402 wallet).",
   "type": "module",
   "main": "dist/index.js",
@@ -116,7 +116,7 @@
   },
   "devDependencies": {
     "@blockrun/model-catalog": "https://codeload.github.com/BlockRunAI/model-catalog/tar.gz/b95efe2f025c9968742e6479bc9ec71b6a40c0f4",
-    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/2cd5a1026f755cd39a3f0d6e61cab23a5ad391a9",
+    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/8773a9954b091bd0090acdfec67c75a006c0e156",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.2.0",
     "openclaw": "^2026.7.2-beta.7",
