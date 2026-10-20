@@ -18,9 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Node 24, not the package's `engines` floor of 22: the openclaw
+      # devDependency (2026.10+) refuses to install below Node 24.16, so
+      # `npm ci` fails on 22. Users still install fine on 22 — openclaw is
+      # dev-only here, and test/Dockerfile.install-test keeps covering 22.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
 
       - run: npm ci
@@ -42,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
 
       - run: npm ci
