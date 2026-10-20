@@ -46028,6 +46028,13 @@ var init_dist = __esm({
         supportsTools: true,
         supportsVision: true
       },
+      "google/gemini-4-argon": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: false,
+        supportsVision: true
+      },
       "minimax/minimax-m2.7": {
         contextWindow: 204800,
         maxOutputTokens: 16384,
