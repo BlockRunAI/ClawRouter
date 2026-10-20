@@ -76,11 +76,14 @@ describe("OpenClaw security scanner", () => {
     // chunks ship — one minified with mangled exports and one with proper names —
     // so match both prefixes, iterate all, and pick the one exporting
     // scanDirectoryWithSummary; fall back to "first function export" for older builds.
+    // 2026.10.x also moved its dist chunks from `.js` to `.mjs`, so accept both.
     const openclawDist = resolveOpenclawDist();
     try {
       const files = readdirSync(openclawDist);
       const scannerFiles = files.filter(
-        (f) => (f.startsWith("skill-scanner") || f.startsWith("scanner-")) && f.endsWith(".js"),
+        (f) =>
+          (f.startsWith("skill-scanner") || f.startsWith("scanner-")) &&
+          (f.endsWith(".js") || f.endsWith(".mjs")),
       );
       if (scannerFiles.length === 0) {
         scannerLoadError = `scanner chunk not found in ${openclawDist}`;
