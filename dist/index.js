@@ -236589,8 +236589,8 @@ function isReasoningModel(modelId) {
 var snapshot_v1_default = {
   catalog: {
     schema_version: 1,
-    catalog_version: "2026.10.20.3",
-    observed_at: "2026-10-20T15:39:43.000Z",
+    catalog_version: "2026.10.20.4",
+    observed_at: "2026-10-20T18:13:39.000Z",
     sources: {
       base: "https://blockrun.ai/api/v1/models?format=json",
       solana: "https://sol.blockrun.ai/api/v1/models?format=json"
@@ -238490,6 +238490,56 @@ var snapshot_v1_default = {
             pricing: {
               input: 0.75,
               output: 3.75
+            },
+            context_window: 1048576,
+            max_output: 65536
+          }
+        }
+      },
+      {
+        id: "google/gemini-4-argon",
+        name: "Gemini 4 Argon",
+        provider: "google",
+        description: "Google's frontier reasoning model, built for long multi-step agent work, complex software engineering and deep math and science problems",
+        lifecycle: "active",
+        declared_capabilities: [
+          "chat",
+          "coding",
+          "reasoning",
+          "vision"
+        ],
+        aliases: [],
+        redirects: [],
+        networks: {
+          base: {
+            listed: true,
+            categories: [
+              "chat",
+              "coding",
+              "reasoning",
+              "vision"
+            ],
+            billing_mode: "paid",
+            pricing: {
+              input: 2,
+              output: 10,
+              cache_read: 0.1
+            },
+            context_window: 1048576,
+            max_output: 65536
+          },
+          solana: {
+            listed: true,
+            categories: [
+              "chat",
+              "coding",
+              "reasoning",
+              "vision"
+            ],
+            billing_mode: "paid",
+            pricing: {
+              input: 2,
+              output: 10
             },
             context_window: 1048576,
             max_output: 65536
@@ -242239,8 +242289,8 @@ var snapshot_v1_default = {
   },
   picker_policy: {
     schema_version: 1,
-    policy_version: "2026.10.20.3",
-    catalog_version: "2026.10.20.3",
+    policy_version: "2026.10.20.4",
+    catalog_version: "2026.10.20.4",
     default_network: "solana",
     compatibility_shortcuts: {
       "opus-4.6": "anthropic/claude-opus-4.6",
@@ -242619,6 +242669,7 @@ var snapshot_v1_default = {
           "claude-opus-4.7": "anthropic/claude-opus-4.7",
           "claude-opus-5.5": "anthropic/claude-opus-5.5",
           "gemini-3.8-flash": "google/gemini-3.8-flash",
+          "gemini-4-argon": "google/gemini-4-argon",
           "nemotron-3-ultra-550b": "nvidia/nemotron-3-ultra-550b",
           "gpt-5.1": "openai/gpt-5.1",
           "claude-fable-5": "anthropic/claude-fable-5",
@@ -242637,7 +242688,7 @@ var snapshot_v1_default = {
   router_policy: {
     schema_version: 1,
     policy_version: "2026.09.29.1",
-    catalog_version: "2026.10.20.3",
+    catalog_version: "2026.10.20.4",
     default_network: "solana",
     status: "draft",
     description: "Prototype model-specific policy for Router Core. Do not consume in production until benchmark review is complete.",

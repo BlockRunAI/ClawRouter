@@ -18,6 +18,12 @@ routing tier or profile picks it yet.
 Google's rate is $2/$10 through 2026-11-30 and $4/$20 from 2026-12-01; the
 entry carries a dated note to reprice.
 
+### model-catalog 2026.10.20.4
+
+`@blockrun/model-catalog` moves to b95efe2 (catalog `2026.10.20.4`), which
+adds Gemini 4 Argon, so the bundled offline fallback catalog lists it too.
+`@blockrun/router-core` stays at 2cd5a10.
+
 ---
 
 ## v0.12.295 — October 20, 2026
