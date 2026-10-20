@@ -544,6 +544,7 @@ No Surf account, no API key — settles directly to Surf's Base treasury in USDC
 | qwen/qwen3.7-max            |    $1.475 |     $4.425 |    $0.0030 | 1M      | reasoning, agentic, tools (Qwen flagship)    |
 | qwen/qwen3.8-max            |     $2.00 |      $6.00 |    $0.0040 | 1M      | reasoning (Qwen 3.8 flagship)                |
 | xai/grok-4.3                |     $1.25 |      $2.50 |    $0.0019 | 1M      | reasoning, vision, agentic, tools            |
+| google/gemini-4-argon       |     $2.00 |     $10.00 |    $0.0060 | 1M      | reasoning, vision, tools (Google frontier)   |
 | google/gemini-3.8-flash     |     $0.75 |      $3.75 |    $0.0023 | 1M      | reasoning, vision, tools (newest Flash)      |
 | google/gemini-3.6-flash     |     $0.75 |      $3.75 |    $0.0023 | 1M      | reasoning, vision, tools (thinking mode)     |
 | google/gemini-3.5-flash     |     $1.50 |      $9.00 |    $0.0053 | 1M      | reasoning, vision, tools (thinking)          |

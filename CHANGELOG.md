@@ -4,6 +4,22 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.296 — October 20, 2026
+
+### Gemini 4 Argon in the catalog
+
+`google/gemini-4-argon`, Google's new frontier reasoning model, is live on
+both chains and now carried in the local catalog and the model picker:
+$2/$10 per 1M, 1M context, 65,536 max output, reasoning + vision + tools.
+Carrying it means `estimateAmount()` prices it, so the balance check and the
+`maxCostPerRun` cap see real cost instead of $0. It is catalog only — no
+routing tier or profile picks it yet.
+
+Google's rate is $2/$10 through 2026-11-30 and $4/$20 from 2026-12-01; the
+entry carries a dated note to reprice.
+
+---
+
 ## v0.12.295 — October 20, 2026
 
 ### Bare `deepseek` names DeepSeek V4.1 Flash

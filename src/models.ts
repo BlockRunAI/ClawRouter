@@ -1381,6 +1381,26 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
   {
+    // Google's frontier reasoning model (blockrun #855, listed 2026-10-20; live
+    // on Base and Solana). Catalogued so estimateAmount() prices it — an
+    // uncatalogued id skips the balance check and projects $0 into
+    // maxCostPerRun. Catalog only: deliberately NOT in any routing tier yet.
+    id: "google/gemini-4-argon",
+    name: "Gemini 4 Argon",
+    version: "4",
+    // ⏰ INTRO RATE, expires 2026-12-01. Google prices Argon at 2/10 through
+    // 2026-11-30 and 4/20 from 2026-12-01 (ai.google.dev/gemini-api/docs/pricing;
+    // blockrun's src/lib/models.ts carries the same dated note). Leaving 2/10 past
+    // that date under-reports spend 2x and lets maxCostPerRun run to twice its cap.
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
     // Current-generation Flash. Live in the BlockRun catalog (chat, reasoning,
     // coding, vision; $0.75/$3.75) and pinned from the Hermes picker, so it
     // MUST be carried here and not just be routable at the gateway:

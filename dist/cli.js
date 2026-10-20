@@ -6749,6 +6749,7 @@ var init_top_models = __esm({
       "openai/gpt-5.4-nano",
       "openai/gpt-5.1",
       "openai/gpt-5.3-codex",
+      "google/gemini-4-argon",
       "google/gemini-3.1-pro",
       "google/gemini-3.8-flash",
       "google/gemini-3.6-flash",
@@ -8152,6 +8153,26 @@ var init_models = __esm({
         version: "3.0",
         inputPrice: 2,
         outputPrice: 12,
+        contextWindow: 1048576,
+        maxOutput: 65536,
+        reasoning: true,
+        vision: true,
+        toolCalling: true
+      },
+      {
+        // Google's frontier reasoning model (blockrun #855, listed 2026-10-20; live
+        // on Base and Solana). Catalogued so estimateAmount() prices it — an
+        // uncatalogued id skips the balance check and projects $0 into
+        // maxCostPerRun. Catalog only: deliberately NOT in any routing tier yet.
+        id: "google/gemini-4-argon",
+        name: "Gemini 4 Argon",
+        version: "4",
+        // ⏰ INTRO RATE, expires 2026-12-01. Google prices Argon at 2/10 through
+        // 2026-11-30 and 4/20 from 2026-12-01 (ai.google.dev/gemini-api/docs/pricing;
+        // blockrun's src/lib/models.ts carries the same dated note). Leaving 2/10 past
+        // that date under-reports spend 2x and lets maxCostPerRun run to twice its cap.
+        inputPrice: 2,
+        outputPrice: 10,
         contextWindow: 1048576,
         maxOutput: 65536,
         reasoning: true,
