@@ -6,6 +6,12 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      # typescript-eslint 8.x peer-rejects TypeScript 7, so a TS major in the
+      # dev group ERESOLVEs npm ci and blocks the whole group (#480). Lift this
+      # once typescript-eslint supports TS 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: development
