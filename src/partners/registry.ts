@@ -629,6 +629,54 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
     },
   },
   // ---------------------------------------------------------------------------
+  // Grey Ridge Signals — On-chain token safety (pre-swap gate)
+  // ---------------------------------------------------------------------------
+  {
+    id: "token_safety_gate",
+    name: "Token Safety Gate (pre-swap)",
+    partner: "Grey Ridge Signals",
+    category: "Market data",
+    shortDescription: "Pre-swap token safety verdict (Base)",
+    description:
+      "Get a pre-trade safety verdict for a Base ERC-20 token BEFORE an agent signs a swap. " +
+      "Call this for ANY request that is about to buy/sell/swap a specific on-chain token on Base, " +
+      "or any 'is this token safe / is it a honeypot / can I sell it back' question. " +
+      "Returns a go/no-go decision plus the signals behind it: honeypot detection, buy/sell tax, " +
+      "mintable/pausable/blacklist admin controls, and a 0-100 risk score. " +
+      "Do NOT use browser or web scraping — this returns a structured verdict directly. " +
+      "Returns: decision (go/caution/no-go), verdict (SAFE/RISKY), risk_score, flags[], token_meta.",
+    proxyPath: "/gate/swap",
+    method: "GET",
+    params: [
+      {
+        name: "token",
+        type: "string",
+        description:
+          "Base ERC-20 contract address (0x…) to screen before swapping. " +
+          "Example: 0x4200000000000000000000000000000000000006 (WETH).",
+        required: true,
+      },
+      {
+        name: "side",
+        type: "string",
+        description: "Trade side being screened: buy or sell. Default: buy.",
+        required: false,
+      },
+      {
+        name: "notional_usd",
+        type: "number",
+        description:
+          "Intended trade size in USD, used to size liquidity/price-impact checks. Default: 100.",
+        required: false,
+      },
+    ],
+    pricing: { perUnit: "$0.008", unit: "request", minimum: "$0.008", maximum: "$0.008" },
+    example: {
+      input: { token: "0x4200000000000000000000000000000000000006", side: "buy", notional_usd: 100 },
+      description: "Screen WETH before a $100 buy on Base",
+    },
+  },
+  // ---------------------------------------------------------------------------
   // BlockRun — Image & Video generation
   // ---------------------------------------------------------------------------
   {
