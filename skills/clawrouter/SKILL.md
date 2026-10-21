@@ -21,13 +21,6 @@ triggers:
   - "phone number verification"
   - "sim swap detection"
   - "outbound ai call"
-  - "blockrun surf"
-  - "surf crypto api"
-  - "on-chain sql query"
-  - "clickhouse onchain"
-  - "wallet labels api"
-  - "crypto mindshare"
-  - "crypto news api"
 homepage: https://blockrun.ai/clawrouter.md
 repository: https://github.com/BlockRunAI/ClawRouter
 license: MIT
@@ -264,16 +257,6 @@ egress by default, so it works out of the box in geoblocked regions).
   bootstraps everything from your wallet. Discover token IDs with the
   `blockrun_predexon_*` data tools first. See the **`polymarket-trading` skill**
   for the golden rules and end-to-end flow.
-
-### Crypto Data (Surf) — skill-only integration
-
-Surf is a unified crypto data API with **84 endpoints across 13 domains**: CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT mindshare, news, project/DeFi metrics, token analytics, unified search, VC fund intelligence. The killer feature is `POST /surf/onchain/sql` — ad-hoc SELECT against the warehouse, no indexer required.
-
-**ClawRouter ships Surf as a skill, not as typed wrappers.** The base proxy whitelists `/v1/surf/*` so any call through `http://127.0.0.1:8402/v1/surf/...` flows through the same x402 wallet that pays for LLM calls. The endpoint catalog, parameter shapes, and example flows live in the dedicated **`surf` skill** — Claude Code (or any agent) reads that skill on demand and crafts the HTTP call itself. No `blockrun_surf_*` tool definitions to maintain, no release of ClawRouter when Surf adds endpoint #85.
-
-Pricing tiers (per call, settled in USDC directly to Surf's Base treasury): **$0.001** prices/rankings/lists/news · **$0.005** orderbooks/candles/search/wallet details/social · **$0.02** on-chain SQL/query/schema, chat completions. No monthly minimums, no Surf account, no API key. See the `surf` skill for the full endpoint reference.
-
-This is the pattern for new BlockRun-marketplace APIs going forward: base proxy whitelists the namespace, a dedicated skill documents the surface — no hand-coded tool wrappers per endpoint.
 
 ## Example Output
 

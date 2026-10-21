@@ -137,8 +137,6 @@ describe("account API service parity through the proxy", () => {
     ["POST", "/v1/phone/numbers/list"],
     ["POST", "/v1/voice/call"],
     ["GET", "/v1/voice/call/fixture-call"],
-    ["GET", "/v1/surf/market/ranking"],
-    ["POST", "/v1/surf/onchain/sql"],
     ["GET", "/v1/pm/polymarket/markets?q=test"],
     ["POST", "/v1/pm/polymarket/query"],
     ["GET", "/v1/crypto/price/BTC-USD"],

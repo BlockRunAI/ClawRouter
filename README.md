@@ -445,48 +445,6 @@ LLM agents discover all eight operations as `blockrun_phone_*` / `blockrun_voice
 
 ---
 
-## Crypto Data (Surf)
-
-Surf is BlockRun's unified crypto data API — **84 endpoints across 13 domains**: CEX/DEX markets, on-chain SQL over 80+ ClickHouse tables (Ethereum, Base, Arbitrum, BSC, TRON, HyperEVM, Tempo), 100M+ labeled wallets, prediction markets (Polymarket + Kalshi), social/CT mindshare, news, project/DeFi metrics, token analytics, unified search, VC fund intelligence. The killer feature is ad-hoc `POST /surf/onchain/sql` — agents query the warehouse directly without running an indexer.
-
-ClawRouter ships Surf as a **skill, not as typed wrappers**. The proxy whitelists `/v1/surf/*` so any call through the local proxy is paid x402 from the same wallet; the agent reads `skills/surf/SKILL.md` for the endpoint catalog and crafts the HTTP call. No `blockrun_surf_*` tool definitions to maintain; a new Surf endpoint requires zero ClawRouter release.
-
-**Flat per-call pricing** — every Surf endpoint costs the same. The old
-$0.001/$0.005/$0.020 tiers no longer apply; upstream prices all three tiers
-identically, and the tier now describes only endpoint weight.
-
-| Rail                        | Price per call                     |
-| --------------------------- | ---------------------------------- |
-| API key (`api.blockrun.ai`) | **$0.0075** (base rate, no tx fee) |
-| Wallet — Solana             | **$0.0075**                        |
-| Wallet — Base               | **$0.0085**                        |
-
-Measured 2026-09-05: the API-key rate from the account ledger, the wallet rates
-from the x402 challenge, which quotes the price before anything is signed. That
-quote is authoritative for the rail that issued it — the key rail issues no 402,
-and the wallet quote includes a transaction fee account credit does not pay, so
-the two are not interchangeable. Solana being cheaper than Base is deliberate
-(the $0.001 is Base's transaction fee), not drift.
-
-**Usage (HTTP):**
-
-```bash
-# Aggregated BTC spot price (Tier 1, $0.001)
-curl 'http://localhost:8402/v1/surf/market/price?symbol=BTC'
-
-# Bulk wallet labels over 100M+ labeled wallets (Tier 2, $0.005)
-curl 'http://localhost:8402/v1/surf/wallet/labels/batch?addresses=0xabc,0xdef,0x123'
-
-# Ad-hoc on-chain SQL (Tier 3, $0.020)
-curl -X POST 'http://localhost:8402/v1/surf/onchain/sql' \
-  -H 'content-type: application/json' \
-  -d '{"sql":"SELECT count() FROM ethereum.transactions WHERE block_timestamp >= now() - INTERVAL 1 HOUR"}'
-```
-
-No Surf account, no API key — settles directly to Surf's Base treasury in USDC via the same wallet as LLM calls. Full endpoint reference: [`skills/surf/SKILL.md`](skills/surf/SKILL.md). Upstream marketplace: <https://blockrun.ai/marketplace/surf>.
-
----
-
 ## Models & Pricing
 
 <!-- br:models.chatVisible -->90<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->7<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
@@ -740,8 +698,7 @@ chains, the response cache and the local spend controls.
 - **One key covers nearly everything.** Verified live against `api.blockrun.ai`
   on 2026-09-05: chat completions (`/v1/chat/completions`), the Anthropic-shaped
   `/v1/messages`, `/v1/models`, image generation, speech, video, and the partner
-  APIs — Surf crypto data, Exa search, prediction markets, and phone lookup and
-  fraud checks.
+  APIs — Exa search, prediction markets, and phone lookup and fraud checks.
 - **The wallet-only exceptions** are the routes that bind a lease or a position
   to a payer address, because there is no address to bind to without a wallet:
   buying, renewing, listing and releasing **phone numbers** (the gateway answers

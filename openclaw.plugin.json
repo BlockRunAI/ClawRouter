@@ -1,7 +1,7 @@
 {
   "id": "blockrun-clawrouter",
   "name": "BlockRun ClawRouter",
-  "description": "Smart LLM router \u2014 82 models, x402 micropayments, 84% cost savings. Phone lookup + AI voice calls (Twilio + Bland.ai). Surf crypto-data API (84 endpoints, on-chain SQL, 100M+ labeled wallets) via skill.",
+  "description": "Smart LLM router \u2014 x402 micropayments, 84% cost savings. Phone lookup + AI voice calls (Twilio + Bland.ai).",
   "skills": ["./skills"],
   "activation": {
     "onStartup": true

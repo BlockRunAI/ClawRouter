@@ -492,7 +492,7 @@ const HINTS: Record<number, string> = {
   402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
   404:
     `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, ` +
-    `speech, video and the partner APIs (Surf, Exa, prediction markets, phone lookup) all work ` +
+    `speech, video and the partner APIs (Exa, prediction markets, phone lookup) all work ` +
     `on an API key. The wallet-only exceptions are the routes that bind a lease or a position to ` +
     `a payer address — buying/renewing/releasing phone numbers, and Polymarket trading — which ` +
     `need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run ` +

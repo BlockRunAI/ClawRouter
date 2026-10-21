@@ -2183,9 +2183,8 @@ function estimateImageCost(model: string, size?: string, n: number = 1): number 
  *
  * Used for partner endpoints (/v1/partner/*, /v1/pm/*), market data
  * (/v1/stocks/*, /v1/usstock/*, /v1/crypto/*, /v1/fx/*, /v1/commodity/*),
- * wallet-backed data tools such as BlockRun Exa (/v1/exa/*), and the Surf
- * unified crypto data API (/v1/surf/*). No smart routing, SSE, compression,
- * or sessions — just collect body, forward via payFetch (which handles 402
+ * and wallet-backed data tools such as BlockRun Exa (/v1/exa/*). No smart
+ * routing, SSE, compression, or sessions — just collect body, forward via payFetch (which handles 402
  * automatically), and stream back.
  */
 /**
@@ -2363,16 +2362,13 @@ async function proxyPaidApiRequest(
   const isModalSandbox = req.url?.startsWith("/v1/modal/") ?? false;
   const isPhone =
     (req.url?.startsWith("/v1/phone/") ?? false) || (req.url?.startsWith("/v1/voice/") ?? false);
-  const isSurf = req.url?.startsWith("/v1/surf/") ?? false;
   const requestLabel = isBlockrunExa
     ? "BlockRun Exa"
     : isModalSandbox
       ? "Modal Sandbox"
       : isPhone
         ? "Phone/Voice"
-        : isSurf
-          ? "Surf"
-          : "Partner";
+        : "Partner";
 
   // Collect request body
   const bodyChunks: Buffer[] = [];
@@ -2437,7 +2433,7 @@ async function proxyPaidApiRequest(
   // answers "which numbers do I own", and upstream marks it public/max-age.
   //
   // Keyed on the CREDENTIAL, not on which route handled the request. The
-  // partner prefixes (/v1/phone, /v1/surf, /v1/pm, ...) are matched before the
+  // partner prefixes (/v1/phone, /v1/exa, /v1/pm, ...) are matched before the
   // generic account passthrough and would otherwise keep the upstream's caching
   // headers while still being account-authenticated.
   if (accountPassthrough || authMode === "api-key") {
@@ -2518,10 +2514,8 @@ async function proxyPaidApiRequest(
         ? "modal-sandbox"
         : isPhone
           ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] // e.g. "phone/lookup", "voice/call"
-          : isSurf
-            ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] // e.g. "surf/onchain/sql"
-            : "partner",
-    tier: isPhone ? "PHONE" : isSurf ? "SURF" : "PARTNER",
+          : "partner",
+    tier: isPhone ? "PHONE" : "PARTNER",
     cost: requestCost,
     baselineCost: requestCost,
     savings: 0,
@@ -2534,9 +2528,7 @@ async function proxyPaidApiRequest(
         ? "modal"
         : isPhone
           ? "phone"
-          : isSurf
-            ? "surf"
-            : "partner",
+          : "partner",
   }).catch(() => {});
 }
 
@@ -4244,9 +4236,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // --- Handle paid API paths (/v1/partner/*, /v1/pm/*, /v1/exa/*, /v1/modal/*,
       // /v1/stocks/*, /v1/usstock/*, /v1/crypto/*, /v1/fx/*, /v1/commodity/*,
       // /v1/phone/* (Twilio number intelligence + provisioning),
-      // /v1/voice/* (Bland.ai outbound AI voice calls),
-      // /v1/surf/* (Surf unified crypto data API: 84 endpoints across CEX/DEX,
-      //   on-chain SQL, wallet intelligence, prediction markets, social, news)) ---
+      // /v1/voice/* (Bland.ai outbound AI voice calls)) ---
+      // /v1/surf/* is deliberately absent: BlockRun retired the Surf API on
+      // 2026-09-06 and the gateway answers every path with 410. In wallet mode it
+      // now gets the local unsupported_endpoint 404 below without ever reaching
+      // payFetch; in API-key mode the account passthrough relays the gateway's
+      // 410 verbatim.
       // Gateway endpoints that carry no `model` we route on, and so must be
       // forwarded verbatim rather than fed to the chat path:
       //   /v1/messages       — the Anthropic-shaped chat surface
@@ -4272,7 +4267,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       if (
         isVerbatimGatewayPath ||
         req.url?.match(
-          /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice|surf)\//,
+          /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice)\//,
         )
       ) {
         try {
@@ -4368,7 +4363,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
                 `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, ` +
                 `/v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, ` +
                 `/v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,` +
-                `modal,stocks,usstock,crypto,fx,commodity,phone,voice,surf}/. ` +
+                `modal,stocks,usstock,crypto,fx,commodity,phone,voice}/. ` +
                 `If BlockRun serves this endpoint, call it directly against the gateway.`,
               type: "invalid_request_error",
               code: "unsupported_endpoint",
