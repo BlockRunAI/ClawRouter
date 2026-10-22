@@ -6758,7 +6758,7 @@ var init_api_key = __esm({
     HINTS = {
       401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
       402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
-      404: `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, speech, video and the partner APIs (Surf, Exa, prediction markets, phone lookup) all work on an API key. The wallet-only exceptions are the routes that bind a lease or a position to a payer address \u2014 buying/renewing/releasing phone numbers, and Polymarket trading \u2014 which need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run "clawrouter logout".`
+      404: `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, speech, video and the partner APIs (Exa, prediction markets, phone lookup) all work on an API key. The wallet-only exceptions are the routes that bind a lease or a position to a payer address \u2014 buying/renewing/releasing phone numbers, and Polymarket trading \u2014 which need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run "clawrouter logout".`
     };
   }
 });
@@ -45962,9 +45962,10 @@ var init_dist = __esm({
         supportsVision: false
       },
       "deepseek/deepseek-v4.1-flash": {
+        // supportsTools: not probed — fails closed
         contextWindow: 1048576,
         maxOutputTokens: 65536,
-        supportsTools: true,
+        supportsTools: false,
         supportsVision: false
       },
       "google/gemini-2.5-flash": {
@@ -46025,13 +46026,6 @@ var init_dist = __esm({
         contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-4-argon": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: false,
         supportsVision: true
       },
       "minimax/minimax-m2.7": {
@@ -46255,9 +46249,10 @@ var init_dist = __esm({
         supportsVision: true
       },
       "openai/gpt-6.1-sol": {
+        // supportsTools: not probed — fails closed
         contextWindow: 105e4,
         maxOutputTokens: 128e3,
-        supportsTools: true,
+        supportsTools: false,
         supportsVision: true
       },
       "openai/o1": {
@@ -46509,14 +46504,6 @@ var init_dist = __esm({
         latencyMs: 8781.2,
         p95LatencyMs: 9881.1,
         outputTokensPerSecond: 58.98,
-        errorRate: 0,
-        samples: 3
-      },
-      "deepseek/deepseek-v4.1-flash": {
-        measuredAt: "2026-10-20T18:12:51Z",
-        latencyMs: 2383.5,
-        p95LatencyMs: 2547.8,
-        outputTokensPerSecond: 216.53,
         errorRate: 0,
         samples: 3
       },
@@ -46808,14 +46795,6 @@ var init_dist = __esm({
         errorRate: 0,
         samples: 3
       },
-      "openai/gpt-6.1-sol": {
-        measuredAt: "2026-10-20T18:12:51Z",
-        latencyMs: 11324,
-        p95LatencyMs: 12747.6,
-        outputTokensPerSecond: 45.11,
-        errorRate: 0,
-        samples: 3
-      },
       "openai/o1": {
         measuredAt: "2026-08-29T16:51:33Z",
         latencyMs: 4324.9,
@@ -47040,13 +47019,11 @@ var init_dist = __esm({
       "anthropic/claude-fable-5.1",
       "anthropic/claude-opus-5.5",
       "anthropic/claude-sonnet-5.5",
-      "deepseek/deepseek-v4.1-flash",
       "google/gemini-3.8-flash",
       "openai/gpt-5.1",
       "openai/gpt-6-astra",
       "openai/gpt-6-luna",
       "openai/gpt-6-sol",
-      "openai/gpt-6.1-sol",
       "xai/grok-4.6",
       "xai/grok-4.7",
       "xiaomi/mimo-v2.5"
@@ -137855,8 +137832,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   const isBlockrunExa = req.url?.startsWith("/v1/exa/") ?? false;
   const isModalSandbox = req.url?.startsWith("/v1/modal/") ?? false;
   const isPhone = (req.url?.startsWith("/v1/phone/") ?? false) || (req.url?.startsWith("/v1/voice/") ?? false);
-  const isSurf = req.url?.startsWith("/v1/surf/") ?? false;
-  const requestLabel = isBlockrunExa ? "BlockRun Exa" : isModalSandbox ? "Modal Sandbox" : isPhone ? "Phone/Voice" : isSurf ? "Surf" : "Partner";
+  const requestLabel = isBlockrunExa ? "BlockRun Exa" : isModalSandbox ? "Modal Sandbox" : isPhone ? "Phone/Voice" : "Partner";
   const bodyChunks = [];
   for await (const chunk of req) {
     bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -137927,14 +137903,14 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   logUsage({
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     ...blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {},
-    model: isBlockrunExa ? "blockrun-exa" : isModalSandbox ? "modal-sandbox" : isPhone ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : isSurf ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : "partner",
-    tier: isPhone ? "PHONE" : isSurf ? "SURF" : "PARTNER",
+    model: isBlockrunExa ? "blockrun-exa" : isModalSandbox ? "modal-sandbox" : isPhone ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : "partner",
+    tier: isPhone ? "PHONE" : "PARTNER",
     cost: requestCost,
     baselineCost: requestCost,
     savings: 0,
     latencyMs,
     partnerId: (req.url?.split("?")[0] ?? "").replace(/^\/v1\//, "").replace(/\//g, "_") || "unknown",
-    service: isBlockrunExa ? "web_search" : isModalSandbox ? "modal" : isPhone ? "phone" : isSurf ? "surf" : "partner"
+    service: isBlockrunExa ? "web_search" : isModalSandbox ? "modal" : isPhone ? "phone" : "partner"
   }).catch(() => {
   });
 }
@@ -139209,7 +139185,7 @@ async function startProxy(options) {
       }
       const isVerbatimGatewayPath = req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false) || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
       if (isVerbatimGatewayPath || req.url?.match(
-        /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice|surf)\//
+        /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice)\//
       )) {
         try {
           await proxyPaidApiRequest(
@@ -139274,7 +139250,7 @@ async function startProxy(options) {
         res.end(
           JSON.stringify({
             error: {
-              message: `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, /v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, /v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,modal,stocks,usstock,crypto,fx,commodity,phone,voice,surf}/. If BlockRun serves this endpoint, call it directly against the gateway.`,
+              message: `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, /v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, /v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,modal,stocks,usstock,crypto,fx,commodity,phone,voice}/. If BlockRun serves this endpoint, call it directly against the gateway.`,
               type: "invalid_request_error",
               code: "unsupported_endpoint"
             }
@@ -287770,6 +287746,7 @@ ClawRouter v${VERSION} - Smart LLM Router
 
 Usage:
   clawrouter [options]
+  clawrouter update                    # Update ClawRouter in place
   clawrouter login [brk_...]           # Use a BlockRun API key (card-funded credit)
   clawrouter logout                    # Forget the API key and go back to the wallet
   clawrouter status                    # Live proxy status (wallet, balance, chain)
@@ -287812,6 +287789,8 @@ Query Commands (talk to running proxy on localhost:${getProxyPort()}):
   cache             Response cache stats (hit rate, size)
 
 Management Commands:
+  update            Update the OpenClaw plugin and this global CLI in one step.
+                    Backs up wallet/config state and rolls back on failure.
   setup             Finish OpenClaw integration (run after npm install -g).
                     Registers ClawRouter as a plugin, syncs the model allowlist,
                     and writes the auth profile. Idempotent \u2014 safe to re-run.
@@ -288540,6 +288519,79 @@ async function cmdSetup() {
 Then verify in your bot: /models \u2014 you should see ${VISIBLE_OPENCLAW_MODELS2.length} BlockRun models.`
   );
 }
+async function cmdUpdate() {
+  const { execFileSync } = await import("child_process");
+  const { copyFileSync: copyFileSync2, existsSync: existsSync9, mkdtempSync, realpathSync: realpathSync2, rmSync } = await import("fs");
+  const { tmpdir } = await import("os");
+  const { dirname: dirname6, join: join21, relative, isAbsolute } = await import("path");
+  const { fileURLToPath: fileURLToPath2 } = await import("url");
+  const isWindows = process.platform === "win32";
+  const packageRoot = dirname6(dirname6(fileURLToPath2(import.meta.url)));
+  const scriptName = isWindows ? "update.ps1" : "update.sh";
+  const updateScript = join21(packageRoot, "scripts", scriptName);
+  const exitStatus = (error) => typeof error === "object" && error !== null && "status" in error && typeof error.status === "number" ? error.status : 1;
+  if (!existsSync9(updateScript)) {
+    console.error("\u2717 The bundled updater is missing from this ClawRouter installation.");
+    console.error(
+      isWindows ? "  Update manually: iwr -useb https://blockrun.ai/ClawRouter-update.ps1 | iex" : "  Update manually: curl -fsSL https://blockrun.ai/ClawRouter-update | bash"
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`\u{1F99E} ClawRouter update (v${VERSION})
+`);
+  const tempDir = mkdtempSync(join21(tmpdir(), "clawrouter-update-"));
+  try {
+    const script = join21(tempDir, scriptName);
+    copyFileSync2(updateScript, script);
+    if (isWindows) {
+      execFileSync(
+        "powershell.exe",
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script],
+        { stdio: "inherit", env: process.env }
+      );
+    } else {
+      execFileSync("bash", [script], { stdio: "inherit", env: process.env });
+    }
+  } catch (error) {
+    process.exitCode = exitStatus(error);
+    return;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+  let globalRoot;
+  try {
+    globalRoot = execFileSync("npm", ["root", "-g"], {
+      encoding: "utf8",
+      shell: isWindows,
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return;
+  }
+  let fromGlobal;
+  try {
+    const rel = relative(realpathSync2(globalRoot), realpathSync2(packageRoot));
+    fromGlobal = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  } catch {
+    return;
+  }
+  if (!fromGlobal) return;
+  const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC || "@blockrun/clawrouter@latest";
+  console.log(`
+\u2192 Updating global CLI (npm install -g ${installSpec})...`);
+  try {
+    execFileSync("npm", ["install", "-g", installSpec], {
+      stdio: "inherit",
+      shell: isWindows,
+      env: process.env
+    });
+    console.log("  \u2713 Global CLI updated");
+  } catch {
+    console.warn("  \u26A0 Plugin updated, but the global CLI could not be refreshed.");
+    console.warn(`    Run manually: npm install -g ${installSpec}`);
+  }
+}
 function parseArgs(args) {
   const result = {
     version: false,
@@ -288565,6 +288617,7 @@ function parseArgs(args) {
     reconcileDays: 7,
     queryCache: false,
     setup: false,
+    update: false,
     share: false,
     shareTarget: void 0,
     sharePreset: void 0,
@@ -288665,6 +288718,8 @@ function parseArgs(args) {
       result.noReuse = true;
     } else if (arg === "setup") {
       result.setup = true;
+    } else if (arg === "update" && i === 0) {
+      result.update = true;
     } else if (arg === "phone") {
       result.phone = true;
       const next = args[i + 1];
@@ -288801,6 +288856,10 @@ async function main() {
   if (args.setup) {
     await cmdSetup();
     process.exit(0);
+  }
+  if (args.update) {
+    await cmdUpdate();
+    return;
   }
   if (args.policy) {
     const result = runPolicyCommand(args.policyArgs);

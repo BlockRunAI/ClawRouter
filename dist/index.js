@@ -243215,7 +243215,7 @@ async function explainApiKeyFailure(response) {
 var HINTS = {
   401: `Check BLOCKRUN_API_KEY, or mint a new key at ${PORTAL_KEYS_URL}.`,
   402: `Top up your BlockRun credit at ${PORTAL_CREDITS_URL}.`,
-  404: `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, speech, video and the partner APIs (Surf, Exa, prediction markets, phone lookup) all work on an API key. The wallet-only exceptions are the routes that bind a lease or a position to a payer address \u2014 buying/renewing/releasing phone numbers, and Polymarket trading \u2014 which need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run "clawrouter logout".`
+  404: `api.blockrun.ai does not serve this endpoint. Chat, Anthropic-shaped messages, images, speech, video and the partner APIs (Exa, prediction markets, phone lookup) all work on an API key. The wallet-only exceptions are the routes that bind a lease or a position to a payer address \u2014 buying/renewing/releasing phone numbers, and Polymarket trading \u2014 which need a wallet to own the thing being bought. For those, unset BLOCKRUN_API_KEY and run "clawrouter logout".`
 };
 
 // src/model-catalog.ts
@@ -257437,9 +257437,10 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: false
   },
   "deepseek/deepseek-v4.1-flash": {
+    // supportsTools: not probed — fails closed
     contextWindow: 1048576,
     maxOutputTokens: 65536,
-    supportsTools: true,
+    supportsTools: false,
     supportsVision: false
   },
   "google/gemini-2.5-flash": {
@@ -257500,13 +257501,6 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     contextWindow: 1048576,
     maxOutputTokens: 65536,
     supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-4-argon": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: false,
     supportsVision: true
   },
   "minimax/minimax-m2.7": {
@@ -257730,9 +257724,10 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: true
   },
   "openai/gpt-6.1-sol": {
+    // supportsTools: not probed — fails closed
     contextWindow: 105e4,
     maxOutputTokens: 128e3,
-    supportsTools: true,
+    supportsTools: false,
     supportsVision: true
   },
   "openai/o1": {
@@ -257984,14 +257979,6 @@ var model_profiles_generated_default = {
     latencyMs: 8781.2,
     p95LatencyMs: 9881.1,
     outputTokensPerSecond: 58.98,
-    errorRate: 0,
-    samples: 3
-  },
-  "deepseek/deepseek-v4.1-flash": {
-    measuredAt: "2026-10-20T18:12:51Z",
-    latencyMs: 2383.5,
-    p95LatencyMs: 2547.8,
-    outputTokensPerSecond: 216.53,
     errorRate: 0,
     samples: 3
   },
@@ -258280,14 +258267,6 @@ var model_profiles_generated_default = {
     latencyMs: 3574.1,
     p95LatencyMs: 4126.3,
     outputTokensPerSecond: 133.59,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-6.1-sol": {
-    measuredAt: "2026-10-20T18:12:51Z",
-    latencyMs: 11324,
-    p95LatencyMs: 12747.6,
-    outputTokensPerSecond: 45.11,
     errorRate: 0,
     samples: 3
   },
@@ -259106,13 +259085,11 @@ var VERIFIED_TOOL_FALLBACKS = [
   "anthropic/claude-fable-5.1",
   "anthropic/claude-opus-5.5",
   "anthropic/claude-sonnet-5.5",
-  "deepseek/deepseek-v4.1-flash",
   "google/gemini-3.8-flash",
   "openai/gpt-5.1",
   "openai/gpt-6-astra",
   "openai/gpt-6-luna",
   "openai/gpt-6-sol",
-  "openai/gpt-6.1-sol",
   "xai/grok-4.6",
   "xai/grok-4.7",
   "xiaomi/mimo-v2.5"
@@ -265580,8 +265557,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   const isBlockrunExa = req.url?.startsWith("/v1/exa/") ?? false;
   const isModalSandbox = req.url?.startsWith("/v1/modal/") ?? false;
   const isPhone = (req.url?.startsWith("/v1/phone/") ?? false) || (req.url?.startsWith("/v1/voice/") ?? false);
-  const isSurf = req.url?.startsWith("/v1/surf/") ?? false;
-  const requestLabel = isBlockrunExa ? "BlockRun Exa" : isModalSandbox ? "Modal Sandbox" : isPhone ? "Phone/Voice" : isSurf ? "Surf" : "Partner";
+  const requestLabel = isBlockrunExa ? "BlockRun Exa" : isModalSandbox ? "Modal Sandbox" : isPhone ? "Phone/Voice" : "Partner";
   const bodyChunks = [];
   for await (const chunk of req) {
     bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -265652,14 +265628,14 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   logUsage({
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     ...blockrunRequestId(upstream) ? { requestId: blockrunRequestId(upstream) } : {},
-    model: isBlockrunExa ? "blockrun-exa" : isModalSandbox ? "modal-sandbox" : isPhone ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : isSurf ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : "partner",
-    tier: isPhone ? "PHONE" : isSurf ? "SURF" : "PARTNER",
+    model: isBlockrunExa ? "blockrun-exa" : isModalSandbox ? "modal-sandbox" : isPhone ? (req.url ?? "").replace(/^\/v1\//, "").split("?")[0] : "partner",
+    tier: isPhone ? "PHONE" : "PARTNER",
     cost: requestCost,
     baselineCost: requestCost,
     savings: 0,
     latencyMs,
     partnerId: (req.url?.split("?")[0] ?? "").replace(/^\/v1\//, "").replace(/\//g, "_") || "unknown",
-    service: isBlockrunExa ? "web_search" : isModalSandbox ? "modal" : isPhone ? "phone" : isSurf ? "surf" : "partner"
+    service: isBlockrunExa ? "web_search" : isModalSandbox ? "modal" : isPhone ? "phone" : "partner"
   }).catch(() => {
   });
 }
@@ -266934,7 +266910,7 @@ async function startProxy(options) {
       }
       const isVerbatimGatewayPath = req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false) || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
       if (isVerbatimGatewayPath || req.url?.match(
-        /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice|surf)\//
+        /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice)\//
       )) {
         try {
           await proxyPaidApiRequest(
@@ -266999,7 +266975,7 @@ async function startProxy(options) {
         res.end(
           JSON.stringify({
             error: {
-              message: `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, /v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, /v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,modal,stocks,usstock,crypto,fx,commodity,phone,voice,surf}/. If BlockRun serves this endpoint, call it directly against the gateway.`,
+              message: `ClawRouter does not proxy ${req.url}. It serves /v1/chat/completions, /v1/messages, /v1/models, /v1/images/generations, /v1/images/image2image, /v1/videos/generations, /v1/audio/generations, /v1/audio/speech, and the partner prefixes /v1/{partner,pm,exa,modal,stocks,usstock,crypto,fx,commodity,phone,voice}/. If BlockRun serves this endpoint, call it directly against the gateway.`,
               type: "invalid_request_error",
               code: "unsupported_endpoint"
             }
