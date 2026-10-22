@@ -641,10 +641,11 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
       "Get a pre-trade safety verdict for a Base ERC-20 token BEFORE an agent signs a swap. " +
       "Call this for ANY request that is about to buy/sell/swap a specific on-chain token on Base, " +
       "or any 'is this token safe / is it a honeypot / can I sell it back' question. " +
-      "Returns a go/no-go decision plus the signals behind it: honeypot detection, buy/sell tax, " +
-      "mintable/pausable/blacklist admin controls, and a 0-100 risk score. " +
+      "Returns a go/hold/block decision plus the signals behind it: honeypot detection, buy/sell tax, " +
+      "mintable/pausable/blacklist admin controls, Uniswap v3 liquidity vs. your notional, and a 0-100 risk score. " +
       "Do NOT use browser or web scraping — this returns a structured verdict directly. " +
-      "Returns: decision (go/caution/no-go), verdict (SAFE/RISKY), risk_score, flags[], token_meta.",
+      "Returns: decision (go|hold|block — go=clear to trade, hold=insufficient confidence/liquidity, block=unsafe), " +
+      "verdict (SAFE|CAUTION|AVOID), reason (string), risk_score (0-100), liquidity_usd, impact_pct_of_pool, flags[], token_meta.",
     proxyPath: "/gate/swap",
     method: "GET",
     params: [
