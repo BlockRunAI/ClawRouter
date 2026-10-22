@@ -5,7 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { isBlockedSsrfHost, readLocalImageAsDataUri, ssrfSafeFetch } from "./local-guard.js";
+import type { LookupAddress } from "node:dns";
+import {
+  isBlockedSsrfHost,
+  pinnedFetch,
+  pinnedLookup,
+  readLocalImageAsDataUri,
+  resolvePublicAddresses,
+  ssrfSafeFetch,
+} from "./local-guard.js";
 import { buildPartnerTools } from "./partners/tools.js";
 import { startProxy, type ProxyHandle } from "./proxy.js";
 
@@ -45,25 +53,241 @@ describe("isBlockedSsrfHost", () => {
   });
 });
 
+describe("resolvePublicAddresses", () => {
+  const dnsOf =
+    (table: Record<string, string[]>) =>
+    async (host: string): Promise<LookupAddress[]> =>
+      (table[host] ?? []).map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
+
+  it("refuses public names that resolve to private addresses", async () => {
+    const resolve = dnsOf({
+      "localtest.me": ["127.0.0.1"],
+      "127.0.0.1.nip.io": ["127.0.0.1"],
+      "169.254.169.254.nip.io": ["169.254.169.254"],
+      "mapped.example": ["::ffff:127.0.0.1"],
+      // One bad address is enough: the connection may land on any of them.
+      "mixed.example": ["93.184.215.14", "10.0.0.5"],
+    });
+    for (const host of [
+      "localtest.me",
+      "127.0.0.1.nip.io",
+      "169.254.169.254.nip.io",
+      "mapped.example",
+      "mixed.example",
+    ]) {
+      await expect(resolvePublicAddresses(host, resolve), host).rejects.toThrow(
+        /private\/loopback\/metadata/,
+      );
+    }
+  });
+
+  it("returns every address of a public name", async () => {
+    const resolve = dnsOf({
+      "example.com": ["93.184.215.14", "2606:2800:21f:cb07:6820:80da:af6b:8b2c"],
+    });
+    expect(await resolvePublicAddresses("example.com", resolve)).toHaveLength(2);
+  });
+
+  it("does not resolve IP literals", async () => {
+    const resolve = async () => {
+      throw new Error("resolver called");
+    };
+    expect(await resolvePublicAddresses("8.8.8.8", resolve)).toEqual([
+      { address: "8.8.8.8", family: 4 },
+    ]);
+    expect(await resolvePublicAddresses("[2001:4860:4860::8888]", resolve)).toEqual([
+      { address: "2001:4860:4860::8888", family: 6 },
+    ]);
+  });
+
+  it("refuses a name that resolves to nothing", async () => {
+    await expect(resolvePublicAddresses("void.example", dnsOf({}))).rejects.toThrow(
+      /could not resolve/,
+    );
+  });
+});
+
+describe("pinnedLookup", () => {
+  const addrs: LookupAddress[] = [
+    { address: "93.184.215.14", family: 4 },
+    { address: "2606:2800:21f:cb07:6820:80da:af6b:8b2c", family: 6 },
+  ];
+
+  it("answers with the vetted addresses whatever name it is asked about", () => {
+    const lookup = pinnedLookup(addrs);
+    lookup("anything.example", { all: true }, (err, all) => {
+      expect(err).toBeNull();
+      expect(all).toEqual(addrs);
+    });
+    lookup("anything.example", {}, (err, address, family) => {
+      expect(err).toBeNull();
+      expect(address).toBe("93.184.215.14");
+      expect(family).toBe(4);
+    });
+  });
+});
+
+describe("pinnedFetch", () => {
+  let server: Server;
+  let port: number;
+  const seen: Array<{ host?: string; url?: string; method?: string; body: string }> = [];
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        seen.push({ host: req.headers.host, url: req.url, method: req.method, body });
+        if (req.url === "/redirect") {
+          res.writeHead(302, { Location: "http://127.0.0.1/elsewhere" });
+          res.end();
+        } else if (req.url === "/empty") {
+          res.writeHead(204);
+          res.end();
+        } else {
+          res.writeHead(200, { "Content-Type": "image/png", "X-Multi": ["a", "b"] });
+          res.end(PNG);
+        }
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    port = (server.address() as AddressInfo).port;
+  });
+  afterAll(() => new Promise<void>((r) => server.close(() => r())));
+  beforeEach(() => {
+    seen.length = 0;
+  });
+
+  const loopback: LookupAddress[] = [{ address: "127.0.0.1", family: 4 }];
+
+  it("connects to the pinned address, never re-resolving the name", async () => {
+    // .invalid never resolves, so reaching the server proves no DNS was used.
+    const res = await pinnedFetch(new URL(`http://rebind.invalid:${port}/x.png`), loopback);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("x-multi")).toBe("a, b");
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(PNG);
+    expect(seen).toEqual([
+      { host: `rebind.invalid:${port}`, url: "/x.png", method: "GET", body: "" },
+    ]);
+  });
+
+  it("returns redirects instead of following them", async () => {
+    const res = await pinnedFetch(new URL(`http://rebind.invalid:${port}/redirect`), loopback);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("http://127.0.0.1/elsewhere");
+    expect(seen).toHaveLength(1);
+  });
+
+  it("handles null-body statuses and request bodies", async () => {
+    const res = await pinnedFetch(new URL(`http://rebind.invalid:${port}/empty`), loopback, {
+      method: "POST",
+      body: "hello",
+      headers: { "Content-Type": "text/plain" },
+    });
+    expect(res.status).toBe(204);
+    expect(res.body).toBeNull();
+    expect(seen[0]).toMatchObject({ method: "POST", body: "hello" });
+  });
+
+  it("honors an abort signal", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      pinnedFetch(new URL(`http://rebind.invalid:${port}/x.png`), loopback, { signal: ac.signal }),
+    ).rejects.toThrow(/abort/i);
+  });
+});
+
 describe("ssrfSafeFetch", () => {
-  it("refuses a public URL that redirects into loopback", async () => {
+  const publicDns = async (): Promise<LookupAddress[]> => [{ address: "93.184.215.14", family: 4 }];
+
+  async function withFetch<T>(
+    impl: (url: string) => Response,
+    run: (calls: string[]) => Promise<T>,
+  ): Promise<T> {
     const orig = globalThis.fetch;
     const calls: string[] = [];
     globalThis.fetch = (async (url: string | URL | Request) => {
       calls.push(String(url));
-      return new Response("", {
-        status: 302,
-        headers: { Location: "http://127.0.0.1:8402/health" },
-      });
+      return impl(String(url));
     }) as typeof fetch;
     try {
-      await expect(ssrfSafeFetch("https://attacker.example/x.png")).rejects.toThrow(
-        /private\/loopback/,
-      );
-      expect(calls).toEqual(["https://attacker.example/x.png"]);
+      return await run(calls);
     } finally {
       globalThis.fetch = orig;
     }
+  }
+
+  it("refuses a public URL that redirects into loopback", async () => {
+    await withFetch(
+      () =>
+        new Response("", { status: 302, headers: { Location: "http://127.0.0.1:8402/health" } }),
+      async (calls) => {
+        await expect(
+          ssrfSafeFetch("https://attacker.example/x.png", {
+            viaUpstreamProxy: true,
+            resolve: publicDns,
+          }),
+        ).rejects.toThrow(/private\/loopback/);
+        expect(calls).toEqual(["https://attacker.example/x.png"]);
+      },
+    );
+  });
+
+  it("refuses a public name that resolves to a private address, before connecting", async () => {
+    const rebinding = async (): Promise<LookupAddress[]> => [
+      { address: "169.254.169.254", family: 4 },
+    ];
+    for (const viaUpstreamProxy of [false, true]) {
+      await withFetch(
+        () => new Response("secret"),
+        async (calls) => {
+          await expect(
+            ssrfSafeFetch("http://169.254.169.254.nip.io/latest/meta-data/", {
+              viaUpstreamProxy,
+              resolve: rebinding,
+            }),
+          ).rejects.toThrow(
+            /resolves to a private\/loopback\/metadata address \(169\.254\.169\.254\)/,
+          );
+          expect(calls).toEqual([]);
+        },
+      );
+    }
+  });
+
+  it("re-resolves every redirect hop", async () => {
+    const resolve = async (host: string): Promise<LookupAddress[]> =>
+      host === "localtest.me"
+        ? [{ address: "127.0.0.1", family: 4 }]
+        : [{ address: "93.184.215.14", family: 4 }];
+    await withFetch(
+      () => new Response("", { status: 302, headers: { Location: "http://localtest.me:8402/" } }),
+      async (calls) => {
+        await expect(
+          ssrfSafeFetch("https://attacker.example/x.png", { viaUpstreamProxy: true, resolve }),
+        ).rejects.toThrow(/localtest\.me: it resolves to/);
+        expect(calls).toEqual(["https://attacker.example/x.png"]);
+      },
+    );
+  });
+
+  it("allowPrivate skips every check", async () => {
+    const resolve = async () => {
+      throw new Error("resolver called");
+    };
+    await withFetch(
+      () => new Response("ok"),
+      async (calls) => {
+        const res = await ssrfSafeFetch("http://127.0.0.1:9/x.png", {
+          allowPrivate: true,
+          resolve,
+        });
+        expect(await res.text()).toBe("ok");
+        expect(calls).toEqual(["http://127.0.0.1:9/x.png"]);
+      },
+    );
   });
 });
 

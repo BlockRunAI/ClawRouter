@@ -3788,6 +3788,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
               const imgResp = await ssrfSafeFetch(val, {
                 signal: clientAbort.signal,
                 allowPrivate: process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH === "1",
+                viaUpstreamProxy: Boolean(upstreamProxy),
               });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
