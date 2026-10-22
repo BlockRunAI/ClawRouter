@@ -4,6 +4,34 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.299 — October 22, 2026
+
+### img2img URL downloads check what a host resolves to
+
+`/v1/images/image2image` downloads an `image` or `mask` given as a URL. The
+SSRF guard checked the hostname as written, so a public name pointing at a
+private address passed it: `localtest.me` and `127.0.0.1.nip.io` resolve to
+loopback, `169.254.169.254.nip.io` to the cloud metadata service. And because
+fetch() resolved the name a second time to connect, a TTL-0 record could
+answer the check with a public address and the connection with a private one
+(DNS rebinding).
+
+Every hop, redirects included, now resolves the host and refuses if any
+address is loopback, private, link-local, CGNAT or metadata, then connects
+only to the addresses that passed — the name is not resolved again. Host, SNI
+and certificate checks still use the hostname. With an upstream proxy
+configured the request still goes through it; the proxy resolves names
+itself, so there the resolve-time check is the guard.
+`CLAWROUTER_ALLOW_PRIVATE_FETCH=1` still opts in to a local image server.
+
+Exposure was limited: the proxy only accepts requests from local clients, which
+can already reach these addresses themselves. The gap mattered for a local
+agent steered by untrusted content into passing such a URL.
+
+- Thanks to Hunteranair for the report.
+
+---
+
 ## v0.12.298 — October 22, 2026
 
 ### `clawrouter update` — one command updates both copies
