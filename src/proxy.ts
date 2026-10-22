@@ -4267,7 +4267,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       if (
         isVerbatimGatewayPath ||
         req.url?.match(
-          /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice)\//,
+          /^\/v1\/(?:partner|pm|exa|modal|stocks|usstock|crypto|fx|commodity|phone|voice|gate)\//,
         )
       ) {
         try {
