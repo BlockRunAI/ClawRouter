@@ -4,6 +4,49 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.298 — October 22, 2026
+
+### `clawrouter update` — one command updates both copies
+
+ClawRouter lives in two places for most OpenClaw users: the plugin OpenClaw
+loads (`~/.openclaw/extensions/blockrun-clawrouter`) and the global npm
+install that provides the `clawrouter` binary. `npm install -g` refreshed only
+the binary, so the plugin OpenClaw actually runs stayed on the old release
+until the user found the separate `curl … | bash` updater.
+
+`clawrouter update` runs the bundled rollback-safe updater (`update.sh`, or
+`update.ps1` on Windows) to back up wallet/config state and reinstall the
+plugin, then — when the CLI is the global install — runs `npm install -g` so
+the binary lands on the same release. A failed global refresh (usually
+`EACCES` on a root-owned prefix) only warns with the manual command, since the
+plugin is already current. `update` is matched only as the first argument, so
+`clawrouter doctor how do I update` stays a doctor question. The updater runs
+from a temp copy so a plugin reinstall can't rewrite the script mid-run.
+
+- Thanks to @0xCheetah1 for the command (#495).
+
+### Surf integration removed
+
+BlockRun retired the Surf data API on 2026-09-06 (`/api/v1/surf/*` answers
+410). The `surf` skill, the proxy whitelist entry and the README/skill/plugin
+references are gone. In wallet mode `/v1/surf/*` is now refused locally with
+`unsupported_endpoint` — nothing signed, nothing sent; API-key mode relays the
+gateway's 410 (#502).
+
+### Prices point at the live rate card
+
+The README model tables and the clawrouter/imagegen skills no longer carry
+hand-copied per-model prices, which had already drifted from what the gateway
+bills. They point at https://blockrun.ai/pricing and `GET /api/v1/models`
+instead (#498, #499). Skill frontmatter and package description now say 90
+models, matching the live catalog (#501).
+
+### Publishing via npm Trusted Publishing
+
+`publish.yml` installs npm >= 11.5.1 so the release job can publish through
+OIDC Trusted Publishing instead of a long-lived token; `NPM_TOKEN` stays as
+the fallback (#500).
+
 ## v0.12.297 — October 20, 2026
 
 ### Mistral Large 4 at its list price
