@@ -64,6 +64,7 @@ export type AggregatedStats = {
   byModel: Record<string, { count: number; cost: number; percentage: number }>;
   dailyBreakdown: DailyStats[];
   entriesWithBaseline: number; // Entries with valid baseline tracking
+  errorCount: number;
 };
 
 /**
@@ -86,6 +87,7 @@ async function parseLogFile(filePath: string): Promise<UsageEntry[]> {
           baselineCost: entry.baselineCost || entry.cost || 0,
           savings: entry.savings || 0,
           latencyMs: entry.latencyMs || 0,
+          status: entry.status === "error" ? "error" : entry.status === "success" ? "success" : undefined,
         });
       } catch {
         // Skip malformed lines, keep valid ones
@@ -163,6 +165,7 @@ export async function getStats(days: number = 7): Promise<AggregatedStats> {
   let totalCost = 0;
   let totalBaselineCost = 0;
   let totalLatency = 0;
+  let errorCount = 0;
 
   for (const file of filesToRead) {
     const date = file.replace("usage-", "").replace(".jsonl", "");
@@ -170,6 +173,12 @@ export async function getStats(days: number = 7): Promise<AggregatedStats> {
     const entries = await parseLogFile(filePath);
 
     if (entries.length === 0) continue;
+
+    for (const entry of entries) {
+      if (entry.status === "error") {
+        errorCount++;
+      }
+    }
 
     const dayStats = aggregateDay(date, entries);
     dailyBreakdown.push(dayStats);
@@ -237,6 +246,7 @@ export async function getStats(days: number = 7): Promise<AggregatedStats> {
     byModel: byModelWithPercentage,
     dailyBreakdown: dailyBreakdown.reverse(), // Oldest first for charts
     entriesWithBaseline, // How many entries have valid baseline tracking
+    errorCount,
   };
 }
 
