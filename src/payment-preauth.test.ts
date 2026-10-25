@@ -182,6 +182,41 @@ describe("payment pre-auth — per-request pricing safety", () => {
     expect(gw.calls.slice(seeded).map((c) => c.paid)).toEqual([false, true]);
   });
 
+  it("skips pre-auth when the request shrank — reusing the bigger payment would overcharge", async () => {
+    let small = false;
+    const est = vi.fn(() => (small ? "1000" : "5000"));
+    const gw = fakeGateway();
+    const onPayment = vi.fn();
+    const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {
+      estimateAmount: est,
+      onPayment,
+    });
+
+    await pay(URL, { method: "POST", body: body(9000) }); // seed cover=5000
+    const seeded = gw.calls.length;
+
+    small = true;
+    const res = await pay(URL, { method: "POST", body: body(10) }); // needs 1000, cache covers 5x
+    expect(res.status).toBe(200);
+    // No pre-paid send: a clean unpaid request, then the paid retry.
+    expect(gw.calls.slice(seeded).map((c) => c.paid)).toEqual([false, true]);
+  });
+
+  it("still reuses pre-auth within 3% above the estimate", async () => {
+    let est = "1030";
+    const gw = fakeGateway();
+    const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {
+      estimateAmount: () => est,
+    });
+
+    await pay(URL, { method: "POST", body: body() }); // seed cover=1030
+    const seeded = gw.calls.length;
+
+    est = "1000";
+    await pay(URL, { method: "POST", body: body() });
+    expect(gw.calls.slice(seeded).map((c) => c.paid)).toEqual([true]);
+  });
+
   it("discards a rejected pre-auth and re-fetches cleanly (no parse error)", async () => {
     const est = vi.fn(() => "1000");
     const gw = fakeGateway();
