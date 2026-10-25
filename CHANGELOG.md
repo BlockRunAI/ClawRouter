@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.300 — October 25, 2026
+
+### A cached payment is reused only when it fits this request
+
+To skip the 402 round trip, ClawRouter re-signs the last payment terms it saw
+for a model ("pre-auth"). It reused them whenever they covered the new request,
+including a much SMALLER one, and an exact payment settles the whole signed
+amount. So a small call made after a large one paid the large call's price: in
+the gateway's records for October 21–24, one $0.001 call paid $0.0098.
+
+A cached payment is now reused only when it covers the request and exceeds its
+estimate by at most 3%. Otherwise the request takes the normal 402 flow and pays
+its own quote. The gateway now refuses a payment signed more than 3% over the
+price (`PAYMENT_OVERSIGNED`, nothing charged), so older ClawRouter versions are
+no longer overcharged either; they just spend an extra round trip.
+
+---
+
 ## v0.12.299 — October 22, 2026
 
 ### img2img URL downloads check what a host resolves to
