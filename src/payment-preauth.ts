@@ -45,6 +45,10 @@ type EstimateFn = (modelId: string, bodyLength: number, maxTokens: number) => st
 
 const DEFAULT_TTL_MS = 3_600_000; // 1 hour
 
+/** Most a reused pre-auth may exceed this request's estimate by — the gateway's
+ *  over-signed band (blockrun x402.ts PAYMENT_TOLERANCE). */
+const PREAUTH_OVERPAY_TOLERANCE = 0.03;
+
 type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export type PaymentNotification = { model: string; amount: string; network: string };
@@ -213,16 +217,21 @@ export function createPayFetchWithPreAuth(
     };
 
     // Try pre-auth only when we can PROVE the cached payment still covers this
-    // request (needMicros <= what the cached entry covered). Skip for Solana:
-    // payments use per-tx blockhashes that expire ~60-90s, making cached
-    // requirements useless and causing double charges.
+    // request (needMicros <= what the cached entry covered) AND does not
+    // overpay it by more than PREAUTH_OVERPAY_TOLERANCE. exact settles the
+    // whole signed amount, so reusing a pre-auth bought for a bigger request
+    // charged the user the bigger price; the gateway now refuses that with a
+    // 402 (PAYMENT_OVERSIGNED), so reusing it would only cost a wasted round
+    // trip. Skip for Solana: payments use per-tx blockhashes that expire
+    // ~60-90s, making cached requirements useless and causing double charges.
     const cached = !options?.skipPreAuth ? cache.get(cacheKey) : undefined;
     const preAuthCovers =
       cached !== undefined &&
       Date.now() - cached.cachedAt < ttlMs &&
       cached.coverMicros !== undefined &&
       needMicros !== undefined &&
-      needMicros <= cached.coverMicros;
+      needMicros <= cached.coverMicros &&
+      cached.coverMicros <= needMicros * (1 + PREAUTH_OVERPAY_TOLERANCE);
     if (preAuthCovers) {
       // Whether a request carrying a SIGNED payment has left this process. Once
       // it has, a failure is ambiguous: "never arrived" and "arrived, settled,
