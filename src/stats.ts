@@ -87,7 +87,7 @@ async function parseLogFile(filePath: string): Promise<UsageEntry[]> {
           baselineCost: entry.baselineCost || entry.cost || 0,
           savings: entry.savings || 0,
           latencyMs: entry.latencyMs || 0,
-          status: entry.status === "error" ? "error" : entry.status === "success" ? "success" : undefined,
+          status: entry.status === "error" || entry.status === "success" ? entry.status : undefined,
         });
       } catch {
         // Skip malformed lines, keep valid ones
@@ -377,8 +377,7 @@ export async function formatRecentLogs(requestedDays: number = 1): Promise<strin
     const model = e.model.length > 24 ? e.model.slice(0, 21) + "..." : e.model;
     const cost = `$${e.cost.toFixed(4)}`;
     const ms = e.latencyMs > 9999 ? `${(e.latencyMs / 1000).toFixed(1)}s` : `${e.latencyMs}ms`;
-    const status =
-      (e as UsageEntry & { status?: string }).status === "error" ? " ERROR  " : " OK     ";
+    const status = e.status === "error" ? " ERROR  " : " OK     ";
     totalCost += e.cost;
     lines.push(
       `║  ${displayTime.padEnd(16)}║  ${model.padEnd(24)}║  ${cost.padStart(7)}║  ${ms.padStart(4)}║${status}║`,
