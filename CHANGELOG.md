@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.302 — October 26, 2026
+
+### Router Core catalog API
+
+Bump @blockrun/router-core to fd6d03d: adds the shared parseModelCatalog / toRoutingCatalog catalog API. No routing behavior change.
+
+---
+
 ## v0.12.301 — October 25, 2026
 
 ### Failed requests show up in `clawrouter logs` and `doctor` again

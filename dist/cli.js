@@ -43186,7 +43186,7 @@ function createPayFetchWithPreAuth(baseFetch, client, ttlMs = DEFAULT_TTL_MS, op
       }
     };
     const cached = !options?.skipPreAuth ? cache2.get(cacheKey3) : void 0;
-    const preAuthCovers = cached !== void 0 && Date.now() - cached.cachedAt < ttlMs && cached.coverMicros !== void 0 && needMicros !== void 0 && needMicros <= cached.coverMicros;
+    const preAuthCovers = cached !== void 0 && Date.now() - cached.cachedAt < ttlMs && cached.coverMicros !== void 0 && needMicros !== void 0 && needMicros <= cached.coverMicros && cached.coverMicros <= needMicros * (1 + PREAUTH_OVERPAY_TOLERANCE);
     if (preAuthCovers) {
       let paymentInFlight = false;
       try {
@@ -43355,7 +43355,7 @@ function receiptChargedMicros(response) {
   }
   return void 0;
 }
-var DEFAULT_TTL_MS, PaymentInDoubtError;
+var DEFAULT_TTL_MS, PREAUTH_OVERPAY_TOLERANCE, PaymentInDoubtError;
 var init_payment_preauth = __esm({
   "src/payment-preauth.ts"() {
     "use strict";
@@ -43363,6 +43363,7 @@ var init_payment_preauth = __esm({
     init_max_tokens();
     init_spend_control();
     DEFAULT_TTL_MS = 36e5;
+    PREAUTH_OVERPAY_TOLERANCE = 0.03;
     PaymentInDoubtError = class extends Error {
       constructor(cause) {
         super(
@@ -45705,10 +45706,10 @@ function isEligible(modelId, features, maxOutputTokens, options) {
   return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
 }
 function estimatedCost(modelId, options, inputTokens, outputTokens) {
-  const price = options.modelPricing.get(modelId);
-  if (!price) return Number.POSITIVE_INFINITY;
-  if (price.flatPrice !== void 0) return price.flatPrice;
-  return (inputTokens * price.inputPrice + outputTokens * price.outputPrice) / 1e6;
+  const price2 = options.modelPricing.get(modelId);
+  if (!price2) return Number.POSITIVE_INFINITY;
+  if (price2.flatPrice !== void 0) return price2.flatPrice;
+  return (inputTokens * price2.inputPrice + outputTokens * price2.outputPrice) / 1e6;
 }
 function profileScore(modelId, options, now2) {
   const profile = options.modelPerformance?.[modelId] ?? LIVE_MODEL_PROFILES[modelId] ?? HISTORICAL_MODEL_PROFILES[modelId];
@@ -45962,10 +45963,9 @@ var init_dist = __esm({
         supportsVision: false
       },
       "deepseek/deepseek-v4.1-flash": {
-        // supportsTools: not probed — fails closed
         contextWindow: 1048576,
         maxOutputTokens: 65536,
-        supportsTools: false,
+        supportsTools: true,
         supportsVision: false
       },
       "google/gemini-2.5-flash": {
@@ -46026,6 +46026,13 @@ var init_dist = __esm({
         contextWindow: 1048576,
         maxOutputTokens: 65536,
         supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-4-argon": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: false,
         supportsVision: true
       },
       "minimax/minimax-m2.7": {
@@ -46249,10 +46256,9 @@ var init_dist = __esm({
         supportsVision: true
       },
       "openai/gpt-6.1-sol": {
-        // supportsTools: not probed — fails closed
         contextWindow: 105e4,
         maxOutputTokens: 128e3,
-        supportsTools: false,
+        supportsTools: true,
         supportsVision: true
       },
       "openai/o1": {
@@ -46504,6 +46510,14 @@ var init_dist = __esm({
         latencyMs: 8781.2,
         p95LatencyMs: 9881.1,
         outputTokensPerSecond: 58.98,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-v4.1-flash": {
+        measuredAt: "2026-10-20T18:12:51Z",
+        latencyMs: 2383.5,
+        p95LatencyMs: 2547.8,
+        outputTokensPerSecond: 216.53,
         errorRate: 0,
         samples: 3
       },
@@ -46795,6 +46809,14 @@ var init_dist = __esm({
         errorRate: 0,
         samples: 3
       },
+      "openai/gpt-6.1-sol": {
+        measuredAt: "2026-10-20T18:12:51Z",
+        latencyMs: 11324,
+        p95LatencyMs: 12747.6,
+        outputTokensPerSecond: 45.11,
+        errorRate: 0,
+        samples: 3
+      },
       "openai/o1": {
         measuredAt: "2026-08-29T16:51:33Z",
         latencyMs: 4324.9,
@@ -47019,11 +47041,13 @@ var init_dist = __esm({
       "anthropic/claude-fable-5.1",
       "anthropic/claude-opus-5.5",
       "anthropic/claude-sonnet-5.5",
+      "deepseek/deepseek-v4.1-flash",
       "google/gemini-3.8-flash",
       "openai/gpt-5.1",
       "openai/gpt-6-astra",
       "openai/gpt-6-luna",
       "openai/gpt-6-sol",
+      "openai/gpt-6.1-sol",
       "xai/grok-4.6",
       "xai/grok-4.7",
       "xiaomi/mimo-v2.5"
@@ -48744,7 +48768,8 @@ async function parseLogFile(filePath) {
           cost: entry.cost || 0,
           baselineCost: entry.baselineCost || entry.cost || 0,
           savings: entry.savings || 0,
-          latencyMs: entry.latencyMs || 0
+          latencyMs: entry.latencyMs || 0,
+          status: entry.status === "error" || entry.status === "success" ? entry.status : void 0
         });
       } catch {
       }
@@ -48798,11 +48823,17 @@ async function getStats(days = 7) {
   let totalCost = 0;
   let totalBaselineCost = 0;
   let totalLatency = 0;
+  let errorCount = 0;
   for (const file of filesToRead) {
     const date = file.replace("usage-", "").replace(".jsonl", "");
     const filePath = join6(LOG_DIR2, file);
     const entries = await parseLogFile(filePath);
     if (entries.length === 0) continue;
+    for (const entry of entries) {
+      if (entry.status === "error") {
+        errorCount++;
+      }
+    }
     const dayStats = aggregateDay(date, entries);
     dailyBreakdown.push(dayStats);
     totalRequests += dayStats.totalRequests;
@@ -48855,8 +48886,9 @@ async function getStats(days = 7) {
     byModel: byModelWithPercentage,
     dailyBreakdown: dailyBreakdown.reverse(),
     // Oldest first for charts
-    entriesWithBaseline
+    entriesWithBaseline,
     // How many entries have valid baseline tracking
+    errorCount
   };
 }
 function formatStatsAscii(stats) {
@@ -67240,7 +67272,7 @@ var require_websocket = __commonJS({
     var net3 = __require("net");
     var tls2 = __require("tls");
     var { randomBytes: randomBytes9, createHash: createHash6 } = __require("crypto");
-    var { Duplex, Readable: Readable3 } = __require("stream");
+    var { Duplex, Readable: Readable4 } = __require("stream");
     var { URL: URL3 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
     var Receiver2 = require_receiver();
@@ -104602,6 +104634,11 @@ ${lines.join("\n")}`;
 });
 
 // src/local-guard.ts
+import { request as httpRequest } from "http";
+import { request as httpsRequest } from "https";
+import { lookup as dnsLookup } from "dns/promises";
+import { isIP } from "net";
+import { Readable } from "stream";
 import { closeSync as closeSync3, fstatSync as fstatSync2, openSync as openSync3, readSync as readSync2, realpathSync } from "fs";
 import { homedir as homedir11 } from "os";
 import { join as join15 } from "path";
@@ -104678,18 +104715,84 @@ function isBlockedSsrfHost(hostname) {
   }
   return false;
 }
+async function resolvePublicAddresses(hostname, resolve2 = systemResolver) {
+  const h = hostname.replace(/^\[/, "").replace(/\]$/, "");
+  const family = isIP(h);
+  const addrs = family ? [{ address: h, family }] : await resolve2(h);
+  if (addrs.length === 0) throw new Error(`could not resolve ${hostname}`);
+  const blocked = addrs.find((a) => isBlockedSsrfHost(a.address));
+  if (blocked) {
+    throw new Error(
+      `refusing to fetch ${hostname}: it resolves to a private/loopback/metadata address (${blocked.address})`
+    );
+  }
+  return addrs;
+}
+function pinnedLookup(addrs) {
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, addrs);
+    } else {
+      callback(null, addrs[0].address, addrs[0].family);
+    }
+  };
+}
+function pinnedFetch(url2, addrs, init2 = {}) {
+  const method = (init2.method ?? "GET").toUpperCase();
+  const body = init2.body;
+  if (body != null && typeof body !== "string" && !(body instanceof Uint8Array)) {
+    return Promise.reject(new TypeError("pinnedFetch supports only string or byte bodies"));
+  }
+  const headers = Object.fromEntries(new Headers(init2.headers));
+  const send = url2.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolve2, reject) => {
+    const req = send(
+      url2,
+      { method, headers, lookup: pinnedLookup(addrs), signal: init2.signal ?? void 0 },
+      (res) => {
+        const status2 = res.statusCode ?? 0;
+        if (status2 < 200 || status2 > 599) {
+          res.destroy();
+          reject(new Error(`unexpected HTTP status ${status2} from ${url2.host}`));
+          return;
+        }
+        const resHeaders = new Headers();
+        for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) {
+          resHeaders.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
+        }
+        const noBody = method === "HEAD" || NULL_BODY_STATUSES.has(status2);
+        if (noBody) res.resume();
+        resolve2(
+          new Response(noBody ? null : Readable.toWeb(res), {
+            status: status2,
+            statusText: res.statusMessage,
+            headers: resHeaders
+          })
+        );
+      }
+    );
+    req.on("error", reject);
+    req.end(body ?? void 0);
+  });
+}
 async function ssrfSafeFetch(url2, init2 = {}, maxHops = 5) {
-  const { allowPrivate, ...fetchInit } = init2;
+  const { allowPrivate, viaUpstreamProxy, resolve: resolve2, ...fetchInit } = init2;
   let current = url2;
   for (let hop = 0; hop <= maxHops; hop++) {
     const u = new URL(current);
     if (u.protocol !== "http:" && u.protocol !== "https:") {
       throw new Error(`refusing to fetch non-http(s) URL (${u.protocol})`);
     }
-    if (!allowPrivate && isBlockedSsrfHost(u.hostname)) {
-      throw new Error(`refusing to fetch a private/loopback/metadata address: ${u.hostname}`);
+    let res;
+    if (allowPrivate) {
+      res = await fetch(current, { ...fetchInit, redirect: "manual" });
+    } else {
+      if (isBlockedSsrfHost(u.hostname)) {
+        throw new Error(`refusing to fetch a private/loopback/metadata address: ${u.hostname}`);
+      }
+      const addrs = await resolvePublicAddresses(u.hostname, resolve2);
+      res = viaUpstreamProxy ? await fetch(current, { ...fetchInit, redirect: "manual" }) : await pinnedFetch(u, addrs, fetchInit);
     }
-    const res = await fetch(current, { ...fetchInit, redirect: "manual" });
     if (res.status >= 300 && res.status < 400) {
       const loc = res.headers.get("location");
       if (!loc) return res;
@@ -104728,11 +104831,13 @@ function readLocalImageAsDataUri(filePath) {
     closeSync3(fd);
   }
 }
-var METADATA_HOSTS, MAX_LOCAL_IMAGE_BYTES, IMAGE_SIGNATURES;
+var METADATA_HOSTS, systemResolver, NULL_BODY_STATUSES, MAX_LOCAL_IMAGE_BYTES, IMAGE_SIGNATURES;
 var init_local_guard = __esm({
   "src/local-guard.ts"() {
     "use strict";
     METADATA_HOSTS = /* @__PURE__ */ new Set(["metadata", "metadata.goog", "instance-data"]);
+    systemResolver = (hostname) => dnsLookup(hostname, { all: true, verbatim: true });
+    NULL_BODY_STATUSES = /* @__PURE__ */ new Set([101, 103, 204, 205, 304]);
     MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
     IMAGE_SIGNATURES = [
       {
@@ -108255,13 +108360,13 @@ var require_util2 = __commonJS({
     function TAOCheck() {
       return "success";
     }
-    function appendFetchMetadata(httpRequest) {
-      if (!isURLPotentiallyTrustworthy(requestCurrentURL(httpRequest))) {
+    function appendFetchMetadata(httpRequest2) {
+      if (!isURLPotentiallyTrustworthy(requestCurrentURL(httpRequest2))) {
         return;
       }
       let header = null;
-      header = httpRequest.mode;
-      httpRequest.headersList.set("sec-fetch-mode", header, true);
+      header = httpRequest2.mode;
+      httpRequest2.headersList.set("sec-fetch-mode", header, true);
     }
     function appendRequestOriginHeader(request2) {
       let serializedOrigin = request2.origin;
@@ -120140,7 +120245,7 @@ var require_readable = __commonJS({
     "use strict";
     var assert10 = __require("assert");
     var { addAbortListener } = __require("events");
-    var { Readable: Readable3 } = __require("stream");
+    var { Readable: Readable4 } = __require("stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError, AbortError } = require_errors();
     var util5 = require_util();
     var kConsume = /* @__PURE__ */ Symbol("kConsume");
@@ -120153,7 +120258,7 @@ var require_readable = __commonJS({
     var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop2 = () => {
     };
-    var BodyReadable = class extends Readable3 {
+    var BodyReadable = class extends Readable4 {
       /**
        * @param {object} opts
        * @param {(this: Readable, size: number) => void} opts.resume
@@ -120552,7 +120657,7 @@ var require_api_request = __commonJS({
     "use strict";
     var assert10 = __require("assert");
     var { AsyncResource } = __require("async_hooks");
-    var { Readable: Readable3 } = require_readable();
+    var { Readable: Readable4 } = require_readable();
     var { InvalidArgumentError, RequestAbortedError } = require_errors();
     var util5 = require_util();
     function noop2() {
@@ -120638,7 +120743,7 @@ var require_api_request = __commonJS({
         const parsedHeaders = headers;
         const contentType = parsedHeaders?.["content-type"];
         const contentLength = parsedHeaders?.["content-length"];
-        const res = new Readable3({
+        const res = new Readable4({
           resume: () => controller.resume(),
           abort: (reason) => controller.abort(reason),
           contentType,
@@ -121014,7 +121119,7 @@ var require_api_pipeline = __commonJS({
   "node_modules/undici/lib/api/api-pipeline.js"(exports, module) {
     "use strict";
     var {
-      Readable: Readable3,
+      Readable: Readable4,
       Duplex,
       PassThrough
     } = __require("stream");
@@ -121031,7 +121136,7 @@ var require_api_pipeline = __commonJS({
     function noop2() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
-    var PipelineRequest = class extends Readable3 {
+    var PipelineRequest = class extends Readable4 {
       constructor() {
         super({ autoDestroy: true });
         this[kResume] = null;
@@ -121049,7 +121154,7 @@ var require_api_pipeline = __commonJS({
         callback(err);
       }
     };
-    var PipelineResponse = class extends Readable3 {
+    var PipelineResponse = class extends Readable4 {
       constructor(resume2) {
         super({ autoDestroy: true });
         this[kResume] = resume2;
@@ -124103,7 +124208,7 @@ var require_dump = __commonJS({
 var require_dns = __commonJS({
   "node_modules/undici/lib/interceptor/dns.js"(exports, module) {
     "use strict";
-    var { isIP: isIP2 } = __require("net");
+    var { isIP: isIP3 } = __require("net");
     var { lookup } = __require("dns");
     var DecoratorHandler = require_decorator_handler();
     var { InvalidArgumentError, InformationalError } = require_errors();
@@ -124520,7 +124625,7 @@ var require_dns = __commonJS({
             return dispatch(origDispatchOpts, handler);
           }
           const origin2 = origDispatchOpts.origin.constructor === URL ? origDispatchOpts.origin : new URL(origDispatchOpts.origin);
-          if (isIP2(origin2.hostname) !== 0) {
+          if (isIP3(origin2.hostname) !== 0) {
             return dispatch(origDispatchOpts, handler);
           }
           instance.runLookup(origin2, origDispatchOpts, (err, newOrigin) => {
@@ -126591,7 +126696,7 @@ var require_cache2 = __commonJS({
   "node_modules/undici/lib/interceptor/cache.js"(exports, module) {
     "use strict";
     var assert10 = __require("assert");
-    var { Readable: Readable3 } = __require("stream");
+    var { Readable: Readable4 } = __require("stream");
     var util5 = require_util();
     var CacheHandler = require_cache_handler();
     var MemoryCacheStore = require_memory_cache_store();
@@ -126787,7 +126892,7 @@ var require_cache2 = __commonJS({
       return dispatch(opts, new CacheHandler(globalOpts, cacheKey3, handler));
     }
     function sendCachedValue(handler, opts, result, age, context, isStale2) {
-      const stream4 = util5.isStream(result.body) ? result.body : Readable3.from(result.body ?? []);
+      const stream4 = util5.isStream(result.body) ? result.body : Readable4.from(result.body ?? []);
       assert10(!stream4.destroyed, "stream should not be destroyed");
       assert10(!stream4.readableDidRead, "stream should not be readableDidRead");
       let aborted = false;
@@ -130252,7 +130357,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants3();
     var EE = __require("events");
-    var { Readable: Readable3, pipeline: pipeline2, finished: finished2, isErrored, isReadable } = __require("stream");
+    var { Readable: Readable4, pipeline: pipeline2, finished: finished2, isErrored, isReadable } = __require("stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { SocketError } = require_errors();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
@@ -130881,90 +130986,90 @@ var require_fetch = __commonJS({
     async function httpNetworkOrCacheFetch(fetchParams, isAuthenticationFetch = false, isNewConnectionFetch = false) {
       const request2 = fetchParams.request;
       let httpFetchParams = null;
-      let httpRequest = null;
+      let httpRequest2 = null;
       let response = null;
       const httpCache = null;
       const revalidatingFlag = false;
       if (request2.window === "no-window" && request2.redirect === "error") {
         httpFetchParams = fetchParams;
-        httpRequest = request2;
+        httpRequest2 = request2;
       } else {
         if (request2.body?.source != null) {
-          httpRequest = cloneRequest(request2);
+          httpRequest2 = cloneRequest(request2);
         } else {
-          httpRequest = cloneRequest({ ...request2, body: null });
-          httpRequest.body = request2.body;
+          httpRequest2 = cloneRequest({ ...request2, body: null });
+          httpRequest2.body = request2.body;
         }
         httpFetchParams = { ...fetchParams };
-        httpFetchParams.request = httpRequest;
+        httpFetchParams.request = httpRequest2;
       }
       const includeCredentials = request2.credentials === "include" || request2.credentials === "same-origin" && request2.responseTainting === "basic";
-      const contentLength = httpRequest.body ? httpRequest.body.length : null;
+      const contentLength = httpRequest2.body ? httpRequest2.body.length : null;
       let contentLengthHeaderValue = null;
-      if (httpRequest.body == null && ["POST", "PUT"].includes(httpRequest.method)) {
+      if (httpRequest2.body == null && ["POST", "PUT"].includes(httpRequest2.method)) {
         contentLengthHeaderValue = "0";
       }
       if (contentLength != null) {
         contentLengthHeaderValue = isomorphicEncode(`${contentLength}`);
       }
-      if (contentLengthHeaderValue != null && !httpRequest.headersList.contains("content-length", true)) {
-        httpRequest.headersList.append("content-length", contentLengthHeaderValue, true);
+      if (contentLengthHeaderValue != null && !httpRequest2.headersList.contains("content-length", true)) {
+        httpRequest2.headersList.append("content-length", contentLengthHeaderValue, true);
       }
-      if (contentLength != null && httpRequest.keepalive) {
+      if (contentLength != null && httpRequest2.keepalive) {
       }
-      if (webidl.is.URL(httpRequest.referrer)) {
-        httpRequest.headersList.append("referer", isomorphicEncode(httpRequest.referrer.href), true);
+      if (webidl.is.URL(httpRequest2.referrer)) {
+        httpRequest2.headersList.append("referer", isomorphicEncode(httpRequest2.referrer.href), true);
       }
-      appendRequestOriginHeader(httpRequest);
-      appendFetchMetadata(httpRequest);
-      if (!httpRequest.headersList.contains("user-agent", true)) {
-        httpRequest.headersList.append("user-agent", defaultUserAgent, true);
+      appendRequestOriginHeader(httpRequest2);
+      appendFetchMetadata(httpRequest2);
+      if (!httpRequest2.headersList.contains("user-agent", true)) {
+        httpRequest2.headersList.append("user-agent", defaultUserAgent, true);
       }
-      if (httpRequest.cache === "default" && (httpRequest.headersList.contains("if-modified-since", true) || httpRequest.headersList.contains("if-none-match", true) || httpRequest.headersList.contains("if-unmodified-since", true) || httpRequest.headersList.contains("if-match", true) || httpRequest.headersList.contains("if-range", true))) {
-        httpRequest.cache = "no-store";
+      if (httpRequest2.cache === "default" && (httpRequest2.headersList.contains("if-modified-since", true) || httpRequest2.headersList.contains("if-none-match", true) || httpRequest2.headersList.contains("if-unmodified-since", true) || httpRequest2.headersList.contains("if-match", true) || httpRequest2.headersList.contains("if-range", true))) {
+        httpRequest2.cache = "no-store";
       }
-      if (httpRequest.cache === "no-cache" && !httpRequest.preventNoCacheCacheControlHeaderModification && !httpRequest.headersList.contains("cache-control", true)) {
-        httpRequest.headersList.append("cache-control", "max-age=0", true);
+      if (httpRequest2.cache === "no-cache" && !httpRequest2.preventNoCacheCacheControlHeaderModification && !httpRequest2.headersList.contains("cache-control", true)) {
+        httpRequest2.headersList.append("cache-control", "max-age=0", true);
       }
-      if (httpRequest.cache === "no-store" || httpRequest.cache === "reload") {
-        if (!httpRequest.headersList.contains("pragma", true)) {
-          httpRequest.headersList.append("pragma", "no-cache", true);
+      if (httpRequest2.cache === "no-store" || httpRequest2.cache === "reload") {
+        if (!httpRequest2.headersList.contains("pragma", true)) {
+          httpRequest2.headersList.append("pragma", "no-cache", true);
         }
-        if (!httpRequest.headersList.contains("cache-control", true)) {
-          httpRequest.headersList.append("cache-control", "no-cache", true);
+        if (!httpRequest2.headersList.contains("cache-control", true)) {
+          httpRequest2.headersList.append("cache-control", "no-cache", true);
         }
       }
-      if (httpRequest.headersList.contains("range", true)) {
-        httpRequest.headersList.append("accept-encoding", "identity", true);
+      if (httpRequest2.headersList.contains("range", true)) {
+        httpRequest2.headersList.append("accept-encoding", "identity", true);
       }
-      if (!httpRequest.headersList.contains("accept-encoding", true)) {
-        if (urlHasHttpsScheme(requestCurrentURL(httpRequest))) {
-          httpRequest.headersList.append("accept-encoding", "br, gzip, deflate, zstd", true);
+      if (!httpRequest2.headersList.contains("accept-encoding", true)) {
+        if (urlHasHttpsScheme(requestCurrentURL(httpRequest2))) {
+          httpRequest2.headersList.append("accept-encoding", "br, gzip, deflate, zstd", true);
         } else {
-          httpRequest.headersList.append("accept-encoding", "gzip, deflate", true);
+          httpRequest2.headersList.append("accept-encoding", "gzip, deflate", true);
         }
       }
-      httpRequest.headersList.delete("host", true);
+      httpRequest2.headersList.delete("host", true);
       if (includeCredentials) {
-        if (!httpRequest.headersList.contains("authorization", true)) {
+        if (!httpRequest2.headersList.contains("authorization", true)) {
           let authorizationValue = null;
-          if (hasAuthenticationEntry(httpRequest) && (httpRequest.useURLCredentials === void 0 || !includesCredentials(requestCurrentURL(httpRequest)))) {
-          } else if (includesCredentials(requestCurrentURL(httpRequest)) && isAuthenticationFetch) {
-            const { username, password } = requestCurrentURL(httpRequest);
+          if (hasAuthenticationEntry(httpRequest2) && (httpRequest2.useURLCredentials === void 0 || !includesCredentials(requestCurrentURL(httpRequest2)))) {
+          } else if (includesCredentials(requestCurrentURL(httpRequest2)) && isAuthenticationFetch) {
+            const { username, password } = requestCurrentURL(httpRequest2);
             authorizationValue = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
           }
           if (authorizationValue !== null) {
-            httpRequest.headersList.append("Authorization", authorizationValue, false);
+            httpRequest2.headersList.append("Authorization", authorizationValue, false);
           }
         }
       }
       if (httpCache == null) {
-        httpRequest.cache = "no-store";
+        httpRequest2.cache = "no-store";
       }
-      if (httpRequest.cache !== "no-store" && httpRequest.cache !== "reload") {
+      if (httpRequest2.cache !== "no-store" && httpRequest2.cache !== "reload") {
       }
       if (response == null) {
-        if (httpRequest.cache === "only-if-cached") {
+        if (httpRequest2.cache === "only-if-cached") {
           return makeNetworkError("only if cached");
         }
         const forwardResponse = await httpNetworkFetch(
@@ -130972,7 +131077,7 @@ var require_fetch = __commonJS({
           includeCredentials,
           isNewConnectionFetch
         );
-        if (!safeMethodsSet.has(httpRequest.method) && forwardResponse.status >= 200 && forwardResponse.status <= 399) {
+        if (!safeMethodsSet.has(httpRequest2.method) && forwardResponse.status >= 200 && forwardResponse.status <= 399) {
         }
         if (revalidatingFlag && forwardResponse.status === 304) {
         }
@@ -130980,12 +131085,12 @@ var require_fetch = __commonJS({
           response = forwardResponse;
         }
       }
-      response.urlList = [...httpRequest.urlList];
-      if (httpRequest.headersList.contains("range", true)) {
+      response.urlList = [...httpRequest2.urlList];
+      if (httpRequest2.headersList.contains("range", true)) {
         response.rangeRequested = true;
       }
       response.requestIncludesCredentials = includeCredentials;
-      if (response.status === 401 && httpRequest.responseTainting !== "cors" && includeCredentials && (request2.useURLCredentials !== void 0 || isTraversableNavigable(request2.traversableForUserPrompts))) {
+      if (response.status === 401 && httpRequest2.responseTainting !== "cors" && includeCredentials && (request2.useURLCredentials !== void 0 || isTraversableNavigable(request2.traversableForUserPrompts))) {
         if (request2.body != null) {
           if (request2.body.source == null) {
             return response;
@@ -131282,7 +131387,7 @@ var require_fetch = __commonJS({
                     }
                   }
                 }
-                this.body = new Readable3({ read: () => controller.resume() });
+                this.body = new Readable4({ read: () => controller.resume() });
                 const onError = (err) => this.onResponseError(controller, err);
                 resolve2({
                   status: status2,
@@ -137016,7 +137121,7 @@ var init_v1 = __esm({
 import { AsyncLocalStorage as AsyncLocalStorage2 } from "async_hooks";
 import { createHmac } from "crypto";
 import { createServer } from "http";
-import { finished, Readable } from "stream";
+import { finished, Readable as Readable2 } from "stream";
 import { pipeline } from "stream/promises";
 import { homedir as homedir13 } from "os";
 import { join as join17 } from "path";
@@ -137872,7 +137977,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   if (accountPassthrough) {
     if (upstream.body) {
       await pipeline(
-        Readable.fromWeb(upstream.body),
+        Readable2.fromWeb(upstream.body),
         res,
         { signal: clientAbort.signal }
       );
@@ -138808,7 +138913,8 @@ async function startProxy(options) {
             } else if (val.startsWith("https://") || val.startsWith("http://")) {
               const imgResp = await ssrfSafeFetch(val, {
                 signal: clientAbort.signal,
-                allowPrivate: process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH === "1"
+                allowPrivate: process.env.CLAWROUTER_ALLOW_PRIVATE_FETCH === "1",
+                viaUpstreamProxy: Boolean(upstreamProxy)
               });
               if (!imgResp.ok)
                 throw new Error(`Failed to download ${field} from ${val}: HTTP ${imgResp.status}`);
@@ -159661,7 +159767,7 @@ var init_readBlob = __esm({
 
 // node_modules/axios/lib/helpers/formDataToStream.js
 import util2 from "util";
-import { Readable as Readable2 } from "stream";
+import { Readable as Readable3 } from "stream";
 var BOUNDARY_ALPHABET, textEncoder, CRLF, CRLF_BYTES, CRLF_BYTES_COUNT, FormDataPart, formDataToStream, formDataToStream_default;
 var init_formDataToStream = __esm({
   "node_modules/axios/lib/helpers/formDataToStream.js"() {
@@ -159741,7 +159847,7 @@ var init_formDataToStream = __esm({
         computedHeaders["Content-Length"] = contentLength;
       }
       headersHandler && headersHandler(computedHeaders);
-      return Readable2.from(
+      return Readable3.from(
         (async function* () {
           for (const part of parts) {
             yield boundaryBytes;
@@ -287392,8 +287498,7 @@ async function collectLogInfo() {
     return {
       requestsLast24h: stats.totalRequests,
       costLast24h: `$${stats.totalCost.toFixed(4)}`,
-      errorsFound: 0
-      // TODO: parse error logs
+      errorsFound: stats.errorCount
     };
   } catch {
     return {

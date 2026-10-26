@@ -1731,6 +1731,7 @@ type AggregatedStats = {
     }>;
     dailyBreakdown: DailyStats[];
     entriesWithBaseline: number;
+    errorCount: number;
 };
 /**
  * Get aggregated statistics for the last N days.
