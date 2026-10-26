@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.301 — October 25, 2026
+
+### Failed requests show up in `clawrouter logs` and `doctor` again
+
+The proxy logs every failed request with `status: "error"`, but the stats reader
+rebuilt each log entry without that field. So `clawrouter logs` marked every
+request OK, and `clawrouter doctor` always reported 0 errors (it was hardcoded).
+The reader now keeps `status`, `getStats()` returns an `errorCount`, and doctor
+reports it. Thanks @Tyagiquamar (#512).
+
+---
+
 ## v0.12.300 — October 25, 2026
 
 ### A cached payment is reused only when it fits this request
