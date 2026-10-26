@@ -316,7 +316,7 @@ async function collectLogInfo(): Promise<LogInfo> {
     return {
       requestsLast24h: stats.totalRequests,
       costLast24h: `$${stats.totalCost.toFixed(4)}`,
-      errorsFound: 0, // TODO: parse error logs
+      errorsFound: stats.errorCount,
     };
   } catch {
     return {
