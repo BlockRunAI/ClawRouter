@@ -22,9 +22,12 @@ jobs:
       # devDependency (2026.10+) refuses to install below Node 24.16, so
       # `npm ci` fails on 22. Users still install fine on 22 — openclaw is
       # dev-only here, and test/Dockerfile.install-test keeps covering 22.
+      # `check-latest`: the floor moves with Node security releases (2026.10.6
+      # needs 24.22.1) and the runner's cached "24" lags them by weeks.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          check-latest: true
           cache: npm
 
       - run: npm ci
@@ -47,6 +50,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          check-latest: true
           cache: npm
 
       - run: npm ci
@@ -92,6 +96,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          check-latest: true
           cache: npm
           cache-dependency-path: |
             package-lock.json
