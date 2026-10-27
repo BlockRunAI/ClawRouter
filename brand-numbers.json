@@ -12,7 +12,7 @@
     "speech": 5,
     "soundfx": 1,
     "withFallback": 29,
-    "withFallbackAllEntries": 68
+    "withFallbackAllEntries": 69
   },
   "clawrouter": {
     "dimensions": 15,
