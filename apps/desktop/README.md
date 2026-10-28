@@ -33,6 +33,11 @@ ClawRouter wallet under `~/.openclaw/blockrun/` is copied into the corresponding
 Core files only when those files do not already exist. The legacy files are
 retained for rollback; Desktop never overwrites an existing Core wallet.
 
+Payment chains are Base, Solana and Circle's Arc — Desktop takes the list from
+ClawRouter's own table (`src/payment-chain.ts`) rather than defining its own.
+Arc pays from the same EVM key and address as Base (`~/.blockrun/.session`);
+its USDC balance is read from `https://arc.blockrun.ai/api/v1/balance`.
+
 ## One-click contract
 
 Every adapter follows the same transaction:

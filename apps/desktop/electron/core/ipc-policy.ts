@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
+import { isPaymentChain } from "./chains.js";
 import type { AgentId, InstallOptions, PaymentChain } from "./types.js";
 
 const AGENT_IDS = new Set<AgentId>(["openclaw", "codex", "hermes", "dsh", "pi"]);
@@ -39,7 +40,7 @@ export function parseInstallOptions(value: unknown): InstallOptions {
 }
 
 export function parsePaymentChain(value: unknown): PaymentChain {
-  if (value !== "base" && value !== "solana") throw new Error("Unsupported payment chain");
+  if (!isPaymentChain(value)) throw new Error("Unsupported payment chain");
   return value;
 }
 

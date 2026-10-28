@@ -13,6 +13,13 @@ import { DshAdapter } from "../adapters/dsh.js";
 import { HermesAdapter } from "../adapters/hermes.js";
 import { OpenClawAdapter } from "../adapters/openclaw.js";
 import { PiAdapter } from "../adapters/pi.js";
+import {
+  chainLabel,
+  coreWalletFileOf,
+  isPaymentChain,
+  paymentChainOrUndefined,
+  walletKindOf,
+} from "./chains.js";
 import { commandExists, runCommand, withEmbeddedNode } from "./process.js";
 import { CLAWROUTER_PACKAGE_VERSION, ensureNpmPackage, proxyHealth } from "./runtime.js";
 import { ServiceSupervisor } from "./supervisor.js";
@@ -35,6 +42,10 @@ import type {
 const BASE_RPC_URL = "https://mainnet.base.org";
 const BASE_USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com";
+// Arc USDC is read through the Arc gateway's free balance endpoint — the same
+// read the proxy uses (src/balance.ts) — because the public Arc RPC is
+// unreliable and Desktop ships no RPC key. Answers micro-USDC as a string.
+const ARC_BALANCE_URL = "https://arc.blockrun.ai/api/v1/balance";
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const BALANCE_CACHE_TTL_MS = 30_000;
 
@@ -169,7 +180,7 @@ export class ClawRouterManager {
           message: (result.stderr || result.stdout).trim() || `Could not switch to ${chain}.`,
         };
       }
-      const label = chain === "solana" ? "Solana" : "Base";
+      const label = chainLabel(chain);
       // The proxy reads the chain once at startup, so apply the switch by
       // restarting the proxy Desktop launched instead of asking the user to
       // restart something they never started. A proxy Desktop does not own is
@@ -265,7 +276,8 @@ export class ClawRouterManager {
 
   async createWallet(chain: PaymentChain): Promise<WalletMutationResult> {
     const coreDir = join(this.context.homeDir, ".blockrun");
-    const name = chain === "base" ? ".session" : ".solana-session";
+    // Arc creates (or finds) the same EVM key as Base: one file, one address.
+    const name = coreWalletFileOf(chain);
     try {
       const existing = await readText(join(coreDir, name));
       if (existing) {
@@ -279,7 +291,7 @@ export class ClawRouterManager {
 
       let value: string;
       let address: string;
-      if (chain === "base") {
+      if (walletKindOf(chain) === "evm") {
         value = `0x${Buffer.from(secp256k1.utils.randomSecretKey()).toString("hex")}`;
         address = evmAddressFromPrivateKey(value);
       } else {
@@ -310,11 +322,11 @@ export class ClawRouterManager {
   async adoptLegacyWallet(chain: PaymentChain): Promise<WalletMutationResult> {
     const coreDir = join(this.context.homeDir, ".blockrun");
     const legacyDir = join(this.context.homeDir, ".openclaw", "blockrun");
-    const name = chain === "base" ? ".session" : ".solana-session";
+    const name = coreWalletFileOf(chain);
     try {
       let value: string | undefined;
       let address: string | undefined;
-      if (chain === "base") {
+      if (walletKindOf(chain) === "evm") {
         value = await readPrivateKey(join(legacyDir, "wallet.key"));
         if (value) address = evmAddressFromPrivateKey(value);
       } else {
@@ -385,6 +397,7 @@ export class ClawRouterManager {
     const legacyBalances = await this.fetchUsdcBalances(
       legacyWallets.base?.address,
       legacyWallets.solana?.address,
+      { withArc: false },
     );
     const legacyWalletDetails = withLegacyBalances(legacyWallets, legacyBalances);
     if (!reachable) {
@@ -448,6 +461,11 @@ export class ClawRouterManager {
         activeBalances.base ??
         (sameAddress(wallet ?? "", localWallets.base) ? localBalances.base : undefined) ??
         (paymentChain === "base" && wallet === activeWallet ? reportedBalance : undefined),
+      // Arc is the same EVM address as Base, read on a different chain.
+      arc:
+        activeBalances.arc ??
+        (sameAddress(wallet ?? "", localWallets.base) ? localBalances.arc : undefined) ??
+        (paymentChain === "arc" && wallet === activeWallet ? reportedBalance : undefined),
       solana:
         activeBalances.solana ??
         (solana === localWallets.solana ? localBalances.solana : undefined) ??
@@ -456,7 +474,8 @@ export class ClawRouterManager {
     const models: ModelInfo[] = (catalog.value?.data ?? []).map(toModelInfo);
     const walletRestartChains: PaymentChain[] = [];
     if (preferredWallet && activeWallet && !sameAddress(activeWallet, preferredWallet)) {
-      walletRestartChains.push("base");
+      // One EVM key pays both Base and Arc, so a stale EVM key is stale on both.
+      walletRestartChains.push("base", "arc");
     }
     if (localWallets.solana && activeSolana && activeSolana !== localWallets.solana) {
       walletRestartChains.push("solana");
@@ -502,30 +521,39 @@ export class ClawRouterManager {
 
   private async configuredPaymentChain(): Promise<PaymentChain> {
     const coreValue = await readText(join(this.context.homeDir, ".blockrun", ".chain"));
-    if (coreValue === "base" || coreValue === "solana") return coreValue;
+    if (isPaymentChain(coreValue)) return coreValue;
 
     const legacyValue = await readText(
       join(this.context.homeDir, ".openclaw", "blockrun", "payment-chain"),
     );
-    return legacyValue === "solana" ? "solana" : "base";
+    return isPaymentChain(legacyValue) ? legacyValue : "base";
   }
 
+  /**
+   * USDC per chain. The EVM address is read on Base AND Arc (one key, two
+   * chains); `withArc: false` skips Arc for wallets that only ever pay Base
+   * (the legacy-wallet migration panel).
+   */
   private async fetchUsdcBalances(
-    baseAddress: string | undefined,
+    evmAddress: string | undefined,
     solanaAddress: string | undefined,
+    { withArc = true }: { withArc?: boolean } = {},
   ): Promise<Partial<Record<PaymentChain, number>>> {
-    const [base, solana] = await Promise.all([
-      baseAddress ? this.fetchCachedBalance("base", baseAddress) : Promise.resolve(undefined),
+    const [base, arc, solana] = await Promise.all([
+      evmAddress ? this.fetchCachedBalance("base", evmAddress) : Promise.resolve(undefined),
+      evmAddress && withArc
+        ? this.fetchCachedBalance("arc", evmAddress)
+        : Promise.resolve(undefined),
       solanaAddress ? this.fetchCachedBalance("solana", solanaAddress) : Promise.resolve(undefined),
     ]);
-    return { base, solana };
+    return { base, arc, solana };
   }
 
   private async fetchCachedBalance(
     chain: PaymentChain,
     address: string,
   ): Promise<number | undefined> {
-    const normalizedAddress = chain === "base" ? address.toLowerCase() : address;
+    const normalizedAddress = walletKindOf(chain) === "evm" ? address.toLowerCase() : address;
     const cacheKey = `${chain}:${normalizedAddress}`;
     const cached = this.balanceCache.get(cacheKey);
     const now = Date.now();
@@ -534,7 +562,9 @@ export class ClawRouterManager {
     const value =
       chain === "base"
         ? await fetchBaseUsdcBalance(address, this.context.fetch)
-        : await fetchSolanaUsdcBalance(address, this.context.fetch);
+        : chain === "arc"
+          ? await fetchArcUsdcBalance(address, this.context.fetch)
+          : await fetchSolanaUsdcBalance(address, this.context.fetch);
     if (value !== undefined) {
       this.balanceCache.set(cacheKey, { value, fetchedAt: now });
       return value;
@@ -564,7 +594,7 @@ export class ClawRouterManager {
       const secret = [...seed, ...ed25519PublicKey(seed)];
       pending.push(writeFileIfMissing(coreDir, ".solana-session", JSON.stringify(secret) + "\n"));
     }
-    if (!coreChain && (legacyChain === "base" || legacyChain === "solana")) {
+    if (!coreChain && isPaymentChain(legacyChain)) {
       pending.push(writeFileIfMissing(coreDir, ".chain", legacyChain + "\n"));
     }
     await Promise.all(pending);
@@ -719,10 +749,6 @@ function toModelInfo(model: Record<string, unknown>): ModelInfo {
   };
 }
 
-function paymentChainOrUndefined(value: unknown): PaymentChain | undefined {
-  return value === "base" || value === "solana" ? value : undefined;
-}
-
 function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -744,6 +770,30 @@ async function fetchBaseUsdcBalance(
     fetcher,
   );
   return rpcHexNumber(token?.result, 1_000_000);
+}
+
+/**
+ * Arc USDC (dollars) for an EVM address, via the Arc gateway. Undefined on any
+ * failure, like the Base and Solana readers: the caller keeps the last cached
+ * value rather than showing an outage as $0.
+ */
+async function fetchArcUsdcBalance(
+  address: string,
+  fetcher: typeof fetch,
+): Promise<number | undefined> {
+  if (!/^0x[0-9a-f]{40}$/i.test(address)) return undefined;
+  try {
+    const response = await fetcher(`${ARC_BALANCE_URL}?address=${encodeURIComponent(address)}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return undefined;
+    const body = (await response.json()) as { balance?: unknown };
+    if (typeof body.balance !== "string" || !/^\d+$/.test(body.balance)) return undefined;
+    return Number(BigInt(body.balance)) / 1_000_000;
+  } catch {
+    return undefined;
+  }
 }
 
 async function fetchSolanaUsdcBalance(
@@ -835,10 +885,6 @@ async function atomicWritePrivateFile(
     }
     throw error;
   }
-}
-
-function chainLabel(chain: PaymentChain): string {
-  return chain === "base" ? "Base" : "Solana";
 }
 
 function withLegacyBalances(

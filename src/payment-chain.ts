@@ -17,8 +17,12 @@
 
 export type PaymentChain = "base" | "solana" | "arc";
 
-/** Every selectable chain, in the order help text lists them. */
-export const PAYMENT_CHAINS: readonly PaymentChain[] = ["solana", "base", "arc"];
+/**
+ * Every selectable chain, in display order (Desktop's chain selector renders
+ * this list as-is). Also imported by apps/desktop, so adding a chain here is
+ * what puts it in front of a Desktop user.
+ */
+export const PAYMENT_CHAINS: readonly PaymentChain[] = ["base", "solana", "arc"];
 
 export function isPaymentChain(value: unknown): value is PaymentChain {
   return typeof value === "string" && (PAYMENT_CHAINS as readonly string[]).includes(value);

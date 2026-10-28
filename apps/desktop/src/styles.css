@@ -287,7 +287,9 @@ nav button.active > span {
 }
 .chain-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* One column per payment chain, however many src/payment-chain.ts lists. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 2px;
   border-radius: 7px;
   background: var(--surface-raised);
@@ -1767,7 +1769,7 @@ main {
 }
 .wallet-network-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
 .wallet-network-card {

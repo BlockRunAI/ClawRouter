@@ -1,8 +1,11 @@
+import type { PaymentChain } from "./chains.js";
+
 export type AgentId = "openclaw" | "codex" | "hermes" | "dsh" | "pi";
 
 export type ActivationMode = "immediate" | "restart-agent" | "restart-gateway";
 
-export type PaymentChain = "base" | "solana";
+/** Base | Solana | Arc — from ClawRouter's chain table (src/payment-chain.ts), not redefined here. */
+export type { PaymentChain };
 
 export type AgentHealth = "not-installed" | "ready" | "needs-attention" | "checking";
 
