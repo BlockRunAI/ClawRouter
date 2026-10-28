@@ -105,6 +105,12 @@ import type { SolanaBalanceMonitor } from "./solana-balance.js";
 type AnyBalanceMonitor = BalanceMonitor | SolanaBalanceMonitor | ApiKeyBalanceMonitor;
 import { resolvePaymentChain } from "./auth.js";
 import {
+  CAIP2_ARC,
+  PAYMENT_CHAIN_GATEWAYS,
+  PAYMENT_CHAIN_LABELS,
+  type PaymentChain,
+} from "./payment-chain.js";
+import {
   BLOCKRUN_API_KEY_API,
   PORTAL_CREDITS_URL,
   createApiKeyFetch,
@@ -166,8 +172,45 @@ import {
 } from "./response-store.js";
 import { isSharePreset, transform } from "./share-formatters.js";
 
-const BLOCKRUN_API = "https://blockrun.ai/api";
-const BLOCKRUN_SOLANA_API = "https://sol.blockrun.ai/api";
+const BLOCKRUN_API = PAYMENT_CHAIN_GATEWAYS.base;
+const BLOCKRUN_SOLANA_API = PAYMENT_CHAIN_GATEWAYS.solana;
+const BLOCKRUN_ARC_API = PAYMENT_CHAIN_GATEWAYS.arc;
+
+/**
+ * Human label for an x402 `network`, for the per-payment log line. Base and
+ * Arc are both `eip155:*`, so the chain id has to be read, not the prefix.
+ */
+export function describePaymentNetwork(network: string): string {
+  if (network === CAIP2_ARC) return `${PAYMENT_CHAIN_LABELS.arc} (EVM)`;
+  if (network.startsWith("eip155")) return `${PAYMENT_CHAIN_LABELS.base} (EVM)`;
+  if (network.startsWith("solana")) return PAYMENT_CHAIN_LABELS.solana;
+  return network;
+}
+
+/**
+ * Whether BlockRun's builder code is stamped onto a payment on this network.
+ * It is a CDP registration read only by the CDP facilitator: EVM networks
+ * other than Arc, whose payments Circle's facilitator settles.
+ */
+export function stampsBuilderCode(network: string): boolean {
+  return network.startsWith("eip155") && network !== CAIP2_ARC;
+}
+
+/**
+ * The x402 gateway a wallet-rail proxy pays against. Solana without a Solana
+ * key falls back to Base — the only rail that proxy can sign for — and says so
+ * at startup; Arc needs nothing beyond the EVM key every wallet has.
+ */
+export function walletGatewayFor(chain: PaymentChain, hasSolanaKey: boolean): string {
+  if (chain === "solana") return hasSolanaKey ? BLOCKRUN_SOLANA_API : BLOCKRUN_API;
+  if (chain === "arc") return BLOCKRUN_ARC_API;
+  return BLOCKRUN_API;
+}
+
+/** Which EVM chain's USDC the wallet-rail balance monitor reads. */
+function evmBalanceChain(chain: PaymentChain): "base" | "arc" {
+  return chain === "arc" ? "arc" : "base";
+}
 const DESKTOP_SERVICE_TOKEN_FILE =
   process.env.CLAWROUTER_DESKTOP_TOKEN_FILE ??
   join(homedir(), ".clawrouter-desktop", "service-token");
@@ -432,8 +475,12 @@ async function readBodyWithTimeout(
 /**
  * Transform upstream payment errors into user-friendly messages.
  * Parses the raw x402 error and formats it nicely.
+ *
+ * `evmChain` names the EVM chain this proxy pays on. A 0x payer cannot say
+ * whether it was paying on Base or Arc (same key, same address), so the
+ * caller supplies it; it defaults to Base, the only EVM rail before Arc.
  */
-export function transformPaymentError(errorBody: string): string {
+export function transformPaymentError(errorBody: string, evmChain = "Base"): string {
   try {
     // Try to parse the error JSON
     const parsed = JSON.parse(errorBody) as {
@@ -478,7 +525,7 @@ export function transformPaymentError(errorBody: string): string {
                 wallet: wallet,
                 current_balance_usd: currentUSD,
                 required_usd: requiredUSD,
-                help: `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`,
+                help: `Fund wallet ${shortWallet} with USDC on ${evmChain}, or use free model: /model free`,
               },
             });
           }
@@ -523,7 +570,7 @@ export function transformPaymentError(errorBody: string): string {
       const shortWallet =
         wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
       // Detect chain from payer address format (0x = EVM, else Solana)
-      const chain = wallet.startsWith("0x") ? "Base" : "Solana";
+      const chain = wallet.startsWith("0x") ? evmChain : "Solana";
 
       if (debugLower.includes("insufficient")) {
         return JSON.stringify({
@@ -534,7 +581,7 @@ export function transformPaymentError(errorBody: string): string {
             help:
               chain === "Solana"
                 ? `Fund wallet ${shortWallet} with USDC on Solana, or switch to Base: /wallet base`
-                : `Fund wallet ${shortWallet} with USDC on Base, or use free model: /model free`,
+                : `Fund wallet ${shortWallet} with USDC on ${chain}, or use free model: /model free`,
           },
         });
       }
@@ -1500,7 +1547,7 @@ export type InsufficientFundsInfo = {
  */
 export type WalletConfig = string | { key: string; solanaPrivateKeyBytes?: Uint8Array };
 
-export type PaymentChain = "base" | "solana";
+export type { PaymentChain };
 
 /**
  * How this proxy pays BlockRun.
@@ -1525,8 +1572,9 @@ export type ProxyOptions = {
   apiKey?: string;
   apiBase?: string;
   /**
-   * Payment chain: "base" or "solana". New installs persist "solana" at wallet
-   * generation; absent config resolves to "base" for pre-existing installs.
+   * Payment chain: "base", "solana" or "arc". New installs persist "solana" at
+   * wallet generation; absent config resolves to "base" for pre-existing
+   * installs. "arc" pays from the same EVM key as Base, on Circle's Arc.
    * Can also be set via CLAWROUTER_PAYMENT_CHAIN env var.
    */
   paymentChain?: PaymentChain;
@@ -2725,9 +2773,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     options.apiBase ??
     (authMode === "api-key"
       ? BLOCKRUN_API_KEY_API
-      : paymentChain === "solana" && solanaPrivateKeyBytes
-        ? BLOCKRUN_SOLANA_API
-        : BLOCKRUN_API);
+      : walletGatewayFor(paymentChain, solanaPrivateKeyBytes !== undefined));
   // Validated once here rather than per request: an unusable account URL should
   // fail at startup, not on the first paid call.
   const apiBase = authMode === "api-key" ? normalizeApiKeyBase(requestedApiBase) : requestedApiBase;
@@ -2749,6 +2795,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     console.warn(`[ClawRouter]   or run "npx @blockrun/clawrouter chain base" to switch to EVM.`);
   } else if (paymentChain === "solana") {
     console.log(`[ClawRouter] Payment chain: Solana (${BLOCKRUN_SOLANA_API})`);
+  } else if (paymentChain === "arc") {
+    // Same EVM key and address as Base — only the chain the USDC is on differs.
+    console.log(`[ClawRouter] Payment chain: Arc (${apiBase})`);
   } else {
     // Base said nothing, so the one rail that never announced itself was also
     // the default. Three rails, three gateways — each should say which.
@@ -2816,7 +2865,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       const { SolanaBalanceMonitor } = await import("./solana-balance.js");
       balanceMonitor = new SolanaBalanceMonitor(reuseSolanaAddress);
     } else {
-      balanceMonitor = new BalanceMonitor(account.address);
+      balanceMonitor = new BalanceMonitor(account.address, evmBalanceChain(paymentChain));
     }
 
     options.onReady?.(listenPort);
@@ -2925,8 +2974,11 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Gated to EVM (`eip155:*`): builder-code / ERC-8021 is Ethereum-only, so
   // stamping it onto Solana (`solana:*`) payloads would attach a field the SVM
   // facilitator never expects — a no-op at best, a settlement risk at worst.
+  // Arc (eip155:5042) is EVM but is settled by Circle's facilitator, not CDP's;
+  // the builder code is a CDP registration that only CDP reads, so the same
+  // reasoning keeps it off Arc payloads too.
   x402?.onAfterPaymentCreation(async (context) => {
-    if (!context.selectedRequirements.network.startsWith("eip155")) return;
+    if (!stampsBuilderCode(context.selectedRequirements.network)) return;
     const payload = context.paymentPayload as {
       extensions?: Record<string, unknown>;
     };
@@ -2939,11 +2991,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   const registerSigningRecorders = (client: PaymentHookClient) => {
     client.onAfterPaymentCreation(async (context) => {
       const network = context.selectedRequirements.network;
-      const chain = network.startsWith("eip155")
-        ? "Base (EVM)"
-        : network.startsWith("solana")
-          ? "Solana"
-          : network;
+      const chain = describePaymentNetwork(network);
       // Capture actual payment amount in USD (amount is in USDC micro units, 6 decimals)
       const amountMicros = parseInt(context.selectedRequirements.amount || "0", 10);
       const amountUsd = amountMicros / 1_000_000;
@@ -3086,7 +3134,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     const { SolanaBalanceMonitor } = await import("./solana-balance.js");
     balanceMonitor = new SolanaBalanceMonitor(solanaAddress);
   } else {
-    balanceMonitor = new BalanceMonitor(account!.address);
+    balanceMonitor = new BalanceMonitor(account!.address, evmBalanceChain(paymentChain));
   }
 
   // Build router options (100% local — no external API calls for routing)
@@ -3099,6 +3147,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   };
 
   const catalog = createClawCatalog({
+    // Arc's gateway carries Base's catalog (same routes, same prices); the
+    // snapshot is keyed by "base" and the live refresh reads arc.blockrun.ai
+    // through `apiBase`.
     network: paymentChain === "solana" && (apiKey || solanaPrivateKeyBytes) ? "solana" : "base",
     apiBase,
     apiKey,
@@ -7370,7 +7421,12 @@ async function proxyRequest(
       const costCapRefusal = errStatus === 429 && rawErrBody.includes('"cost_cap_exceeded"');
 
       // Transform payment errors into user-friendly messages
-      const transformedErr = transformPaymentError(rawErrBody);
+      const transformedErr = transformPaymentError(
+        rawErrBody,
+        balanceMonitor instanceof BalanceMonitor && balanceMonitor.getChain() === "arc"
+          ? PAYMENT_CHAIN_LABELS.arc
+          : PAYMENT_CHAIN_LABELS.base,
+      );
 
       // Mark as error for usage logging (logs this failed attempt with cost)
       requestHadError = true;

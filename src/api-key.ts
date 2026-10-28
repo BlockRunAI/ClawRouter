@@ -6,7 +6,7 @@
  * credit card at https://user.blockrun.ai. Same catalogue, same model ids,
  * same OpenAI-compatible shape — a different host and a different auth header:
  *
- *   wallet    → https://blockrun.ai/api  |  https://sol.blockrun.ai/api  (x402)
+ *   wallet    → https://blockrun.ai/api  |  https://sol.blockrun.ai/api  |  https://arc.blockrun.ai/api  (x402)
  *   API key   → https://api.blockrun.ai                                  (Bearer brk_…)
  *
  * Resolution order, highest first:

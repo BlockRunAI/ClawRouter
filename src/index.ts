@@ -55,6 +55,7 @@ import {
 import type { WalletResolution } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
+import { PAYMENT_CHAIN_LABELS } from "./payment-chain.js";
 import { loadExcludeList } from "./exclude-models.js";
 
 /**
@@ -1153,7 +1154,7 @@ async function startProxyInBackground(
   const currentChain = await resolvePaymentChain();
   const displayAddress =
     currentChain === "solana" && proxy.solanaAddress ? proxy.solanaAddress : wallet!.address;
-  const network = currentChain === "solana" ? "Solana" : "Base";
+  const network = PAYMENT_CHAIN_LABELS[currentChain];
   proxy.balanceMonitor
     .checkBalance()
     .then(async (balance) => {
@@ -1902,6 +1903,30 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
         }
       }
 
+      if (subcommand === "arc") {
+        // Switch to Circle's Arc. Same EVM key and address as Base — nothing to
+        // set up, only the chain (and gateway) the USDC is paid on changes.
+        try {
+          await savePaymentChain("arc");
+          if (api) restartProxyForChainSwitch(api);
+          return {
+            text: [
+              api
+                ? "✓ Payment chain switched to **Arc (EVM)**. Proxy restarting in background (~2s)."
+                : "Payment chain set to Arc (EVM). Restart the gateway to apply.",
+              "",
+              `**Arc Address:** \`${address}\` (same as your Base address)`,
+              "Fund with USDC on Arc to pay for calls.",
+            ].join("\n"),
+          };
+        } catch (err) {
+          return {
+            text: `Failed to set payment chain: ${err instanceof Error ? err.message : String(err)}`,
+            isError: true,
+          };
+        }
+      }
+
       if (subcommand === "base") {
         // Switch back to Base (EVM) payment chain
         try {
@@ -1929,6 +1954,24 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
         } catch {
           return "Balance: (could not check)";
         }
+      })();
+
+      const chainPromise = resolvePaymentChain();
+
+      // Arc shares the EVM address; its USDC is only read when Arc is the
+      // active chain, so a Base or Solana user's /wallet never calls the Arc gateway.
+      const arcPromise = (async () => {
+        if ((await chainPromise) !== "arc") return "";
+        let arcBalanceText = "Balance: (could not check)";
+        try {
+          const balance = await new BalanceMonitor(address!, "arc").checkBalance();
+          arcBalanceText = `Balance: ${balance.balanceUSD}`;
+        } catch {
+          // keep default
+        }
+        return ["", "**Arc (EVM):**", `  Address: \`${address}\``, `  ${arcBalanceText}`].join(
+          "\n",
+        );
       })();
 
       const solanaPromise = (async () => {
@@ -1960,8 +2003,6 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
         }
       })();
 
-      const chainPromise = resolvePaymentChain();
-
       const usagePromise = (async () => {
         try {
           const stats = await getStats(7);
@@ -1991,23 +2032,26 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
         }
       })();
 
-      const [evmBalanceText, solanaSection, currentChain, usageSection] = await Promise.all([
-        evmBalancePromise,
-        solanaPromise,
-        chainPromise,
-        usagePromise,
-      ]);
+      const [evmBalanceText, solanaSection, currentChain, arcSection, usageSection] =
+        await Promise.all([
+          evmBalancePromise,
+          solanaPromise,
+          chainPromise,
+          arcPromise,
+          usagePromise,
+        ]);
 
       return {
         text: [
           "**ClawRouter Wallet**",
           "",
-          `**Payment Chain:** ${currentChain === "solana" ? "Solana" : "Base (EVM)"}`,
+          `**Payment Chain:** ${currentChain === "solana" ? "Solana" : `${PAYMENT_CHAIN_LABELS[currentChain]} (EVM)`}`,
           "",
           "**Base (EVM):**",
           `  Address: \`${address}\``,
           `  ${evmBalanceText}`,
           `  Fund (USDC only): https://basescan.org/address/${address}`,
+          arcSection,
           solanaSection,
           usageSection,
           "",
@@ -2018,8 +2062,9 @@ function createWalletCommand(api?: OpenClawPluginApi): OpenClawPluginCommandDefi
           "• `/wallet export` - Export private key for backup",
           "• `/stats` - Detailed usage breakdown",
           !solanaSection ? "• `/wallet solana` - Enable Solana payments" : "",
-          solanaSection ? "• `/wallet base` - Switch to Base (EVM)" : "",
-          solanaSection ? "• `/wallet solana` - Switch to Solana" : "",
+          currentChain !== "base" ? "• `/wallet base` - Switch to Base (EVM)" : "",
+          currentChain !== "arc" ? "• `/wallet arc` - Switch to Arc (EVM, same address)" : "",
+          solanaSection && currentChain !== "solana" ? "• `/wallet solana` - Switch to Solana" : "",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -2791,6 +2836,7 @@ export {
   UnreadableSpendPolicyError,
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
+  CAIP2_ARC,
   PAYABLE_NETWORKS,
 } from "./spend-control.js";
 export type {

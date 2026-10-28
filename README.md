@@ -113,14 +113,14 @@ Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key
 
 **Two ways to pay for the paid ones — pick one, the rest of ClawRouter is identical:**
 
-|                   | Wallet (default)                                           | API key                                                                                                    |
-| ----------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Who it is for** | Autonomous agents, and anyone happy holding USDC           | People who would rather pay with a card                                                                    |
-| **Setup**         | Nothing — a wallet is generated on first run               | Sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, mint a key, `clawrouter login brk_live_…` |
-| **Auth**          | An x402 signature per request                              | `Authorization: Bearer brk_live_…`                                                                         |
-| **Gateway**       | `sol.blockrun.ai` (Solana, default) / `blockrun.ai` (Base) | `api.blockrun.ai`                                                                                          |
-| **Billing**       | USDC leaves your wallet per call, non-custodial            | Card-funded account credit, drawn down at exact usage                                                      |
-| **Fees**          | $0.001/tx settlement fee (covers on-chain gas)             | 5.5% + $0.30 on the top-up, then list price with **nothing per call**                                      |
+|                   | Wallet (default)                                                                     | API key                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **Who it is for** | Autonomous agents, and anyone happy holding USDC                                     | People who would rather pay with a card                                                                    |
+| **Setup**         | Nothing — a wallet is generated on first run                                         | Sign up at [user.blockrun.ai](https://user.blockrun.ai), top up, mint a key, `clawrouter login brk_live_…` |
+| **Auth**          | An x402 signature per request                                                        | `Authorization: Bearer brk_live_…`                                                                         |
+| **Gateway**       | `sol.blockrun.ai` (Solana, default) / `blockrun.ai` (Base) / `arc.blockrun.ai` (Arc) | `api.blockrun.ai`                                                                                          |
+| **Billing**       | USDC leaves your wallet per call, non-custodial                                      | Card-funded account credit, drawn down at exact usage                                                      |
+| **Fees**          | $0.001/tx settlement fee (covers on-chain gas)                                       | 5.5% + $0.30 on the top-up, then list price with **nothing per call**                                      |
 
 ClawRouter prefers the API key whenever one is configured, so `clawrouter login`
 is all it takes to switch and `clawrouter logout` is all it takes to switch back.
@@ -583,12 +583,15 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 
 **Dual-chain support:** Pay with **USDC on Solana** (the default) or **USDC on Base (EVM)**. Both wallets are derived from a single BIP-39 mnemonic on first run. New installs get **Solana**; an install that predates the Solana default keeps its **Base** wallet — its USDC is there — until you switch with `/wallet solana`.
 
+**Arc:** you can also pay with **USDC on [Circle's Arc](https://arc.network)** (`eip155:5042`) via `arc.blockrun.ai` — same models, same prices, same $0.001 per-call fee as Base. Arc uses the **same EVM key and address as Base**, so there is nothing new to back up: switch with `/wallet arc` (or `clawrouter chain arc`) and fund that address with USDC on Arc.
+
 ```bash
 /wallet              # Check balance and address (both chains)
 /wallet export       # Export mnemonic + keys for backup
 /wallet recover      # Restore wallet from mnemonic on a new machine
 /wallet solana       # Switch to Solana USDC payments
 /wallet base         # Switch to Base (EVM) USDC payments
+/wallet arc          # Switch to Arc (EVM) USDC payments — same address as Base
 /stats               # View usage and savings
 /stats clear         # Reset usage statistics
 /exclude             # Show excluded models
@@ -601,6 +604,7 @@ USDC stays in your wallet until spent — non-custodial. Price is visible in the
 
 - **Solana (default):** Send USDC on Solana to your Solana address
 - **Base (EVM):** Send USDC on Base to your EVM address
+- **Arc (EVM):** Send USDC on Arc to the same EVM address
 - **Coinbase/CEX:** Withdraw USDC to either network
 - **Credit card:** don't fund a wallet at all — [sign up at user.blockrun.ai](https://user.blockrun.ai) and use an API key instead (below)
 

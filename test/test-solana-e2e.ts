@@ -15,6 +15,7 @@
  */
 
 import { startProxy } from "../src/proxy.js";
+import type { PaymentChain } from "../src/payment-chain.js";
 import { generateWalletMnemonic, deriveEvmKey, deriveSolanaKeyBytes } from "../src/wallet.js";
 
 let passed = 0;
@@ -83,7 +84,7 @@ async function run() {
     status: string;
     wallet: string;
     solana?: string;
-    paymentChain?: "base" | "solana";
+    paymentChain?: PaymentChain;
   };
   assert(healthData.status === "ok", `Health status: ${healthData.status}`);
   assert(typeof healthData.wallet === "string", `Health reports EVM wallet: ${healthData.wallet}`);

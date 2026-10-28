@@ -22,6 +22,11 @@ import {
 } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
 import {
+  PAYMENT_CHAIN_GATEWAYS,
+  PAYMENT_CHAIN_LABELS,
+  type PaymentChain,
+} from "./payment-chain.js";
+import {
   resolveApiKey,
   maskApiKey,
   BLOCKRUN_API_KEY_API,
@@ -43,7 +48,7 @@ interface SystemInfo {
   memoryTotal: string;
 }
 
-interface WalletInfo {
+export interface WalletInfo {
   exists: boolean;
   valid: boolean;
   address: string | null;
@@ -52,7 +57,7 @@ interface WalletInfo {
   isLow: boolean;
   isEmpty: boolean;
   source: "core" | "saved" | "env" | "config" | "generated" | null;
-  paymentChain: "base" | "solana";
+  paymentChain: PaymentChain;
 }
 
 /** Set only when this install pays with a `brk_…` key instead of a wallet. */
@@ -230,7 +235,8 @@ async function collectWalletInfo(apiKeyConfigured: boolean): Promise<WalletInfo>
         const monitor = new SolanaBalanceMonitor(solanaAddress);
         balanceInfo = await monitor.checkBalance();
       } else {
-        const monitor = new BalanceMonitor(address);
+        // Base and Arc share the EVM address; read the active chain's USDC.
+        const monitor = new BalanceMonitor(address, paymentChain === "arc" ? "arc" : "base");
         balanceInfo = await monitor.checkBalance();
       }
       return {
@@ -275,13 +281,17 @@ async function collectWalletInfo(apiKeyConfigured: boolean): Promise<WalletInfo>
 // Collect network info
 async function collectNetworkInfo(): Promise<NetworkInfo> {
   const port = getProxyPort();
+  // Arc pays against its own gateway; probe that one when it is the active
+  // chain, so "reachable" describes the host paid calls will actually go to.
+  const chain = await resolvePaymentChain().catch(() => "base" as const);
+  const modelsUrl = `${chain === "arc" ? PAYMENT_CHAIN_GATEWAYS.arc : PAYMENT_CHAIN_GATEWAYS.base}/v1/models`;
 
   // Check BlockRun API
   let blockrunReachable = false;
   let blockrunLatency: number | null = null;
   try {
     const start = Date.now();
-    const response = await fetch("https://blockrun.ai/api/v1/models", {
+    const response = await fetch(modelsUrl, {
       method: "GET",
       signal: AbortSignal.timeout(10000),
     });
@@ -346,10 +356,12 @@ function identifyIssues(result: DiagnosticResult): string[] {
     issues.push("No wallet found");
   }
   if (result.wallet.isEmpty) {
-    const chain = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    const chain = PAYMENT_CHAIN_LABELS[result.wallet.paymentChain];
     issues.push(`Wallet is empty - need to fund with USDC on ${chain}`);
     if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
-      issues.push("Tip: if you funded Solana, run /wallet solana to switch chains");
+      issues.push(
+        `Tip: if you funded Solana, ${chainSwitchInstruction("solana", "run /wallet solana")} to switch chains`,
+      );
     }
   } else if (result.wallet.isLow) {
     issues.push("Wallet balance is low (< $1.00)");
@@ -427,14 +439,16 @@ function printDiagnostics(result: DiagnosticResult): void {
     if (result.wallet.solanaAddress) {
       console.log(`  ${green(`Solana Address: ${result.wallet.solanaAddress}`)}`);
     }
-    const chainLabel = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    const chainLabel = PAYMENT_CHAIN_LABELS[result.wallet.paymentChain];
     console.log(`  ${green(`Chain: ${chainLabel}`)}`);
     if (result.wallet.isEmpty) {
       console.log(
         `  ${red(`Balance: $0.00 - NEED TO FUND WITH USDC ON ${chainLabel.toUpperCase()}!`)}`,
       );
       if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
-        console.log(`  ${yellow(`Tip: funded Solana instead? Run /wallet solana to switch`)}`);
+        console.log(
+          `  ${yellow(`Tip: funded Solana instead? ${chainSwitchInstruction("solana", "run /wallet solana")} to switch`)}`,
+        );
       }
     } else if (result.wallet.isLow) {
       console.log(`  ${yellow(`Balance: ${result.wallet.balance} (low)`)}`);
@@ -523,6 +537,56 @@ export function createDoctorX402Client(opts: {
   return x402;
 }
 
+/**
+ * How to switch to `target`, for every chain-switch hint doctor prints.
+ * CLAWROUTER_PAYMENT_CHAIN overrides the saved chain (resolvePaymentChain), so
+ * while it is set, `chain base` / `/wallet solana` saves a choice that never
+ * takes effect — the hint has to name the variable instead.
+ */
+export function chainSwitchInstruction(
+  target: PaymentChain,
+  command: string,
+  envValue: string | undefined = process["env"].CLAWROUTER_PAYMENT_CHAIN,
+): string {
+  const env = envValue?.trim();
+  if (!env) return command;
+  return (
+    `set CLAWROUTER_PAYMENT_CHAIN=${target} (it is "${env}" and overrides the saved chain), ` +
+    `or unset CLAWROUTER_PAYMENT_CHAIN and ${command}`
+  );
+}
+
+/**
+ * What doctor prints when the active chain's balance is empty and it cannot
+ * pay for its own analysis. Derived from the active payment chain: on Arc the
+ * empty balance is Arc USDC, so pointing the user at Base (or the Base bridge)
+ * would send their money to a chain this install is not paying on.
+ */
+export function emptyWalletGuidance(
+  wallet: Pick<WalletInfo, "paymentChain" | "address" | "solanaAddress">,
+): string[] {
+  const lines = ["", "💳 Wallet is empty - cannot call AI for analysis."];
+  if (wallet.paymentChain === "arc") {
+    lines.push(
+      `   Fund your EVM wallet with USDC on Arc (same address as Base): ${wallet.address}`,
+      "   Send USDC on the Arc network only — USDC on Base does not fund Arc payments.",
+      `   Or switch chains: ${chainSwitchInstruction("base", "npx @blockrun/clawrouter chain base")}`,
+      "",
+    );
+    return lines;
+  }
+  lines.push(`   Fund your EVM wallet with USDC on Base: ${wallet.address}`);
+  if (wallet.solanaAddress) {
+    lines.push(`   Fund your Solana wallet with USDC: ${wallet.solanaAddress}`);
+  }
+  lines.push(
+    "   Get USDC: https://www.coinbase.com/price/usd-coin",
+    "   Bridge to Base: https://bridge.base.org",
+    "",
+  );
+  return lines;
+}
+
 // Send to AI for analysis
 async function analyzeWithAI(
   diagnostics: DiagnosticResult,
@@ -540,13 +604,7 @@ async function analyzeWithAI(
 
   // Check if wallet has funds
   if (diagnostics.wallet.isEmpty) {
-    console.log("\n💳 Wallet is empty - cannot call AI for analysis.");
-    console.log(`   Fund your EVM wallet with USDC on Base: ${diagnostics.wallet.address}`);
-    if (diagnostics.wallet.solanaAddress) {
-      console.log(`   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress}`);
-    }
-    console.log("   Get USDC: https://www.coinbase.com/price/usd-coin");
-    console.log("   Bridge to Base: https://bridge.base.org\n");
+    for (const line of emptyWalletGuidance(diagnostics.wallet)) console.log(line);
     return;
   }
 
@@ -581,10 +639,9 @@ async function analyzeWithAI(
     }
 
     const paymentFetch = wrapFetchWithPayment(fetch, x402);
-    const apiUrl =
-      paymentChain === "solana"
-        ? "https://sol.blockrun.ai/api/v1/chat/completions"
-        : "https://blockrun.ai/api/v1/chat/completions";
+    // Arc signs with the same EVM scheme as Base: the exact-EVM client takes the
+    // chain id from the 402's `eip155:5042` and the USDC domain from its `extra`.
+    const apiUrl = `${PAYMENT_CHAIN_GATEWAYS[paymentChain]}/v1/chat/completions`;
 
     const response = await paymentFetch(apiUrl, {
       method: "POST",

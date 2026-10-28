@@ -8,6 +8,12 @@ import type {
   ModelInfo,
   PaymentChain,
 } from "../electron/core/types";
+import {
+  PAYMENT_CHAINS,
+  chainLabel,
+  paymentChainOrUndefined,
+  walletKindOf,
+} from "../electron/core/chains";
 import { api } from "./api";
 import { AGENT_ICON_DATA } from "./agent-icons";
 import BLOCKRUN_ICON from "./blockrun-icon.svg";
@@ -145,7 +151,7 @@ export function App() {
 
   async function adoptLegacyWallet(chain: PaymentChain, address: string) {
     const confirmed = window.confirm(
-      `Use ${shortAddress(address)} as your current ${chain === "base" ? "Base" : "Solana"} wallet? Your current Core wallet will be backed up and ClawRouter will need a restart.`,
+      `Use ${shortAddress(address)} as your current ${chainLabel(chain)} wallet? Your current Core wallet will be backed up and ClawRouter will need a restart.`,
     );
     if (!confirmed) return;
     setWalletBusy(chain);
@@ -292,6 +298,7 @@ export function App() {
           busy={fundingBusy}
           wallet={dashboard?.proxy.configuredWallet ?? dashboard?.proxy.wallet}
           solana={dashboard?.proxy.configuredSolana ?? dashboard?.proxy.solana}
+          chain={dashboard?.proxy.configuredChain}
           onAmount={setFundingAmount}
           onClose={() => !fundingBusy && setFundingOpen(false)}
           onContinue={() => void startOnramp()}
@@ -323,7 +330,7 @@ function Overview({
     () => collapseModelAliases(dashboard?.models ?? []).length,
     [dashboard?.models],
   );
-  const chain = dashboard?.proxy.configuredChain === "solana" ? "Solana" : "Base";
+  const chain = chainLabel(dashboard?.proxy.configuredChain ?? "base");
   // A proxy authenticating with a BlockRun API key settles nothing on-chain, so
   // name the account instead of claiming a chain that is not there.
   const settlement =
@@ -741,7 +748,7 @@ function WalletCenter({
         </span>
         <i>→</i>
         <span>
-          <b>{selected === "base" ? "Base" : "Solana"}</b>
+          <b>{chainLabel(selected)}</b>
           <small>default network</small>
         </span>
         <i>→</i>
@@ -752,15 +759,17 @@ function WalletCenter({
       </div>
 
       <div className="wallet-network-grid">
-        {(["base", "solana"] as PaymentChain[]).map((chain) => {
-          const address =
-            chain === "base"
-              ? (proxy?.configuredWallet ?? proxy?.wallet)
-              : (proxy?.configuredSolana ?? proxy?.solana);
-          const activeAddress = chain === "base" ? proxy?.activeWallet : proxy?.activeSolana;
+        {PAYMENT_CHAINS.map((chain) => {
+          // Base and Arc pay from the same EVM key and address.
+          const evm = walletKindOf(chain) === "evm";
+          const address = evm
+            ? (proxy?.configuredWallet ?? proxy?.wallet)
+            : (proxy?.configuredSolana ?? proxy?.solana);
+          const activeAddress = evm ? proxy?.activeWallet : proxy?.activeSolana;
           const restart = proxy?.walletRestartChains?.includes(chain) ?? false;
-          const issue = proxy?.walletIssues?.[chain];
-          const name = chain === "base" ? "Base" : "Solana";
+          // Wallet issues are reported per key file; Arc shares Base's.
+          const issue = proxy?.walletIssues?.[evm ? "base" : "solana"];
+          const name = chainLabel(chain);
           return (
             <article
               className={`wallet-network-card ${selected === chain ? "selected" : ""}`}
@@ -773,7 +782,7 @@ function WalletCenter({
                   </i>
                   <span>
                     <b>{name}</b>
-                    <small>USDC</small>
+                    <small>{chain === "arc" ? "USDC · same address as Base" : "USDC"}</small>
                   </span>
                 </span>
                 {selected === chain && <em>Default network</em>}
@@ -822,9 +831,7 @@ function WalletCenter({
                     disabled={walletBusy !== null || Boolean(issue)}
                     onClick={() => onCreate(chain)}
                   >
-                    {walletBusy === chain
-                      ? "Creating…"
-                      : `Create ${chain === "base" ? "Base" : "Solana"} wallet`}
+                    {walletBusy === chain ? "Creating…" : `Create ${name} wallet`}
                   </button>
                 )}
               </footer>
@@ -843,13 +850,15 @@ function WalletCenter({
             </p>
           </div>
           <div className="legacy-wallet-list">
+            {/* Legacy wallets are per KEY, not per chain: the old EVM key
+                (wallet.key) pays Base and Arc alike, so it is listed once. */}
             {(["base", "solana"] as PaymentChain[]).map((chain) => {
               const legacy = proxy.legacyWallets?.[chain];
               if (!legacy) return null;
               return (
                 <div key={chain}>
                   <span>
-                    <b>{chain === "base" ? "Base" : "Solana"}</b>
+                    <b>{chain === "base" ? "Base / Arc" : "Solana"}</b>
                     <code>{shortAddress(legacy.address)}</code>
                   </span>
                   <strong>{formatWalletBalance(legacy.balance, false, dashboard === null)}</strong>
@@ -870,8 +879,8 @@ function WalletCenter({
         <div>
           <b>Network selection is not wallet selection</b>
           <p>
-            Base / Solana chooses which network pays for requests. It does not switch between
-            multiple wallets on the same network.
+            Base / Solana / Arc chooses which network pays for requests. It does not switch between
+            multiple wallets on the same network. Base and Arc share one address.
           </p>
         </div>
         <div>
@@ -990,6 +999,21 @@ function ChainLogo({ chain }: { chain: PaymentChain }) {
   // Gradient ids must be unique per instance: the Solana mark can render twice
   // at once (wallet card plus the deposit sheet), and duplicate ids are invalid.
   const gradient = `sol-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  if (chain === "arc") {
+    // Neutral mark (an arc over a roundel), not Circle's brand asset.
+    return (
+      <svg viewBox="0 0 28 28" aria-hidden="true">
+        <circle cx="14" cy="14" r="14" fill="#1B1F2A" />
+        <path
+          d="M7 18.5a7 7 0 0 1 14 0"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
   if (chain === "base") {
     return (
       <svg viewBox="0 0 146 146" aria-hidden="true">
@@ -1146,9 +1170,10 @@ function WalletSummary({
     );
   }
 
-  const selected = proxy?.configuredChain ?? (proxy?.paymentChain === "solana" ? "solana" : "base");
+  const selected: PaymentChain =
+    proxy?.configuredChain ?? paymentChainOrUndefined(proxy?.paymentChain) ?? "base";
   const address =
-    selected === "solana"
+    walletKindOf(selected) === "solana"
       ? (proxy?.configuredSolana ?? proxy?.solana)
       : (proxy?.configuredWallet ?? proxy?.wallet);
   const balance =
@@ -1163,9 +1188,9 @@ function WalletSummary({
         <em>{proxy?.chainRestartRequired || proxy?.walletRestartRequired ? "Restart" : "Live"}</em>
       </span>
       <div className="chain-switch" aria-label="Payment chain">
-        {(["base", "solana"] as PaymentChain[]).map((chain) => {
+        {PAYMENT_CHAINS.map((chain) => {
           const available = Boolean(
-            chain === "base"
+            walletKindOf(chain) === "evm"
               ? (proxy?.configuredWallet ?? proxy?.wallet)
               : (proxy?.configuredSolana ?? proxy?.solana),
           );
@@ -1178,7 +1203,7 @@ function WalletSummary({
               title={available ? undefined : `Create a ${chain} wallet first`}
               onClick={() => onSwitch(chain)}
             >
-              <span>{chain === "base" ? "Base" : "Solana"}</span>
+              <span>{chainLabel(chain)}</span>
               <small>{formatWalletBalance(proxy?.balances?.[chain], true)}</small>
             </button>
           );
@@ -1194,9 +1219,7 @@ function WalletSummary({
         Add funds
       </button>
       {proxy?.chainRestartRequired && (
-        <small className="wallet-restart">
-          Restart gateway to activate {selected === "solana" ? "Solana" : "Base"}
-        </small>
+        <small className="wallet-restart">Restart gateway to activate {chainLabel(selected)}</small>
       )}
       {proxy?.walletRestartChains?.includes(selected) && (
         <small className="wallet-restart">Restart gateway to activate the shared wallet</small>
@@ -1210,6 +1233,7 @@ function FundingDialog({
   busy,
   wallet,
   solana,
+  chain,
   onAmount,
   onClose,
   onContinue,
@@ -1218,6 +1242,8 @@ function FundingDialog({
   busy: boolean;
   wallet: string | undefined;
   solana: string | undefined;
+  /** The selected payment chain, so an Arc user is not told Base USDC funds Arc. */
+  chain?: PaymentChain;
   onAmount(value: number): void;
   onClose(): void;
   onContinue(): void;
@@ -1234,10 +1260,12 @@ function FundingDialog({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
   const valid = Number.isFinite(amount) && amount >= 1 && amount <= 2_500;
-  const depositRows: { chain: PaymentChain; label: string; address?: string }[] = [
-    { chain: "base", label: "Base", address: wallet },
-    { chain: "solana", label: "Solana", address: solana },
-  ];
+  const depositRows: { chain: PaymentChain; label: string; address?: string }[] =
+    PAYMENT_CHAINS.map((rowChain) => ({
+      chain: rowChain,
+      label: chainLabel(rowChain),
+      address: walletKindOf(rowChain) === "evm" ? wallet : solana,
+    }));
   return (
     <div className="funding-backdrop" onMouseDown={onClose} role="presentation">
       <section
@@ -1408,6 +1436,12 @@ function FundingDialog({
                 </>
               )}
             </button>
+            {chain === "arc" && (
+              <p className="funding-error" role="note">
+                Coinbase delivers USDC on Base. Your payment chain is Arc, so calls pay from USDC on
+                Arc — deposit USDC on Arc to the same address, or switch to Base.
+              </p>
+            )}
             <p className="funding-legal">
               Coinbase shows the final quote, fees, and payment methods available in your region.
               The one-time checkout opens in your browser.

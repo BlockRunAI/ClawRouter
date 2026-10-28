@@ -55,7 +55,7 @@ Source: https://github.com/BlockRunAI/ClawRouter · npm: https://www.npmjs.com/p
 ## Data Flow
 
 ```
-Your app → localhost proxy (ClawRouter) → https://blockrun.ai/api  (or sol.blockrun.ai/api)
+Your app → localhost proxy (ClawRouter) → https://blockrun.ai/api  (or sol.blockrun.ai/api, arc.blockrun.ai/api)
                                               ↓
                                         OpenAI / Anthropic / Google / etc.
                                               ↓
@@ -149,6 +149,7 @@ Model prices move (vendors reprice, promos end), so this skill carries no model 
 ```bash
 curl -s https://blockrun.ai/api/v1/models       # Base
 curl -s https://sol.blockrun.ai/api/v1/models   # Solana
+curl -s https://arc.blockrun.ai/api/v1/models   # Arc (same catalog as Base)
 ```
 
 Each entry in `data[]` has an `id`, a `billing_mode` and a `pricing` object. All amounts are USD.

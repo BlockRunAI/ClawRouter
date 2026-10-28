@@ -1,7 +1,8 @@
 /**
  * Balance Monitor for ClawRouter
  *
- * Monitors USDC balance on Base network with intelligent caching.
+ * Monitors USDC balance on an EVM payment chain (Base, or Circle's Arc) with
+ * intelligent caching.
  * Provides pre-request balance checks to prevent failed payments.
  *
  * Caching Strategy:
@@ -13,9 +14,45 @@
 import { createPublicClient, http, erc20Abi } from "viem";
 import { base } from "viem/chains";
 import { RpcError } from "./errors.js";
+import { PAYMENT_CHAIN_GATEWAYS } from "./payment-chain.js";
 
 /** USDC contract address on Base mainnet */
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+
+/** EVM chains whose USDC the BalanceMonitor can read. */
+export type EvmBalanceChain = "base" | "arc";
+
+/** Per-read timeout, shared by the Base RPC and the Arc gateway read. */
+const READ_TIMEOUT_MS = 10_000;
+
+/**
+ * Read an address's USDC on Arc, in micro-USDC.
+ *
+ * Arc is read through the Arc gateway's free `/v1/balance`, not an RPC: the
+ * public Arc RPC is unreliable (and public proxies that answer eth_chainId fail
+ * eth_call), and ClawRouter ships no RPC key. The gateway reads the USDC
+ * ERC-20 at 0x3600…0000 with BlockRun's own RPC and answers
+ * `{"balance":"24253720", ...}` — micro-USDC as a decimal string.
+ *
+ * Throws on any failure, like the Base read: an unreachable endpoint must never
+ * read as an empty wallet (that would push every request onto the free tier).
+ */
+export async function fetchArcUsdcBalance(
+  address: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<bigint> {
+  const url = `${PAYMENT_CHAIN_GATEWAYS.arc}/v1/balance?address=${encodeURIComponent(address)}`;
+  const res = await fetchImpl(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Arc balance read failed (HTTP ${res.status})`);
+  const body = (await res.json()) as { balance?: unknown };
+  if (typeof body.balance !== "string" || !/^\d+$/.test(body.balance)) {
+    throw new Error("Arc balance read returned no balance");
+  }
+  return BigInt(body.balance);
+}
 
 /** Cache TTL in milliseconds (30 seconds) */
 const CACHE_TTL_MS = 30_000;
@@ -53,30 +90,42 @@ export type SufficiencyResult = {
 };
 
 /**
- * Monitors USDC balance on Base network.
+ * Monitors USDC balance on Base (default) or Arc. Both chains share the EVM
+ * wallet, so one address; `chain` picks which chain's USDC is read.
  *
  * Usage:
- *   const monitor = new BalanceMonitor("0x...");
+ *   const monitor = new BalanceMonitor("0x...");          // Base
+ *   const arc = new BalanceMonitor("0x...", "arc");      // Arc
  *   const info = await monitor.checkBalance();
  *   if (info.isLow) console.warn("Low balance!");
  */
 export class BalanceMonitor {
   private readonly client;
   private readonly walletAddress: `0x${string}`;
+  private readonly chain: EvmBalanceChain;
+  private readonly fetchImpl: typeof fetch;
 
   /** Cached balance (null = not yet fetched) */
   private cachedBalance: bigint | null = null;
   /** Timestamp when cache was last updated */
   private cachedAt = 0;
 
-  constructor(walletAddress: string) {
+  constructor(walletAddress: string, chain: EvmBalanceChain = "base", fetchImpl?: typeof fetch) {
     this.walletAddress = walletAddress as `0x${string}`;
+    this.chain = chain;
+    // Resolved per call when not injected, so a test's stubbed global fetch applies.
+    this.fetchImpl = fetchImpl ?? ((...args) => fetch(...args));
     this.client = createPublicClient({
       chain: base,
       transport: http(undefined, {
-        timeout: 10_000, // 10 second timeout to prevent hanging on slow RPC
+        timeout: READ_TIMEOUT_MS, // prevent hanging on slow RPC
       }),
     });
+  }
+
+  /** Which chain's USDC this monitor reads. */
+  getChain(): EvmBalanceChain {
+    return this.chain;
   }
 
   /**
@@ -175,6 +224,8 @@ export class BalanceMonitor {
   /** Fetch balance from RPC */
   private async fetchBalance(): Promise<bigint> {
     try {
+      if (this.chain === "arc")
+        return await fetchArcUsdcBalance(this.walletAddress, this.fetchImpl);
       const balance = await this.client.readContract({
         address: USDC_BASE,
         abi: erc20Abi,

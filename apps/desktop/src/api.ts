@@ -125,7 +125,7 @@ const demoDashboard: DashboardData = {
     paymentChain: "base",
     configuredChain: "base",
     balance: 18.42,
-    balances: { base: 18.42, solana: 7.08 },
+    balances: { base: 18.42, solana: 7.08, arc: 3.5 },
   },
   stats: {
     requests: demoRequests,
@@ -240,7 +240,7 @@ const fallbackApi: ClawRouterApi = {
   createWallet: async (chain) => ({
     ok: true,
     chain,
-    address: chain === "base" ? "0x4d20…81b2" : "7WzH…9xKe",
+    address: chain === "solana" ? "7WzH…9xKe" : "0x4d20…81b2",
     restartRequired: false,
     message: `${chain} wallet created.`,
   }),

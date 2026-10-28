@@ -19,6 +19,7 @@ import type {
 import {
   CAIP2_BASE,
   CAIP2_SOLANA_MAINNET,
+  CAIP2_ARC,
   PAYABLE_NETWORKS,
   POLICY_LISTS,
   SpendControl,
@@ -66,7 +67,7 @@ const USAGE = [
   `  policy set|add|remove <list> <v>...    <list>: ${POLICY_LISTS.join(" | ")}`,
   "  policy clear <list>",
   `  policy limit <window> <usd>|clear      <window>: ${SPEND_WINDOWS.join(" | ")}`,
-  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet).`,
+  `Networks are CAIP-2 ids: ${CAIP2_BASE} (Base), ${CAIP2_SOLANA_MAINNET} (Solana mainnet) or ${CAIP2_ARC} (Arc).`,
 ].join("\n");
 /**
  * Without a handle on the running proxy's SpendControl this command can only
@@ -116,7 +117,7 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
   if (list === "allowedNetworks") {
     return PAYABLE_NETWORKS.includes(value)
       ? undefined
-      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base) or ${CAIP2_SOLANA_MAINNET} (Solana mainnet), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
+      : `"${value}" is not a network the proxy can pay on — allowedNetworks accepts only ${CAIP2_BASE} (Base), ${CAIP2_SOLANA_MAINNET} (Solana mainnet) or ${CAIP2_ARC} (Arc), not a nickname. Other CAIP-2 ids are well formed but cannot appear in a payment quote, so allowlisting one would only block payments`;
   }
   if (/^0x/i.test(value)) {
     return EVM_ADDRESS.test(value)
@@ -129,7 +130,7 @@ function rejectValue(list: PolicyList, value: string): string | undefined {
   // is dead weight that reads as protection.
   return BASE58_ADDRESS.test(value)
     ? undefined
-    : `"${value}" is not an address — expected 0x plus 40 hex characters (Base) or a 32–44 character base58 id (Solana)`;
+    : `"${value}" is not an address — expected 0x plus 40 hex characters (Base/Arc) or a 32–44 character base58 id (Solana)`;
 }
 
 /** Turn argv into a plan or a rejection. Pure: nothing is read or written here. */
