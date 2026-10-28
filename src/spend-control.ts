@@ -19,6 +19,7 @@ import * as path from "node:path";
 import { homedir } from "node:os";
 import type { x402Client } from "@x402/fetch";
 import { readTextFileSync } from "./fs-read.js";
+import { CAIP2_ARC } from "./payment-chain.js";
 
 const WALLET_DIR = path.join(homedir(), ".openclaw", "blockrun");
 
@@ -39,6 +40,8 @@ export type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" |
 export const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+/** Circle's Arc mainnet, as carried on x402 `selectedRequirements.network`. */
+export { CAIP2_ARC };
 
 /**
  * Every network the proxy can pay on, as carried on x402
@@ -46,7 +49,7 @@ export const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc1
  * validate `allowedNetworks` entries: an entry outside this set can never
  * match a quote and would only block payments.
  */
-export const PAYABLE_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET];
+export const PAYABLE_NETWORKS: readonly string[] = [CAIP2_BASE, CAIP2_SOLANA_MAINNET, CAIP2_ARC];
 
 export const POLICY_LISTS: readonly PolicyList[] = [
   "allowedPayees",

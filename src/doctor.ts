@@ -22,6 +22,11 @@ import {
 } from "./auth.js";
 import { BalanceMonitor } from "./balance.js";
 import {
+  PAYMENT_CHAIN_GATEWAYS,
+  PAYMENT_CHAIN_LABELS,
+  type PaymentChain,
+} from "./payment-chain.js";
+import {
   resolveApiKey,
   maskApiKey,
   BLOCKRUN_API_KEY_API,
@@ -52,7 +57,7 @@ interface WalletInfo {
   isLow: boolean;
   isEmpty: boolean;
   source: "core" | "saved" | "env" | "config" | "generated" | null;
-  paymentChain: "base" | "solana";
+  paymentChain: PaymentChain;
 }
 
 /** Set only when this install pays with a `brk_…` key instead of a wallet. */
@@ -230,7 +235,8 @@ async function collectWalletInfo(apiKeyConfigured: boolean): Promise<WalletInfo>
         const monitor = new SolanaBalanceMonitor(solanaAddress);
         balanceInfo = await monitor.checkBalance();
       } else {
-        const monitor = new BalanceMonitor(address);
+        // Base and Arc share the EVM address; read the active chain's USDC.
+        const monitor = new BalanceMonitor(address, paymentChain === "arc" ? "arc" : "base");
         balanceInfo = await monitor.checkBalance();
       }
       return {
@@ -275,13 +281,17 @@ async function collectWalletInfo(apiKeyConfigured: boolean): Promise<WalletInfo>
 // Collect network info
 async function collectNetworkInfo(): Promise<NetworkInfo> {
   const port = getProxyPort();
+  // Arc pays against its own gateway; probe that one when it is the active
+  // chain, so "reachable" describes the host paid calls will actually go to.
+  const chain = await resolvePaymentChain().catch(() => "base" as const);
+  const modelsUrl = `${chain === "arc" ? PAYMENT_CHAIN_GATEWAYS.arc : PAYMENT_CHAIN_GATEWAYS.base}/v1/models`;
 
   // Check BlockRun API
   let blockrunReachable = false;
   let blockrunLatency: number | null = null;
   try {
     const start = Date.now();
-    const response = await fetch("https://blockrun.ai/api/v1/models", {
+    const response = await fetch(modelsUrl, {
       method: "GET",
       signal: AbortSignal.timeout(10000),
     });
@@ -346,7 +356,7 @@ function identifyIssues(result: DiagnosticResult): string[] {
     issues.push("No wallet found");
   }
   if (result.wallet.isEmpty) {
-    const chain = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    const chain = PAYMENT_CHAIN_LABELS[result.wallet.paymentChain];
     issues.push(`Wallet is empty - need to fund with USDC on ${chain}`);
     if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
       issues.push("Tip: if you funded Solana, run /wallet solana to switch chains");
@@ -427,7 +437,7 @@ function printDiagnostics(result: DiagnosticResult): void {
     if (result.wallet.solanaAddress) {
       console.log(`  ${green(`Solana Address: ${result.wallet.solanaAddress}`)}`);
     }
-    const chainLabel = result.wallet.paymentChain === "solana" ? "Solana" : "Base";
+    const chainLabel = PAYMENT_CHAIN_LABELS[result.wallet.paymentChain];
     console.log(`  ${green(`Chain: ${chainLabel}`)}`);
     if (result.wallet.isEmpty) {
       console.log(
@@ -581,10 +591,9 @@ async function analyzeWithAI(
     }
 
     const paymentFetch = wrapFetchWithPayment(fetch, x402);
-    const apiUrl =
-      paymentChain === "solana"
-        ? "https://sol.blockrun.ai/api/v1/chat/completions"
-        : "https://blockrun.ai/api/v1/chat/completions";
+    // Arc signs with the same EVM scheme as Base: the exact-EVM client takes the
+    // chain id from the 402's `eip155:5042` and the USDC domain from its `extra`.
+    const apiUrl = `${PAYMENT_CHAIN_GATEWAYS[paymentChain]}/v1/chat/completions`;
 
     const response = await paymentFetch(apiUrl, {
       method: "POST",

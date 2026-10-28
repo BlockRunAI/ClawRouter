@@ -41,13 +41,13 @@ Complete reference for ClawRouter configuration options.
 ClawRouter has two ways to pay BlockRun, and they are mutually exclusive per
 process:
 
-|              | Wallet (default)                                         | API key                                                              |
-| ------------ | -------------------------------------------------------- | -------------------------------------------------------------------- |
-| Credential   | An EVM/Solana private key held locally                   | `brk_live_…`, issued at [user.blockrun.ai](https://user.blockrun.ai) |
-| Gateway      | `blockrun.ai/api` (Base), `sol.blockrun.ai/api` (Solana) | `api.blockrun.ai`                                                    |
-| Wire auth    | An x402 signature per request                            | `Authorization: Bearer brk_live_…`                                   |
-| Funding      | USDC you send to the wallet                              | Credit card top-up on the portal                                     |
-| Out of money | Local balance check → free-model fallback                | Gateway answers `402 insufficient_quota`                             |
+|              | Wallet (default)                                                                      | API key                                                              |
+| ------------ | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Credential   | An EVM/Solana private key held locally                                                | `brk_live_…`, issued at [user.blockrun.ai](https://user.blockrun.ai) |
+| Gateway      | `blockrun.ai/api` (Base), `sol.blockrun.ai/api` (Solana), `arc.blockrun.ai/api` (Arc) | `api.blockrun.ai`                                                    |
+| Wire auth    | An x402 signature per request                                                         | `Authorization: Bearer brk_live_…`                                   |
+| Funding      | USDC you send to the wallet                                                           | Credit card top-up on the portal                                     |
+| Out of money | Local balance check → free-model fallback                                             | Gateway answers `402 insufficient_quota`                             |
 
 **An API key wins whenever one is present.** A machine holding both a legacy
 wallet and a key the user just added means "bill my account", not "keep spending
@@ -287,7 +287,7 @@ payer `SolanaLLMClient` uses.
 
 ## Wallet Configuration
 
-ClawRouter supports **two payment chains**: Base (EVM) and Solana. Both are USDC only — no SOL or ETH accepted for payments.
+ClawRouter supports **three payment chains**: Base (EVM), Solana, and Circle's Arc (EVM, `eip155:5042`). All are USDC only — no SOL or ETH accepted for payments. Base and Arc share one EVM key and address; Arc's gateway (`arc.blockrun.ai/api`) serves the same routes and prices as Base, including the $0.001 per-call fee. Arc balances are read through the Arc gateway's `/v1/balance` endpoint (no RPC key is needed or shipped).
 
 ### Check Active Wallet
 
@@ -319,9 +319,12 @@ Response (dual-chain):
 ```bash
 /wallet solana    # Switch to Solana USDC payments
 /wallet base      # Switch to Base (EVM) USDC payments
+/wallet arc       # Switch to Arc (EVM) USDC payments — same address as Base
 ```
 
-The selected chain is persisted across gateway restarts in `~/.blockrun/.chain` (and mirrored to the legacy `~/.openclaw/blockrun/payment-chain` file for rollback compatibility). New installs default to **Solana**; existing installs without a saved selection stay on **Base**, where their funds already live. The `CLAWROUTER_PAYMENT_CHAIN` environment variable (`solana` or `base`) overrides the persisted selection.
+From the CLI: `clawrouter chain solana|base|arc`.
+
+The selected chain is persisted across gateway restarts in `~/.blockrun/.chain` (and mirrored to the legacy `~/.openclaw/blockrun/payment-chain` file for rollback compatibility). New installs default to **Solana**; existing installs without a saved selection stay on **Base**, where their funds already live. The `CLAWROUTER_PAYMENT_CHAIN` environment variable (`solana`, `base` or `arc`) overrides the persisted selection.
 
 ### Switch Wallets
 
@@ -745,8 +748,9 @@ proxy startup — **edit it, then restart the proxy** for changes to take effect
 
 **Networks are CAIP-2, not nicknames.** `base` does not match `eip155:8453`
 and fails closed. Use `eip155:8453` for Base and
-`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d` for Solana mainnet; both
-are exported as `CAIP2_BASE` and `CAIP2_SOLANA_MAINNET`.
+`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d` for Solana mainnet and
+`eip155:5042` for Arc; they are exported as `CAIP2_BASE`, `CAIP2_SOLANA_MAINNET`
+and `CAIP2_ARC`.
 
 EVM addresses in `allowedPayees`, `blockedPayees` and `allowedAssets` are
 compared case-insensitively, so checksummed and lowercase forms both match.

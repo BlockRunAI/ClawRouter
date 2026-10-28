@@ -27,6 +27,7 @@
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 import { readTextFile } from "./fs-read.js";
+import { isPaymentChain, type PaymentChain } from "./payment-chain.js";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import bs58 from "bs58";
@@ -171,7 +172,7 @@ export async function migrateLegacyWalletToCore(): Promise<LegacyWalletMigration
 
   if (coreChain === undefined) {
     const legacyChain = await readOptional(CHAIN_FILE);
-    if (legacyChain === "base" || legacyChain === "solana") {
+    if (isPaymentChain(legacyChain)) {
       migrated.chain = await writeCoreFileIfMissing(CORE_CHAIN_FILE, legacyChain + "\n");
     }
   }
@@ -641,7 +642,7 @@ export async function setupSolana(): Promise<{
 /**
  * Persist the user's payment chain selection to disk.
  */
-export async function savePaymentChain(chain: "base" | "solana"): Promise<void> {
+export async function savePaymentChain(chain: PaymentChain): Promise<void> {
   await mkdir(WALLET_DIR, { recursive: true });
   await mkdir(CORE_WALLET_DIR, { recursive: true });
   await Promise.all([
@@ -671,21 +672,20 @@ export async function savePaymentChain(chain: "base" | "solana"): Promise<void> 
  * resolveOrGenerateWalletKey — and the wallet it did write keeps us on Base,
  * which is the only chain that proxy can actually sign for).
  */
-export async function loadPaymentChain(): Promise<"base" | "solana"> {
+export async function loadPaymentChain(): Promise<PaymentChain> {
   const core = await readOptional(CORE_CHAIN_FILE);
   const legacy = await readOptional(CHAIN_FILE);
-  if (core === "solana" || core === "base") {
+  if (isPaymentChain(core)) {
     // Same precedence as the wallet, and the same silence it used to keep: a
     // chain another BlockRun product wrote moves this install to a different
     // signer and a different gateway, where its USDC may not be (#315). Core
     // still wins — Desktop reads the Core files directly — but say it.
-    if ((legacy === "solana" || legacy === "base") && legacy !== core) {
+    if (isPaymentChain(legacy) && legacy !== core) {
       warnChainOverride(core, legacy);
     }
     return core;
   }
-  if (legacy === "solana") return "solana";
-  if (legacy === "base") return "base";
+  if (isPaymentChain(legacy)) return legacy;
   // No selection recorded anywhere. Prefer Solana unless a wallet predates the
   // preference, in which case its funds decide.
   return (await hasExistingWallet()) ? "base" : "solana";
@@ -723,8 +723,8 @@ async function hasExistingWallet(): Promise<boolean> {
  * Resolve payment chain: env var first → persisted file second → the
  * fresh-install preference (Solana) last. See loadPaymentChain.
  */
-export async function resolvePaymentChain(): Promise<"base" | "solana"> {
-  if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "solana") return "solana";
-  if (process["env"].CLAWROUTER_PAYMENT_CHAIN === "base") return "base";
+export async function resolvePaymentChain(): Promise<PaymentChain> {
+  const fromEnv = process["env"].CLAWROUTER_PAYMENT_CHAIN;
+  if (isPaymentChain(fromEnv)) return fromEnv;
   return loadPaymentChain();
 }

@@ -22,6 +22,7 @@ import {
   savePaymentChain,
 } from "./auth.js";
 import { getSolanaAddress } from "./wallet.js";
+import { PAYMENT_CHAIN_GATEWAYS, isPaymentChain, type PaymentChain } from "./payment-chain.js";
 import { generateReport } from "./report.js";
 import { formatRecentLogs } from "./stats.js";
 import { runDoctor } from "./doctor.js";
@@ -103,6 +104,7 @@ Management Commands:
   logout            Delete the stored API key and fall back to the wallet
   chain solana      Switch to Solana (persists)
   chain base        Switch to Base EVM (persists)
+  chain arc         Switch to Circle's Arc (EVM, same address as Base; persists)
   policy            Edit spend limits and counterparty lists (fail-closed; restart proxy to apply)
 
 Paying for calls — two ways, and ClawRouter prefers the API key when both exist:
@@ -115,6 +117,7 @@ Environment Variables:
   BLOCKRUN_API_KEY        BlockRun API key (brk_...) — wins over the wallet when set
   BLOCKRUN_WALLET_KEY     Private key for x402 payments (auto-generated if not set)
   BLOCKRUN_PROXY_PORT     Default proxy port (default: 8402)
+  CLAWROUTER_PAYMENT_CHAIN  solana | base | arc — overrides the saved chain
 
 For more info: https://blockrun.ai/clawrouter.md
 `);
@@ -380,6 +383,11 @@ async function cmdWallet(port: number): Promise<void> {
     console.log(`  Base (EVM):`);
     console.log(`    Address: ${data.wallet}`);
     console.log(`    Fund:    https://basescan.org/address/${data.wallet}`);
+    if (data.paymentChain === "arc") {
+      console.log();
+      console.log(`  Arc (EVM, same key as Base):`);
+      console.log(`    Address: ${data.wallet}`);
+    }
     if (data.solana) {
       console.log();
       console.log(`  Solana:`);
@@ -1090,7 +1098,7 @@ function parseArgs(args: string[]): {
   reportPeriod: "daily" | "weekly" | "monthly";
   reportJson: boolean;
   walletRecover: boolean;
-  chain?: "solana" | "base";
+  chain?: PaymentChain;
   port?: number;
   noReuse: boolean;
   // Query commands
@@ -1134,7 +1142,7 @@ function parseArgs(args: string[]): {
     reportPeriod: "daily" as "daily" | "weekly" | "monthly",
     reportJson: false,
     walletRecover: false,
-    chain: undefined as "solana" | "base" | undefined,
+    chain: undefined as PaymentChain | undefined,
     port: undefined as number | undefined,
     noReuse: false,
     queryStatus: false,
@@ -1220,17 +1228,14 @@ function parseArgs(args: string[]): {
       if (args[i + 1] === "recover") {
         result.walletRecover = true;
         i++;
-      } else if (args[i + 1] === "solana" || args[i + 1] === "base") {
-        result.chain = args[i + 1] as "solana" | "base";
+      } else if (isPaymentChain(args[i + 1])) {
+        result.chain = args[i + 1] as PaymentChain;
         i++;
       } else {
         result.queryWallet = true;
       }
-    } else if (
-      (arg === "chain" || arg === "/wallet") &&
-      (args[i + 1] === "solana" || args[i + 1] === "base")
-    ) {
-      result.chain = args[i + 1] as "solana" | "base";
+    } else if ((arg === "chain" || arg === "/wallet") && isPaymentChain(args[i + 1])) {
+      result.chain = args[i + 1] as PaymentChain;
       i++;
     } else if (arg === "login") {
       result.login = true;
@@ -1645,6 +1650,13 @@ async function main(): Promise<void> {
       console.log(`[ClawRouter] Payment chain → Solana`);
       console.log(`[ClawRouter] Solana address : ${solanaAddr}`);
       console.log(`[ClawRouter] Fund USDC at   : https://solscan.io/account/${solanaAddr}`);
+    } else if (targetChain === "arc") {
+      // Arc pays from the EVM wallet — the same key and address as Base.
+      const wallet = await resolveOrGenerateWalletKey();
+      await savePaymentChain("arc");
+      console.log(`[ClawRouter] Payment chain → Arc (EVM, ${PAYMENT_CHAIN_GATEWAYS.arc})`);
+      console.log(`[ClawRouter] Arc address   : ${wallet.address} (same as Base)`);
+      console.log(`[ClawRouter] Fund it with USDC on Arc.`);
     } else {
       await savePaymentChain("base");
       console.log(`[ClawRouter] Payment chain → Base (EVM)`);
