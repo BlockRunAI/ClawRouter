@@ -569,7 +569,8 @@ declare class ResponseCache {
 /**
  * Balance Monitor for ClawRouter
  *
- * Monitors USDC balance on Base network with intelligent caching.
+ * Monitors USDC balance on an EVM payment chain (Base, or Circle's Arc) with
+ * intelligent caching.
  * Provides pre-request balance checks to prevent failed payments.
  *
  * Caching Strategy:
@@ -577,6 +578,8 @@ declare class ResponseCache {
  *   - Optimistic deduction: after successful payment, subtract estimated cost from cache
  *   - Invalidation: on payment failure, immediately refresh from RPC
  */
+/** EVM chains whose USDC the BalanceMonitor can read. */
+type EvmBalanceChain = "base" | "arc";
 /** Balance thresholds in USDC smallest unit (6 decimals) */
 declare const BALANCE_THRESHOLDS: {
     /** Low balance warning threshold: $1.00 */
@@ -607,21 +610,27 @@ type SufficiencyResult = {
     shortfall?: string;
 };
 /**
- * Monitors USDC balance on Base network.
+ * Monitors USDC balance on Base (default) or Arc. Both chains share the EVM
+ * wallet, so one address; `chain` picks which chain's USDC is read.
  *
  * Usage:
- *   const monitor = new BalanceMonitor("0x...");
+ *   const monitor = new BalanceMonitor("0x...");          // Base
+ *   const arc = new BalanceMonitor("0x...", "arc");      // Arc
  *   const info = await monitor.checkBalance();
  *   if (info.isLow) console.warn("Low balance!");
  */
 declare class BalanceMonitor {
     private readonly client;
     private readonly walletAddress;
+    private readonly chain;
+    private readonly fetchImpl;
     /** Cached balance (null = not yet fetched) */
     private cachedBalance;
     /** Timestamp when cache was last updated */
     private cachedAt;
-    constructor(walletAddress: string);
+    constructor(walletAddress: string, chain?: EvmBalanceChain, fetchImpl?: typeof fetch);
+    /** Which chain's USDC this monitor reads. */
+    getChain(): EvmBalanceChain;
     /**
      * Check current USDC balance.
      * Uses cache if valid, otherwise fetches from RPC.
@@ -744,6 +753,26 @@ declare class SolanaBalanceMonitor {
 }
 
 /**
+ * The x402 payment chains ClawRouter can pay on, and the per-chain facts every
+ * surface (CLI, OpenClaw command, proxy, balance, doctor) needs to agree on.
+ *
+ *   base    Base mainnet (eip155:8453)  → https://blockrun.ai/api
+ *   solana  Solana mainnet              → https://sol.blockrun.ai/api
+ *   arc     Circle's Arc (eip155:5042)  → https://arc.blockrun.ai/api
+ *
+ * Base and Arc are both EVM and share ONE key: the same address holds USDC on
+ * each, and the 402's `network` decides which chain's USDC gets signed for.
+ * Arc's gateway serves the same routes, prices and $0.001 per-call fee as
+ * Base; it differs only in the chain it settles on. Solana has its own key.
+ *
+ * Leaf module on purpose — no imports — so auth.ts, proxy.ts and balance.ts
+ * can all depend on it without a cycle.
+ */
+type PaymentChain = "base" | "solana" | "arc";
+/** Arc mainnet, as carried on x402 `selectedRequirements.network`. */
+declare const CAIP2_ARC = "eip155:5042";
+
+/**
  * Spend Control - Time-windowed spending limits and counterparty policy
  *
  * Absorbed from @blockrun/clawwallet. Chain-agnostic (works for both EVM and Solana).
@@ -771,6 +800,7 @@ type PolicyList = "allowedPayees" | "blockedPayees" | "allowedNetworks" | "allow
 declare const CAIP2_BASE = "eip155:8453";
 /** Solana mainnet genesis, as carried on x402 `selectedRequirements.network`. */
 declare const CAIP2_SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+
 /**
  * Every network the proxy can pay on, as carried on x402
  * `selectedRequirements.network`. Single source of truth for surfaces that
@@ -1253,7 +1283,7 @@ type WalletConfig = string | {
     key: string;
     solanaPrivateKeyBytes?: Uint8Array;
 };
-type PaymentChain = "base" | "solana";
+
 /**
  * How this proxy pays BlockRun.
  * - "wallet"  — x402 micropayments signed per call from a local USDC wallet.
@@ -1276,8 +1306,9 @@ type ProxyOptions = {
     apiKey?: string;
     apiBase?: string;
     /**
-     * Payment chain: "base" or "solana". New installs persist "solana" at wallet
-     * generation; absent config resolves to "base" for pre-existing installs.
+     * Payment chain: "base", "solana" or "arc". New installs persist "solana" at
+     * wallet generation; absent config resolves to "base" for pre-existing
+     * installs. "arc" pays from the same EVM key as Base, on Circle's Arc.
      * Can also be set via CLAWROUTER_PAYMENT_CHAIN env var.
      */
     paymentChain?: PaymentChain;
@@ -1409,6 +1440,32 @@ type ProxyHandle = {
 declare function startProxy(options: ProxyOptions): Promise<ProxyHandle>;
 
 /**
+ * BlockRun Auth Methods for OpenClaw
+ *
+ * Provides wallet-based authentication for the BlockRun provider.
+ * Operators configure their wallet private key, which is used to
+ * sign x402 micropayments for LLM inference.
+ *
+ * Wallet resolution order:
+ *   1. Environment variable — read from BLOCKRUN_WALLET_KEY
+ *   2. BlockRun Core — reuse ~/.blockrun wallets across BlockRun products
+ *   3. Legacy saved wallet — ~/.openclaw/blockrun/wallet.key
+ *   4. Auto-generate — create a legacy wallet for standalone installs
+ *
+ * SECURITY NOTE (for OpenClaw scanner):
+ * This module reads BLOCKRUN_WALLET_KEY environment variable and uses it
+ * to sign x402 payment requests. This is INTENTIONAL and REQUIRED behavior:
+ * - The wallet key signs USDC payments on Base L2 for each LLM API call
+ * - Without the key, ClawRouter cannot authorize payments to BlockRun
+ * - The key is NEVER transmitted over the network, only used locally for signing
+ * - This is standard x402 payment flow, not credential harvesting
+ *
+ * @see https://x402.org - x402 payment protocol specification
+ * @see https://blockrun.ai/docs - BlockRun API documentation
+ * @openclaw-security env-access=BLOCKRUN_WALLET_KEY purpose=x402-payment-signing
+ */
+
+/**
  * Resolve wallet key: migrate legacy files → explicit env → Core → legacy → generate.
  * Also loads Core Solana material or a legacy mnemonic-derived key when available.
  * Called by index.ts before the auth wizard runs.
@@ -1432,7 +1489,7 @@ declare function setupSolana(): Promise<{
 /**
  * Persist the user's payment chain selection to disk.
  */
-declare function savePaymentChain(chain: "base" | "solana"): Promise<void>;
+declare function savePaymentChain(chain: PaymentChain): Promise<void>;
 /**
  * Load the persisted payment chain selection from disk.
  *
@@ -1454,12 +1511,12 @@ declare function savePaymentChain(chain: "base" | "solana"): Promise<void>;
  * resolveOrGenerateWalletKey — and the wallet it did write keeps us on Base,
  * which is the only chain that proxy can actually sign for).
  */
-declare function loadPaymentChain(): Promise<"base" | "solana">;
+declare function loadPaymentChain(): Promise<PaymentChain>;
 /**
  * Resolve payment chain: env var first → persisted file second → the
  * fresh-install preference (Solana) last. See loadPaymentChain.
  */
-declare function resolvePaymentChain(): Promise<"base" | "solana">;
+declare function resolvePaymentChain(): Promise<PaymentChain>;
 
 /**
  * BlockRun ProviderPlugin for OpenClaw
@@ -1955,5 +2012,5 @@ declare function buildImageGenerationProvider(): ImageGenerationProviderPlugin;
 
 declare const plugin: OpenClawPluginDefinition;
 
-export { BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, BalanceMonitor, CAIP2_BASE, CAIP2_SOLANA_MAINNET, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, PAYABLE_NETWORKS, RequestDeduplicator, ResponseCache, RpcError, SessionStore, SolanaBalanceMonitor, SpendControl, SpendPolicyError, UnreadableSpendPolicyError, VISIBLE_OPENCLAW_MODELS, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, removeRuntimeMcpConfig, resolveModelAlias, resolvePaymentChain, savePaymentChain, setRuntimeProviderConfig, setupSolana, startProxy, syncAgentModelCache };
+export { BALANCE_THRESHOLDS, BLOCKRUN_MODELS, BLOCKRUN_PLUGIN_ID, BalanceMonitor, CAIP2_ARC, CAIP2_BASE, CAIP2_SOLANA_MAINNET, DEFAULT_RETRY_CONFIG, DEFAULT_SESSION_CONFIG, EmptyWalletError, FileSpendControlStorage, InMemorySpendControlStorage, InsufficientFundsError, MODEL_ALIASES, MalformedSpendPolicyError, OPENCLAW_MODELS, PARTNER_SERVICES, PAYABLE_NETWORKS, RequestDeduplicator, ResponseCache, RpcError, SessionStore, SolanaBalanceMonitor, SpendControl, SpendPolicyError, UnreadableSpendPolicyError, VISIBLE_OPENCLAW_MODELS, blockrunProvider, buildImageGenerationProvider, buildPartnerTools, buildProviderModels, clearStats, plugin as default, deriveAllKeys, deriveEvmKey, deriveSolanaKeyBytes, fetchWithRetry, formatDuration, formatStatsAscii, generateWalletMnemonic, getAgenticModels, getModelContextWindow, getPartnerService, getProxyPort, getSessionId, getStats, hashRequestContent, injectAuthProfile, injectModelsConfig, isAgenticModel, isBalanceError, isBlockrunWebSearchDisabled, isEmptyWalletError, isInsufficientFundsError, isRetryable, isRpcError, isValidMnemonic, loadPaymentChain, logUsage, parseCallArgs, registerSpendPolicyHook, removeRuntimeMcpConfig, resolveModelAlias, resolvePaymentChain, savePaymentChain, setRuntimeProviderConfig, setupSolana, startProxy, syncAgentModelCache };
 export type { AggregatedStats, BalanceInfo, CachedLLMResponse, CachedResponse, CheckResult, CounterpartyInfo, DailyStats, DerivedKeys, InsufficientFundsInfo, LowBalanceInfo, PartnerServiceDefinition, PartnerToolDefinition, PaymentChain, PolicyList, ProxyHandle, ProxyOptions, ResponseCacheConfig, RetryConfig, SessionConfig, SessionEntry, SolanaBalanceInfo, SpendControlOptions, SpendControlStorage, SpendLimits, SpendRecord, SpendWindow, SpendingStatus, SufficiencyResult, UsageEntry, WalletConfig, WalletResolution };

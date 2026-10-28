@@ -4,6 +4,14 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.303 — October 28, 2026
+
+### Arc as a third payment chain
+
+Pay on Circle's Arc (eip155:5042) through arc.blockrun.ai with `clawrouter chain arc`, `/wallet arc`, or `CLAWROUTER_PAYMENT_CHAIN=arc`. Arc pays from the same EVM key and address as Base, funded with USDC on Arc. Balance, low-balance warnings, doctor and Desktop all read the Arc balance from the Arc gateway. Fresh installs still default to Solana. Desktop pins this release, so choosing Arc there now takes effect.
+
+---
+
 ## v0.12.302 — October 26, 2026
 
 ### Router Core catalog API
