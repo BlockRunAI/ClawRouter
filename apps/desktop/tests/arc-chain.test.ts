@@ -227,3 +227,86 @@ describe("ClawRouterManager on Arc", () => {
     expect((await readFile(join(home, ".blockrun", ".chain"), "utf8")).trim()).toBe("arc");
   });
 });
+
+describe("Arc balance never holds up a non-Arc dashboard", () => {
+  /** Base answers at once; the Arc gateway hangs until `release` is called. */
+  function hangingArcFetcher(home: string, health: Record<string, unknown>) {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const arcCalls: string[] = [];
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const path = String(url);
+      if (path.startsWith(ARC_BALANCE)) {
+        arcCalls.push(path);
+        await gate;
+        return response({ balance: "24253720", network: "arc" });
+      }
+      return chainFetcher(home, health)(url, init);
+    }) as typeof fetch;
+    return { fetcher, arcCalls, release: () => release() };
+  }
+
+  function managerFor(home: string, fetcher: typeof fetch) {
+    return new ClawRouterManager({
+      homeDir: home,
+      stateDir: join(home, ".clawrouter-desktop"),
+      commandExists: async () => false,
+      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
+      fetch: fetcher,
+    });
+  }
+
+  it("answers a Base user's dashboard while arc.blockrun.ai is hung, then fills Arc in", async () => {
+    const home = await homeWithEvmWallet("clawrouter-arc-hang-", "base");
+    const arc = hangingArcFetcher(home, {
+      status: "ok",
+      wallet: EVM_ADDRESS,
+      paymentChain: "base",
+    });
+    const manager = managerFor(home, arc.fetcher);
+
+    const first = await manager.dashboard(); // would never settle if Arc were awaited
+    expect(first.proxy.balance).toBe(12.5);
+    expect(first.proxy.balances?.base).toBe(12.5);
+    expect(first.proxy.balances?.arc).toBeUndefined();
+
+    // A second refresh while the first Arc read is still out does not stack another.
+    await manager.dashboard();
+    expect(arc.arcCalls).toHaveLength(1);
+
+    arc.release();
+    await manager.settleBackgroundBalanceReads();
+    const later = await manager.dashboard();
+    expect(later.proxy.balances?.arc).toBe(24.25372);
+    expect(later.proxy.balance).toBe(12.5); // still Base's: Base is the active chain
+  });
+
+  it("does not hold an offline Solana user's dashboard on Arc either", async () => {
+    const home = await homeWithEvmWallet("clawrouter-arc-hang-sol-", "solana");
+    const arc = hangingArcFetcher(home, {
+      status: "ok",
+      wallet: EVM_ADDRESS,
+      paymentChain: "solana",
+    });
+    const dashboard = await managerFor(home, arc.fetcher).dashboard();
+    expect(dashboard.proxy.configuredChain).toBe("solana");
+    expect(dashboard.proxy.balances?.arc).toBeUndefined();
+    arc.release();
+  });
+
+  it("an API-key proxy's dashboard never calls the Arc gateway at all", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-arc-apikey-"));
+    const arc = hangingArcFetcher(home, {
+      status: "ok",
+      authMode: "api-key",
+      // Desktop's identity check (verifyClawRouter) requires a string `wallet`.
+      wallet: "",
+      apiKey: "brk_live_…abcd",
+      gateway: "https://api.blockrun.ai",
+    });
+    const dashboard = await managerFor(home, arc.fetcher).dashboard();
+    expect(dashboard.proxy, JSON.stringify(dashboard.proxy)).toMatchObject({ authMode: "api-key" });
+    expect(arc.arcCalls).toHaveLength(0); // no EVM wallet on disk, nothing to read
+    arc.release();
+  });
+});

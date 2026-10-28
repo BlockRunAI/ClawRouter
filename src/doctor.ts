@@ -48,7 +48,7 @@ interface SystemInfo {
   memoryTotal: string;
 }
 
-interface WalletInfo {
+export interface WalletInfo {
   exists: boolean;
   valid: boolean;
   address: string | null;
@@ -533,6 +533,37 @@ export function createDoctorX402Client(opts: {
   return x402;
 }
 
+/**
+ * What doctor prints when the active chain's balance is empty and it cannot
+ * pay for its own analysis. Derived from the active payment chain: on Arc the
+ * empty balance is Arc USDC, so pointing the user at Base (or the Base bridge)
+ * would send their money to a chain this install is not paying on.
+ */
+export function emptyWalletGuidance(
+  wallet: Pick<WalletInfo, "paymentChain" | "address" | "solanaAddress">,
+): string[] {
+  const lines = ["", "💳 Wallet is empty - cannot call AI for analysis."];
+  if (wallet.paymentChain === "arc") {
+    lines.push(
+      `   Fund your EVM wallet with USDC on Arc (same address as Base): ${wallet.address}`,
+      "   Send USDC on the Arc network only — USDC on Base does not fund Arc payments.",
+      "   Or switch chains: npx @blockrun/clawrouter chain base",
+      "",
+    );
+    return lines;
+  }
+  lines.push(`   Fund your EVM wallet with USDC on Base: ${wallet.address}`);
+  if (wallet.solanaAddress) {
+    lines.push(`   Fund your Solana wallet with USDC: ${wallet.solanaAddress}`);
+  }
+  lines.push(
+    "   Get USDC: https://www.coinbase.com/price/usd-coin",
+    "   Bridge to Base: https://bridge.base.org",
+    "",
+  );
+  return lines;
+}
+
 // Send to AI for analysis
 async function analyzeWithAI(
   diagnostics: DiagnosticResult,
@@ -550,13 +581,7 @@ async function analyzeWithAI(
 
   // Check if wallet has funds
   if (diagnostics.wallet.isEmpty) {
-    console.log("\n💳 Wallet is empty - cannot call AI for analysis.");
-    console.log(`   Fund your EVM wallet with USDC on Base: ${diagnostics.wallet.address}`);
-    if (diagnostics.wallet.solanaAddress) {
-      console.log(`   Fund your Solana wallet with USDC: ${diagnostics.wallet.solanaAddress}`);
-    }
-    console.log("   Get USDC: https://www.coinbase.com/price/usd-coin");
-    console.log("   Bridge to Base: https://bridge.base.org\n");
+    for (const line of emptyWalletGuidance(diagnostics.wallet)) console.log(line);
     return;
   }
 

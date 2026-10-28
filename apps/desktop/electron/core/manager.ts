@@ -55,6 +55,8 @@ export class ClawRouterManager {
   private readonly transaction: ConfigurationTransaction;
   private readonly adapters: Map<AgentId, AgentAdapter>;
   private readonly balanceCache = new Map<string, { value: number; fetchedAt: number }>();
+  /** Background balance reads in flight, keyed like balanceCache, so a refresh never stacks them. */
+  private readonly balanceRefreshes = new Map<string, Promise<number | undefined>>();
 
   constructor(overrides: Partial<AdapterContext> = {}) {
     const homeDir = overrides.homeDir ?? homedir();
@@ -383,13 +385,19 @@ export class ClawRouterManager {
     const root = this.context.proxyBaseUrl.replace(/\/v1\/?$/, "");
     const localWalletsPromise = this.localWallets();
     const legacyWalletsPromise = localWalletsPromise.then((local) => this.legacyWallets(local));
-    const localBalancesPromise = localWalletsPromise.then(({ base, solana }) =>
-      this.fetchUsdcBalances(base, solana),
+    const configuredChainPromise = this.configuredPaymentChain();
+    // Arc is awaited only when it is the chain being paid on. Otherwise its
+    // balance is shown from cache and refreshed in the background, so a slow or
+    // unreachable arc.blockrun.ai never holds up a Base, Solana or API-key
+    // user's dashboard (which refreshes every 15s) for its 10s timeout.
+    const localBalancesPromise = Promise.all([localWalletsPromise, configuredChainPromise]).then(
+      ([{ base, solana }, chain]) =>
+        this.fetchUsdcBalances(base, solana, { arc: chain === "arc" ? "await" : "background" }),
     );
     const [reachable, configuredChain, localWallets, legacyWallets, localBalances] =
       await Promise.all([
         proxyHealth(this.context),
-        this.configuredPaymentChain(),
+        configuredChainPromise,
         localWalletsPromise,
         legacyWalletsPromise,
         localBalancesPromise,
@@ -397,7 +405,7 @@ export class ClawRouterManager {
     const legacyBalances = await this.fetchUsdcBalances(
       legacyWallets.base?.address,
       legacyWallets.solana?.address,
-      { withArc: false },
+      { arc: "skip" },
     );
     const legacyWalletDetails = withLegacyBalances(legacyWallets, legacyBalances);
     if (!reachable) {
@@ -455,6 +463,7 @@ export class ClawRouterManager {
     const activeBalances = await this.fetchUsdcBalances(
       wallet && !sameAddress(wallet, localWallets.base) ? wallet : undefined,
       solana && solana !== localWallets.solana ? solana : undefined,
+      { arc: paymentChain === "arc" || configuredChain === "arc" ? "await" : "background" },
     );
     const balances: Partial<Record<PaymentChain, number>> = {
       base:
@@ -531,30 +540,60 @@ export class ClawRouterManager {
 
   /**
    * USDC per chain. The EVM address is read on Base AND Arc (one key, two
-   * chains); `withArc: false` skips Arc for wallets that only ever pay Base
-   * (the legacy-wallet migration panel).
+   * chains). `arc` decides how the Arc read joins the response:
+   *   "await"      — Arc is the active chain; wait for it like Base/Solana.
+   *   "background" — return the cached Arc value (or none) at once and refresh
+   *                  it off the response path; the next refresh shows it.
+   *   "skip"       — never read Arc (legacy wallets only ever paid Base).
    */
   private async fetchUsdcBalances(
     evmAddress: string | undefined,
     solanaAddress: string | undefined,
-    { withArc = true }: { withArc?: boolean } = {},
+    { arc: arcMode }: { arc: "await" | "background" | "skip" },
   ): Promise<Partial<Record<PaymentChain, number>>> {
     const [base, arc, solana] = await Promise.all([
       evmAddress ? this.fetchCachedBalance("base", evmAddress) : Promise.resolve(undefined),
-      evmAddress && withArc
-        ? this.fetchCachedBalance("arc", evmAddress)
-        : Promise.resolve(undefined),
+      !evmAddress || arcMode === "skip"
+        ? Promise.resolve(undefined)
+        : arcMode === "await"
+          ? this.fetchCachedBalance("arc", evmAddress)
+          : Promise.resolve(this.cachedBalanceRefreshingInBackground("arc", evmAddress)),
       solanaAddress ? this.fetchCachedBalance("solana", solanaAddress) : Promise.resolve(undefined),
     ]);
     return { base, arc, solana };
+  }
+
+  /**
+   * The last known balance (fresh or stale), without waiting. A stale or
+   * missing entry starts one background read that fills the cache; its
+   * failure is swallowed, exactly like a failed foreground read.
+   */
+  private cachedBalanceRefreshingInBackground(
+    chain: PaymentChain,
+    address: string,
+  ): number | undefined {
+    const cacheKey = balanceCacheKey(chain, address);
+    const cached = this.balanceCache.get(cacheKey);
+    const fresh = cached && Date.now() - cached.fetchedAt < BALANCE_CACHE_TTL_MS;
+    if (!fresh && !this.balanceRefreshes.has(cacheKey)) {
+      const refresh = this.fetchCachedBalance(chain, address)
+        .catch(() => undefined)
+        .finally(() => this.balanceRefreshes.delete(cacheKey));
+      this.balanceRefreshes.set(cacheKey, refresh);
+    }
+    return cached?.value;
+  }
+
+  /** Test seam: settles once every background balance read has. */
+  async settleBackgroundBalanceReads(): Promise<void> {
+    await Promise.all([...this.balanceRefreshes.values()]);
   }
 
   private async fetchCachedBalance(
     chain: PaymentChain,
     address: string,
   ): Promise<number | undefined> {
-    const normalizedAddress = walletKindOf(chain) === "evm" ? address.toLowerCase() : address;
-    const cacheKey = `${chain}:${normalizedAddress}`;
+    const cacheKey = balanceCacheKey(chain, address);
     const cached = this.balanceCache.get(cacheKey);
     const now = Date.now();
     if (cached && now - cached.fetchedAt < BALANCE_CACHE_TTL_MS) return cached.value;
@@ -770,6 +809,10 @@ async function fetchBaseUsdcBalance(
     fetcher,
   );
   return rpcHexNumber(token?.result, 1_000_000);
+}
+
+function balanceCacheKey(chain: PaymentChain, address: string): string {
+  return `${chain}:${walletKindOf(chain) === "evm" ? address.toLowerCase() : address}`;
 }
 
 /**
