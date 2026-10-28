@@ -1,6 +1,6 @@
 import { createRequire as __blockrun_createRequire } from 'node:module'; const require = __blockrun_createRequire(import.meta.url);
 
-// node_modules/@blockrun/router-core/dist/index.js
+// ../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/@blockrun/router-core/dist/index.js
 var UNSEGMENTED_SCRIPT = /[؀-ۿ　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/;
 var WORD_CHAR = /[\p{L}\p{N}]/u;
 var ASCII_PHRASE = /^[a-z0-9' -]+$/;
@@ -671,9 +671,10 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: false
   },
   "deepseek/deepseek-v4.1-flash": {
+    // supportsTools: not probed — fails closed
     contextWindow: 1048576,
     maxOutputTokens: 65536,
-    supportsTools: true,
+    supportsTools: false,
     supportsVision: false
   },
   "google/gemini-2.5-flash": {
@@ -734,13 +735,6 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     contextWindow: 1048576,
     maxOutputTokens: 65536,
     supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-4-argon": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: false,
     supportsVision: true
   },
   "minimax/minimax-m2.7": {
@@ -964,9 +958,10 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsVision: true
   },
   "openai/gpt-6.1-sol": {
+    // supportsTools: not probed — fails closed
     contextWindow: 105e4,
     maxOutputTokens: 128e3,
-    supportsTools: true,
+    supportsTools: false,
     supportsVision: true
   },
   "openai/o1": {
@@ -1218,14 +1213,6 @@ var model_profiles_generated_default = {
     latencyMs: 8781.2,
     p95LatencyMs: 9881.1,
     outputTokensPerSecond: 58.98,
-    errorRate: 0,
-    samples: 3
-  },
-  "deepseek/deepseek-v4.1-flash": {
-    measuredAt: "2026-10-20T18:12:51Z",
-    latencyMs: 2383.5,
-    p95LatencyMs: 2547.8,
-    outputTokensPerSecond: 216.53,
     errorRate: 0,
     samples: 3
   },
@@ -1514,14 +1501,6 @@ var model_profiles_generated_default = {
     latencyMs: 3574.1,
     p95LatencyMs: 4126.3,
     outputTokensPerSecond: 133.59,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-6.1-sol": {
-    measuredAt: "2026-10-20T18:12:51Z",
-    latencyMs: 11324,
-    p95LatencyMs: 12747.6,
-    outputTokensPerSecond: 45.11,
     errorRate: 0,
     samples: 3
   },
@@ -2340,13 +2319,11 @@ var VERIFIED_TOOL_FALLBACKS = [
   "anthropic/claude-fable-5.1",
   "anthropic/claude-opus-5.5",
   "anthropic/claude-sonnet-5.5",
-  "deepseek/deepseek-v4.1-flash",
   "google/gemini-3.8-flash",
   "openai/gpt-5.1",
   "openai/gpt-6-astra",
   "openai/gpt-6-luna",
   "openai/gpt-6-sol",
-  "openai/gpt-6.1-sol",
   "xai/grok-4.6",
   "xai/grok-4.7",
   "xiaomi/mimo-v2.5"
@@ -2361,10 +2338,10 @@ function isEligible(modelId, features, maxOutputTokens, options) {
   return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
 }
 function estimatedCost(modelId, options, inputTokens, outputTokens) {
-  const price2 = options.modelPricing.get(modelId);
-  if (!price2) return Number.POSITIVE_INFINITY;
-  if (price2.flatPrice !== void 0) return price2.flatPrice;
-  return (inputTokens * price2.inputPrice + outputTokens * price2.outputPrice) / 1e6;
+  const price = options.modelPricing.get(modelId);
+  if (!price) return Number.POSITIVE_INFINITY;
+  if (price.flatPrice !== void 0) return price.flatPrice;
+  return (inputTokens * price.inputPrice + outputTokens * price.outputPrice) / 1e6;
 }
 function profileScore(modelId, options, now) {
   const profile = options.modelPerformance?.[modelId] ?? LIVE_MODEL_PROFILES[modelId] ?? HISTORICAL_MODEL_PROFILES[modelId];
@@ -2525,81 +2502,6 @@ var PortfolioStrategy = class {
     };
   }
 };
-var MODEL_KINDS = ["chat", "image", "video", "music"];
-var PRICE_KEYS = [
-  "input",
-  "output",
-  "per_image",
-  "per_second",
-  "per_track",
-  "cache_read",
-  "cache_write",
-  "transaction_fee",
-  "per_call_surcharge",
-  "default_duration_seconds",
-  "max_duration_seconds"
-];
-var UNIT_PRICE = { image: "per_image", video: "per_second", music: "per_track" };
-var MODEL_ID = /^[a-z0-9][a-z0-9._-]*\/[a-zA-Z0-9][a-zA-Z0-9._:+-]*$/;
-var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-var price = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
-var capacity = (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
-function parseModelCatalog(value) {
-  if (!record(value) || !Array.isArray(value.data)) {
-    throw new TypeError("Model catalog must contain a data array");
-  }
-  const entries = /* @__PURE__ */ new Map();
-  for (const entry of value.data) {
-    if (record(entry) && typeof entry.id === "string" && entry.id.length <= 200 && MODEL_ID.test(entry.id)) {
-      entries.set(entry.id, entry);
-    }
-  }
-  const result = { models: [], chat: [], image: [], video: [], music: [], unavailable: [] };
-  const models = [];
-  const unavailable = [];
-  for (const [id, entry] of entries) {
-    if (entry.available === false) unavailable.push(id);
-    if (entry.available !== void 0 && entry.available !== true || entry.hidden !== void 0 && entry.hidden !== false || !Array.isArray(entry.categories) || !record(entry.pricing)) continue;
-    const categories = [...new Set(entry.categories.filter((c) => typeof c === "string"))];
-    const rawPricing = entry.pricing;
-    const pricing = {};
-    for (const key of PRICE_KEYS) if (price(rawPricing[key])) pricing[key] = rawPricing[key];
-    const kinds = MODEL_KINDS.filter((kind) => categories.includes(kind) && (kind === "chat" ? price(rawPricing.input) && price(rawPricing.output) : price(rawPricing[UNIT_PRICE[kind]])));
-    if (!kinds.length) continue;
-    const model = {
-      id,
-      name: typeof entry.name === "string" && entry.name.trim() ? entry.name : id,
-      categories,
-      kinds,
-      pricing,
-      free: kinds.includes("chat") && entry.billing_mode === "free" && pricing.input === 0 && pricing.output === 0,
-      ...typeof entry.billing_mode === "string" ? { billingMode: entry.billing_mode } : {},
-      ...capacity(entry.context_window) !== void 0 ? { contextWindow: capacity(entry.context_window) } : {},
-      ...capacity(entry.max_output) !== void 0 ? { maxOutputTokens: capacity(entry.max_output) } : {}
-    };
-    models.push(model);
-  }
-  result.models = models;
-  result.unavailable = unavailable;
-  for (const kind of MODEL_KINDS) result[kind] = models.filter((model) => model.kinds.includes(kind));
-  return result;
-}
-function toRoutingCatalog(catalog, options = {}) {
-  const verified = { ...DEFAULT_MODEL_CAPABILITIES, ...options.verifiedCapabilities };
-  const modelPricing = /* @__PURE__ */ new Map();
-  const modelCapabilities = {};
-  for (const model of catalog.chat) {
-    modelPricing.set(model.id, { inputPrice: model.pricing.input, outputPrice: model.pricing.output });
-    const evidence = verified[model.id];
-    modelCapabilities[model.id] = {
-      contextWindow: model.contextWindow ?? evidence?.contextWindow ?? 0,
-      maxOutputTokens: model.maxOutputTokens ?? evidence?.maxOutputTokens ?? 0,
-      supportsTools: evidence?.supportsTools === true,
-      supportsVision: model.categories.includes("vision")
-    };
-  }
-  return { modelPricing, modelCapabilities, unavailableModels: [...catalog.unavailable] };
-}
 var DEFAULT_ROUTING_CONFIG = {
   version: "3.5",
   strategy: "portfolio",
@@ -4096,7 +3998,6 @@ export {
   DEFAULT_ROUTING_CONFIG,
   HISTORICAL_MODEL_PROFILES,
   LIVE_MODEL_PROFILES,
-  MODEL_KINDS,
   PortfolioStrategy,
   RulesStrategy,
   applyUnavailableModels,
@@ -4111,9 +4012,7 @@ export {
   getFallbackChainFiltered,
   getStrategy,
   inferToolRequirement,
-  parseModelCatalog,
   registerStrategy,
-  route,
-  toRoutingCatalog
+  route
 };
 //# sourceMappingURL=index.js.map
