@@ -309,4 +309,21 @@ describe("Arc balance never holds up a non-Arc dashboard", () => {
     expect(arc.arcCalls).toHaveLength(0); // no EVM wallet on disk, nothing to read
     arc.release();
   });
+
+  it("an API-key proxy with a saved EVM wallet and arc chain never starts an Arc read", async () => {
+    const home = await homeWithEvmWallet("clawrouter-arc-apikey-wallet-", "arc");
+    const arc = hangingArcFetcher(home, {
+      status: "ok",
+      authMode: "api-key",
+      wallet: "",
+      apiKey: "brk_live_…abcd",
+      gateway: "https://api.blockrun.ai",
+    });
+    const manager = managerFor(home, arc.fetcher);
+    const dashboard = await manager.dashboard(); // would hang if Arc were awaited
+    expect(dashboard.proxy).toMatchObject({ reachable: true, authMode: "api-key" });
+    await manager.settleBackgroundBalanceReads();
+    expect(arc.arcCalls).toHaveLength(0); // not awaited, not started in the background either
+    arc.release();
+  });
 });

@@ -386,15 +386,16 @@ export class ClawRouterManager {
     const localWalletsPromise = this.localWallets();
     const legacyWalletsPromise = localWalletsPromise.then((local) => this.legacyWallets(local));
     const configuredChainPromise = this.configuredPaymentChain();
-    // Arc is awaited only when it is the chain being paid on. Otherwise its
-    // balance is shown from cache and refreshed in the background, so a slow or
-    // unreachable arc.blockrun.ai never holds up a Base, Solana or API-key
-    // user's dashboard (which refreshes every 15s) for its 10s timeout.
-    const localBalancesPromise = Promise.all([localWalletsPromise, configuredChainPromise]).then(
-      ([{ base, solana }, chain]) =>
-        this.fetchUsdcBalances(base, solana, { arc: chain === "arc" ? "await" : "background" }),
+    // Base and Solana are read alongside the health probe. Arc is NOT: it is
+    // added below only once the proxy is known not to be on an API key (that
+    // response discards every balance), and awaited only when Arc is the chain
+    // being paid on — otherwise shown from cache and refreshed in the
+    // background — so a slow or unreachable arc.blockrun.ai never holds up a
+    // Base, Solana or API-key dashboard (refreshed every 15s) for its 10s timeout.
+    const localBalancesPromise = localWalletsPromise.then(({ base, solana }) =>
+      this.fetchUsdcBalances(base, solana, { arc: "skip" }),
     );
-    const [reachable, configuredChain, localWallets, legacyWallets, localBalances] =
+    const [reachable, configuredChain, localWallets, legacyWallets, localBalancesWithoutArc] =
       await Promise.all([
         proxyHealth(this.context),
         configuredChainPromise,
@@ -408,7 +409,12 @@ export class ClawRouterManager {
       { arc: "skip" },
     );
     const legacyWalletDetails = withLegacyBalances(legacyWallets, legacyBalances);
+    const withLocalArc = async (arcActive: boolean) => ({
+      ...localBalancesWithoutArc,
+      arc: await this.arcBalanceFor(localWallets.base, arcActive ? "await" : "background"),
+    });
     if (!reachable) {
+      const localBalances = await withLocalArc(configuredChain === "arc");
       return {
         proxy: {
           reachable: false,
@@ -460,10 +466,12 @@ export class ClawRouterManager {
     const solana = activeSolana ?? localWallets.solana;
     const paymentChain = paymentChainOrUndefined(health.value?.paymentChain);
     const reportedBalance = currencyNumberOrUndefined(health.value?.balance);
+    const arcActive = paymentChain === "arc" || configuredChain === "arc";
+    const localBalances = await withLocalArc(arcActive);
     const activeBalances = await this.fetchUsdcBalances(
       wallet && !sameAddress(wallet, localWallets.base) ? wallet : undefined,
       solana && solana !== localWallets.solana ? solana : undefined,
-      { arc: paymentChain === "arc" || configuredChain === "arc" ? "await" : "background" },
+      { arc: arcActive ? "await" : "background" },
     );
     const balances: Partial<Record<PaymentChain, number>> = {
       base:
@@ -561,6 +569,17 @@ export class ClawRouterManager {
       solanaAddress ? this.fetchCachedBalance("solana", solanaAddress) : Promise.resolve(undefined),
     ]);
     return { base, arc, solana };
+  }
+
+  /** Arc USDC for the EVM address: awaited, or from cache with a background refresh. */
+  private async arcBalanceFor(
+    address: string | undefined,
+    mode: "await" | "background",
+  ): Promise<number | undefined> {
+    if (!address) return undefined;
+    return mode === "await"
+      ? this.fetchCachedBalance("arc", address)
+      : this.cachedBalanceRefreshingInBackground("arc", address);
   }
 
   /**

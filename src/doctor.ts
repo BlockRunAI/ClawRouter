@@ -359,7 +359,9 @@ function identifyIssues(result: DiagnosticResult): string[] {
     const chain = PAYMENT_CHAIN_LABELS[result.wallet.paymentChain];
     issues.push(`Wallet is empty - need to fund with USDC on ${chain}`);
     if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
-      issues.push("Tip: if you funded Solana, run /wallet solana to switch chains");
+      issues.push(
+        `Tip: if you funded Solana, ${chainSwitchInstruction("solana", "run /wallet solana")} to switch chains`,
+      );
     }
   } else if (result.wallet.isLow) {
     issues.push("Wallet balance is low (< $1.00)");
@@ -444,7 +446,9 @@ function printDiagnostics(result: DiagnosticResult): void {
         `  ${red(`Balance: $0.00 - NEED TO FUND WITH USDC ON ${chainLabel.toUpperCase()}!`)}`,
       );
       if (result.wallet.paymentChain === "base" && result.wallet.solanaAddress) {
-        console.log(`  ${yellow(`Tip: funded Solana instead? Run /wallet solana to switch`)}`);
+        console.log(
+          `  ${yellow(`Tip: funded Solana instead? ${chainSwitchInstruction("solana", "run /wallet solana")} to switch`)}`,
+        );
       }
     } else if (result.wallet.isLow) {
       console.log(`  ${yellow(`Balance: ${result.wallet.balance} (low)`)}`);
@@ -534,6 +538,25 @@ export function createDoctorX402Client(opts: {
 }
 
 /**
+ * How to switch to `target`, for every chain-switch hint doctor prints.
+ * CLAWROUTER_PAYMENT_CHAIN overrides the saved chain (resolvePaymentChain), so
+ * while it is set, `chain base` / `/wallet solana` saves a choice that never
+ * takes effect — the hint has to name the variable instead.
+ */
+export function chainSwitchInstruction(
+  target: PaymentChain,
+  command: string,
+  envValue: string | undefined = process["env"].CLAWROUTER_PAYMENT_CHAIN,
+): string {
+  const env = envValue?.trim();
+  if (!env) return command;
+  return (
+    `set CLAWROUTER_PAYMENT_CHAIN=${target} (it is "${env}" and overrides the saved chain), ` +
+    `or unset CLAWROUTER_PAYMENT_CHAIN and ${command}`
+  );
+}
+
+/**
  * What doctor prints when the active chain's balance is empty and it cannot
  * pay for its own analysis. Derived from the active payment chain: on Arc the
  * empty balance is Arc USDC, so pointing the user at Base (or the Base bridge)
@@ -547,7 +570,7 @@ export function emptyWalletGuidance(
     lines.push(
       `   Fund your EVM wallet with USDC on Arc (same address as Base): ${wallet.address}`,
       "   Send USDC on the Arc network only — USDC on Base does not fund Arc payments.",
-      "   Or switch chains: npx @blockrun/clawrouter chain base",
+      `   Or switch chains: ${chainSwitchInstruction("base", "npx @blockrun/clawrouter chain base")}`,
       "",
     );
     return lines;
