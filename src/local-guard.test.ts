@@ -41,13 +41,29 @@ describe("isBlockedSsrfHost", () => {
       "2002:7f00:1::",
       "64:ff9b::7f00:1",
       "fd00::1",
+      "fe80::1",
     ]) {
       expect(isBlockedSsrfHost(h), h).toBe(true);
     }
   });
 
+  it("blocks the whole fe80::/10 link-local range, not only the fe80:: prefix", () => {
+    for (const h of ["fe81::1", "fe9f::1", "fea0::1", "febf::1", "[febf::1]", "FE81::ABCD"]) {
+      expect(isBlockedSsrfHost(h), h).toBe(true);
+    }
+  });
+
   it("allows public hosts", () => {
-    for (const h of ["example.com", "8.8.8.8", "fda.gov", "blockrun.ai"]) {
+    for (const h of [
+      "example.com",
+      "8.8.8.8",
+      "fda.gov",
+      "blockrun.ai",
+      "fe7f::1",
+      "fe8::1",
+      "fec0::1",
+      "2001:4860:4860::8888",
+    ]) {
       expect(isBlockedSsrfHost(h), h).toBe(false);
     }
   });
@@ -98,6 +114,15 @@ describe("resolvePublicAddresses", () => {
     expect(await resolvePublicAddresses("[2001:4860:4860::8888]", resolve)).toEqual([
       { address: "2001:4860:4860::8888", family: 6 },
     ]);
+  });
+
+  it("refuses a link-local IPv6 literal outside the fe80:: prefix", async () => {
+    const resolve = async () => {
+      throw new Error("resolver called");
+    };
+    await expect(resolvePublicAddresses("[fe81::1]", resolve)).rejects.toThrow(
+      /private\/loopback\/metadata/,
+    );
   });
 
   it("refuses a name that resolves to nothing", async () => {
