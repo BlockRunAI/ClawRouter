@@ -155,8 +155,14 @@ function aggregateDay(date: string, entries: UsageEntry[]): DailyStats {
  * Get aggregated statistics for the last N days.
  */
 export async function getStats(days: number = 7): Promise<AggregatedStats> {
+  // The sink for every caller's window, including the `/stats <days>` command,
+  // whose `parseInt(arg, 10) || 7` lets a negative through because -1 is truthy.
+  // A negative `slice(0, days)` trims days off the newest-first list and NaN
+  // reads as zero, while the period rendered "last -1 days". Same guard as
+  // formatRecentLogs and resolveStatsDays: an unusable window is the default.
+  const window = Number.isFinite(days) && days >= 1 ? Math.floor(days) : DEFAULT_STATS_DAYS;
   const logFiles = await getLogFiles();
-  const filesToRead = logFiles.slice(0, days);
+  const filesToRead = logFiles.slice(0, window);
 
   const dailyBreakdown: DailyStats[] = [];
   const allByTier: Record<string, { count: number; cost: number }> = {};
@@ -234,7 +240,7 @@ export async function getStats(days: number = 7): Promise<AggregatedStats> {
   }
 
   return {
-    period: days === 1 ? "today" : `last ${days} days`,
+    period: window === 1 ? "today" : `last ${window} days`,
     totalRequests,
     totalCost,
     totalBaselineCost,
