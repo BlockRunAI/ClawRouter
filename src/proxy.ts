@@ -51,6 +51,7 @@ import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { x402Client } from "@x402/fetch";
+import { PAYMENT_SETTLED_NO_COMPLETION, type PayFetch } from "./pay-fetch.js";
 import { createPayFetchWithPreAuth, type SolanaBatchRoute } from "./payment-preauth.js";
 
 /** The Solana RPC the batch payer reads chain state from when none is configured. */
@@ -1571,6 +1572,12 @@ export type ProxyOptions = {
    */
   apiKey?: string;
   apiBase?: string;
+  /**
+   * Replaces the rail's upstream fetch with one supplied by the caller (see `PayFetch` in pay-fetch.ts for
+   * the contract). When set, no x402 or API-key payment is attempted by this proxy. A rail that does not
+   * enforce spend limits is refused at startup while amount limits are configured.
+   */
+  payFetch?: PayFetch;
   /**
    * Payment chain: "base", "solana" or "arc". New installs persist "solana" at
    * wallet generation; absent config resolves to "base" for pre-existing
@@ -3096,8 +3103,19 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // the same windows are enforced inside the signer (`registerSpendPolicyHook`
   // above); there is no signer here, so they move to the only other place every
   // paid call on this rail passes through (#329).
-  const payFetch =
-    authMode === "api-key"
+  if (options.payFetch && !options.payFetch.enforcesSpend) {
+    const sc = options.spendControl ?? getSharedSpendControl();
+    if (sc.hasAmountLimits()) {
+      // A rail that cannot honour configured limits must not be used: it would sign payments past them.
+      throw new Error(
+        "[ClawRouter] payFetch override does not enforce spend limits, but perRequest/hourly/daily/session limits are configured. " +
+          "Refusing to start. Build the rail with its spend option (e.g. createMppFetch(account, fetch, { spend })) or remove the limits.",
+      );
+    }
+  }
+  const payFetch: PayFetch =
+    options.payFetch ??
+    (authMode === "api-key"
       ? withSpendPolicy(
           createApiKeyFetch(apiKey!, fetch, apiBase),
           options.spendControl ?? getSharedSpendControl(),
@@ -3122,7 +3140,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           // nothing settled — take it back off the session's budget.
           onPaymentDeclined: () => paymentStore.getStore()?.sessionSpend?.voidLastSigned(),
           solanaBatch,
-        });
+        }));
 
   // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
   let balanceMonitor: AnyBalanceMonitor;
@@ -4871,6 +4889,25 @@ async function tryModelRequest(
     return { success: true, response };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    if (err instanceof Error && err.name === PAYMENT_SETTLED_NO_COMPLETION) {
+      // A rail signed a payment and sent it, then the call failed. Paying again (a retry, the next
+      // model) would charge twice, so the chain stops; the reference lets the caller dispute it.
+      return {
+        success: false,
+        errorBody: JSON.stringify({
+          error: {
+            message: errorMsg,
+            type: "payment_settled_no_completion",
+            code: "payment_settled_no_completion",
+            payment_reference: (err as { reference?: string }).reference,
+          },
+        }),
+        errorStatus: 502,
+        isProviderError: false,
+        errorCategory: "payment_error",
+        paymentInDoubt: true,
+      };
+    }
     if (
       err instanceof Error &&
       (err.name === "BatchPaymentUnresolvedError" || err.name === "PaymentInDoubtError")

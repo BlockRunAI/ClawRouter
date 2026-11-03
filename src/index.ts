@@ -2825,8 +2825,11 @@ export { BalanceMonitor, BALANCE_THRESHOLDS } from "./balance.js";
 export type { BalanceInfo, SufficiencyResult } from "./balance.js";
 export { SolanaBalanceMonitor } from "./solana-balance.js";
 export type { SolanaBalanceInfo } from "./solana-balance.js";
+export type { PayFetch } from "./pay-fetch.js";
+export { PAYMENT_SETTLED_NO_COMPLETION } from "./pay-fetch.js";
 export {
   SpendControl,
+  assertSpendPolicyAllows,
   FileSpendControlStorage,
   InMemorySpendControlStorage,
   formatDuration,
@@ -2844,6 +2847,7 @@ export type {
   PolicyList,
   SpendLimits,
   CounterpartyInfo,
+  QuotedRequirements,
   SpendRecord,
   SpendingStatus,
   CheckResult,

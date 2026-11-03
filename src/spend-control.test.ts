@@ -972,3 +972,41 @@ describe("reloadLimits (in-process proxy restart)", () => {
     errors.mockRestore();
   });
 });
+
+describe("payeeDeferred", () => {
+  it("skips only the payee lists; a check without payTo still fails closed otherwise", () => {
+    const c = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    c.setPolicy("allowedPayees", ["PayeeA"]);
+    expect(c.check(0, { network: "n", asset: "a" }).allowed).toBe(false);
+    expect(c.check(0, { network: "n", asset: "a", payeeDeferred: true }).allowed).toBe(true);
+    c.setLimit("perRequest", 0.001);
+    expect(c.check(0.01, { network: "n", asset: "a", payeeDeferred: true }).allowed).toBe(false);
+  });
+});
+
+describe("record / settleReservation / annotateRecord", () => {
+  const withDaily = () => {
+    const c = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    c.setLimit("daily", 5); // an aggregate window, so spend reaches the ledger
+    return c;
+  };
+
+  it("record() and settleReservation() return the entry, and annotateRecord() persists a note on it", () => {
+    const c = withDaily();
+    const direct = c.record(0.01, { action: "direct" });
+    expect(direct.amount).toBe(0.01);
+    const id = c.reserve(0.02);
+    const settled = c.settleReservation(id, { action: "settled" });
+    expect(settled?.amount).toBe(0.02);
+    c.annotateRecord(settled!, "signed, no completion");
+    expect(c.getHistory().map((r) => r.note)).toContain("signed, no completion");
+  });
+
+  it("settleReservation() of an unknown or already-settled id returns undefined", () => {
+    const c = withDaily();
+    const id = c.reserve(0.02);
+    expect(c.settleReservation(id)).toBeDefined();
+    expect(c.settleReservation(id)).toBeUndefined();
+    expect(c.settleReservation("nope")).toBeUndefined();
+  });
+});
