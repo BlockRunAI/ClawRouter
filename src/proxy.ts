@@ -51,6 +51,7 @@ import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { x402Client } from "@x402/fetch";
+import type { PayFetch } from "./mpp-fetch.js";
 import { createPayFetchWithPreAuth, type SolanaBatchRoute } from "./payment-preauth.js";
 
 /** The Solana RPC the batch payer reads chain state from when none is configured. */
@@ -1571,6 +1572,11 @@ export type ProxyOptions = {
    */
   apiKey?: string;
   apiBase?: string;
+  /**
+   * Replaces the rail's upstream fetch (e.g. `createMppFetch(account)` to pay an MPP seller).
+   * Spike seam: when set, no x402 or API-key payment is attempted by this proxy.
+   */
+  payFetch?: PayFetch;
   /**
    * Payment chain: "base", "solana" or "arc". New installs persist "solana" at
    * wallet generation; absent config resolves to "base" for pre-existing
@@ -3096,8 +3102,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // the same windows are enforced inside the signer (`registerSpendPolicyHook`
   // above); there is no signer here, so they move to the only other place every
   // paid call on this rail passes through (#329).
-  const payFetch =
-    authMode === "api-key"
+  const payFetch: PayFetch =
+    options.payFetch ??
+    (authMode === "api-key"
       ? withSpendPolicy(
           createApiKeyFetch(apiKey!, fetch, apiBase),
           options.spendControl ?? getSharedSpendControl(),
@@ -3122,7 +3129,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           // nothing settled — take it back off the session's budget.
           onPaymentDeclined: () => paymentStore.getStore()?.sessionSpend?.voidLastSigned(),
           solanaBatch,
-        });
+        }));
 
   // Create balance monitor for pre-request checks (lazy import to avoid loading @solana/kit on Base chain)
   let balanceMonitor: AnyBalanceMonitor;
