@@ -54,6 +54,8 @@ export type SolanaMppFetchOptions = {
 type Call = {
   reservationId?: string;
   settled: boolean;
+  /** The payee-aware check ran (the `challenge` event); signing without it is refused. */
+  payeeChecked: boolean;
   quote?: { network: string; asset: string; amount?: string; priceable: boolean };
 };
 
@@ -83,11 +85,13 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
             amount,
             priceable,
           };
-          // payTo is not in the candidate; it is checked in the `challenge` progress event below.
+          // payTo is not in the candidate, so payee lists are deferred to the `challenge` progress event
+          // below (which runs before the transaction is built). `signing` refuses if that never happened.
           call.reservationId = assertSpendPolicyAllows(spend, {
             network: call.quote.network,
             asset: candidate.mint,
             amount,
+            payeeDeferred: true,
           });
           return { maxAmountAtomic: candidate.amount };
         },
@@ -120,6 +124,11 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
             blockedByPolicy: result.blockedByPolicy,
           });
         }
+        call.payeeChecked = true;
+      } else if (e.type === "signing") {
+        if (!call.payeeChecked) {
+          throw new SpendPolicyError("payee was never checked before signing; refusing to sign");
+        }
       } else if (e.type === "signed" || e.type === "paid") {
         if (call.reservationId !== undefined && !call.settled) {
           call.settled = true;
@@ -130,7 +139,7 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
     .build();
 
   const payFetch: PayFetch = async (input, init) => {
-    const call: Call = { settled: false };
+    const call: Call = { settled: false, payeeChecked: false };
     try {
       return await calls.run(call, () => client.fetch(input, init, "mpp"));
     } finally {

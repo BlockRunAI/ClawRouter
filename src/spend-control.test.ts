@@ -972,3 +972,14 @@ describe("reloadLimits (in-process proxy restart)", () => {
     errors.mockRestore();
   });
 });
+
+describe("payeeDeferred", () => {
+  it("skips only the payee lists; a check without payTo still fails closed otherwise", () => {
+    const c = new SpendControl({ storage: new InMemorySpendControlStorage() });
+    c.setPolicy("allowedPayees", ["PayeeA"]);
+    expect(c.check(0, { network: "n", asset: "a" }).allowed).toBe(false);
+    expect(c.check(0, { network: "n", asset: "a", payeeDeferred: true }).allowed).toBe(true);
+    c.setLimit("perRequest", 0.001);
+    expect(c.check(0.01, { network: "n", asset: "a", payeeDeferred: true }).allowed).toBe(false);
+  });
+});

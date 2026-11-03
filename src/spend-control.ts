@@ -155,6 +155,12 @@ export interface CounterpartyInfo {
   payTo?: string;
   network?: string;
   asset?: string;
+  /**
+   * The payee is not known yet and WILL be checked by a later check() call that carries `payTo`
+   * (before anything is signed). Skips only the payee lists; amount, network and asset still apply.
+   * Callers must fail closed if that later call never happens.
+   */
+  payeeDeferred?: boolean;
 }
 
 export interface SpendRecord {
@@ -514,7 +520,7 @@ export class SpendControl {
     const payeePolicySet =
       (this.limits.blockedPayees && this.limits.blockedPayees.length > 0) ||
       (this.limits.allowedPayees && this.limits.allowedPayees.length > 0);
-    if (payeePolicySet) {
+    if (payeePolicySet && !counterparty?.payeeDeferred) {
       if (counterparty?.payTo === undefined) {
         return {
           allowed: false,
@@ -1033,6 +1039,8 @@ export type QuotedRequirements = {
   asset?: string;
   amount?: string;
   maxAmountRequired?: string;
+  /** See CounterpartyInfo.payeeDeferred. */
+  payeeDeferred?: boolean;
 };
 
 /**
@@ -1061,6 +1069,7 @@ export function assertSpendPolicyAllows(
     payTo: selected.payTo,
     network: selected.network,
     asset: selected.asset,
+    payeeDeferred: selected.payeeDeferred,
   });
   if (!result.allowed) {
     throw new SpendPolicyError(result.reason ?? "blocked by spend policy", {

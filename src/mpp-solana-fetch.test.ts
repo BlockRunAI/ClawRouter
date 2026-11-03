@@ -85,7 +85,33 @@ describe("Solana MPP spend controls", () => {
       network: "localnet",
       spend,
     });
-    await expect(call(f, s.url)).rejects.toBeInstanceOf(SpendPolicyError);
+    await expect(call(f, s.url)).rejects.toThrow(/Payee is blocked by policy/);
+  });
+
+  it("lets an allowlisted payee reach signing (regression: authorize() ran the payee check with no payTo)", async () => {
+    const s = await seller();
+    const spend = control((c) => c.setPolicy("allowedPayees", [s.operator.address]));
+    const f = await createSolanaMppFetch({
+      signer: await payer(),
+      rpcUrl: DEAD_RPC,
+      network: "localnet",
+      spend,
+    });
+    // Past every policy check, then dies at the dead RPC while building the transaction.
+    await expect(call(f, s.url)).rejects.not.toBeInstanceOf(SpendPolicyError);
+  });
+
+  it("refuses a payee that is not on the allowlist, before signing", async () => {
+    const s = await seller();
+    const other = (await payer()).address;
+    const spend = control((c) => c.setPolicy("allowedPayees", [other]));
+    const f = await createSolanaMppFetch({
+      signer: await payer(),
+      rpcUrl: DEAD_RPC,
+      network: "localnet",
+      spend,
+    });
+    await expect(call(f, s.url)).rejects.toThrow(/not in the configured allowlist/);
   });
 
   it("releases the held budget when the payment fails before a signed credential", async () => {
