@@ -90,6 +90,18 @@ function v4FromHex(hi: number, lo: number): string {
 }
 
 /**
+ * fe80::/10 (RFC 4291). Link-local is fe80:: through febf::, not only the
+ * fe80:: prefix. The first hextet carries those 10 bits, so fe81::1 is
+ * link-local while fe8::1 (hextet 0x0fe8) is not.
+ */
+function isIpv6LinkLocal(address: string): boolean {
+  const first = address.split(":")[0];
+  if (!/^[0-9a-f]{1,4}$/.test(first)) return false;
+  const value = parseInt(first, 16);
+  return value >= 0xfe80 && value <= 0xfebf;
+}
+
+/**
  * True for loopback, private, link-local, CGNAT and cloud-metadata hosts,
  * including the IPv6 forms that embed an IPv4 address. Literal-host based:
  * it does not resolve DNS — resolvePublicAddresses() applies it to what a
@@ -104,7 +116,7 @@ export function isBlockedSsrfHost(hostname: string): boolean {
 
   if (h.includes(":")) {
     if (h === "::1" || h === "::") return true;
-    if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
+    if (isIpv6LinkLocal(h) || h.startsWith("fc") || h.startsWith("fd")) return true;
     // 6to4: 2002:WWXX:YYZZ::/16 embeds W.X.Y.Z.
     const sixToFour = h.match(/^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4}):/);
     if (sixToFour) {
