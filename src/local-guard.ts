@@ -122,14 +122,21 @@ export function isBlockedSsrfHost(hostname: string): boolean {
     if (sixToFour) {
       return isBlockedSsrfHost(v4FromHex(parseInt(sixToFour[1], 16), parseInt(sixToFour[2], 16)));
     }
-    // NAT64 (64:ff9b::/96) and IPv4-mapped (::ffff:0:0/96) embed an IPv4.
+    // NAT64 (64:ff9b::/96), IPv4-translated (::ffff:0:0/96 / RFC 2765/6052), and IPv4-mapped (::ffff:a.b.c.d).
     const embedded = h.match(/^64:ff9b::(.+)$/) ?? h.match(/::ffff:(.+)$/);
     if (embedded) {
-      const tail = embedded[1];
+      const tail = embedded[1].startsWith("0:") ? embedded[1].slice(2) : embedded[1];
       if (tail.includes(".")) return isBlockedSsrfHost(tail);
       const seg = tail.split(":");
       if (seg.length === 2)
         return isBlockedSsrfHost(v4FromHex(parseInt(seg[0], 16), parseInt(seg[1], 16)));
+    }
+    // IPv4-compatible (::a.b.c.d / RFC 4291 §2.5.5.1) and hex ::WWXX:YYZZ.
+    const compat = h.match(/^::(?:0:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+    if (compat) return isBlockedSsrfHost(compat[1]);
+    const compatHex = h.match(/^::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (compatHex) {
+      return isBlockedSsrfHost(v4FromHex(parseInt(compatHex[1], 16), parseInt(compatHex[2], 16)));
     }
     return false;
   }

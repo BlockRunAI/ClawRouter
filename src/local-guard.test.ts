@@ -53,6 +53,24 @@ describe("isBlockedSsrfHost", () => {
     }
   });
 
+  it("blocks IPv4-translated and IPv4-compatible embedded IPv6 addresses", () => {
+    for (const h of [
+      "::ffff:0:7f00:1",
+      "[::ffff:0:127.0.0.1]",
+      "::ffff:0:a9fe:a9fe",
+      "[::ffff:0:169.254.169.254]",
+      "::ffff:0:10.0.0.1",
+      "::127.0.0.1",
+      "[::127.0.0.1]",
+      "::7f00:1",
+      "[::7f00:1]",
+      "::169.254.169.254",
+      "[::a9fe:a9fe]",
+    ]) {
+      expect(isBlockedSsrfHost(h), h).toBe(true);
+    }
+  });
+
   it("allows public hosts", () => {
     for (const h of [
       "example.com",
@@ -63,6 +81,9 @@ describe("isBlockedSsrfHost", () => {
       "fe8::1",
       "fec0::1",
       "2001:4860:4860::8888",
+      "::ffff:0:8.8.8.8",
+      "::ffff:0:808:808",
+      "::808:808",
     ]) {
       expect(isBlockedSsrfHost(h), h).toBe(false);
     }
@@ -90,6 +111,23 @@ describe("resolvePublicAddresses", () => {
       "169.254.169.254.nip.io",
       "mapped.example",
       "mixed.example",
+    ]) {
+      await expect(resolvePublicAddresses(host, resolve), host).rejects.toThrow(
+        /private\/loopback\/metadata/,
+      );
+    }
+  });
+
+  it("refuses IPv4-translated and IPv4-compatible IPv6 literals and resolved names", async () => {
+    const resolve = dnsOf({
+      "translated.example": ["::ffff:0:127.0.0.1"],
+      "compat.example": ["::127.0.0.1"],
+    });
+    for (const host of [
+      "translated.example",
+      "compat.example",
+      "[::ffff:0:7f00:1]",
+      "[::7f00:1]",
     ]) {
       await expect(resolvePublicAddresses(host, resolve), host).rejects.toThrow(
         /private\/loopback\/metadata/,
