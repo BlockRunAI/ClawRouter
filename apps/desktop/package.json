@@ -33,12 +33,21 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.1",
-    "electron": "44.0.0",
+    "electron": "44.9.1",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.1",
     "typescript": "7.0.2",
-    "vite": "8.2.2",
-    "vitest": "4.1.11"
+    "vite": "8.2.4",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "brace-expansion@1": "1.1.21",
+    "brace-expansion@2": "2.1.7",
+    "brace-expansion@5": "5.0.12",
+    "fast-uri": "3.1.9",
+    "source-map-js": "1.2.2",
+    "undici@6": "6.29.1",
+    "undici@7": "7.30.1"
   },
   "engines": {
     "node": ">=22.19"

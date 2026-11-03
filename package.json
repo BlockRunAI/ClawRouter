@@ -129,6 +129,7 @@
   },
   "overrides": {
     "axios": "$axios",
+    "follow-redirects": "1.16.1",
     "undici": "$undici",
     "ws": "^8.21.2",
     "postcss": "^8.5.25",
@@ -138,11 +139,12 @@
     "tar": "^7.5.22",
     "hono": "^4.13.5",
     "@hono/node-server": "^2.1.0",
-    "ip-address": "10.7.1",
+    "ip-address": "10.7.4",
     "@solana-program/compute-budget": "^0.18.1",
     "@solana-program/token": "^0.16.1",
     "@solana-program/token-2022": "^0.16.1",
     "proxy-addr": "^2.0.8",
+    "npm": "12.2.1",
     "@x402/svm": {
       "@solana/program-client-core": "$@solana/kit"
     },
