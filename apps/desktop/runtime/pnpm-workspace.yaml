@@ -28,9 +28,13 @@ overrides:
   zod: ^4.6.6
   qs: 6.16.1
   body-parser: 2.4.0
+  # Sole consumer is pi-coding-agent, which only calls minimatch(str, pattern,
+  # {nocase}); v11 keeps that API (it drops makeRe/AST/debug).
+  minimatch: 11.0.4
   # Hold fresh transitives to the versions the root lockfile already vetted, or to
   # releases at least 14 days old.
   viem: 2.57.13
   "@preact/signals-core": 1.14.4
 minimumReleaseAgeExclude:
   - "@blockrun/clawrouter@0.12.305"
+  - minimatch@11.0.4
