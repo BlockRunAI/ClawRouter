@@ -6,7 +6,7 @@ import {
   MppPaidNoCompletionError,
 } from "./mpp-paid-failure.js";
 import { guardMethod } from "./mpp-fetch.js";
-import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@blockrun/clawrouter";
+import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@twzrd/clawrouter";
 
 const PATHUSD = "0x20c0000000000000000000000000000000000000";
 const challenge = {

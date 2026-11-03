@@ -20,14 +20,14 @@ import {
   SpendPolicyError,
   type SpendControl,
   type SpendRecord,
-} from "@blockrun/clawrouter";
+} from "@twzrd/clawrouter";
 
 export class MppPaidNoCompletionError extends Error {
   readonly reference: string;
   readonly status?: number;
   constructor(message: string, reference: string, status?: number, options?: { cause?: unknown }) {
     super(message, options);
-    // The host proxy matches this name (see PayFetch in @blockrun/clawrouter), so it answers 502 and stops.
+    // The host proxy matches this name (see PayFetch in @twzrd/clawrouter), so it answers 502 and stops.
     this.name = PAYMENT_SETTLED_NO_COMPLETION;
     this.reference = reference;
     this.status = status;

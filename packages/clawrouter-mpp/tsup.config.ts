@@ -8,7 +8,7 @@ export default defineConfig({
   dts: true,
   clean: true,
   external: [
-    "@blockrun/clawrouter",
+    "@twzrd/clawrouter",
     "mppx",
     /^mppx\//,
     "@solana/pay-kit",

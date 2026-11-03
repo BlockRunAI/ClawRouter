@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { generateKeyPairSigner } from "@solana/kit";
 import { createPayKit, usd } from "@solana/pay-kit";
 import { createSolanaMppFetch } from "./mpp-solana-fetch.js";
-import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@blockrun/clawrouter";
+import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@twzrd/clawrouter";
 
 // A real pay-kit server emits real Solana MPP 402s without touching a chain. The payer's RPC points at a
 // closed port, so a veto that fails to hold would surface as a connection error, not SpendPolicyError.

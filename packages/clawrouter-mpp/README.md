@@ -4,7 +4,7 @@ MPP (Machine Payments Protocol) payment rails for [ClawRouter](https://github.co
 pay an MPP seller over **Tempo** or **Solana** instead of x402, under ClawRouter's own spend limits.
 
 ```ts
-import { startProxy, SpendControl, FileSpendControlStorage } from "@blockrun/clawrouter";
+import { startProxy, SpendControl, FileSpendControlStorage } from "@twzrd/clawrouter";
 import { createMppFetch, createSolanaMppFetch } from "@twzrd/clawrouter-mpp";
 
 const spend = new SpendControl({ storage: new FileSpendControlStorage() });
@@ -17,11 +17,15 @@ const payFetch = createMppFetch(account, fetch, { spend });
 await startProxy({ spendControl: spend, payFetch /* ... */ });
 ```
 
-Requires a ClawRouter release that includes the `payFetch` seam (`>=0.12.307`; upstream PR pending).
+Requires ClawRouter with the `payFetch` seam. Until that ships upstream
+([BlockRunAI/ClawRouter#546](https://github.com/BlockRunAI/ClawRouter/pull/546)), install the
+`@twzrd/clawrouter` distribution: upstream ClawRouter plus that seam, nothing else, with version numbers
+mirroring upstream. When the seam is released upstream, switch the import and peer dependency back to
+`@blockrun/clawrouter`.
 
 ## What it guarantees
 
-- **Spend limits apply.** The amount, network, asset and payee are checked, and budget reserved, *before*
+- **Spend limits apply.** The amount, network, asset and payee are checked, and budget reserved, _before_
   anything is signed. Payee lists on Solana are checked at the challenge event and fail closed.
   The proxy refuses to start a rail that does not set `enforcesSpend` while amount limits are configured.
 - **A signed payment is never paid twice.** If a call fails after a credential or transaction was signed, it
@@ -41,4 +45,4 @@ npm install   # from the ClawRouter repo root
 npm run typecheck && npm test && npm run build   # in packages/clawrouter-mpp
 ```
 
-Tests resolve `@blockrun/clawrouter` to the repo source until the seam is released.
+Tests resolve `@twzrd/clawrouter` to the repo source until the seam is released.

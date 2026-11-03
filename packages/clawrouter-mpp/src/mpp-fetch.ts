@@ -21,7 +21,7 @@ import {
   SpendPolicyError,
   type PayFetch,
   type SpendControl,
-} from "@blockrun/clawrouter";
+} from "@twzrd/clawrouter";
 import { guardPaid, markSigned } from "./mpp-paid-failure.js";
 import { loadOptional, MPPX_RANGE } from "./mpp-optional.js";
 

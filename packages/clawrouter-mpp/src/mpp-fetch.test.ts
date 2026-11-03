@@ -58,7 +58,7 @@ describe("createMppFetch", () => {
 });
 
 import { Mppx as ServerMppx, tempo as serverTempo } from "mppx/server";
-import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@blockrun/clawrouter";
+import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@twzrd/clawrouter";
 import { guardMethod, quoteFromChallenge } from "./mpp-fetch.js";
 
 const PATHUSD = "0x20c0000000000000000000000000000000000000";

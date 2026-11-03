@@ -1,7 +1,7 @@
 /**
  * MPP (Machine Payments Protocol) payment rails for ClawRouter.
  *
- *   import { startProxy } from "@blockrun/clawrouter";
+ *   import { startProxy } from "@twzrd/clawrouter";
  *   import { createMppFetch } from "@twzrd/clawrouter-mpp";
  *   await startProxy({ ..., payFetch: createMppFetch(account, fetch, { spend }) });
  *
