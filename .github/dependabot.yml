@@ -18,6 +18,11 @@ updates:
       typescript-eslint:
         patterns:
           - "@typescript-eslint/*"
+      # The @x402/* packages share one @x402/core and must move in lockstep:
+      # bumping evm alone nests a second core and fails typecheck (#536).
+      x402:
+        patterns:
+          - "@x402/*"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
