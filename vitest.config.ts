@@ -18,6 +18,6 @@ process.env.BLOCKRUN_MODEL_CATALOG_URL ??= "";
 
 export default defineConfig({
   test: {
-    exclude: [...configDefaults.exclude, "test/integration/**"],
+    exclude: [...configDefaults.exclude, "test/integration/**", "packages/**"],
   },
 });
