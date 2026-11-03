@@ -75,3 +75,58 @@ describe("formatRecentLogs day window", () => {
     expect(out).toContain("2 days");
   });
 });
+
+/**
+ * The `/stats <days>` command parses with `parseInt(arg, 10) || 7`, which lets a
+ * negative through because -1 is truthy, and it then calls getStats() directly.
+ * getStats() slices its newest-first file list with `slice(0, days)`, so a
+ * negative trims days off the window and the period renders "last -1 days".
+ * The HTTP endpoint (resolveStatsDays) and formatRecentLogs guard their own
+ * windows; getStats is the sink shared by all of them.
+ */
+describe("getStats day window", () => {
+  let home: string;
+
+  const entry = (model: string, day: string) =>
+    JSON.stringify({
+      timestamp: `${day}T12:00:00.000Z`,
+      model,
+      tier: "CHEAP",
+      cost: 0.01,
+      baselineCost: 0.02,
+      savings: 0.5,
+      latencyMs: 100,
+    });
+
+  beforeEach(async () => {
+    vi.resetModules();
+    home = await mkdtemp(join(tmpdir(), "clawrouter-stats-window-"));
+    vi.doMock("node:os", async () => {
+      const actual = await vi.importActual<typeof import("node:os")>("node:os");
+      return { ...actual, homedir: () => home };
+    });
+    const logs = join(home, ".openclaw", "blockrun", "logs");
+    await mkdir(logs, { recursive: true });
+    // Oldest → newest. getLogFiles() sorts and reverses, so NEWEST is index 0.
+    await writeFile(join(logs, "usage-2026-08-27.jsonl"), entry("oldest-model", "2026-08-27"));
+    await writeFile(join(logs, "usage-2026-08-28.jsonl"), entry("middle-model", "2026-08-28"));
+    await writeFile(join(logs, "usage-2026-08-29.jsonl"), entry("newest-model", "2026-08-29"));
+  });
+
+  afterEach(async () => {
+    vi.doUnmock("node:os");
+    await rm(home, { recursive: true, force: true });
+  });
+
+  it.each([
+    ["negative", -1],
+    ["zero", 0],
+    ["NaN", Number.NaN],
+  ])("falls back to the default window for a %s day count", async (_label, value) => {
+    const { getStats, DEFAULT_STATS_DAYS } = await import("./stats.js");
+    const stats = await getStats(value);
+
+    expect(stats.period).toBe(`last ${DEFAULT_STATS_DAYS} days`);
+    expect(stats.totalRequests).toBe(3);
+  });
+});
