@@ -4,6 +4,33 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.304 — November 2, 2026
+
+### The SSRF guard blocks the whole IPv6 link-local range
+
+Link-local IPv6 is `fe80::/10`, which runs from `fe80::` through `febf::`. The
+guard only matched hosts starting with `fe80:`, so `fe81::1` through `febf::`
+were treated as public. It now checks the whole range, in bracketed and
+uppercase forms too, and refuses those literals without a DNS lookup. Thanks
+@Tyagiquamar (#534).
+
+### `/stats` with a negative or zero day count shows the default week
+
+`/stats -1` passed `-1` straight through, which trimmed the newest day and
+labelled the result "last -1 days". Zero and non-numeric values did the same.
+`getStats()` now falls back to the 7-day default for any unusable window, for
+every caller. Thanks @Tyagiquamar (#535).
+
+### Payment libraries: x402 2.29 and Solana kit 8.6
+
+The `@x402/*` packages move to 2.29 together, and `@solana/kit` moves to 8.6.0.
+Signed payments are byte-identical to 0.12.303 on Solana and Base. One copy of
+each package ships in the bundle. Dependabot now bumps the x402 packages as one
+group, because bumping one alone splits the shared core (#541). Also: viem
+2.57.13 (#537).
+
+---
+
 ## v0.12.303 — October 28, 2026
 
 ### Arc as a third payment chain
