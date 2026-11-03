@@ -1,7 +1,7 @@
 {
   "name": "@blockrun/clawrouter",
   "version": "0.12.303",
-  "description": "Smart LLM router — save 84% on inference costs. 90 models (7 free). Pay by credit card (API key) or USDC (x402 wallet).",
+  "description": "Smart LLM router \u2014 save 84% on inference costs. 90 models (7 free). Pay by credit card (API key) or USDC (x402 wallet).",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -95,7 +95,7 @@
     "@polymarket/clob-client-v2": "1.2.0",
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^1.5.0",
-    "@solana/kit": "^8.4.0",
+    "@solana/kit": "^8.6.0",
     "@x402/core": "~2.29.0",
     "@x402/evm": "~2.29.0",
     "@x402/fetch": "~2.29.0",
@@ -145,6 +145,10 @@
     "proxy-addr": "^2.0.8",
     "@x402/svm": {
       "@solana/program-client-core": "$@solana/kit"
+    },
+    "@blockrun/llm": {
+      "@x402/core": "$@x402/core",
+      "@x402/svm": "$@x402/svm"
     }
   },
   "engines": {
