@@ -30,6 +30,9 @@ export default defineConfig({
     // @blockrun/llm dependency) in the unlikely case it ever runs. Set here, not
     // in `external`: `noExternal: [/.*/]` wins over tsup's own external list.
     options.external = [...(options.external ?? []), "@anthropic-ai/sdk"];
+    // The MPP rails' optional peer dependencies: never inlined, loaded by dynamic import on first
+    // use (src/mpp-optional.ts), so a bundle that includes the rails still installs without them.
+    options.external.push("mppx", "mppx/*", "@solana/pay-kit", "@solana/pay-kit/*");
   },
   // The identifier must not be `__cjs_createRequire`: the stale bundle above carries
   // its own `import { createRequire as __cjs_createRequire }`, and esbuild cannot

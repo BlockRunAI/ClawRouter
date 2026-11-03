@@ -168,6 +168,8 @@ export interface SpendRecord {
   amount: number;
   model?: string;
   action?: string;
+  /** Free-text outcome added after the fact, e.g. "signed, no completion". Never read for policy. */
+  note?: string;
 }
 
 export interface SpendingStatus {
@@ -675,7 +677,7 @@ export class SpendControl {
     return { allowed: true };
   }
 
-  record(amount: number, metadata?: { model?: string; action?: string }): void {
+  record(amount: number, metadata?: { model?: string; action?: string }): SpendRecord {
     if (!Number.isFinite(amount) || amount < 0) {
       throw new Error("Record amount must be a non-negative finite number");
     }
@@ -691,6 +693,13 @@ export class SpendControl {
     this.sessionCalls += 1;
 
     this.cleanup();
+    this.save();
+    return record;
+  }
+
+  /** Attach an outcome note to an entry returned by record()/settleReservation(), and persist it. */
+  annotateRecord(record: SpendRecord, note: string): void {
+    record.note = note;
     this.save();
   }
 
@@ -732,11 +741,14 @@ export class SpendControl {
   }
 
   /** Convert a reservation into recorded spend (the payment was signed). */
-  settleReservation(id: string, metadata?: { model?: string; action?: string }): void {
+  settleReservation(
+    id: string,
+    metadata?: { model?: string; action?: string },
+  ): SpendRecord | undefined {
     const held = this.pending.get(id);
-    if (!held) return; // already released, settled, or expired
+    if (!held) return undefined; // already released, settled, or expired
     this.pending.delete(id);
-    this.record(held.amount, metadata);
+    return this.record(held.amount, metadata);
   }
 
   /** Drop a reservation without recording spend (the payment was never signed). */

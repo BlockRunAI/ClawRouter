@@ -8,14 +8,16 @@
  * Spend controls (opt-in via `opts.spend`) follow the wallet rail's signing hook, not the API-key
  * wrapper: the price is read from the QUOTED challenge before anything is signed, the policy is
  * fail-closed, and a signed credential counts as spend even if the request then fails (MPP settles
- * before the upstream responds). The check lives in the method's `createCredential` (see `guardMethod`)
+ * before the upstream responds); that failure is surfaced as MppPaidNoCompletionError (mpp-paid-failure.ts). The check lives in the method's `createCredential` (see `guardMethod`)
  * because mppx swallows errors thrown from its event handlers.
  *
  * The account is supplied by the caller; this module reads no env vars and no key files.
  */
-import { Mppx, tempo } from "mppx/client";
+import type { Mppx as MppxClient } from "mppx/client";
 import type { Account } from "viem";
 import { assertSpendPolicyAllows, SpendPolicyError, type SpendControl } from "./spend-control.js";
+import { guardPaid, markSigned } from "./mpp-paid-failure.js";
+import { loadOptional, MPPX_RANGE } from "./mpp-optional.js";
 
 export type PayFetch = ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) & {
   /** True when this fetch checks `clawrouter policy` limits before signing. */
@@ -81,29 +83,34 @@ type MethodLike = { createCredential: (options: any) => Promise<string> };
  */
 export function guardMethod<M extends MethodLike>(
   method: M,
-  control: SpendControl,
+  control: SpendControl | undefined,
   usdAssets: ReadonlySet<string> = DEFAULT_TEMPO_USD_ASSETS,
 ): M {
   const guarded: MethodLike = {
     createCredential: async (options: { challenge: ChallengeLike }) => {
-      const quote = quoteFromChallenge(options.challenge, usdAssets);
-      if (!quote.priceable && control.hasAmountLimits()) {
-        // An amount we cannot convert to USD cannot be compared to a configured cap.
-        throw new SpendPolicyError(
-          `MPP quote is in an asset or shape ClawRouter cannot price (${quote.asset ?? "none"}); refusing to pay against a configured spend limit`,
-        );
+      let reservationId: string | undefined;
+      if (control) {
+        const quote = quoteFromChallenge(options.challenge, usdAssets);
+        if (!quote.priceable && control.hasAmountLimits()) {
+          // An amount we cannot convert to USD cannot be compared to a configured cap.
+          throw new SpendPolicyError(
+            `MPP quote is in an asset or shape ClawRouter cannot price (${quote.asset ?? "none"}); refusing to pay against a configured spend limit`,
+          );
+        }
+        reservationId = assertSpendPolicyAllows(control, quote);
       }
-      const reservationId = assertSpendPolicyAllows(control, quote);
       let credential: string;
       try {
         credential = await method.createCredential(options);
       } catch (err) {
-        if (reservationId !== undefined) control.releaseReservation(reservationId);
+        if (control && reservationId !== undefined) control.releaseReservation(reservationId);
         throw err;
       }
-      if (reservationId !== undefined) {
-        control.settleReservation(reservationId, { action: "mpp tempo charge" });
-      }
+      const record =
+        control && reservationId !== undefined
+          ? control.settleReservation(reservationId, { action: "mpp tempo charge" })
+          : undefined;
+      markSigned(credential, record);
       return credential;
     },
   };
@@ -125,14 +132,25 @@ export function createMppFetch(
     return res;
   };
   // polyfill:false keeps globalThis.fetch untouched: only calls routed through this wrapper can pay.
+  // `mppx` is an optional peer dependency, loaded on the first paid call (see mpp-optional.ts).
   const { spend, usdAssets } = opts;
-  const methods = tempo({ account }).map((m) => (spend ? guardMethod(m, spend, usdAssets) : m));
-  const mppx = Mppx.create({ methods, polyfill: false, fetch: recording });
+  let mppxPromise: Promise<ReturnType<typeof MppxClient.create>> | undefined;
+  const getMppx = () =>
+    (mppxPromise ??= loadOptional("mppx", MPPX_RANGE, () => import("mppx/client")).then(
+      ({ Mppx, tempo }) =>
+        Mppx.create({
+          methods: tempo({ account }).map((m) => guardMethod(m, spend, usdAssets)),
+          polyfill: false,
+          fetch: recording,
+        }),
+    ));
 
   const payFetch: PayFetch = async (input, init) => {
     last402 = undefined;
+    const mppx = await getMppx();
     try {
-      return await mppx.fetch(input, init);
+      // After a credential is signed, a failed or non-2xx result ends in MppPaidNoCompletionError.
+      return await guardPaid(spend, () => mppx.fetch(input, init));
     } catch (e) {
       if (last402 && /No method found for challenges/.test((e as Error).message)) return last402;
       throw e;

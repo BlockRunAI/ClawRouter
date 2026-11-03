@@ -4886,6 +4886,25 @@ async function tryModelRequest(
     return { success: true, response };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    if (err instanceof Error && err.name === "MppPaidNoCompletionError") {
+      // An MPP payment was signed and sent, then the call failed. Paying again (a retry, the next
+      // model) would charge twice, so the chain stops; the reference lets the caller dispute it.
+      return {
+        success: false,
+        errorBody: JSON.stringify({
+          error: {
+            message: errorMsg,
+            type: "payment_settled_no_completion",
+            code: "payment_settled_no_completion",
+            payment_reference: (err as { reference?: string }).reference,
+          },
+        }),
+        errorStatus: 502,
+        isProviderError: false,
+        errorCategory: "payment_error",
+        paymentInDoubt: true,
+      };
+    }
     if (
       err instanceof Error &&
       (err.name === "BatchPaymentUnresolvedError" || err.name === "PaymentInDoubtError")

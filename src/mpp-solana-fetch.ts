@@ -19,9 +19,11 @@
  * Reads no env vars and no key files: the signer is supplied by the caller.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { PayKitClient, type PaymentCandidate, type SolanaNetwork } from "@solana/pay-kit/client";
+import type { PaymentCandidate, SolanaNetwork } from "@solana/pay-kit/client";
 import type { KeyPairSigner } from "@solana/kit";
 import type { PayFetch } from "./mpp-fetch.js";
+import { guardPaid, markSigned } from "./mpp-paid-failure.js";
+import { loadOptional, PAY_KIT_RANGE } from "./mpp-optional.js";
 import { assertSpendPolicyAllows, SpendPolicyError, type SpendControl } from "./spend-control.js";
 
 /**
@@ -98,6 +100,12 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
       }
     : undefined;
 
+  // `@solana/pay-kit` is an optional peer dependency (see mpp-optional.ts).
+  const { PayKitClient } = await loadOptional(
+    "@solana/pay-kit",
+    PAY_KIT_RANGE,
+    () => import("@solana/pay-kit/client"),
+  );
   const client = await PayKitClient.builder()
     .signer(opts.signer)
     .rpcUrl(opts.rpcUrl)
@@ -106,10 +114,14 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .permissions(permissions as any)
     .onProgress((event) => {
-      if (!spend) return;
       const call = calls.getStore();
-      const e = event as { type?: string; recipient?: string };
+      const e = event as { type?: string; recipient?: string; transaction?: string };
       if (!call) return;
+      if (!spend) {
+        // No limits: nothing to reserve, but a signed payment still has to be tracked (mpp-paid-failure.ts).
+        if (e.type === "signed" && typeof e.transaction === "string") markSigned(e.transaction);
+        return;
+      }
       if (e.type === "challenge" && call.quote) {
         // Payee lists only: cost 0, because this payment's own amount is already reserved and counting
         // it again would block a payment that fits. Throws here, before the transaction is built, abort it.
@@ -130,10 +142,13 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
           throw new SpendPolicyError("payee was never checked before signing; refusing to sign");
         }
       } else if (e.type === "signed" || e.type === "paid") {
+        let record;
         if (call.reservationId !== undefined && !call.settled) {
           call.settled = true;
-          spend.settleReservation(call.reservationId, { action: "mpp solana charge" });
+          record = spend.settleReservation(call.reservationId, { action: "mpp solana charge" });
         }
+        if (e.type === "signed" && typeof e.transaction === "string")
+          markSigned(e.transaction, record);
       }
     })
     .build();
@@ -141,7 +156,8 @@ export async function createSolanaMppFetch(opts: SolanaMppFetchOptions): Promise
   const payFetch: PayFetch = async (input, init) => {
     const call: Call = { settled: false, payeeChecked: false };
     try {
-      return await calls.run(call, () => client.fetch(input, init, "mpp"));
+      // After a transaction is signed, a failed or non-2xx result ends in MppPaidNoCompletionError.
+      return await guardPaid(spend, () => calls.run(call, () => client.fetch(input, init, "mpp")));
     } finally {
       // Never signed (denied, failed, or no payable option): free the held budget.
       if (spend && call.reservationId !== undefined && !call.settled) {

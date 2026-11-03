@@ -96,7 +96,6 @@
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^1.5.0",
     "@solana/kit": "^8.6.0",
-    "@solana/pay-kit": "0.13.1",
     "@x402/core": "~2.29.0",
     "@x402/evm": "~2.29.0",
     "@x402/fetch": "~2.29.0",
@@ -104,15 +103,22 @@
     "axios": "^1.20.0",
     "bs58": "^6.0.0",
     "https-proxy-agent": "^9.1.0",
-    "mppx": "0.17.0",
     "undici": "^8.11.2",
     "viem": "~2.57.5"
   },
   "peerDependencies": {
-    "openclaw": ">=2025.1.0"
+    "openclaw": ">=2025.1.0",
+    "mppx": "~0.17.0",
+    "@solana/pay-kit": "~0.13.1"
   },
   "peerDependenciesMeta": {
     "openclaw": {
+      "optional": true
+    },
+    "mppx": {
+      "optional": true
+    },
+    "@solana/pay-kit": {
       "optional": true
     }
   },
@@ -120,7 +126,9 @@
     "@blockrun/model-catalog": "https://codeload.github.com/BlockRunAI/model-catalog/tar.gz/b95efe2f025c9968742e6479bc9ec71b6a40c0f4",
     "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/fd6d03d035ff676642ba1683c333d929939f8a00",
     "@eslint/js": "^10.0.1",
+    "@solana/pay-kit": "0.13.1",
     "eslint": "^10.2.0",
+    "mppx": "0.17.0",
     "openclaw": "^2026.7.2-beta.7",
     "prettier": "^3.8.1",
     "tsup": "^9.0.0",
