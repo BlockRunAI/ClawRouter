@@ -23,10 +23,11 @@ overrides:
   hono: 4.13.11
   "@hono/node-server": 2.1.3
   sharp: ^0.35.5
-  follow-redirects: 1.16.1
+  follow-redirects: 1.16.2
   "@modelcontextprotocol/sdk": 1.32.0
   zod: ^4.6.6
   qs: 6.16.1
+  body-parser: 2.4.0
   # Hold fresh transitives to the versions the root lockfile already vetted, or to
   # releases at least 14 days old.
   viem: 2.57.13

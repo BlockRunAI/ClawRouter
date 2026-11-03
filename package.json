@@ -129,7 +129,7 @@
   },
   "overrides": {
     "axios": "$axios",
-    "follow-redirects": "1.16.1",
+    "follow-redirects": "1.16.2",
     "undici": "$undici",
     "ws": "^8.21.2",
     "postcss": "^8.5.25",
