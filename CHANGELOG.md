@@ -4,6 +4,23 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.305 — November 2, 2026
+
+### Solana batch payments: four fixes from @blockrun/llm 3.25.0
+
+ClawRouter pays Solana batch-settlement through @blockrun/llm's
+`SolanaBatchPayer`, bundled into this package. 3.24.4 → 3.25.0 brings:
+
+- A channel the facilitator reclaimed is reopened, instead of topped up.
+- A paid call the gateway did not settle is booked at $0, not its quoted price.
+- A deposit is signed with a finalized blockhash when the 402 names none.
+- A channel whose authorization is refused with a plain 402 is re-read.
+
+The new `batch.onLocked` option defaults to `"exact"`, so behavior when
+another process holds the channel lock is unchanged (#544).
+
+---
+
 ## v0.12.304 — November 2, 2026
 
 ### The SSRF guard blocks the whole IPv6 link-local range

@@ -107337,11 +107337,13 @@ __export(dist_exports, {
   AnthropicClient: () => AnthropicClient,
   BASE_CHAIN_ID: () => BASE_CHAIN_ID,
   BLOCKRUN_SOL_OPERATOR: () => BLOCKRUN_SOL_OPERATOR,
+  BatchChannelLockedError: () => BatchChannelLockedError,
   BatchCloseDeferredError: () => BatchCloseDeferredError,
   BatchPaymentUnresolvedError: () => BatchPaymentUnresolvedError,
   BlockrunClient: () => BlockrunClient,
   BlockrunError: () => BlockrunError,
   DEFAULT_BATCH_IN_DOUBT: () => DEFAULT_BATCH_IN_DOUBT,
+  DEFAULT_BATCH_LOCK_WAIT_MS: () => DEFAULT_BATCH_LOCK_WAIT_MS,
   DEFAULT_BATCH_RATE_LIMIT: () => DEFAULT_BATCH_RATE_LIMIT,
   EVM_NETWORKS: () => EVM_NETWORKS,
   ImageClient: () => ImageClient,
@@ -107722,13 +107724,43 @@ function readSettlement(response, quotedUsd, scheme) {
   };
   return { costUsd, settlement };
 }
+function settlementSkipReason(response) {
+  const headers = response.headers;
+  if (typeof headers?.get !== "function") return void 0;
+  const reason = [headers.get("X-Settlement-Skipped"), headers.get("X-Payment-Waived")].map((value) => value?.trim()).find((value) => !!value && !NOT_A_SKIP.test(value));
+  if (reason === void 0) return void 0;
+  const evidence = settlementEvidence(response);
+  if (evidence !== void 0) {
+    console.error(
+      `[@blockrun/llm] settlement: the gateway named a skipped settlement (${JSON.stringify(reason)}) on a response that also carries ${evidence}; booked as charged`
+    );
+    return void 0;
+  }
+  return reason;
+}
+function settlementEvidence(response) {
+  const header = response.headers.get("PAYMENT-RESPONSE") ?? response.headers.get("X-PAYMENT-RESPONSE");
+  const receipt = header ? decode4(header) : void 0;
+  if (receipt && receipt.success !== false) {
+    if (typeof receipt.transaction === "string" && receipt.transaction) return "a settlement receipt with a transaction";
+    const extra = receipt.extra;
+    const charged = receiptChargedUsd({
+      amount: receipt.amount,
+      extra: extra && typeof extra === "object" ? extra : void 0
+    });
+    if (charged !== void 0 && charged > 0) return "a settlement receipt with a charge";
+  }
+  if (response.headers.get("X-Payment-Receipt")?.trim()) return "an X-Payment-Receipt transaction";
+  return void 0;
+}
 function settlementSkipped(response) {
-  return response.headers.get("X-Settlement-Skipped") === "free-fallback";
+  return settlementSkipReason(response) !== void 0;
 }
 function withCost(body, response, bookedUsd, scheme) {
-  if (settlementSkipped(response)) {
+  const skipped = settlementSkipReason(response);
+  if (skipped !== void 0) {
     body.costUsd = 0;
-    body.settlement = { ...readSettlement(response, bookedUsd, scheme).settlement, skipped: "free-fallback" };
+    body.settlement = { ...readSettlement(response, bookedUsd, scheme).settlement, skipped };
     return body;
   }
   body.costUsd = bookedUsd;
@@ -108750,10 +108782,10 @@ function isEligible2(modelId, features, maxOutputTokens, options) {
   return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
 }
 function estimatedCost2(modelId, options, inputTokens, outputTokens) {
-  const price = options.modelPricing.get(modelId);
-  if (!price) return Number.POSITIVE_INFINITY;
-  if (price.flatPrice !== void 0) return price.flatPrice;
-  return (inputTokens * price.inputPrice + outputTokens * price.outputPrice) / 1e6;
+  const price2 = options.modelPricing.get(modelId);
+  if (!price2) return Number.POSITIVE_INFINITY;
+  if (price2.flatPrice !== void 0) return price2.flatPrice;
+  return (inputTokens * price2.inputPrice + outputTokens * price2.outputPrice) / 1e6;
 }
 function profileScore2(modelId, options, now2) {
   const profile = options.modelPerformance?.[modelId] ?? LIVE_MODEL_PROFILES2[modelId] ?? HISTORICAL_MODEL_PROFILES2[modelId];
@@ -110049,7 +110081,7 @@ function decodeChannelAccount(owner, data) {
 }
 async function readChannelAccount(rpcUrl, channelId, rpcHeaders, options = {}) {
   await checkChannelLayout();
-  const config2 = { encoding: "base64", commitment: "finalized" };
+  const config2 = { encoding: "base64", commitment: options.commitment ?? "finalized" };
   if (options.minContextSlot !== void 0) config2.minContextSlot = options.minContextSlot;
   const response = await fetch(rpcUrl, {
     method: "POST",
@@ -110111,6 +110143,10 @@ function checkChannelLayout() {
   });
   return layoutChecked;
 }
+function savedReclaimAnchor(record2) {
+  const saved = record2.reclaimAnchorHeight;
+  return typeof saved === "number" && Number.isSafeInteger(saved) && saved > 0 ? saved : void 0;
+}
 function maxOf(a, b) {
   if (a === void 0) return b;
   if (b === void 0) return a;
@@ -110134,6 +110170,35 @@ function batchUnavailable(paymentRequired) {
 function withoutClientSignedBatch(paymentRequired) {
   const accepts = paymentRequired.accepts ?? [];
   return accepts.some(clientSignedBatch) ? { ...paymentRequired, accepts: accepts.filter((accept) => !clientSignedBatch(accept)) } : paymentRequired;
+}
+async function finalizedBlockhash(rpcUrl, rpcHeaders) {
+  const cached2 = depositBlockhashes.get(rpcUrl);
+  if (cached2 && Date.now() - cached2.fetchedAt < DEPOSIT_BLOCKHASH_TTL_MS) return cached2;
+  const result = await rpcRequest(rpcUrl, "getLatestBlockhash", [{ commitment: "finalized" }], rpcHeaders);
+  const blockhash2 = result.value?.blockhash;
+  if (typeof blockhash2 !== "string" || !blockhash2) throw new Error("getLatestBlockhash returned no blockhash");
+  const entry = {
+    blockhash: blockhash2,
+    lastValidBlockHeight: rpcInteger(result.value?.lastValidBlockHeight, "getLatestBlockhash lastValidBlockHeight"),
+    fetchedAt: Date.now()
+  };
+  depositBlockhashes.delete(rpcUrl);
+  depositBlockhashes.set(rpcUrl, entry);
+  while (depositBlockhashes.size > MAX_DEPOSIT_BLOCKHASH_ENDPOINTS) {
+    depositBlockhashes.delete(depositBlockhashes.keys().next().value);
+  }
+  return entry;
+}
+function withDepositBlockhash(paymentRequired, blockhash2) {
+  const accepts = paymentRequired.accepts ?? [];
+  const lacking = (accept) => accept.scheme === BATCH_SCHEME && !accept.extra?.recentBlockhash;
+  if (!accepts.some(lacking)) return paymentRequired;
+  return {
+    ...paymentRequired,
+    accepts: accepts.map(
+      (accept) => lacking(accept) ? { ...accept, extra: { ...accept.extra, recentBlockhash: blockhash2.blockhash, lastValidBlockHeight: blockhash2.lastValidBlockHeight } } : accept
+    )
+  };
 }
 function withPaymentIdentifier(paymentRequired) {
   const declared = paymentRequired.extensions?.[PAYMENT_IDENTIFIER];
@@ -110795,7 +110860,7 @@ async function setupAgentClient(options = {}) {
   chain3 ??= !loadSolanaWallet() && loadWallet() ? "base" : "solana";
   return chain3 === "solana" ? setupAgentSolanaWallet(options) : setupAgentWallet(options);
 }
-var RETRY_DISPOSITION, BlockrunError, RetiredEndpointError, PaymentError, APIError, LOCALHOST_DOMAINS, KNOWN_PROVIDERS, TRANSIENT_STATUS, TRANSIENT_RETRIES, TRANSIENT_BACKOFF_MS, API_KEY_URL, PORTAL_URL2, ApiKeyAuth, UNSEGMENTED_SCRIPT2, WORD_CHAR2, ASCII_PHRASE2, SEGMENTED_WORD_CHAR2, BOUNDARY_BEFORE2, BOUNDARY_AFTER2, BOUNDED_LAST_WORD_LENGTH2, SHORT_SUFFIXES2, SIBILANT_PLURAL2, MID_SUFFIXES2, DROPPED_E_SUFFIXES2, DOUBLED_CONSONANT_SUFFIXES2, matcherCache2, BASELINE_MODEL_ID2, BASELINE_INPUT_PRICE2, BASELINE_OUTPUT_PRICE2, SERVER_MARGIN_PERCENT2, MIN_PAYMENT_USD2, CJK_CHARS2, RulesStrategy2, registry3, DEFAULT_MODEL_CAPABILITIES2, model_profiles_generated_default2, LIVE_MODEL_PROFILES2, HISTORICAL_MODEL_PROFILES2, DEFAULT_PORTFOLIO_WEIGHTS2, VERIFIED_TOOL_FALLBACKS2, PortfolioStrategy2, DEFAULT_ROUTING_CONFIG2, AUTO_ROUTING_PROFILES, BASE_MINIMUM_PAYMENT_USD, SOLANA_MINIMUM_PAYMENT_USD, searchModelsByCatalog, INSTALL_HINT, BASE_CHAIN_ID, USDC_BASE2, ARC_CHAIN_ID, USDC_ARC, EVM_NETWORKS, SOLANA_NETWORK, USDC_SOLANA, SOLANA_USDC_DECIMALS, DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS2, DEFAULT_COMPUTE_UNIT_LIMIT2, BLOCKHASH_TTL_MS, MAX_FEE_NONCE_STEPS, MAX_TRACKED_BLOCKHASHES, MAX_TRACKED_ENDPOINTS, blockhashCache, issuedByBlockhash, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, BLOCKRUN_DIR, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_API_URL, DEFAULT_MAX_TOKENS2, DEFAULT_TIMEOUT, LLMClient, client_default, DEFAULT_API_URL2, DEFAULT_MODEL, DEFAULT_SIZE, DEFAULT_TIMEOUT2, POLL_INTERVAL_MS, POLL_MAX_DURATION_MS, ImageClient, DEFAULT_API_URL3, DEFAULT_MODEL2, DEFAULT_TIMEOUT3, MusicClient, DEFAULT_API_URL4, DEFAULT_MODEL3, DEFAULT_SOUNDFX_MODEL, DEFAULT_TIMEOUT4, SpeechClient, DEFAULT_API_URL5, DEFAULT_MODEL4, DEFAULT_TIMEOUT5, POLL_INTERVAL_MS2, DEFAULT_GENERATE_BUDGET_MS, MAX_TIMEOUT_SECONDS, MAX_POLL_RESIGNS, VideoClient, DEFAULT_API_URL6, DEFAULT_TIMEOUT6, CALL_PRICE_USD, VALID_MODELS, VoiceClient, DEFAULT_API_URL7, DEFAULT_TIMEOUT7, PHONE_PRICES, PhoneClient, DEFAULT_API_URL8, DEFAULT_TIMEOUT8, PORTRAIT_ENROLLMENT_PRICE_USD, PortraitClient, DEFAULT_API_URL9, DEFAULT_TIMEOUT9, SearchClient, DEFAULT_API_URL10, DEFAULT_TIMEOUT10, PriceClient, DEFAULT_API_URL11, DEFAULT_TIMEOUT11, SURF_PREFIX, warnedRetired, SurfClient, DEFAULT_API_URL12, DEFAULT_TIMEOUT12, RPC_PRICE_USD, SUPPORTED_NETWORKS, NETWORK_ALIASES, RpcClient, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, USDC_BASE_CONTRACT, BASE_CHAIN_ID2, WALLET_FILE_PATH, WALLET_DIR_PATH, WALLET_DIR3, SOLANA_WALLET_FILE, POLL_AUTH_HEADERS, ED25519_PKCS8_PREFIX, BATCH_SCHEME, BLOCKRUN_SOL_OPERATOR, DEFAULT_BATCH_RATE_LIMIT, DEFAULT_BATCH_IN_DOUBT, BatchPaymentUnresolvedError, BatchCloseDeferredError, INSTALL_HINT2, FileChannelStorage, MemoryChannelStorage, FileIntentJournal, MemoryIntentJournal, BATCH_REGISTRY, registryHost, registry22, lockIds, ChannelResyncRequiredError, ChannelBook, PAYMENT_CHANNELS_PROGRAM_ID2, CHANNEL, ChannelUnreadableError, ChannelLayoutError, layoutChecked, LANDING_MARGIN_BLOCKS, ResyncError, PAYMENT_IDENTIFIER, IN_DOUBT_MIN_WAIT_MS, IN_DOUBT_MAX_WAIT_MS, BATCH_REFUSALS, PRE_REQUEST_REFUSALS, MAX_RETRY_AFTER_MS, NOT_BROADCAST_REFUSALS, CONFIG_REFUSALS, REFUSAL_COOLDOWN_MS, CONFIG_REFUSAL_COOLDOWN_MS, REFUSAL_COOLDOWN_MAX_MS, realSleep, sleep2, warnedNoSizer, payScope, RPC_SCOPE_STORE, RPC_HEADER_HOOK, sharedGlobal, rpcScope, SolanaBatchPayer, SOLANA_API_URL, DEFAULT_MAX_TOKENS22, DEFAULT_TIMEOUT14, STALE_BLOCKHASH_RETRY_BACKOFFS_MS, MAX_PAYMENT_FAILURE_BYTES, DEFAULT_VIDEO_MODEL, DEFAULT_MUSIC_MODEL, DEFAULT_VIDEO_BUDGET_MS, DEFAULT_MUSIC_BUDGET_MS, VIDEO_POLL_INTERVAL_MS, MAX_PAID_POLL_REFUSALS, MAX_RETRY_AFTER_MS2, MEDIA_SUBMIT_TIMEOUT_MS, SafeStaleBlockhashError, DEFAULT_SOLANA_RPC_URL, SolanaLLMClient, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL, StreamingResponse, ChatCompletions, Chat, OpenAI, AnthropicClient;
+var RETRY_DISPOSITION, BlockrunError, RetiredEndpointError, PaymentError, APIError, LOCALHOST_DOMAINS, KNOWN_PROVIDERS, TRANSIENT_STATUS, TRANSIENT_RETRIES, TRANSIENT_BACKOFF_MS, API_KEY_URL, PORTAL_URL2, ApiKeyAuth, NOT_A_SKIP, UNSEGMENTED_SCRIPT2, WORD_CHAR2, ASCII_PHRASE2, SEGMENTED_WORD_CHAR2, BOUNDARY_BEFORE2, BOUNDARY_AFTER2, BOUNDED_LAST_WORD_LENGTH2, SHORT_SUFFIXES2, SIBILANT_PLURAL2, MID_SUFFIXES2, DROPPED_E_SUFFIXES2, DOUBLED_CONSONANT_SUFFIXES2, matcherCache2, BASELINE_MODEL_ID2, BASELINE_INPUT_PRICE2, BASELINE_OUTPUT_PRICE2, SERVER_MARGIN_PERCENT2, MIN_PAYMENT_USD2, CJK_CHARS2, RulesStrategy2, registry3, DEFAULT_MODEL_CAPABILITIES2, model_profiles_generated_default2, LIVE_MODEL_PROFILES2, HISTORICAL_MODEL_PROFILES2, DEFAULT_PORTFOLIO_WEIGHTS2, VERIFIED_TOOL_FALLBACKS2, PortfolioStrategy2, DEFAULT_ROUTING_CONFIG2, AUTO_ROUTING_PROFILES, BASE_MINIMUM_PAYMENT_USD, SOLANA_MINIMUM_PAYMENT_USD, searchModelsByCatalog, INSTALL_HINT, BASE_CHAIN_ID, USDC_BASE2, ARC_CHAIN_ID, USDC_ARC, EVM_NETWORKS, SOLANA_NETWORK, USDC_SOLANA, SOLANA_USDC_DECIMALS, DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS2, DEFAULT_COMPUTE_UNIT_LIMIT2, BLOCKHASH_TTL_MS, MAX_FEE_NONCE_STEPS, MAX_TRACKED_BLOCKHASHES, MAX_TRACKED_ENDPOINTS, blockhashCache, issuedByBlockhash, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, BLOCKRUN_DIR, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_API_URL, DEFAULT_MAX_TOKENS2, DEFAULT_TIMEOUT, LLMClient, client_default, DEFAULT_API_URL2, DEFAULT_MODEL, DEFAULT_SIZE, DEFAULT_TIMEOUT2, POLL_INTERVAL_MS, POLL_MAX_DURATION_MS, ImageClient, DEFAULT_API_URL3, DEFAULT_MODEL2, DEFAULT_TIMEOUT3, MusicClient, DEFAULT_API_URL4, DEFAULT_MODEL3, DEFAULT_SOUNDFX_MODEL, DEFAULT_TIMEOUT4, SpeechClient, DEFAULT_API_URL5, DEFAULT_MODEL4, DEFAULT_TIMEOUT5, POLL_INTERVAL_MS2, DEFAULT_GENERATE_BUDGET_MS, MAX_TIMEOUT_SECONDS, MAX_POLL_RESIGNS, VideoClient, DEFAULT_API_URL6, DEFAULT_TIMEOUT6, CALL_PRICE_USD, VALID_MODELS, VoiceClient, DEFAULT_API_URL7, DEFAULT_TIMEOUT7, PHONE_PRICES, PhoneClient, DEFAULT_API_URL8, DEFAULT_TIMEOUT8, PORTRAIT_ENROLLMENT_PRICE_USD, PortraitClient, DEFAULT_API_URL9, DEFAULT_TIMEOUT9, SearchClient, DEFAULT_API_URL10, DEFAULT_TIMEOUT10, PriceClient, DEFAULT_API_URL11, DEFAULT_TIMEOUT11, SURF_PREFIX, warnedRetired, SurfClient, DEFAULT_API_URL12, DEFAULT_TIMEOUT12, RPC_PRICE_USD, SUPPORTED_NETWORKS, NETWORK_ALIASES, RpcClient, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, USDC_BASE_CONTRACT, BASE_CHAIN_ID2, WALLET_FILE_PATH, WALLET_DIR_PATH, WALLET_DIR3, SOLANA_WALLET_FILE, POLL_AUTH_HEADERS, ED25519_PKCS8_PREFIX, BATCH_SCHEME, BLOCKRUN_SOL_OPERATOR, DEFAULT_BATCH_RATE_LIMIT, DEFAULT_BATCH_IN_DOUBT, DEFAULT_BATCH_LOCK_WAIT_MS, LOCK_POLL_MS, BatchPaymentUnresolvedError, BatchCloseDeferredError, BatchChannelLockedError, INSTALL_HINT2, FileChannelStorage, MemoryChannelStorage, FileIntentJournal, MemoryIntentJournal, BATCH_REGISTRY, registryHost, registry22, lockIds, ChannelResyncRequiredError, ChannelBook, PAYMENT_CHANNELS_PROGRAM_ID2, CHANNEL, ChannelUnreadableError, ChannelLayoutError, layoutChecked, LANDING_MARGIN_BLOCKS, ResyncError, DEPOSIT_BLOCKHASH_TTL_MS, MAX_DEPOSIT_BLOCKHASH_ENDPOINTS, depositBlockhashes, PAYMENT_IDENTIFIER, IN_DOUBT_MIN_WAIT_MS, IN_DOUBT_MAX_WAIT_MS, BATCH_REFUSALS, PRE_REQUEST_REFUSALS, MAX_RETRY_AFTER_MS, NOT_BROADCAST_REFUSALS, CONFIG_REFUSALS, REFUSAL_COOLDOWN_MS, CONFIG_REFUSAL_COOLDOWN_MS, REFUSAL_COOLDOWN_MAX_MS, realSleep, sleep2, warnedNoSizer, payScope, RPC_SCOPE_STORE, RPC_HEADER_HOOK, sharedGlobal, rpcScope, SolanaBatchPayer, SOLANA_API_URL, DEFAULT_MAX_TOKENS22, STALE_BLOCKHASH_RETRY_BACKOFFS_MS, MAX_PAYMENT_FAILURE_BYTES, DEFAULT_VIDEO_MODEL, DEFAULT_MUSIC_MODEL, DEFAULT_VIDEO_BUDGET_MS, DEFAULT_MUSIC_BUDGET_MS, VIDEO_POLL_INTERVAL_MS, MAX_PAID_POLL_REFUSALS, MAX_RETRY_AFTER_MS2, MEDIA_SUBMIT_TIMEOUT_MS, SafeStaleBlockhashError, DEFAULT_SOLANA_RPC_URL, SolanaLLMClient, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL, StreamingResponse, ChatCompletions, Chat, OpenAI, AnthropicClient;
 var init_dist2 = __esm({
   "node_modules/@blockrun/llm/dist/index.js"() {
     "use strict";
@@ -110963,6 +111028,7 @@ var init_dist2 = __esm({
         throw new APIError("Account API job polling timed out; check the job before submitting again.", 504, { poll_url: url3 });
       }
     };
+    NOT_A_SKIP = /^(false|0|no|none)$/i;
     UNSEGMENTED_SCRIPT2 = /[؀-ۿ　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/;
     WORD_CHAR2 = /[\p{L}\p{N}]/u;
     ASCII_PHRASE2 = /^[a-z0-9' -]+$/;
@@ -113970,7 +114036,7 @@ var init_dist2 = __esm({
     BLOCKRUN_SERVICE_CODE2 = "blockrun";
     BLOCKRUN_DIR = path2.join(os.homedir(), ".blockrun");
     COST_LOG_FILE = path2.join(BLOCKRUN_DIR, "cost_log.jsonl");
-    SDK_VERSION = "3.24.4";
+    SDK_VERSION = "3.25.0";
     USER_AGENT2 = `blockrun-ts/${SDK_VERSION}`;
     DEFAULT_API_URL = "https://blockrun.ai/api";
     DEFAULT_MAX_TOKENS2 = 1024;
@@ -113997,8 +114063,15 @@ var init_dist2 = __esm({
       modelPricingCache = null;
       modelPricingPromise = null;
       // Pre-auth cache: avoids the 402 round-trip on repeat requests to the same model.
-      // Key = "endpoint:model", value = cached payment header + timestamp.
+      // Key = "endpoint:model", value = cached payment header + timestamp + the
+      // length of the request body it was quoted for.
       // TTL: 1 hour — pre-auth quotes are stable server-side on that horizon.
+      //
+      // A quote prices ONE request (input size + max_tokens), and exact settles
+      // the whole signed amount, so reusing it for a smaller request overpaid and
+      // for a larger one underpaid. The gateway refuses both with a 402 (an
+      // over-signed payment since blockrun#874), so a reuse is only attempted for
+      // a body the same size as the one that was quoted.
       preAuthCache = /* @__PURE__ */ new Map();
       static PRE_AUTH_TTL_MS = 36e5;
       /**
@@ -114518,9 +114591,9 @@ var init_dist2 = __esm({
         return this.bookPaid(url3, body, details, retryResponse);
       }
       /**
-       * Book a served, paid chat call and attach its cost. A response the gateway
-       * served from a free fallback with settlement skipped
-       * (`X-Settlement-Skipped: free-fallback`) moved nothing on chain, so it is
+       * Book a served, paid chat call and attach its cost. A response whose
+       * settlement the gateway skipped ({@link settlementSkipped}: e.g.
+       * `X-Settlement-Skipped: free-fallback`) moved nothing on chain, so it is
        * not added to `getSpending()` or the cost log, and reports `costUsd: 0`.
        */
       async bookPaid(url3, body, details, response) {
@@ -114531,6 +114604,21 @@ var init_dist2 = __esm({
           this.recordCost(url3, costUsd, { body, network: details.network });
         }
         return withCost(await this.parseChatResponse(response), response, costUsd, "exact");
+      }
+      /**
+       * Book a served, paid raw (non-chat) call: the signed amount goes to
+       * `getSpending()` and the cost log, unless the gateway skipped settlement
+       * ({@link settlementSkipped}: e.g. `X-Settlement-Skipped: empty-result` on an
+       * empty prediction-market search, `unexecuted` on a JSON-RPC call that never
+       * ran, or `X-Payment-Waived`), in which case nothing moved and nothing is
+       * booked. `X-Payment-Settled: false` alone is still booked: it is owed.
+       */
+      bookPaidRaw(url3, details, response, body) {
+        if (settlementSkipped(response)) return;
+        const costUsd = parseFloat(details.amount) / 1e6;
+        this.sessionCalls += 1;
+        this.sessionTotalUsd += costUsd;
+        this.recordCost(url3, costUsd, body ? { body, network: details.network } : { network: details.network });
       }
       /**
        * Sign a payment header and return the PAYMENT-SIGNATURE value.
@@ -114605,9 +114693,10 @@ var init_dist2 = __esm({
         if (options?.responseFormat !== void 0) body.response_format = options.responseFormat;
         if (options?.stop !== void 0) body.stop = options.stop;
         const cacheKey22 = `/v1/chat/completions:${requestModel}`;
+        const requestBody = JSON.stringify(body);
         const cached2 = this.preAuthCache.get(cacheKey22);
         const now2 = Date.now();
-        if (cached2 && now2 - cached2.cachedAt < _LLMClient.PRE_AUTH_TTL_MS) {
+        if (cached2 && now2 - cached2.cachedAt < _LLMClient.PRE_AUTH_TTL_MS && cached2.bodyLength === requestBody.length) {
           let signed2;
           try {
             signed2 = await this.signPayment(cached2.paymentHeader);
@@ -114631,8 +114720,10 @@ var init_dist2 = __esm({
               throw withDisposition(err, "paid-or-in-doubt");
             }
             if (preAuthResp.ok) {
-              this.sessionCalls += 1;
-              this.sessionTotalUsd += signed2.costUsd;
+              if (!settlementSkipped(preAuthResp)) {
+                this.sessionCalls += 1;
+                this.sessionTotalUsd += signed2.costUsd;
+              }
               return preAuthResp;
             }
             this.preAuthCache.delete(cacheKey22);
@@ -114676,7 +114767,7 @@ var init_dist2 = __esm({
           }
         }
         if (!paymentHeader) throw new PaymentError("402 response but no payment requirements found");
-        this.preAuthCache.set(cacheKey22, { paymentHeader, cachedAt: now2 });
+        this.preAuthCache.set(cacheKey22, { paymentHeader, cachedAt: now2, bodyLength: requestBody.length });
         const { paymentPayload, costUsd } = await this.signPayment(paymentHeader);
         const streamResp = await this.fetchWithTimeout(url3, {
           method: "POST",
@@ -114697,8 +114788,10 @@ var init_dist2 = __esm({
           }
           throw new APIError(`API error after payment: ${streamResp.status}`, streamResp.status, sanitizeErrorResponse(errorBody));
         }
-        this.sessionCalls += 1;
-        this.sessionTotalUsd += costUsd;
+        if (!settlementSkipped(streamResp)) {
+          this.sessionCalls += 1;
+          this.sessionTotalUsd += costUsd;
+        }
         return streamResp;
       }
       /**
@@ -114822,10 +114915,7 @@ var init_dist2 = __esm({
               }
               throw new APIError(`API error after payment: ${retryResp2.status}`, retryResp2.status, sanitizeErrorResponse(errorBody));
             }
-            const costUsd2 = parseFloat(details.amount) / 1e6;
-            this.sessionCalls += 1;
-            this.sessionTotalUsd += costUsd2;
-            this.recordCost(url3, costUsd2, { body, network: details.network });
+            this.bookPaidRaw(url3, details, retryResp2, body);
             return retryResp2.json();
           }
         }
@@ -114845,10 +114935,7 @@ var init_dist2 = __esm({
             sanitizeErrorResponse(errorBody)
           );
         }
-        const costUsd = parseFloat(details.amount) / 1e6;
-        this.sessionCalls += 1;
-        this.sessionTotalUsd += costUsd;
-        this.recordCost(url3, costUsd, { body, network: details.network });
+        this.bookPaidRaw(url3, details, retryResponse, body);
         return retryResponse.json();
       }
       /**
@@ -114968,10 +115055,7 @@ var init_dist2 = __esm({
               }
               throw new APIError(`API error after payment: ${retryResp2.status}`, retryResp2.status, sanitizeErrorResponse(errorBody));
             }
-            const costUsd2 = parseFloat(details.amount) / 1e6;
-            this.sessionCalls += 1;
-            this.sessionTotalUsd += costUsd2;
-            this.recordCost(url3, costUsd2, { network: details.network });
+            this.bookPaidRaw(url3, details, retryResp2);
             return retryResp2.json();
           }
         }
@@ -114991,10 +115075,7 @@ var init_dist2 = __esm({
             sanitizeErrorResponse(errorBody)
           );
         }
-        const costUsd = parseFloat(details.amount) / 1e6;
-        this.sessionCalls += 1;
-        this.sessionTotalUsd += costUsd;
-        this.recordCost(url3, costUsd, { network: details.network });
+        this.bookPaidRaw(url3, details, retryResponse);
         return retryResponse.json();
       }
       /**
@@ -116001,8 +116082,10 @@ var init_dist2 = __esm({
           throw new APIError(`API error after payment: ${retryResponse.status}`, retryResponse.status, sanitizeErrorResponse(errorBody));
         }
         const data = await retryResponse.json();
-        this.sessionCalls++;
-        this.sessionTotalUsd += 0.1575;
+        if (!settlementSkipped(retryResponse)) {
+          this.sessionCalls++;
+          this.sessionTotalUsd += 0.1575;
+        }
         const txHash = retryResponse.headers.get("x-payment-receipt") || retryResponse.headers.get("X-Payment-Receipt");
         if (txHash) data.txHash = txHash;
         return data;
@@ -116211,9 +116294,11 @@ var init_dist2 = __esm({
           throw new APIError(`API error after payment: ${retryResponse.status}`, retryResponse.status, sanitizeErrorResponse(errorBody));
         }
         const data = await retryResponse.json();
-        this.sessionCalls++;
-        const paidUsd = Number(details.amount) / 1e6;
-        if (Number.isFinite(paidUsd)) this.sessionTotalUsd += paidUsd;
+        if (!settlementSkipped(retryResponse)) {
+          this.sessionCalls++;
+          const paidUsd = Number(details.amount) / 1e6;
+          if (Number.isFinite(paidUsd)) this.sessionTotalUsd += paidUsd;
+        }
         const txHash = retryResponse.headers.get("x-payment-receipt") || retryResponse.headers.get("X-Payment-Receipt");
         if (txHash) data.txHash = txHash;
         return data;
@@ -116507,8 +116592,10 @@ var init_dist2 = __esm({
           }
           if (lastStatus === "completed") {
             const data = pollData;
-            this.sessionCalls++;
-            this.sessionTotalUsd += Number(details.amount) / 1e6;
+            if (!settlementSkipped(pollResp)) {
+              this.sessionCalls++;
+              this.sessionTotalUsd += Number(details.amount) / 1e6;
+            }
             const txHash = pollResp.headers.get("x-payment-receipt") || pollResp.headers.get("X-Payment-Receipt");
             if (txHash) data.txHash = txHash;
             return data;
@@ -116800,8 +116887,10 @@ var init_dist2 = __esm({
           throw new APIError(`API error after payment: ${retryResponse.status}`, retryResponse.status, sanitizeErrorResponse(errorBody));
         }
         const data = await retryResponse.json();
-        this.sessionCalls++;
-        this.sessionTotalUsd += CALL_PRICE_USD;
+        if (!settlementSkipped(retryResponse)) {
+          this.sessionCalls++;
+          this.sessionTotalUsd += CALL_PRICE_USD;
+        }
         const txHash = retryResponse.headers.get("x-payment-receipt") || retryResponse.headers.get("X-Payment-Receipt");
         if (txHash) data.txHash = txHash;
         return data;
@@ -117006,9 +117095,10 @@ var init_dist2 = __esm({
           throw new PaymentError("Payment was rejected. Check your wallet balance.");
         }
         const data = await this.unwrap(retry, true);
-        const costUsd = Number.parseFloat(details.amount) / 1e6;
-        this.sessionCalls += 1;
-        this.sessionTotalUsd += costUsd;
+        if (!settlementSkipped(retry)) {
+          this.sessionCalls += 1;
+          this.sessionTotalUsd += Number.parseFloat(details.amount) / 1e6;
+        }
         const txHash = retry.headers.get("x-payment-receipt") || retry.headers.get("X-Payment-Receipt");
         if (txHash && data && typeof data === "object" && !("txHash" in data)) {
           data.txHash = txHash;
@@ -117170,9 +117260,10 @@ var init_dist2 = __esm({
           throw new PaymentError("Payment was rejected. Check your wallet balance.");
         }
         const data = await this.unwrap(retry, true);
-        const costUsd = Number.parseFloat(details.amount) / 1e6;
-        this.sessionCalls += 1;
-        this.sessionTotalUsd += costUsd;
+        if (!settlementSkipped(retry)) {
+          this.sessionCalls += 1;
+          this.sessionTotalUsd += Number.parseFloat(details.amount) / 1e6;
+        }
         if (data && typeof data === "object" && !("txHash" in data)) {
           const settlement = data.settlement;
           if (settlement?.tx_hash) {
@@ -117956,9 +118047,11 @@ var init_dist2 = __esm({
           }
           throw new APIError(`API error after payment: ${retryResponse.status}`, retryResponse.status, sanitizeErrorResponse(errorBody));
         }
-        this.sessionCalls++;
-        const paidUsd = Number(details.amount) / 1e6;
-        if (Number.isFinite(paidUsd)) this.sessionTotalUsd += paidUsd;
+        if (!settlementSkipped(retryResponse)) {
+          this.sessionCalls++;
+          const paidUsd = Number(details.amount) / 1e6;
+          if (Number.isFinite(paidUsd)) this.sessionTotalUsd += paidUsd;
+        }
         return { data: await retryResponse.json(), headers: retryResponse.headers };
       }
       async fetchWithTimeout(url3, options) {
@@ -118073,7 +118166,7 @@ var init_dist2 = __esm({
         if (resp402.status !== 402) {
           await this.throwApiError(resp402, `poll submit failed (${submitUrl})`);
         }
-        const paymentPayload = await this.signFrom402(resp402, submitUrl, {
+        const { paymentPayload, costUsd } = await this.signFrom402(resp402, submitUrl, {
           description: "BlockRun async job",
           maxTimeoutSeconds: MAX_SIGNED_AUTH_SECONDS
         });
@@ -118092,7 +118185,7 @@ var init_dist2 = __esm({
           await this.throwApiError(submitResp, `poll submit failed (${submitUrl})`);
         }
         if (submitResp.status === 200) {
-          this.recordSpending();
+          this.recordSpending(submitResp, costUsd);
           return submitResp.json();
         }
         const submitData = await submitResp.json();
@@ -118129,7 +118222,7 @@ var init_dist2 = __esm({
             );
           }
           if (pollResp.status === 200 && lastStatus === "completed") {
-            this.recordSpending();
+            this.recordSpending(pollResp, costUsd);
             return pollData;
           }
           if (pollResp.status !== 200 && pollResp.status !== 202 && pollResp.status !== 504) {
@@ -118170,7 +118263,7 @@ var init_dist2 = __esm({
         if (resp402.status === 200) {
           streamResp = resp402;
         } else if (resp402.status === 402) {
-          const paymentPayload = await this.signFrom402(resp402, url3, {
+          const { paymentPayload, costUsd } = await this.signFrom402(resp402, url3, {
             description: "BlockRun stream"
           });
           streamResp = await this.fetchWithTimeout(url3, {
@@ -118189,7 +118282,7 @@ var init_dist2 = __esm({
           if (!streamResp.ok) {
             await this.throwApiError(streamResp, `stream failed after payment (${url3})`);
           }
-          this.recordSpending();
+          this.recordSpending(streamResp, costUsd);
         } else {
           await this.throwApiError(resp402, `stream failed (${url3})`);
           return;
@@ -118245,7 +118338,7 @@ var init_dist2 = __esm({
         return response.json();
       }
       async handlePaymentAndRetry(url3, method, body, response) {
-        const paymentPayload = await this.signFrom402(response, url3, {
+        const { paymentPayload, costUsd } = await this.signFrom402(response, url3, {
           description: "BlockRun"
         });
         const retryInit = {
@@ -118268,13 +118361,14 @@ var init_dist2 = __esm({
         if (!retry.ok) {
           await this.throwApiError(retry, `${method} ${url3} failed after payment`);
         }
-        this.recordSpending();
+        this.recordSpending(retry, costUsd);
         return retry.json();
       }
       /**
        * Read a 402 response's payment requirements (header or body), then sign and
-       * return the base64 PAYMENT-SIGNATURE payload. Also records the cost-to-be
-       * onto the response context (settled on `recordSpending`).
+       * return the base64 PAYMENT-SIGNATURE payload with what it pays, in USD.
+       * The cost stays with the call that signed it (booked by `recordSpending`):
+       * concurrent calls on one client never share it.
        */
       async signFrom402(response, url3, opts) {
         let paymentHeader = response.headers.get("payment-required");
@@ -118292,8 +118386,8 @@ var init_dist2 = __esm({
         }
         const paymentRequired = parsePaymentRequired(paymentHeader);
         const details = extractPaymentDetails(paymentRequired);
-        this.pendingCostUsd = parseFloat(details.amount) / 1e6;
-        return createPaymentPayload(
+        const costUsd = parseFloat(details.amount) / 1e6;
+        const paymentPayload = await createPaymentPayload(
           this.privateKey,
           this.account.address,
           details.recipient,
@@ -118310,14 +118404,20 @@ var init_dist2 = __esm({
             asset: details.asset
           }
         );
+        return { paymentPayload, costUsd };
       }
-      /** Accumulates the most-recent pending cost; settled by recordSpending. */
-      pendingCostUsd = 0;
-      recordSpending() {
-        if (this.pendingCostUsd > 0) {
+      /**
+       * Book `costUsd`, what the call that `response` answered signed. A response
+       * whose settlement the gateway skipped ({@link settlementSkipped}:
+       * `X-Settlement-Skipped: <reason>` or `X-Payment-Waived`) moved nothing, so
+       * nothing is booked. `X-Payment-Settled: false` alone is still booked: the
+       * payment is owed.
+       */
+      recordSpending(response, costUsd) {
+        if (settlementSkipped(response)) return;
+        if (costUsd > 0) {
           this.sessionCalls += 1;
-          this.sessionTotalUsd += this.pendingCostUsd;
-          this.pendingCostUsd = 0;
+          this.sessionTotalUsd += costUsd;
         }
       }
       async throwApiError(resp, prefix) {
@@ -118369,6 +118469,8 @@ var init_dist2 = __esm({
     BLOCKRUN_SOL_OPERATOR = "5YKPQUFjw5WQqhSUkEGKNNfYYVqnRRNbpYyL71qQ1vm3";
     DEFAULT_BATCH_RATE_LIMIT = { maxAttempts: 3, maxWaitMs: 6e4 };
     DEFAULT_BATCH_IN_DOUBT = { maxWaitMs: 3e5 };
+    DEFAULT_BATCH_LOCK_WAIT_MS = 6e4;
+    LOCK_POLL_MS = 500;
     BatchPaymentUnresolvedError = class extends PaymentError {
       /** The {@link SolanaBatchEvent.reason} of the `unresolved` event reported with it. */
       reason;
@@ -118412,6 +118514,22 @@ var init_dist2 = __esm({
         this.reason = init2.reason;
         this.wallet = init2.wallet;
         this.channelIds = init2.channelIds ?? [];
+      }
+    };
+    BatchChannelLockedError = class extends BlockrunError {
+      /** The paying wallet's address. */
+      wallet;
+      /** The live owner's pid, when the SDK knows it. */
+      ownerPid;
+      /** How long this call waited for the lock, in ms (0 unless `onLocked` is `"wait"`). */
+      waitedMs;
+      constructor(init2) {
+        super(`batch-settlement unavailable for wallet ${init2.wallet}: ${init2.detail}`);
+        this.name = "BatchChannelLockedError";
+        this.wallet = init2.wallet;
+        if (init2.ownerPid !== void 0) this.ownerPid = init2.ownerPid;
+        this.waitedMs = init2.waitedMs;
+        withDisposition(this, "unpaid");
       }
     };
     INSTALL_HINT2 = "npm install @x402/core@~2.28.0 @x402/svm@~2.28.0 @solana/kit";
@@ -118735,6 +118853,9 @@ var init_dist2 = __esm({
       }
       reason;
     };
+    DEPOSIT_BLOCKHASH_TTL_MS = 1e4;
+    MAX_DEPOSIT_BLOCKHASH_ENDPOINTS = 8;
+    depositBlockhashes = /* @__PURE__ */ new Map();
     PAYMENT_IDENTIFIER = "payment-identifier";
     IN_DOUBT_MIN_WAIT_MS = 1e3;
     IN_DOUBT_MAX_WAIT_MS = 3e4;
@@ -118818,12 +118939,22 @@ var init_dist2 = __esm({
         if (!Number.isFinite(this.inDoubtMaxWaitMs) || this.inDoubtMaxWaitMs < 0) {
           throw new Error("batch.inDoubt.maxWaitMs must be a finite number of ms >= 0");
         }
+        this.onLocked = init2.options.onLocked ?? "exact";
+        if (this.onLocked !== "exact" && this.onLocked !== "wait" && this.onLocked !== "throw") {
+          throw new Error('batch.onLocked must be "exact", "wait" or "throw"');
+        }
+        this.lockWaitMs = init2.options.lockWaitMs ?? DEFAULT_BATCH_LOCK_WAIT_MS;
+        if (!Number.isFinite(this.lockWaitMs) || this.lockWaitMs < 0) {
+          throw new Error("batch.lockWaitMs must be a finite number of ms >= 0");
+        }
       }
       init;
       state;
       maxAttempts;
       maxWaitMs;
       inDoubtMaxWaitMs;
+      onLocked;
+      lockWaitMs;
       counters = {
         fallbacks: 0,
         fallbacksByReason: {},
@@ -118872,6 +119003,7 @@ var init_dist2 = __esm({
             if (owner !== void 0) {
               return {
                 reason: "channel_store_locked",
+                ownerPid: owner,
                 detail: owner === process.pid ? `channel store ${file2} is in use by another copy of @blockrun/llm in this process (or by a process that had this pid and died: remove ${file2}.lock if nothing uses it)` : `channel store ${file2} is in use by process ${owner}`
               };
             }
@@ -119217,12 +119349,23 @@ var init_dist2 = __esm({
         const unavailable = batchUnavailable(paymentRequired);
         if (unavailable) return this.fallback(unavailable);
         let wallet;
+        let waitedMs = 0;
         try {
           wallet = await this.wallet();
+          if ("reason" in wallet && wallet.reason === "channel_store_locked" && this.onLocked === "wait") {
+            const started = Date.now();
+            wallet = await this.waitForLock(wallet);
+            waitedMs = Date.now() - started;
+          }
         } catch (err) {
           return this.fallback(creationFailure(err));
         }
-        if ("reason" in wallet) return this.fallback({ reason: wallet.reason, detail: wallet.detail });
+        if ("reason" in wallet) {
+          if (wallet.reason === "channel_store_locked" && this.onLocked !== "exact") {
+            return this.lockedOut(wallet.detail, wallet.ownerPid, waitedMs);
+          }
+          return this.fallback({ reason: wallet.reason, detail: wallet.detail });
+        }
         if (closesAtStart !== void 0 && wallet.closes !== closesAtStart) {
           return this.fallback({
             reason: "closed_during_call",
@@ -119238,6 +119381,40 @@ var init_dist2 = __esm({
         } finally {
           wallet.active -= 1;
         }
+      }
+      /**
+       * `onLocked: "wait"`: try the wallet's channel store again every
+       * {@link LOCK_POLL_MS} until its owner lets go of it or `lockWaitMs` runs
+       * out. Reported once as a `backoff` event (`channel_store_locked`).
+       */
+      async waitForLock(refusal) {
+        const deadline = Date.now() + this.lockWaitMs;
+        let current = refusal;
+        if (this.lockWaitMs > 0) {
+          await this.report({
+            type: "backoff",
+            reason: "channel_store_locked",
+            retryAfterMs: this.lockWaitMs,
+            detail: refusal.detail
+          });
+        }
+        while ("reason" in current && current.reason === "channel_store_locked") {
+          const left = deadline - Date.now();
+          if (left <= 0) break;
+          await sleep2(Math.min(LOCK_POLL_MS, left));
+          current = await this.wallet();
+        }
+        return current;
+      }
+      /** `onLocked` other than `"exact"`: the call's `"unpaid"` error, nothing signed. */
+      async lockedOut(detail, ownerPid, waitedMs) {
+        const error62 = new BatchChannelLockedError({
+          wallet: await this.init.address(),
+          detail,
+          waitedMs,
+          ...ownerPid !== void 0 ? { ownerPid } : {}
+        });
+        return { kind: "failed", error: error62 };
       }
       /**
        * The close fence for a call about to send its first request: how many
@@ -119329,11 +119506,9 @@ var init_dist2 = __esm({
             }
             if (wallet.busy) return fallback2({ reason: "channel_busy", attempt: budget.attempt });
             if (wallet.file && !holdsChannelFile(wallet.file)) {
-              return fallback2({
-                reason: "channel_store_locked",
-                attempt: budget.attempt,
-                detail: `this process no longer holds the lock on ${wallet.file}; another owner may be paying into its channels`
-              });
+              const detail = `this process no longer holds the lock on ${wallet.file}; another owner may be paying into its channels`;
+              if (this.onLocked !== "exact") return this.lockedOut(detail, void 0, 0);
+              return fallback2({ reason: "channel_store_locked", attempt: budget.attempt, detail });
             }
             wallet.busy = true;
             holding = true;
@@ -119378,6 +119553,8 @@ var init_dist2 = __esm({
                     wallet.refusedFor = outcome.errorReason;
                   }
                 }
+              } else if (built.key && outcome.reason === "payment_required" && outcome.refusedForMs === void 0) {
+                await this.recheckRefusedChannel(wallet, built.key, built.reclaimAnchor);
               }
               sent = void 0;
               release();
@@ -119645,6 +119822,13 @@ var init_dist2 = __esm({
       }
       /** Build a new batch payment for a 402: the payload, its headers and its kind. */
       async buildPayment(wallet, paymentRequired) {
+        const acceptKey = channelKeyOf(trustedBatchAccept(paymentRequired, this.init.options.operators));
+        let reclaimAnchor;
+        try {
+          const stored = acceptKey ? await wallet.book.base.get(acceptKey) : void 0;
+          reclaimAnchor = stored ? savedReclaimAnchor(stored) : void 0;
+        } catch {
+        }
         const { http: http5, payload } = await this.createPayload(wallet, paymentRequired);
         const scope = payScope.getStore();
         if (scope?.afterError) {
@@ -119666,7 +119850,16 @@ var init_dist2 = __esm({
           const record2 = known?.record;
           kind = record2 && (record2.pending === void 0 || record2.hasConfirmedState) ? "top-up" : "open";
         }
-        return { http: http5, payload, headers, kind, key: known?.key, sentAt: Date.now(), sends: 0 };
+        return {
+          http: http5,
+          payload,
+          headers,
+          kind,
+          key: known?.key,
+          ...reclaimAnchor !== void 0 && known?.key === acceptKey ? { reclaimAnchor } : {},
+          sentAt: Date.now(),
+          sends: 0
+        };
       }
       /**
        * Write a deposit's intent to the wallet's journal before it is sent
@@ -119892,12 +120085,119 @@ var init_dist2 = __esm({
           const http5 = (await this.build(wallet)).http;
           try {
             await this.prepareTopUp(wallet, paymentRequired);
-            return { http: http5, payload: await http5.createPaymentPayload(withPaymentIdentifier(withoutClientSignedBatch(paymentRequired))) };
+            const required2 = await this.withDepositBlockhash(wallet, withoutClientSignedBatch(paymentRequired));
+            return { http: http5, payload: await http5.createPaymentPayload(withPaymentIdentifier(required2)) };
           } catch (err) {
             if (pass > 0 || !isResyncRequired(err) || wallet.resyncs.size === 0) throw err;
           } finally {
             wallet.topUp = void 0;
           }
+        }
+      }
+      /**
+       * The 402 to build this payment from: with a finalized blockhash
+       * ({@link withDepositBlockhash}) when the payment will likely carry a
+       * deposit (no usable record for the trusted accept's channel, so an open,
+       * or a top-up {@link prepareTopUp} just sized). An authorization signs no
+       * transaction and costs no RPC read. Best effort: a failed read leaves the
+       * 402 as it is, and `@x402/svm` fetches its own blockhash.
+       */
+      async withDepositBlockhash(wallet, paymentRequired) {
+        const accept = trustedBatchAccept(paymentRequired, this.init.options.operators);
+        const key3 = accept ? channelKeyOf(accept) : void 0;
+        if (!accept || accept.extra?.recentBlockhash) return paymentRequired;
+        let deposit = wallet.topUp !== void 0;
+        if (!deposit) {
+          try {
+            const record2 = key3 ? await wallet.book.base.get(key3) : void 0;
+            deposit = !record2 || typeof record2.channelId !== "string" || record2.pending !== void 0;
+          } catch {
+            deposit = true;
+          }
+        }
+        if (!deposit) return paymentRequired;
+        try {
+          return withDepositBlockhash(paymentRequired, await finalizedBlockhash(this.init.rpcUrl, this.init.rpcHeaders));
+        } catch {
+          return paymentRequired;
+        }
+      }
+      /**
+       * Queue a re-read of a stored channel whose account is gone at finalized
+       * and at confirmed commitment (closed, its account reclaimed), anchored at
+       * the SDK's own `getBlockHeight` at confirmed. The anchor is saved in the
+       * record (`reclaimAnchorHeight`), so a short-lived process finishes the
+       * wait instead of starting it over; a failed read leaves resync to take it,
+       * and a failed save only costs that. resync pays exact until finality is
+       * LANDING_MARGIN_BLOCKS past the anchor, then drops the record if the
+       * finalized chain still has no account (a lagging read finds the channel
+       * and rewrites the record, without the anchor).
+       */
+      async queueReclaimed(wallet, key3, record2, channelId, savedAnchor) {
+        let anchorHeight = savedReclaimAnchor(record2) ?? savedAnchor;
+        if (anchorHeight === void 0) {
+          try {
+            anchorHeight = rpcInteger(
+              await rpcRequest(this.init.rpcUrl, "getBlockHeight", [{ commitment: "confirmed" }], this.init.rpcHeaders),
+              "getBlockHeight"
+            );
+          } catch {
+          }
+        }
+        if (anchorHeight !== void 0 && savedReclaimAnchor(record2) !== anchorHeight) {
+          try {
+            await wallet.book.set(key3, { ...record2, reclaimAnchorHeight: anchorHeight });
+          } catch {
+          }
+        }
+        addResyncTarget(wallet, {
+          key: key3,
+          channelId,
+          channelConfig: record2.channelConfig,
+          cumulative: parseAtomic(record2.chargedCumulativeAmount),
+          knownDeposit: parseAtomic(record2.deposit),
+          ...anchorHeight !== void 0 ? { anchorHeight } : {},
+          reason: "channel_unusable"
+        });
+      }
+      /**
+       * After the gateway refused an authorization with a plain 402 (no receipt,
+       * not an admission refusal), check the channel it paid into. That is how
+       * the gateway answers an authorization into a channel the facilitator
+       * closed (its verify rejects it), and a channel with deposit to spare is
+       * otherwise never read again: every call would sign another authorization
+       * into it and pay exact. A channel the finalized chain shows closing,
+       * closed or not this wallet's is re-read through resync (record dropped,
+       * or kept and paid exact); one gone at every commitment is queued as
+       * {@link queueReclaimed}; an open one of this wallet's, or one only at
+       * confirmed (not finalized yet), is left as it is. A queued re-read is run
+       * at once. Best effort: a failed read changes nothing, and the next
+       * refusal checks again.
+       */
+      async recheckRefusedChannel(wallet, key3, savedAnchor) {
+        try {
+          const record2 = await wallet.book.get(key3);
+          if (!record2 || record2.pending || typeof record2.channelId !== "string" || wallet.resyncs.has(key3)) return;
+          const channelId = record2.channelId;
+          const channel = await readChannelAccount(this.init.rpcUrl, channelId, this.init.rpcHeaders);
+          if (channel !== void 0) {
+            if (channel.open && channel.payer === await this.init.address() && channel.authorizedSigner === record2.channelConfig.payerAuthorizer && channel.mint === record2.channelConfig.token) {
+              return;
+            }
+            addResyncTarget(wallet, {
+              key: key3,
+              channelId,
+              channelConfig: record2.channelConfig,
+              cumulative: parseAtomic(record2.chargedCumulativeAmount),
+              knownDeposit: parseAtomic(record2.deposit),
+              reason: "channel_unusable"
+            });
+          } else {
+            if (await readChannelAccount(this.init.rpcUrl, channelId, this.init.rpcHeaders, { commitment: "confirmed" }) !== void 0) return;
+            await this.queueReclaimed(wallet, key3, record2, channelId, savedAnchor);
+          }
+          await this.resync(wallet);
+        } catch {
         }
       }
       /**
@@ -119917,7 +120217,11 @@ var init_dist2 = __esm({
        * pays exact (`channel_unreadable`), record kept. If
        * the finalized channel is closing or closed, or is not this wallet's for
        * the record's operator and mint, no top-up is sized from the record: it
-       * is re-read at once (`channel_unusable`), see {@link createPayload}.
+       * is re-read at once (`channel_unusable`), see {@link createPayload}. So is
+       * a channel with no account at finalized or at confirmed commitment (closed
+       * and reclaimed); resync drops its record only once finality is past its
+       * own anchor. One that shows only at confirmed is not finalized yet: the
+       * lifetime cap applies.
        */
       async prepareTopUp(wallet, paymentRequired) {
         wallet.topUp = void 0;
@@ -119929,8 +120233,12 @@ var init_dist2 = __esm({
         const deposit = parseAtomic(record2.deposit);
         if (parseAtomic(record2.chargedCumulativeAmount) + parseAtomic(accept.amount) <= deposit) return;
         let channel;
+        let unfinalized = false;
         try {
           channel = await readChannelAccount(this.init.rpcUrl, record2.channelId, this.init.rpcHeaders);
+          if (channel === void 0) {
+            unfinalized = await readChannelAccount(this.init.rpcUrl, record2.channelId, this.init.rpcHeaders, { commitment: "confirmed" }) !== void 0;
+          }
         } catch (err) {
           if (err instanceof ChannelLayoutError) {
             throw new ResyncError("channel_unreadable", `channel ${record2.channelId}: ${err.message}; no top-up is sized from it`);
@@ -119943,7 +120251,11 @@ var init_dist2 = __esm({
             `could not read channel ${record2.channelId} before topping it up: ${err instanceof Error ? err.message : String(err)}`
           );
         }
-        if (channel === void 0) return;
+        if (channel === void 0 && unfinalized) return;
+        if (channel === void 0) {
+          await this.queueReclaimed(wallet, key3, record2, record2.channelId);
+          throw new ChannelResyncRequiredError(record2.channelId);
+        }
         if (!channel.open || channel.payer !== await this.init.address() || channel.authorizedSigner !== record2.channelConfig.payerAuthorizer || channel.mint !== record2.channelConfig.token) {
           addResyncTarget(wallet, {
             key: key3,
@@ -120114,7 +120426,6 @@ var init_dist2 = __esm({
     };
     SOLANA_API_URL = "https://sol.blockrun.ai/api";
     DEFAULT_MAX_TOKENS22 = 1024;
-    DEFAULT_TIMEOUT14 = 6e4;
     STALE_BLOCKHASH_RETRY_BACKOFFS_MS = [500, 2e3];
     MAX_PAYMENT_FAILURE_BYTES = 64 * 1024;
     DEFAULT_VIDEO_MODEL = "xai/grok-imagine-video";
@@ -120170,7 +120481,7 @@ var init_dist2 = __esm({
         const rpc = resolveRpcConfig(options.rpcUrl, options.rpcHeaders);
         this.rpcUrl = rpc.url;
         this.rpcHeaders = rpc.headers;
-        this.timeout = options.timeout || DEFAULT_TIMEOUT14;
+        this.timeout = options.timeout || DEFAULT_TIMEOUT;
         if (options.batch && !this.apiAuth) {
           this.batchPayer = new SolanaBatchPayer({
             options: options.batch,
@@ -120464,7 +120775,7 @@ var init_dist2 = __esm({
               body: requestBody
             });
             await this.assertPaid(paid);
-            this.recordSettlement(costUsd);
+            this.recordSettlement(costUsd, paid);
             return paid;
           } catch (error62) {
             if (!(error62 instanceof SafeStaleBlockhashError) || staleRetries >= STALE_BLOCKHASH_RETRY_BACKOFFS_MS.length) throw error62;
@@ -120851,7 +121162,7 @@ var init_dist2 = __esm({
                   closesAtStart
                 );
                 if (batch.kind === "paid") {
-                  this.recordSettlement(batch.chargedUsd);
+                  this.recordSettlement(batch.chargedUsd, batch.response);
                   const paid = await this.readPaidJson(batch.response);
                   return withCost(paid, batch.response, batch.chargedUsd, "batch");
                 }
@@ -120968,7 +121279,7 @@ var init_dist2 = __esm({
         };
         const deliver = (data, response) => {
           if (kind === "video") {
-            if (videoCostUsd !== void 0) this.recordSettlement(videoCostUsd);
+            if (videoCostUsd !== void 0) this.recordSettlement(videoCostUsd, response);
             const txHash = response.headers.get("x-payment-receipt");
             if (txHash) data.txHash = txHash;
           }
@@ -121215,7 +121526,7 @@ var init_dist2 = __esm({
           throw withDisposition(error62, "paid-or-in-doubt");
         }
         await this.assertPaid(retryResponse);
-        if (!settlementSkipped(retryResponse)) this.recordSettlement(costUsd);
+        this.recordSettlement(costUsd, retryResponse);
         const paid = await this.readPaidJson(retryResponse);
         return withCost(paid, retryResponse, costUsd, "exact");
       }
@@ -121275,11 +121586,11 @@ var init_dist2 = __esm({
         await this.assertPaid(retryResponse);
         if (retryResponse.status === 202) {
           const kind = pollKindFor(url3);
-          if (kind !== "video") this.recordSettlement(costUsd);
+          if (kind !== "video") this.recordSettlement(costUsd, retryResponse);
           const submitted = await retryResponse.json();
           return this.followSolanaJob(submitted, media.pollBudgetMs ?? this.timeout, kind);
         }
-        this.recordSettlement(costUsd);
+        this.recordSettlement(costUsd, retryResponse);
         return retryResponse.json();
       }
       async getWithPaymentRaw(endpoint, params) {
@@ -121323,7 +121634,7 @@ var init_dist2 = __esm({
           }
         });
         await this.assertPaid(retryResponse);
-        this.recordSettlement(costUsd);
+        this.recordSettlement(costUsd, retryResponse);
         return retryResponse.json();
       }
       /**
@@ -121361,8 +121672,17 @@ var init_dist2 = __esm({
           );
         }
       }
-      /** Count one settled x402 payment against the session total. */
-      recordSettlement(costUsd) {
+      /**
+       * Count one settled x402 payment against the session total.
+       *
+       * Takes the paid response so no booking site can forget the check: a
+       * response whose settlement the gateway skipped ({@link settlementSkipped}:
+       * `X-Settlement-Skipped: free-fallback | empty-result | unexecuted | …`, or
+       * `X-Payment-Waived`) moved nothing on chain and books nothing.
+       * `X-Payment-Settled: false` alone is still booked: the payment is owed.
+       */
+      recordSettlement(costUsd, response) {
+        if (settlementSkipped(response)) return;
         this.sessionCalls += 1;
         this.sessionTotalUsd += costUsd;
       }
