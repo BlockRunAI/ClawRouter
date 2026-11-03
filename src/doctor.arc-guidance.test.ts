@@ -62,9 +62,7 @@ describe("doctor chain-switch hints respect CLAWROUTER_PAYMENT_CHAIN", () => {
         solanaAddress: null,
       }).join("\n");
       expect(text).toContain("set CLAWROUTER_PAYMENT_CHAIN=base");
-      expect(text).toContain(
-        "unset CLAWROUTER_PAYMENT_CHAIN and npx @blockrun/clawrouter chain base",
-      );
+      expect(text).toContain("unset CLAWROUTER_PAYMENT_CHAIN and npx @twzrd/clawrouter chain base");
     } finally {
       if (saved === undefined) delete process.env.CLAWROUTER_PAYMENT_CHAIN;
       else process.env.CLAWROUTER_PAYMENT_CHAIN = saved;

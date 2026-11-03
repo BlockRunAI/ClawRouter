@@ -114,7 +114,7 @@ function yellow(text: string): string {
 // Fetch latest published version from npm registry
 async function fetchLatestVersion(): Promise<string | null> {
   try {
-    const res = await fetch("https://registry.npmjs.org/@blockrun/clawrouter/latest", {
+    const res = await fetch("https://registry.npmjs.org/@twzrd/clawrouter/latest", {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -570,7 +570,7 @@ export function emptyWalletGuidance(
     lines.push(
       `   Fund your EVM wallet with USDC on Arc (same address as Base): ${wallet.address}`,
       "   Send USDC on the Arc network only — USDC on Base does not fund Arc payments.",
-      `   Or switch chains: ${chainSwitchInstruction("base", "npx @blockrun/clawrouter chain base")}`,
+      `   Or switch chains: ${chainSwitchInstruction("base", "npx @twzrd/clawrouter chain base")}`,
       "",
     );
     return lines;
