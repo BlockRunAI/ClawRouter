@@ -6,16 +6,24 @@ import { readFileSync } from "node:fs";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { startProxy } from "../src/proxy.js";
 import { createMppFetch } from "../src/mpp-fetch.js";
+import { InMemorySpendControlStorage, SpendControl } from "../src/spend-control.js";
 
 const signerPath = process.env.SIGNER_PATH;
 const seller = process.env.SELLER ?? "http://127.0.0.1:4093";
 if (!signerPath) throw new Error("SIGNER_PATH required");
 const payer = privateKeyToAccount(JSON.parse(readFileSync(signerPath, "utf8")).privateKey);
 
+// Isolated, in-memory spend control (never touches ~/.openclaw). PER_REQUEST_USD caps one payment.
+const spend = new SpendControl({ storage: new InMemorySpendControlStorage() });
+const perRequest = Number(process.env.PER_REQUEST_USD ?? "0.001");
+spend.setLimit("perRequest", perRequest);
+if (process.env.DAILY_USD) spend.setLimit("daily", Number(process.env.DAILY_USD));
+
 const proxy = await startProxy({
+  spendControl: spend,
   wallet: generatePrivateKey(),
   apiBase: seller,
-  payFetch: createMppFetch(payer),
+  payFetch: createMppFetch(payer, fetch, { spend }),
   skipBalanceCheck: true,
   port: 8499,
 });
@@ -36,7 +44,13 @@ try {
   } catch {
     content = text.slice(0, 200);
   }
-  console.log(JSON.stringify({ payer: payer.address, status: res.status, content }, null, 1));
+  console.log(
+    JSON.stringify(
+      { payer: payer.address, status: res.status, content, perRequest, spent: spend.getStatus() },
+      null,
+      1,
+    ),
+  );
   process.exitCode = res.status === 200 ? 0 : 1;
 } finally {
   await proxy.close();

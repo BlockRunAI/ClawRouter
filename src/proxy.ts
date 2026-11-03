@@ -3102,6 +3102,14 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // the same windows are enforced inside the signer (`registerSpendPolicyHook`
   // above); there is no signer here, so they move to the only other place every
   // paid call on this rail passes through (#329).
+  if (options.payFetch && !options.payFetch.enforcesSpend) {
+    const sc = options.spendControl ?? getSharedSpendControl();
+    if (sc.hasAmountLimits()) {
+      console.warn(
+        "[ClawRouter] \u26A0 payFetch override does not enforce spend limits; the configured perRequest/hourly/daily/session limits will NOT apply to this rail.",
+      );
+    }
+  }
   const payFetch: PayFetch =
     options.payFetch ??
     (authMode === "api-key"
