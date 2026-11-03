@@ -77,20 +77,20 @@ OpenRouter uses nested model IDs: `openrouter/deepseek/deepseek-v3.2`. OpenClaw'
 
 ### How ClawRouter Solves This
 
-ClawRouter uses clean aliases. You say `sonnet` and get `anthropic/claude-sonnet-4-6`. You say `flash` and get `google/gemini-2.5-flash`. No nested prefixes. No double-prefix bugs.
+ClawRouter uses clean aliases. You say `sonnet` and get `anthropic/claude-sonnet-4.6`. You say `flash` and get `google/gemini-2.5-flash`. No nested prefixes. No double-prefix bugs.
 
 ```typescript
 // resolveModelAlias() handles all normalization
-"sonnet"     → "anthropic/claude-sonnet-4-6"
-"opus"       → "anthropic/claude-opus-4-6"
+"sonnet"     → "anthropic/claude-sonnet-4.6"
+"opus"       → "anthropic/claude-opus-5"
 "flash"      → "google/gemini-2.5-flash"
-"grok"       → "xai/grok-4-0314"
-"deepseek"   → "deepseek/deepseek-chat"
+"grok"       → "xai/grok-4.5"
+"deepseek"   → "deepseek/deepseek-v4.1-flash"
 ```
 
 One canonical format. No mangling. No UI inconsistency.
 
-![Eliminating Model ID Mangling — OpenRouter's nested prefixes cause double-prefix bugs (openrouter/openrouter/auto) and UI stripping issues. ClawRouter uses one canonical format with clean aliases: "sonnet" → anthropic/claude-sonnet-4-6, "flash" → google/gemini-2.5-flash.](./assets/clawrouter-eliminating-model-id-mangling.png)
+![Eliminating Model ID Mangling — OpenRouter's nested prefixes cause double-prefix bugs (openrouter/openrouter/auto) and UI stripping issues. ClawRouter uses one canonical format with clean aliases: "sonnet" → anthropic/claude-sonnet-4.6, "flash" → google/gemini-2.5-flash.](./assets/clawrouter-eliminating-model-id-mangling.png)
 
 ---
 
@@ -244,8 +244,8 @@ ClawRouter maintains a curated catalog of <!-- br:models.chatVisible -->90<!-- /
 
 ```typescript
 // Delisted models redirect automatically
-"xai/grok-code-fast-1"  → "deepseek/deepseek-chat"
-"google/gemini-2.0-pro"  → "google/gemini-3.1-pro"
+"xai/grok-code-fast-1"         → "deepseek/deepseek-chat"
+"google/gemini-3-pro-preview"  → "google/gemini-3.1-pro"
 ```
 
 No silent drops. No stale catalog. Models are benchmarked for speed, quality, and tool support before inclusion.

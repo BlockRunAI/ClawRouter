@@ -204,7 +204,8 @@ export const MODEL_ALIASES: Record<string, string> = {
   "qwen3.8-flash": "qwen/qwen3.8-flash",
   "qwen3-8-flash": "qwen/qwen3.8-flash",
   "qwen-vision": "qwen/qwen3.8-flash",
-  // DeepSeek's first image-capable SKU. Bare `deepseek` stays on deepseek-chat.
+  // DeepSeek's first image-capable SKU. Bare `deepseek` stays on the text-only
+  // deepseek-v4.1-flash; vision is opt-in via these pins.
   "deepseek-vision": "deepseek/deepseek-v4-flash-vision-exp",
   "v4-flash-vision": "deepseek/deepseek-v4-flash-vision-exp",
   // Xiaomi MiMo V2.5 — the natively multimodal SKU, distinct from mimo-v2.5-pro
