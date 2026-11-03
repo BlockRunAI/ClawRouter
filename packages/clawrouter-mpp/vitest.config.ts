@@ -6,7 +6,7 @@ process.env.BLOCKRUN_MODEL_CATALOG_URL ??= "";
 export default defineConfig({
   resolve: {
     alias: {
-      "@twzrd/clawrouter": fileURLToPath(new URL("../../src/index.ts", import.meta.url)),
+      "@twzrd1111/clawrouter": fileURLToPath(new URL("../../src/index.ts", import.meta.url)),
     },
   },
 });

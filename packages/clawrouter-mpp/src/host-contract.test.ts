@@ -5,7 +5,7 @@ import {
   SpendControl,
   startProxy,
   type PayFetch,
-} from "@twzrd/clawrouter";
+} from "@twzrd1111/clawrouter";
 import { MppPaidNoCompletionError } from "./index.js";
 
 // The package and the host only share a name and a flag (see PayFetch). This proves they line up.

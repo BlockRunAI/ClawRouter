@@ -5,12 +5,12 @@
  * Standalone proxy for deployed setups where the proxy needs to survive gateway restarts.
  *
  * Usage:
- *   npx @twzrd/clawrouter              # Start standalone proxy
- *   npx @twzrd/clawrouter --version    # Show version
- *   npx @twzrd/clawrouter --port 8402  # Custom port
+ *   npx @twzrd1111/clawrouter              # Start standalone proxy
+ *   npx @twzrd1111/clawrouter --version    # Show version
+ *   npx @twzrd1111/clawrouter --port 8402  # Custom port
  *
  * For production deployments, use with PM2:
- *   pm2 start "npx @twzrd/clawrouter" --name clawrouter
+ *   pm2 start "npx @twzrd1111/clawrouter" --name clawrouter
  */
 
 import { startProxy, getProxyPort } from "./proxy.js";
@@ -354,7 +354,7 @@ async function cmdStatus(port: number): Promise<void> {
     console.log();
   } catch {
     console.error(`✗ Cannot connect to ClawRouter on port ${port}`);
-    console.error(`  Is the proxy running? Start with: npx @twzrd/clawrouter`);
+    console.error(`  Is the proxy running? Start with: npx @twzrd1111/clawrouter`);
     process.exit(1);
   }
 }
@@ -596,7 +596,7 @@ async function cmdPhone(
     }
   } catch (err) {
     console.error(`✗ ${err instanceof Error ? err.message : String(err)}`);
-    console.error(`  Is the proxy running on port ${port}? (start: npx @twzrd/clawrouter)`);
+    console.error(`  Is the proxy running on port ${port}? (start: npx @twzrd1111/clawrouter)`);
     process.exit(1);
   }
 }
@@ -618,7 +618,7 @@ async function cmdCache(port: number): Promise<void> {
 /**
  * `clawrouter setup` — finish OpenClaw integration after `npm install -g`.
  *
- * Bare `npm install -g @twzrd/clawrouter` puts the package on disk and
+ * Bare `npm install -g @twzrd1111/clawrouter` puts the package on disk and
  * adds the `clawrouter` binary to PATH, but performs ZERO OpenClaw plugin
  * registration: no entry in openclaw.json's `plugins.entries`, no provider
  * registration, no models allowlist sync, no auth profile. The bot ends up
@@ -740,7 +740,7 @@ async function cmdSetup(): Promise<void> {
         const metadata = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8")) as {
           name?: unknown;
         };
-        return metadata.name === "@blockrun/clawrouter" || metadata.name === "@twzrd/clawrouter";
+        return metadata.name === "@blockrun/clawrouter" || metadata.name === "@twzrd1111/clawrouter";
       } catch {
         return false;
       }
@@ -817,7 +817,7 @@ async function cmdSetup(): Promise<void> {
           };
           legacyBlockRunInstall =
             legacyPackage.name === "@blockrun/clawrouter" ||
-            legacyPackage.name === "@twzrd/clawrouter";
+            legacyPackage.name === "@twzrd1111/clawrouter";
         } catch {
           // An unreadable directory is not proof that the official id was ours.
         }
@@ -892,7 +892,7 @@ async function cmdSetup(): Promise<void> {
     } catch {
       // Older OpenClaw versions do not need the flag.
     }
-    const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC ?? "@twzrd/clawrouter";
+    const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC ?? "@twzrd1111/clawrouter";
     const installArgs = ["plugins", "install", "--force"];
     if (acceptsCapabilities) installArgs.push("--accept-capabilities");
     installArgs.push(installSpec);
@@ -1071,7 +1071,7 @@ async function cmdUpdate(): Promise<void> {
   }
   if (!fromGlobal) return;
 
-  const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC || "@twzrd/clawrouter@latest";
+  const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC || "@twzrd1111/clawrouter@latest";
   console.log(`\n→ Updating global CLI (npm install -g ${installSpec})...`);
   try {
     execFileSync("npm", ["install", "-g", installSpec], {
@@ -1737,7 +1737,7 @@ async function main(): Promise<void> {
       console.error(
         `[ClawRouter] Insufficient funds. Balance: ${info.balanceUSD}, Need: ${info.requiredUSD}`,
       );
-      console.error(`[ClawRouter] Need help? Run: npx @twzrd/clawrouter doctor`);
+      console.error(`[ClawRouter] Need help? Run: npx @twzrd1111/clawrouter doctor`);
     },
   });
 
@@ -1774,6 +1774,6 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   console.error(`[ClawRouter] Fatal error: ${err.message}`);
-  console.error(`[ClawRouter] Need help? Run: npx @twzrd/clawrouter doctor`);
+  console.error(`[ClawRouter] Need help? Run: npx @twzrd1111/clawrouter doctor`);
   process.exit(1);
 });

@@ -1,11 +1,11 @@
-# @twzrd/clawrouter-mpp
+# @twzrd1111/clawrouter-mpp
 
 MPP (Machine Payments Protocol) payment rails for [ClawRouter](https://github.com/BlockRunAI/ClawRouter):
 pay an MPP seller over **Tempo** or **Solana** instead of x402, under ClawRouter's own spend limits.
 
 ```ts
-import { startProxy, SpendControl, FileSpendControlStorage } from "@twzrd/clawrouter";
-import { createMppFetch, createSolanaMppFetch } from "@twzrd/clawrouter-mpp";
+import { startProxy, SpendControl, FileSpendControlStorage } from "@twzrd1111/clawrouter";
+import { createMppFetch, createSolanaMppFetch } from "@twzrd1111/clawrouter-mpp";
 
 const spend = new SpendControl({ storage: new FileSpendControlStorage() });
 
@@ -19,7 +19,7 @@ await startProxy({ spendControl: spend, payFetch /* ... */ });
 
 Requires ClawRouter with the `payFetch` seam. Until that ships upstream
 ([BlockRunAI/ClawRouter#546](https://github.com/BlockRunAI/ClawRouter/pull/546)), install the
-`@twzrd/clawrouter` distribution: upstream ClawRouter plus that seam, nothing else, with version numbers
+`@twzrd1111/clawrouter` distribution: upstream ClawRouter plus that seam, nothing else, with version numbers
 mirroring upstream. When the seam is released upstream, switch the import and peer dependency back to
 `@blockrun/clawrouter`.
 
@@ -45,4 +45,4 @@ npm install   # from the ClawRouter repo root
 npm run typecheck && npm test && npm run build   # in packages/clawrouter-mpp
 ```
 
-Tests resolve `@twzrd/clawrouter` to the repo source until the seam is released.
+Tests resolve `@twzrd1111/clawrouter` to the repo source until the seam is released.

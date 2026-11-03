@@ -1,5 +1,5 @@
 {
-  "name": "@twzrd/clawrouter-mpp",
+  "name": "@twzrd1111/clawrouter-mpp",
   "version": "0.1.0",
   "description": "MPP (Machine Payments Protocol) payment rails for ClawRouter: Tempo and Solana charge, with spend limits and paid-failure handling",
   "type": "module",
@@ -25,7 +25,7 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@twzrd/clawrouter": ">=0.12.306",
+    "@twzrd1111/clawrouter": ">=0.12.306",
     "@solana/kit": "*",
     "@solana/pay-kit": "~0.13.1",
     "mppx": "~0.17.0",

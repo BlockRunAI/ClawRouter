@@ -236,7 +236,7 @@ async function generateAndSaveWallet(existingCoreSolanaKey?: Uint8Array): Promis
         `Restore your EVM private key using one of:\n` +
         `  Windows:   set BLOCKRUN_WALLET_KEY=0x<your_key>\n` +
         `  Mac/Linux: export BLOCKRUN_WALLET_KEY=0x<your_key>\n\n` +
-        `Then run: npx @twzrd/clawrouter`,
+        `Then run: npx @twzrd1111/clawrouter`,
     );
   }
 
@@ -593,7 +593,7 @@ export async function recoverWalletFromMnemonic(): Promise<void> {
   await migrateLegacyWalletToCore();
 
   console.log(`[ClawRouter] ✓ Wallet restored into BlockRun Core at ${CORE_WALLET_DIR}`);
-  console.log(`[ClawRouter]   Run: npx @twzrd/clawrouter`);
+  console.log(`[ClawRouter]   Run: npx @twzrd1111/clawrouter`);
   console.log(`[ClawRouter]`);
 }
 
@@ -703,7 +703,7 @@ function warnChainOverride(core: string, legacy: string): void {
   console.warn(
     `[ClawRouter]   A different chain means a different signer and gateway — funds on ${legacy} will not be spendable.`,
   );
-  console.warn(`[ClawRouter]   To go back: npx @twzrd/clawrouter wallet ${legacy}`);
+  console.warn(`[ClawRouter]   To go back: npx @twzrd1111/clawrouter wallet ${legacy}`);
 }
 
 /**

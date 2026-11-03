@@ -28,7 +28,7 @@ import {
   SpendPolicyError,
   type PayFetch,
   type SpendControl,
-} from "@twzrd/clawrouter";
+} from "@twzrd1111/clawrouter";
 
 /**
  * 6-decimal USD stablecoin mints priced here (from pay-kit 0.13.1's own tables). Any other mint cannot be

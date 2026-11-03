@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "baseUrl": ".",
-    "paths": { "@twzrd/clawrouter": ["../../src/index.ts"] }
+    "paths": { "@twzrd1111/clawrouter": ["../../src/index.ts"] }
   },
   "include": ["src"]
 }
