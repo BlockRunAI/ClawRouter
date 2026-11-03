@@ -1,3 +1,10 @@
+> **`@twzrd/clawrouter` is a distribution of [BlockRunAI/ClawRouter](https://github.com/BlockRunAI/ClawRouter)** (MIT, © BlockRunAI).
+> It is upstream 0.12.306 plus one change: the payment-rail seam proposed in
+> [BlockRunAI/ClawRouter#546](https://github.com/BlockRunAI/ClawRouter/pull/546), which lets a rail such as
+> [`@twzrd/clawrouter-mpp`](https://www.npmjs.com/package/@twzrd/clawrouter-mpp) plug in. Version numbers mirror
+> upstream. It will be retired when the seam ships upstream. Not affiliated with or endorsed by BlockRun.
+> Do not install it alongside `@blockrun/clawrouter`: they share the OpenClaw plugin id.
+
 <div align="center">
 
 <img src="assets/banner.png" alt="ClawRouter Banner" width="600">
