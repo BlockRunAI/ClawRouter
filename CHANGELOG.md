@@ -4,6 +4,33 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.306 — November 2, 2026
+
+### Dependency security sweep: 91 open Dependabot alerts → 0
+
+**In the npm package:** `follow-redirects` 1.16.0 → 1.16.2, bundled into
+`dist/` through axios on the Polymarket path. Older versions could carry
+credential headers across a cross-origin redirect (four high advisories).
+
+**In ClawRouter Desktop:**
+
+- DeepSeek Harness 0.1.1-rc.2 → 0.1.2-rc.1. The old version trusted the
+  client's `Host` header on its local control API, so a spoofed header gave
+  full agent control (critical, GHSA-8m2g-8cgm-3vcp).
+- Electron 44.0.0 → 44.9.1 (eight advisories, including the compromised
+  eMudhra intermediate certificate).
+- The bundled runtime moved off a stale ClawRouter 0.12.284, which was failing
+  the packaging check, and picked up patched `undici`, `@modelcontextprotocol/sdk`,
+  `body-parser`, `zod`, `qs`, `hono`, `fast-uri`, `ip-address` and `minimatch`.
+
+Eight alerts were dismissed with the reason recorded on each. `elliptic` has
+no patched release, and its signing code never runs here: Polymarket requests
+are signed through viem. The rest are copies bundled inside npm itself or
+inside electron-builder's build tooling, which overrides cannot reach and
+which never ship to users.
+
+---
+
 ## v0.12.305 — November 2, 2026
 
 ### Solana batch payments: four fixes from @blockrun/llm 3.25.0
