@@ -125,7 +125,15 @@ export function isBlockedSsrfHost(hostname: string): boolean {
     // NAT64 (64:ff9b::/96), IPv4-translated (::ffff:0:0/96 / RFC 2765/6052), and IPv4-mapped (::ffff:a.b.c.d).
     const embedded = h.match(/^64:ff9b::(.+)$/) ?? h.match(/::ffff:(.+)$/);
     if (embedded) {
-      const tail = embedded[1].startsWith("0:") ? embedded[1].slice(2) : embedded[1];
+      // Strip the translated prefix's extra `0:` only when an IPv4 still follows it
+      // (dotted, or two hextets). A two-hextet tail that starts with `0:` is
+      // IPv4-mapped 0.0.x.y — `::ffff:0:1` is how WHATWG URL writes
+      // `[::ffff:0.0.0.1]` — and must keep its first hextet.
+      const rawTail = embedded[1];
+      const tail =
+        rawTail.startsWith("0:") && (rawTail.includes(".") || rawTail.split(":").length > 2)
+          ? rawTail.slice(2)
+          : rawTail;
       if (tail.includes(".")) return isBlockedSsrfHost(tail);
       const seg = tail.split(":");
       if (seg.length === 2)

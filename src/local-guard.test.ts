@@ -71,6 +71,21 @@ describe("isBlockedSsrfHost", () => {
     }
   });
 
+  it("keeps blocking IPv4-mapped 0.0.x.y, which WHATWG URL writes as ::ffff:0:xxyy", () => {
+    // new URL("http://[::ffff:0.0.0.1]").hostname === "[::ffff:0:1]" — the
+    // translated-prefix strip must not eat the first IPv4 hextet here.
+    for (const h of [
+      "::ffff:0:0",
+      "::ffff:0:1",
+      "[::ffff:0:1]",
+      "::ffff:0:a00",
+      "::ffff:0.0.0.1",
+      "::ffff:0:0:1", // translated 0.0.0.1
+    ]) {
+      expect(isBlockedSsrfHost(h), h).toBe(true);
+    }
+  });
+
   it("allows public hosts", () => {
     for (const h of [
       "example.com",
