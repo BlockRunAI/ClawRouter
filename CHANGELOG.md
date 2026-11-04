@@ -4,6 +4,27 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.307 — November 3, 2026
+
+### The SSRF guard reads every IPv6 form that embeds an IPv4 address
+
+Three more ways of writing an IPv4 address inside an IPv6 literal now resolve
+to the embedded address and are judged by the IPv4 rules: IPv4-translated
+(`::ffff:0:127.0.0.1`, `::ffff:0:7f00:1`), IPv4-compatible (`::127.0.0.1`,
+`::7f00:1`) and the hex spelling of each. Loopback, private, link-local and
+cloud-metadata targets written that way are refused, as literals and as DNS
+answers; public addresses in those forms still pass. Thanks @Tyagiquamar
+(#547).
+
+Landing it surfaced one regression, fixed before release: the translated
+prefix strip removed the leading `0:` from every `::ffff:` tail, so a
+two-hextet tail such as `::ffff:0:1` (IPv4-mapped 0.0.0.1, which is how the
+URL parser writes `[::ffff:0.0.0.1]`) lost its first hextet and fell through
+unblocked. The strip now fires only when an IPv4 still follows it. Six
+regression cases pin the mapped `0.0.x.y` forms.
+
+---
+
 ## v0.12.306 — November 2, 2026
 
 ### Dependency security sweep: 91 open Dependabot alerts → 0
