@@ -288842,11 +288842,18 @@ function isBlockedSsrfHost(hostname3) {
     }
     const embedded = h.match(/^64:ff9b::(.+)$/) ?? h.match(/::ffff:(.+)$/);
     if (embedded) {
-      const tail = embedded[1];
+      const rawTail = embedded[1];
+      const tail = rawTail.startsWith("0:") && (rawTail.includes(".") || rawTail.split(":").length > 2) ? rawTail.slice(2) : rawTail;
       if (tail.includes(".")) return isBlockedSsrfHost(tail);
       const seg = tail.split(":");
       if (seg.length === 2)
         return isBlockedSsrfHost(v4FromHex(parseInt(seg[0], 16), parseInt(seg[1], 16)));
+    }
+    const compat = h.match(/^::(?:0:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+    if (compat) return isBlockedSsrfHost(compat[1]);
+    const compatHex = h.match(/^::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (compatHex) {
+      return isBlockedSsrfHost(v4FromHex(parseInt(compatHex[1], 16), parseInt(compatHex[2], 16)));
     }
     return false;
   }
