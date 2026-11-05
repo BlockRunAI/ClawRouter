@@ -1619,7 +1619,8 @@ export type ProxyOptions = {
   cacheConfig?: ResponseCacheConfig;
   /**
    * Maximum total spend (in USD) per session run.
-   * Default: undefined (no limit). Example: 0.5 = $0.50 per session.
+   * Default: undefined (no limit). Example: 0.5 = $0.50 per session. 0 refuses paid chat
+   * completions; other paid endpoints are not capped.
    */
   maxCostPerRunUsd?: number;
   /**
@@ -6393,7 +6394,7 @@ async function proxyRequest(
   // Must happen before streaming headers are sent.
   let sessionSpend: SessionSpend | undefined;
   if (
-    options.maxCostPerRunUsd &&
+    options.maxCostPerRunUsd !== undefined &&
     effectiveSessionId &&
     !isFreeModel &&
     (options.maxCostPerRunMode ?? "graceful") === "strict"
@@ -6438,7 +6439,7 @@ async function proxyRequest(
       return;
     }
     sessionSpend = admission.spend;
-  } else if (options.maxCostPerRunUsd && effectiveSessionId) {
+  } else if (options.maxCostPerRunUsd !== undefined && effectiveSessionId) {
     // Graceful mode (and a free model in strict mode) refuses nothing, but a
     // signed payment is still spend — including one whose response was lost —
     // so it is recorded the same way.
@@ -6455,7 +6456,7 @@ async function proxyRequest(
   //       silently substituting with free model would be deceptive regardless of task type
   // Simple routing profile requests are handled later via graceful downgrade.
   if (
-    options.maxCostPerRunUsd &&
+    options.maxCostPerRunUsd !== undefined &&
     effectiveSessionId &&
     !isFreeModel &&
     (options.maxCostPerRunMode ?? "graceful") === "graceful"
@@ -6499,7 +6500,7 @@ async function proxyRequest(
       // Case B: explicit model request (user chose a specific model, not a routing profile).
       // Silently substituting their choice with free model is deceptive — block instead.
       const est = estimate(modelId, body.length, maxTokens);
-      const canAfford = !est || Number(est) / 1_000_000 <= remainingUsd;
+      const canAfford = est ? Number(est) / 1_000_000 <= remainingUsd : remainingUsd > 0;
       if (!canAfford) {
         console.log(
           `[ClawRouter] Budget insufficient for explicit model ${modelId} in session ${effectiveSessionId.slice(0, 8)}...: $${Math.max(0, remainingUsd).toFixed(4)} remaining — blocking (user explicitly chose ${modelId})`,
@@ -6839,7 +6840,7 @@ async function proxyRequest(
     // Simple tasks (no tools, non-complex tier): downgrade with visible warning.
     // Complex/agentic tasks with no affordable model: already blocked above (before streaming headers).
     if (
-      options.maxCostPerRunUsd &&
+      options.maxCostPerRunUsd !== undefined &&
       effectiveSessionId &&
       !isFreeModel &&
       (options.maxCostPerRunMode ?? "graceful") === "graceful"
@@ -6849,9 +6850,11 @@ async function proxyRequest(
 
       const beforeFilter = [...modelsToTry];
       modelsToTry = modelsToTry.filter((m) => {
-        if (catalog.freeIds.has(m)) return true; // free models always fit (no cost)
+        // Router-core names free rungs by their upstream id (nvidia/...), which
+        // only the alias map ties to the free tier.
+        if (catalog.freeIds.has(resolveModelAlias(m))) return true; // free models always fit (no cost)
         const est = estimate(m, body.length, maxTokens);
-        if (!est) return true; // no pricing data → keep (permissive)
+        if (!est) return remainingUsd > 0; // no pricing data → keep only while budget remains
         return Number(est) / 1_000_000 <= remainingUsd;
       });
 
@@ -6905,7 +6908,9 @@ async function proxyRequest(
         return;
       }
 
-      if (excluded.length > 0) {
+      // Dropping fallbacks while the primary survives is not a downgrade: the
+      // request still runs on the model it was routed to, so say nothing.
+      if (excluded.length > 0 && modelsToTry[0] !== beforeFilter[0]) {
         const budgetSummary =
           remainingUsd > 0
             ? `$${remainingUsd.toFixed(4)} remaining`
@@ -6917,7 +6922,11 @@ async function proxyRequest(
         // A: Set visible warning notice — prepended to response so user sees the downgrade
         const fromModel = excluded[0];
         const usingFree = modelsToTry.length === 1 && catalog.freeIds.has(modelsToTry[0]);
-        if (usingFree) {
+        // A $0 cap is a deliberate free-only setup, not a budget that ran out: the
+        // header below still reports the downgrade, but the reply stays clean.
+        if (options.maxCostPerRunUsd === 0) {
+          budgetDowngradeNotice = undefined;
+        } else if (usingFree) {
           budgetDowngradeNotice = `> **⚠️ Budget cap reached** ($${runCostUsd.toFixed(4)}/$${options.maxCostPerRunUsd}) — downgraded to free model. Quality may be reduced. Increase \`maxCostPerRun\` to continue with ${fromModel}.\n\n`;
         } else {
           const toModel = modelsToTry[0] ?? FREE_MODEL; // last resort
