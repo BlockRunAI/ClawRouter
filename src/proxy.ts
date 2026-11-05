@@ -7999,8 +7999,11 @@ async function proxyRequest(
         completedAt: Date.now(),
       });
 
-      // Cache for response cache (long-term, 10min) - only successful non-streaming
-      if (upstream.status === 200 && responseCache.shouldCache(body)) {
+      // Cache for response cache (long-term, 10min) - only successful non-streaming.
+      // Pass the request headers, as the lookup does: a request that bypassed the
+      // cache with `Cache-Control: no-cache` must not have its response stored and
+      // served to the next caller.
+      if (upstream.status === 200 && responseCache.shouldCache(body, reqHeaders)) {
         responseCache.set(cacheKey, {
           body: responseBody,
           status: upstream.status,
