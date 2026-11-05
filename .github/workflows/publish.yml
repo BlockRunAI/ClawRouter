@@ -1,19 +1,17 @@
 name: Publish (npm)
 
-# Why this exists: publishing was 100% manual — `npm publish` run from a laptop,
-# which hits the account's "2FA for writes" gate and demands an interactive OTP
-# every release. This automates it: CI publishes with an automation NPM_TOKEN +
-# --provenance, guarded by a version check so a re-run can never double-publish.
-# Mirrors blockrun-mcp/.github/workflows/publish.yml (npm half only — ClawRouter
-# is not an MCP server, so there is no MCP-registry step).
+# Twzrd package release is manual: merging to the fork's release branch cannot
+# publish these packages without an operator dispatch. The main branch has its
+# separate @blockrun/clawrouter release workflow.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "package.json" # only run when the version could have changed
-      - ".github/workflows/publish.yml"
-  workflow_dispatch: # manual trigger (e.g. to unstick a failed publish)
+  workflow_dispatch:
+    inputs:
+      confirm_publish:
+        description: Publish the exact core and MPP versions shown in the run log
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: publish
@@ -21,7 +19,9 @@ concurrency:
 
 jobs:
   publish:
+    if: github.ref == 'refs/heads/claude/twzrd-fork' && inputs.confirm_publish == true
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write # required for npm --provenance attestation
@@ -34,37 +34,86 @@ jobs:
           check-latest: true
           registry-url: "https://registry.npmjs.org"
 
-      - name: Resolve versions
-        id: v
+      - name: Resolve Twzrd package versions
+        id: versions
+        shell: bash
         run: |
-          PKG=$(node -p "require('./package.json').version")
-          NPM=$(npm view @blockrun/clawrouter version 2>/dev/null || echo "none")
-          echo "pkg=$PKG" >> "$GITHUB_OUTPUT"
-          echo "npm=$NPM" >> "$GITHUB_OUTPUT"
-          echo "package.json=$PKG | npm=$NPM"
+          ROOT_NAME=$(node -p "require('./package.json').name")
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          if ROOT_REGISTRY_RESULT=$(npm view "$ROOT_NAME@$ROOT_VERSION" version 2>&1); then
+            ROOT_PUBLISHED=true
+          elif grep -q 'E404' <<<"$ROOT_REGISTRY_RESULT"; then
+            ROOT_PUBLISHED=false
+          else
+            echo "$ROOT_REGISTRY_RESULT" >&2
+            exit 1
+          fi
+          MPP_NAME=$(node -p "require('./packages/clawrouter-mpp/package.json').name")
+          MPP_VERSION=$(node -p "require('./packages/clawrouter-mpp/package.json').version")
+          if MPP_REGISTRY_RESULT=$(npm view "$MPP_NAME@$MPP_VERSION" version 2>&1); then
+            MPP_PUBLISHED=true
+          elif grep -q 'E404' <<<"$MPP_REGISTRY_RESULT"; then
+            MPP_PUBLISHED=false
+          else
+            echo "$MPP_REGISTRY_RESULT" >&2
+            exit 1
+          fi
 
-      - name: Install dependencies
-        run: npm ci
+          {
+            echo "root_name=$ROOT_NAME"
+            echo "root_version=$ROOT_VERSION"
+            echo "publish_root=$([ "$ROOT_PUBLISHED" = false ] && echo true || echo false)"
+            echo "mpp_name=$MPP_NAME"
+            echo "mpp_version=$MPP_VERSION"
+            echo "publish_mpp=$([ "$MPP_PUBLISHED" = false ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+          echo "$ROOT_NAME@$ROOT_VERSION: $( [ "$ROOT_PUBLISHED" = true ] && echo already-published || echo not-yet-published )"
+          echo "$MPP_NAME@$MPP_VERSION: $( [ "$MPP_PUBLISHED" = true ] && echo already-published || echo not-yet-published )"
 
-      - name: Build, typecheck, test
+      - name: Install core dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build, typecheck, and test core
+        run: |
+          npx prettier --check .
+          npm run lint
+          npm run build
+          npm run typecheck
+          npm test
+          node scripts/sync-brand-numbers.mjs --check
+
+      - name: Install MPP package development dependencies
+        working-directory: packages/clawrouter-mpp
+        run: npm install --ignore-scripts --legacy-peer-deps --package-lock=false --no-audit --no-fund
+
+      - name: Build, typecheck, and test MPP package
+        working-directory: packages/clawrouter-mpp
         run: |
           npm run build
           npm run typecheck
           npm test
 
-      # npm trusted publishing (OIDC): with this package's Trusted Publisher set
-      # to this repo + publish.yml on npmjs.com, npm >= 11.5.1 exchanges the
-      # job's id-token for a one-off publish credential, so no long-lived
-      # NPM_TOKEN is needed. The token stays below as a fallback until every
-      # package is switched over.
+      # The root package must publish first because MPP declares it as a peer.
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@^11.5.1
-      - name: Publish to npm
-        if: steps.v.outputs.pkg != steps.v.outputs.npm
+
+      - name: Publish core package
+        if: steps.versions.outputs.publish_root == 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Skip npm (already published)
-        if: steps.v.outputs.pkg == steps.v.outputs.npm
-        run: echo "npm already at ${{ steps.v.outputs.pkg }} — skipping npm publish"
+      - name: Skip core package (already published)
+        if: steps.versions.outputs.publish_root != 'true'
+        run: echo "${{ steps.versions.outputs.root_name }}@${{ steps.versions.outputs.root_version }} is already published"
+
+      - name: Publish MPP package
+        if: steps.versions.outputs.publish_mpp == 'true'
+        working-directory: packages/clawrouter-mpp
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip MPP package (already published)
+        if: steps.versions.outputs.publish_mpp != 'true'
+        run: echo "${{ steps.versions.outputs.mpp_name }}@${{ steps.versions.outputs.mpp_version }} is already published"
