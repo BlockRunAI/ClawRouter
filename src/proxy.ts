@@ -1619,7 +1619,8 @@ export type ProxyOptions = {
   cacheConfig?: ResponseCacheConfig;
   /**
    * Maximum total spend (in USD) per session run.
-   * Default: undefined (no limit). Example: 0.5 = $0.50 per session. 0 allows free models only.
+   * Default: undefined (no limit). Example: 0.5 = $0.50 per session. 0 refuses paid chat
+   * completions; other paid endpoints are not capped.
    */
   maxCostPerRunUsd?: number;
   /**
@@ -6499,7 +6500,7 @@ async function proxyRequest(
       // Case B: explicit model request (user chose a specific model, not a routing profile).
       // Silently substituting their choice with free model is deceptive — block instead.
       const est = estimate(modelId, body.length, maxTokens);
-      const canAfford = !est || Number(est) / 1_000_000 <= remainingUsd;
+      const canAfford = est ? Number(est) / 1_000_000 <= remainingUsd : remainingUsd > 0;
       if (!canAfford) {
         console.log(
           `[ClawRouter] Budget insufficient for explicit model ${modelId} in session ${effectiveSessionId.slice(0, 8)}...: $${Math.max(0, remainingUsd).toFixed(4)} remaining — blocking (user explicitly chose ${modelId})`,
@@ -6851,7 +6852,7 @@ async function proxyRequest(
       modelsToTry = modelsToTry.filter((m) => {
         if (catalog.freeIds.has(m)) return true; // free models always fit (no cost)
         const est = estimate(m, body.length, maxTokens);
-        if (!est) return true; // no pricing data → keep (permissive)
+        if (!est) return remainingUsd > 0; // no pricing data → keep only while budget remains
         return Number(est) / 1_000_000 <= remainingUsd;
       });
 

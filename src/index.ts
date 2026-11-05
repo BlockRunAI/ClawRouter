@@ -1046,7 +1046,8 @@ async function startProxyInBackground(
   const routingConfig = api.pluginConfig?.routing as Partial<RoutingConfig> | undefined;
 
   const maxCostPerRunUsd =
-    typeof api.pluginConfig?.maxCostPerRun === "number"
+    typeof api.pluginConfig?.maxCostPerRun === "number" &&
+    Number.isFinite(api.pluginConfig.maxCostPerRun)
       ? (api.pluginConfig.maxCostPerRun as number)
       : undefined;
 
