@@ -120,9 +120,21 @@ describe("maxCostPerRun of 0", () => {
     expect(paidHits).toBe(0);
   });
 
+  it("adds no downgrade notice when the routed primary is already free", async () => {
+    const res = await send(graceful, "eco");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-clawrouter-budget-mode")).toBeNull();
+    const json = (await res.json()) as { choices: { message: { content: string } }[] };
+    expect(json.choices[0].message.content).toBe("ok");
+    expect(paidHits).toBe(0);
+  });
+
   it("downgrades a simple routed request to a free model in graceful mode", async () => {
     const res = await send(graceful, "auto");
     expect(res.status).toBe(200);
+    expect(res.headers.get("x-clawrouter-budget-mode")).toBe("downgraded");
+    const json = (await res.json()) as { choices: { message: { content: string } }[] };
+    expect(json.choices[0].message.content).toBe("ok");
     expect(paidHits).toBe(0);
   });
 

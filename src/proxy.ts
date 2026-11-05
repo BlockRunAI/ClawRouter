@@ -6850,7 +6850,9 @@ async function proxyRequest(
 
       const beforeFilter = [...modelsToTry];
       modelsToTry = modelsToTry.filter((m) => {
-        if (catalog.freeIds.has(m)) return true; // free models always fit (no cost)
+        // Router-core names free rungs by their upstream id (nvidia/...), which
+        // only the alias map ties to the free tier.
+        if (catalog.freeIds.has(resolveModelAlias(m))) return true; // free models always fit (no cost)
         const est = estimate(m, body.length, maxTokens);
         if (!est) return remainingUsd > 0; // no pricing data → keep only while budget remains
         return Number(est) / 1_000_000 <= remainingUsd;
@@ -6906,7 +6908,9 @@ async function proxyRequest(
         return;
       }
 
-      if (excluded.length > 0) {
+      // Dropping fallbacks while the primary survives is not a downgrade: the
+      // request still runs on the model it was routed to, so say nothing.
+      if (excluded.length > 0 && modelsToTry[0] !== beforeFilter[0]) {
         const budgetSummary =
           remainingUsd > 0
             ? `$${remainingUsd.toFixed(4)} remaining`
@@ -6918,7 +6922,11 @@ async function proxyRequest(
         // A: Set visible warning notice — prepended to response so user sees the downgrade
         const fromModel = excluded[0];
         const usingFree = modelsToTry.length === 1 && catalog.freeIds.has(modelsToTry[0]);
-        if (usingFree) {
+        // A $0 cap is a deliberate free-only setup, not a budget that ran out: the
+        // header below still reports the downgrade, but the reply stays clean.
+        if (options.maxCostPerRunUsd === 0) {
+          budgetDowngradeNotice = undefined;
+        } else if (usingFree) {
           budgetDowngradeNotice = `> **⚠️ Budget cap reached** ($${runCostUsd.toFixed(4)}/$${options.maxCostPerRunUsd}) — downgraded to free model. Quality may be reduced. Increase \`maxCostPerRun\` to continue with ${fromModel}.\n\n`;
         } else {
           const toModel = modelsToTry[0] ?? FREE_MODEL; // last resort

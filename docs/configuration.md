@@ -534,7 +534,8 @@ plugins:
     config:
       # Maximum spend per session/run in USD.
       # Default: disabled (no limit). 0 refuses paid chat completions, so only
-      # free models answer. In strict mode pin a free model: auto is refused.
+      # free models answer. Pin a free model: strict mode refuses auto and premium,
+      # and graceful mode refuses them on tool calls.
       maxCostPerRun: 0.50 # $0.50 per session
 
       # How to enforce the budget cap. Default: graceful
