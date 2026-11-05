@@ -292,9 +292,10 @@ const FREE_MODELS = new Set([
   "free/nemotron-3.5-lightning", // free-tier default — 1M ctx, thinking mode
   "free/laguna-xs-2.1", // coding, ~161 tok/s — on our NVIDIA key
   "free/north-mini-code", // coding, 607ms median — OpenRouter $0 pool
-  "free/nemotron-3-nano-omni-30b-a3b-reasoning", // vision (text/image/video/audio)
+  "free/nemotron-3.5-bolt", // about a second, reads images
+  "free/nemotron-3-nano-omni-30b-a3b-reasoning", // 256K ctx, reasoning
+  "free/nemotron-3-super-120b", // reasoning; rescued often when capacity is short
   "free/nemotron-3-ultra-550b", // largest free model, 1M ctx — but slow + flaky
-  "free/llama-3.2-11b-vision", // only free Llama left; slowest, so last
 ]);
 /**
  * Upstream ids the ACTIVE chain's gateway actually lists, or `undefined` while
@@ -378,7 +379,7 @@ const FREE_MODEL = "free/nemotron-3.5-lightning";
  * Free models whose upstream id is NOT `nvidia/<basename>`.
  *
  * The free tier stopped being NVIDIA-only on 2026-08-30 (blockrun #448): two of
- * the seven are hosted under their own maker's namespace upstream. The `free/`
+ * its models are hosted under their own maker's namespace upstream. The `free/`
  * prefix stays ClawRouter's picker convention for all of them — a picker row
  * reading `cohere/north-mini-code` gives a user no way to tell it is free — so
  * the exceptions are named here instead of leaking into the id.
@@ -2135,8 +2136,6 @@ const VIDEO_PRICING: Record<
     pricePerSecond: 0.315,
     defaultDurationSeconds: 5,
   },
-  // Sora 2 via Azure AI Foundry — flat $0.10/s for both t2v and i2v.
-  "azure/sora-2": { pricePerSecond: 0.1, defaultDurationSeconds: 4 },
 };
 
 // Phone & Voice pricing (must match server's PHONE_PRICING/BLAND_PRICING in

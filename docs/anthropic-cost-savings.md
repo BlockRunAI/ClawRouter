@@ -54,9 +54,9 @@ This is where you're paying for real value:
 
 ```
 ┌─────────────┐     ┌──────────────────────────────┐     ┌──────────────────┐
-│  Your App    │────▶│       ClawRouter              │────▶│  41+ AI Models   │
+│  Your App    │────▶│       ClawRouter              │────▶│  90+ AI Models   │
 │  (OpenAI     │     │       (local proxy)           │     │                  │
-│   SDK)       │     │                               │     │  FREE  (9 free)  │
+│   SDK)       │     │                               │     │  FREE  (8 free)  │
 │              │     │  1. Route to cheapest model    │     │  $0.10 (gemini)  │
 │  model:      │     │  2. Compress tokens            │     │  $3.00 (sonnet)  │
 │  "auto"      │     │  3. Cache repeated requests    │     │  $0.20 (grok)    │

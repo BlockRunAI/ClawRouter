@@ -291,7 +291,7 @@ describe("capability flags vs blockrun's catalog", () => {
     }
   });
 
-  it("claims no vision on any free model — the flag routes real image turns", () => {
+  it("claims vision on only the free model that proved it — the flag routes real image turns", () => {
     // 2026-08-31. Both gateways' catalogs advertise vision on the free tier and
     // blockrun #448 cites an 8x8 PNG answering "Red", but a properly-sized
     // 64x64 solid-red probe does not hold up: nano-omni was 1 of 4 correct on
@@ -306,8 +306,11 @@ describe("capability flags vs blockrun's catalog", () => {
     // than having no free vision, because there is no error to branch on. If a
     // future probe comes back correct on both chains, restore the flag with the
     // probe recorded here — do not restore it from a catalog `categories` list.
+    //
+    // 2026-11-05: free/nemotron-3.5-bolt passed that bar, 8 of 8 on 64x64 PNGs
+    // across Base and Solana, each answered by Bolt itself.
     const freeWithVision = BLOCKRUN_MODELS.filter((m) => m.inputPrice === 0 && m.vision);
-    expect(freeWithVision.map((m) => m.id)).toEqual([]);
+    expect(freeWithVision.map((m) => m.id)).toEqual(["free/nemotron-3.5-bolt"]);
   });
 
   it("marks MiniMax M3 vision-capable so image_url requests reach it", () => {
