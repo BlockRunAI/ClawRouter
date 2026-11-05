@@ -533,7 +533,7 @@ plugins:
   - id: "@blockrun/clawrouter"
     config:
       # Maximum spend per session/run in USD.
-      # Default: disabled (no limit)
+      # Default: disabled (no limit). 0 allows free models only.
       maxCostPerRun: 0.50 # $0.50 per session
 
       # How to enforce the budget cap. Default: graceful

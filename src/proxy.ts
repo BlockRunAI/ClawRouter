@@ -1619,7 +1619,7 @@ export type ProxyOptions = {
   cacheConfig?: ResponseCacheConfig;
   /**
    * Maximum total spend (in USD) per session run.
-   * Default: undefined (no limit). Example: 0.5 = $0.50 per session.
+   * Default: undefined (no limit). Example: 0.5 = $0.50 per session. 0 allows free models only.
    */
   maxCostPerRunUsd?: number;
   /**
@@ -6393,7 +6393,7 @@ async function proxyRequest(
   // Must happen before streaming headers are sent.
   let sessionSpend: SessionSpend | undefined;
   if (
-    options.maxCostPerRunUsd &&
+    options.maxCostPerRunUsd !== undefined &&
     effectiveSessionId &&
     !isFreeModel &&
     (options.maxCostPerRunMode ?? "graceful") === "strict"
@@ -6438,7 +6438,7 @@ async function proxyRequest(
       return;
     }
     sessionSpend = admission.spend;
-  } else if (options.maxCostPerRunUsd && effectiveSessionId) {
+  } else if (options.maxCostPerRunUsd !== undefined && effectiveSessionId) {
     // Graceful mode (and a free model in strict mode) refuses nothing, but a
     // signed payment is still spend — including one whose response was lost —
     // so it is recorded the same way.
@@ -6455,7 +6455,7 @@ async function proxyRequest(
   //       silently substituting with free model would be deceptive regardless of task type
   // Simple routing profile requests are handled later via graceful downgrade.
   if (
-    options.maxCostPerRunUsd &&
+    options.maxCostPerRunUsd !== undefined &&
     effectiveSessionId &&
     !isFreeModel &&
     (options.maxCostPerRunMode ?? "graceful") === "graceful"
@@ -6839,7 +6839,7 @@ async function proxyRequest(
     // Simple tasks (no tools, non-complex tier): downgrade with visible warning.
     // Complex/agentic tasks with no affordable model: already blocked above (before streaming headers).
     if (
-      options.maxCostPerRunUsd &&
+      options.maxCostPerRunUsd !== undefined &&
       effectiveSessionId &&
       !isFreeModel &&
       (options.maxCostPerRunMode ?? "graceful") === "graceful"
