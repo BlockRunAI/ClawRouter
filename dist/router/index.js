@@ -1,6 +1,6 @@
 import { createRequire as __blockrun_createRequire } from 'node:module'; const require = __blockrun_createRequire(import.meta.url);
 
-// node_modules/@blockrun/router-core/dist/index.js
+// ../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/@blockrun/router-core/dist/index.js
 var UNSEGMENTED_SCRIPT = /[؀-ۿ　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/;
 var WORD_CHAR = /[\p{L}\p{N}]/u;
 var ASCII_PHRASE = /^[a-z0-9' -]+$/;
