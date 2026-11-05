@@ -1354,7 +1354,8 @@ type ProxyOptions = {
     /**
      * Maximum total spend (in USD) per session run.
      * Default: undefined (no limit). Example: 0.5 = $0.50 per session. A positive cap
-     * covers chat completions only; 0 refuses every paid call on every endpoint.
+     * covers /v1/chat/completions and /v1/messages; 0 refuses every paid call on every
+     * endpoint.
      */
     maxCostPerRunUsd?: number;
     /**

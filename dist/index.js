@@ -287452,9 +287452,12 @@ var SessionSpend = class _SessionSpend {
   }
 };
 var CostCapError = class extends SpendPolicyError {
-  constructor(reason) {
+  /** A graceful-mode refusal: the budget ran out, and nothing cheaper may be swapped in. */
+  budgetExhausted;
+  constructor(reason, budgetExhausted = false) {
     super(reason);
     this.name = "CostCapError";
+    this.budgetExhausted = budgetExhausted;
   }
 };
 var ZERO_CAP_REFUSAL = "ClawRouter cost cap: maxCostPerRun is 0, so no paid call is made";
@@ -290982,14 +290985,87 @@ function refuseOverCostCap(res, err) {
   if (!(err instanceof CostCapError) || res.headersSent) return false;
   res.writeHead(429, {
     "Content-Type": "application/json",
-    "X-ClawRouter-Cost-Cap-Exceeded": "1"
+    "X-ClawRouter-Cost-Cap-Exceeded": "1",
+    ...err.budgetExhausted ? { "X-ClawRouter-Budget-Mode": "blocked" } : {}
   });
   res.end(
     JSON.stringify({
-      error: { message: err.message, type: "cost_cap_exceeded", code: "cost_cap_exceeded" }
+      error: {
+        message: err.message,
+        type: "cost_cap_exceeded",
+        code: err.budgetExhausted ? "budget_exhausted" : "cost_cap_exceeded"
+      }
     })
   );
   return true;
+}
+function capMessagesRequest(body, headers, cap) {
+  let parsed = {};
+  try {
+    const value = JSON.parse(body.toString());
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      parsed = value;
+    }
+  } catch {
+  }
+  const messages = Array.isArray(parsed.messages) ? parsed.messages.filter(
+    (m) => typeof m?.role === "string" && m.content !== void 0
+  ) : [];
+  const sessionId = getSessionId(headers) ?? deriveSessionId(messages) ?? NO_SESSION_ID;
+  const store = paymentStore.getStore();
+  const track = () => {
+    const spend2 = SessionSpend.track(cap.sessions, sessionId);
+    if (store) store.sessionSpend = spend2;
+    return spend2;
+  };
+  const model = typeof parsed.model === "string" ? parsed.model : void 0;
+  if (model !== void 0 && cap.isFree(model)) {
+    track();
+    return { recordSuccess: () => {
+    } };
+  }
+  const estimate = parseMicros(
+    model === void 0 ? void 0 : estimateAmount(
+      resolveModelAlias(model),
+      body.length,
+      resolveMaxTokens(parsed),
+      new Map(cap.models.map((m) => [m.id, m]))
+    )
+  );
+  let spend;
+  if (cap.mode === "strict") {
+    const admission = SessionSpend.admit(
+      cap.sessions,
+      sessionId,
+      usdToMicros(cap.usd),
+      // As on the chat path: the key rail has no signing check behind this one, so
+      // one micro refuses a model it can't price once the session has nothing left.
+      estimate ?? (cap.authMode === "api-key" ? 1n : 0n)
+    );
+    if (!admission.admitted) {
+      const projected = admission.spentMicros + admission.heldMicros + admission.estimateMicros;
+      throw new CostCapError(
+        `ClawRouter cost cap exceeded: projected spend $${microsToUsd(projected).toFixed(4)} would exceed limit $${cap.usd}`
+      );
+    }
+    spend = admission.spend;
+    if (store) store.sessionSpend = spend;
+  } else {
+    const remainingUsd = cap.usd - cap.sessions.getSessionCostUsd(sessionId);
+    const canAfford = estimate !== void 0 ? microsToUsd(estimate) <= remainingUsd : remainingUsd > 0;
+    if (!canAfford) {
+      throw new CostCapError(
+        `ClawRouter budget exhausted: $${Math.max(0, remainingUsd).toFixed(4)} remaining (limit: $${cap.usd}). Increase maxCostPerRun to continue.`,
+        true
+      );
+    }
+    spend = track();
+  }
+  return {
+    recordSuccess: () => {
+      if (estimate !== void 0) spend.recordSuccess(estimate);
+    }
+  };
 }
 var ZERO_CAP_FREE_READ = /^\/v1\/(?:models|usage|balance|audio\/models|audio\/voices|images\/models|video\/models|health\/[^/]+)$/;
 function withZeroCapGuard(inner, isFree) {
@@ -291015,7 +291091,7 @@ function withZeroCapGuard(inner, isFree) {
     return inner(input2, init2);
   };
 }
-async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd, accountPassthrough = false, authMode = "wallet") {
+async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd, accountPassthrough = false, authMode = "wallet", capRequest) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
   const isBlockrunExa = req.url?.startsWith("/v1/exa/") ?? false;
@@ -291027,6 +291103,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
     bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   const body = Buffer.concat(bodyChunks);
+  const capped = capRequest?.(body);
   const headers = {};
   for (const [key3, value] of Object.entries(req.headers)) {
     if (key3 === "host" || key3 === "connection" || key3 === "transfer-encoding" || key3 === "content-length")
@@ -291048,6 +291125,7 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
     body: body.length > 0 ? new Uint8Array(body) : void 0,
     signal: clientAbort.signal
   });
+  if (upstream.ok) capped?.recordSuccess();
   const responseHeaders = {};
   upstream.headers.forEach((value, key3) => {
     if (key3 === "transfer-encoding" || key3 === "connection" || key3 === "content-encoding" || key3 === "content-length")
@@ -291408,11 +291486,12 @@ async function startProxy(options) {
   }
   const requestOptions = solanaBatch ? { ...options, _solanaBatchActive: true } : options;
   const keyFetch = apiKey ? createApiKeyFetch(apiKey, fetch, apiBase) : void 0;
+  const isFreeForCap = (model) => {
+    const { freeIds } = catalog.current();
+    return freeIds.has(resolveModelAlias(model)) || [...freeIds].some((id2) => toUpstreamModelId(id2) === model);
+  };
   const payFetch = authMode === "api-key" ? withSpendPolicy(
-    options.maxCostPerRunUsd === 0 ? withZeroCapGuard(keyFetch, (model) => {
-      const { freeIds } = catalog.current();
-      return freeIds.has(resolveModelAlias(model)) || [...freeIds].some((id2) => toUpstreamModelId(id2) === model);
-    }) : keyFetch,
+    options.maxCostPerRunUsd === 0 ? withZeroCapGuard(keyFetch, isFreeForCap) : keyFetch,
     options.spendControl ?? getSharedSpendControl(),
     () => {
       const store = paymentStore.getStore();
@@ -292393,7 +292472,8 @@ async function startProxy(options) {
         }
         return;
       }
-      const isVerbatimGatewayPath = req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false) || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
+      const isMessagesPath = req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false);
+      const isVerbatimGatewayPath = isMessagesPath || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
       if (isVerbatimGatewayPath || req.url?.match(PAID_API_PATH)) {
         try {
           await proxyPaidApiRequest(
@@ -292403,7 +292483,16 @@ async function startProxy(options) {
             payFetch,
             () => paymentStore.getStore()?.amountUsd ?? 0,
             false,
-            authMode
+            authMode,
+            // $0 is enforced below this, where calls are signed or fetched.
+            isMessagesPath && options.maxCostPerRunUsd !== void 0 && options.maxCostPerRunUsd !== 0 ? (body) => capMessagesRequest(body, req.headers, {
+              usd: options.maxCostPerRunUsd,
+              mode: options.maxCostPerRunMode ?? "graceful",
+              authMode,
+              sessions: sessionStore,
+              models: catalog.current().models,
+              isFree: isFreeForCap
+            }) : void 0
           );
         } catch (err) {
           if (refuseOverCostCap(res, err)) return;
@@ -292419,6 +292508,8 @@ async function startProxy(options) {
           } else if (!res.writableEnded) {
             res.end();
           }
+        } finally {
+          paymentStore.getStore()?.sessionSpend?.release();
         }
         return;
       }
