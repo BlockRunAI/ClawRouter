@@ -296,15 +296,15 @@ describe("a positive maxCostPerRun", () => {
     expect(billed).toHaveLength(1);
   });
 
-  it("leaves routes outside the chat path uncapped, as documented", async () => {
+  it("leaves routes outside chat and /v1/messages uncapped, as documented", async () => {
     const p = await proxy("wallet", 0.0001);
-    const res = await post(p, "/v1/messages", {
-      model: PAID_MODEL,
-      max_tokens: 10,
-      messages: user("hi"),
+    const res = await post(p, "/v1/audio/speech", {
+      model: "elevenlabs/eleven-v3",
+      input: "hi",
+      voice: "x",
     });
     expect(res.status).toBe(200);
-    expect(billed).toEqual(["/v1/messages"]);
+    expect(billed).toEqual(["/v1/audio/speech"]);
   });
 });
 
