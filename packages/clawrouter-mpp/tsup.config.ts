@@ -1,6 +1,6 @@
 import { defineConfig } from "tsup";
 
-// The host package and the optional peers stay external: nothing of ClawRouter, mppx or pay-kit is inlined.
+// Keep the host and optional payment SDKs external to this package.
 export default defineConfig({
   entry: ["src/index.ts"],
   format: ["esm"],
@@ -11,8 +11,8 @@ export default defineConfig({
     "@twzrd1111/clawrouter",
     "mppx",
     /^mppx\//,
-    "@solana/pay-kit",
-    /^@solana\/pay-kit\//,
+    "@solana/mpp",
+    /^@solana\/mpp\//,
     "@solana/kit",
     "viem",
     /^viem\//,

@@ -35,6 +35,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 // hooks check and record against it (see session-spend.ts).
 const paymentStore = new AsyncLocalStorage<{
   amountUsd: number;
+  attemptPaid: boolean;
   estimatedUsd?: number;
   sessionSpend?: SessionSpend;
   /** Signature mark of the Solana batch pay() in progress (see solanaBatch.begin). */
@@ -164,6 +165,7 @@ import { SessionJournal } from "./journal.js";
 import { readLocalImageAsDataUri, ssrfSafeFetch, untrustedRequestReason } from "./local-guard.js";
 import { applyUpstreamProxy } from "./upstream-proxy.js";
 import { extractTextualToolCalls } from "./textual-tool-calls.js";
+import { pumpNativeOpenAIStream } from "./native-openai-stream.js";
 import {
   appendResponse,
   getById,
@@ -408,6 +410,31 @@ export function toUpstreamModelId(modelId: string): string {
 const MAX_MESSAGES = 200; // BlockRun API limit - truncate older messages if exceeded
 const CONTEXT_LIMIT_KB = 5120; // Server-side limit: 5MB in KB
 const HEARTBEAT_INTERVAL_MS = 2_000;
+
+/**
+ * Keep a deferred streaming response alive with HTTP 102 Processing: the first after
+ * HEARTBEAT_INTERVAL_MS / 2, then every HEARTBEAT_INTERVAL_MS. A 1xx response is informational and leaves
+ * `res.headersSent` false, so the final status and headers (including `Payment-Receipt`) are still open.
+ * Stops on its own once the final headers go out or the socket closes; callers also clear it.
+ */
+function startProcessingKeepalive(res: ServerResponse): ReturnType<typeof setInterval> {
+  let ticks = 0;
+  const timer = setInterval(() => {
+    if (res.headersSent || res.writableEnded || res.destroyed) {
+      clearInterval(timer);
+      return;
+    }
+    ticks++;
+    if (ticks % 2 === 1) {
+      try {
+        res.writeProcessing();
+      } catch {
+        clearInterval(timer);
+      }
+    }
+  }, HEARTBEAT_INTERVAL_MS / 2);
+  return timer;
+}
 // Hard ceiling on the pre-request balance check. It runs before SSE headers
 // are flushed, so a slow RPC must not eat into OpenClaw's ~10-15s silence
 // timeout. On expiry the request proceeds optimistically.
@@ -855,6 +882,64 @@ export function sanitizeHeaderValue(value: string): string {
       return "?"; // lone surrogate — not encodable
     }
   });
+}
+
+/**
+ * Hop-by-hop headers (RFC 9110 §7.6.1) never cross the proxy, plus the two that stop being true once the
+ * proxy has decoded or rewritten the upstream body (fetch decompresses; the proxy re-serializes JSON or
+ * converts it to SSE, and Node computes framing for the new body).
+ */
+const NON_FORWARDED_RESPONSE_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "content-length",
+  "content-encoding",
+]);
+
+/** Settlement metadata from a paid upstream response. Wire name `Payment-Receipt`. */
+const PAYMENT_RECEIPT_HEADER = "payment-receipt";
+
+/**
+ * Copy the end-to-end headers of an upstream response (lowercase names). If the upstream returned a
+ * `Payment-Receipt`, it is kept and added to `Access-Control-Expose-Headers` so browser callers can read it.
+ */
+export function endToEndResponseHeaders(upstream: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  upstream.forEach((value, key) => {
+    if (NON_FORWARDED_RESPONSE_HEADERS.has(key)) return;
+    out[key] = value;
+  });
+  if (out[PAYMENT_RECEIPT_HEADER] !== undefined) {
+    const exposed = (out["access-control-expose-headers"] ?? "")
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (!exposed.some((n) => n === "*" || n.toLowerCase() === PAYMENT_RECEIPT_HEADER)) {
+      exposed.push("Payment-Receipt");
+    }
+    out["access-control-expose-headers"] = exposed.join(", ");
+  }
+  return out;
+}
+
+/**
+ * Headers for a response served from the dedup or response cache. That request made no payment, so it must
+ * not present the original caller's `Payment-Receipt` as its own; `X-ClawRouter-Cache: HIT` marks the replay.
+ */
+export function replayResponseHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === PAYMENT_RECEIPT_HEADER) continue;
+    out[key] = value;
+  }
+  out["x-clawrouter-cache"] = "HIT";
+  return out;
 }
 
 /**
@@ -2406,7 +2491,7 @@ async function proxyPaidApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
   apiBase: string,
-  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  payFetch: PayFetch,
   getActualPaymentUsd: () => number,
   accountPassthrough = false,
   authMode: AuthMode = "wallet",
@@ -2443,6 +2528,7 @@ async function proxyPaidApiRequest(
     )
       continue;
     if (key.startsWith("x-stainless-") || key.startsWith("anthropic-")) continue;
+    if (key === PAYMENT_RECEIPT_HEADER) continue; // settlement output, never caller input
     if (typeof value === "string") headers[key] = value;
   }
   if (!headers["content-type"]) headers["content-type"] = "application/json";
@@ -3004,7 +3090,10 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       const amountUsd = amountMicros / 1_000_000;
       // Write to request-scoped store (if available)
       const store = paymentStore.getStore();
-      if (store) store.amountUsd = amountUsd;
+      if (store) {
+        store.amountUsd = amountUsd;
+        store.attemptPaid = true;
+      }
       console.log(
         `[ClawRouter] Payment signed on ${chain} (${network}) — $${amountUsd.toFixed(6)}`,
       );
@@ -3073,16 +3162,21 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           if (store && outcome.chargedMicros !== undefined) {
             store.amountUsd = microsToUsd(outcome.chargedMicros);
           }
+          if (store) store.attemptPaid = true;
           if (spend && mark !== undefined && spend.signatureMark() > mark) {
             spend.voidSignedSince(mark, true);
             // No receipt, no proof of the charge: the signed ceiling stays.
             if (outcome.chargedMicros !== undefined) spend.settleLastSigned(outcome.chargedMicros);
           }
         } else if (outcome.kind === "not_charged") {
-          if (store) store.amountUsd = 0;
+          if (store) {
+            store.amountUsd = 0;
+            store.attemptPaid = false;
+          }
           if (spend && mark !== undefined) spend.voidSignedSince(mark, false);
-        } else if (spend && mark !== undefined) {
-          spend.voidSignedSince(mark, true);
+        } else {
+          if (store) store.attemptPaid = true;
+          if (spend && mark !== undefined) spend.voidSignedSince(mark, true);
         }
       },
     };
@@ -3138,7 +3232,11 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           onPayment: options.onPayment,
           // A 402 answer to a signed payment means the gateway declined it and
           // nothing settled — take it back off the session's budget.
-          onPaymentDeclined: () => paymentStore.getStore()?.sessionSpend?.voidLastSigned(),
+          onPaymentDeclined: () => {
+            const store = paymentStore.getStore();
+            if (store) store.attemptPaid = false;
+            store?.sessionSpend?.voidLastSigned();
+          },
           solanaBatch,
         }));
 
@@ -3207,7 +3305,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     // Wrap in paymentStore.run() so x402 hook can write actual payment amount per-request
-    const handled: Promise<void> = paymentStore.run({ amountUsd: 0 }, async () => {
+    // prettier-ignore
+    const handled: Promise<void> = paymentStore.run({ amountUsd: 0, attemptPaid: false }, async () => {
       // Add stream error handlers to prevent server crashes
       req.on("error", (err) => {
         console.error(`[ClawRouter] Request stream error: ${err.message}`);
@@ -4716,6 +4815,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 type ModelRequestResult = {
   success: boolean;
   response?: Response;
+  responseWasPaid?: boolean;
   errorBody?: string;
   errorStatus?: number;
   isProviderError?: boolean;
@@ -4783,11 +4883,30 @@ async function tryModelRequest(
   body: Buffer,
   modelId: string,
   maxTokens: number,
-  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  payFetch: PayFetch,
   balanceMonitor: AnyBalanceMonitor,
   signal: AbortSignal,
   catalogReasoning = false,
 ): Promise<ModelRequestResult> {
+  // Payment identity is attempt-scoped. A prior paid attempt must not make a
+  // later unpaid/free fallback look paid when deciding whether it can retry.
+  const requestPayment = paymentStore.getStore();
+  if (requestPayment) requestPayment.attemptPaid = false;
+  const paidNoCompletion = (message: string): ModelRequestResult => ({
+    success: false,
+    errorBody: JSON.stringify({
+      error: {
+        message,
+        type: "payment_settled_no_completion",
+        code: "payment_settled_no_completion",
+      },
+    }),
+    errorStatus: 502,
+    isProviderError: false,
+    errorCategory: "payment_error",
+    paymentInDoubt: true,
+  });
+
   // Update model in body and normalize messages
   let requestBody = body;
   try {
@@ -4846,8 +4965,18 @@ async function tryModelRequest(
       signal,
     });
 
+    const responseWasPaid =
+      payFetch.isPaidResponse?.(response) === true ||
+      response.headers.has(PAYMENT_RECEIPT_HEADER) ||
+      paymentStore.getStore()?.attemptPaid === true;
+
     // Check for provider errors
     if (response.status !== 200) {
+      if (responseWasPaid) {
+        const reason = `paid upstream response returned HTTP ${response.status}`;
+        payFetch.onNoCompletion?.(response, reason);
+        return paidNoCompletion(reason);
+      }
       // Clone response to read body without consuming it
       const errorBodyChunks = await readBodyWithTimeout(response.body, ERROR_BODY_READ_TIMEOUT_MS);
       const errorBody = Buffer.concat(errorBodyChunks).toString();
@@ -4865,28 +4994,44 @@ async function tryModelRequest(
 
     // Detect provider degradation hidden inside HTTP 200 responses.
     const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("json") || contentType.includes("text")) {
+    if (
+      contentType.includes("json") ||
+      (contentType.includes("text") && !contentType.includes("text/event-stream"))
+    ) {
+      let degradedReason: string | undefined;
       try {
         const clonedChunks = await readBodyWithTimeout(
           response.clone().body,
           ERROR_BODY_READ_TIMEOUT_MS,
         );
         const responseBody = Buffer.concat(clonedChunks).toString();
-        const degradedReason = detectDegradedSuccessResponse(responseBody);
-        if (degradedReason) {
-          return {
-            success: false,
-            errorBody: degradedReason,
-            errorStatus: 503,
-            isProviderError: true,
-          };
-        }
+        degradedReason = detectDegradedSuccessResponse(responseBody);
       } catch {
-        // Ignore body inspection failures and pass through response.
+        if (responseWasPaid) {
+          const reason = "paid response body could not be read to completion";
+          payFetch.onNoCompletion?.(response, reason);
+          return paidNoCompletion(reason);
+        }
+        // Ignore unpaid body inspection failures and pass through response.
+      }
+      if (degradedReason) {
+        // Deliberately outside the inspection catch: a paid rail's terminal
+        // error must reach the payment-in-doubt handler, never be swallowed.
+        if (responseWasPaid) {
+          payFetch.onNoCompletion?.(response, degradedReason);
+          return paidNoCompletion(degradedReason);
+        }
+        payFetch.onNoCompletion?.(response, degradedReason);
+        return {
+          success: false,
+          errorBody: degradedReason,
+          errorStatus: 503,
+          isProviderError: true,
+        };
       }
     }
 
-    return { success: true, response };
+    return { success: true, response, responseWasPaid };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     if (err instanceof Error && err.name === PAYMENT_SETTLED_NO_COMPLETION) {
@@ -4925,6 +5070,9 @@ async function tryModelRequest(
         errorCategory: "payment_error",
         paymentInDoubt: true,
       };
+    }
+    if (paymentStore.getStore()?.attemptPaid === true) {
+      return paidNoCompletion(errorMsg);
     }
     if (err instanceof CostCapError) {
       // The strict session cap refused to sign this attempt (a retry or
@@ -4988,7 +5136,7 @@ async function proxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
   apiBase: string,
-  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  payFetch: PayFetch,
   options: ProxyOptions,
   routerOpts: RouterOptions,
   deduplicator: RequestDeduplicator,
@@ -5825,11 +5973,22 @@ async function proxyRequest(
         return;
       }
 
-      // Force stream: false — BlockRun API doesn't support streaming yet
-      // ClawRouter handles SSE heartbeat simulation for upstream compatibility
+      // Only an opted-in rail receives stream:true. Existing wallet/API-key
+      // rails keep their established JSON-to-SSE conversion contract.
       if (parsed.stream === true) {
-        parsed.stream = false;
-        bodyModified = true;
+        if (!payFetch.supportsNativeStreaming) {
+          parsed.stream = false;
+          bodyModified = true;
+        } else {
+          const streamOptions =
+            typeof parsed.stream_options === "object" && parsed.stream_options !== null
+              ? (parsed.stream_options as Record<string, unknown>)
+              : {};
+          if (streamOptions.include_usage !== true) {
+            parsed.stream_options = { ...streamOptions, include_usage: true };
+            bodyModified = true;
+          }
+        }
       }
 
       // Normalize model name for comparison (trim whitespace, lowercase)
@@ -6237,10 +6396,8 @@ async function proxyRequest(
   }
 
   // --- Response cache check (long-term, 10min TTL) ---
-  // Prefix with the client's original stream intent. The body was already
-  // rewritten to stream:false for the upstream call (same reason as dedupKey
-  // below), so SSE and JSON responses would otherwise share a cache slot and
-  // the first caller's response shape would be served to the second.
+  // Keep the client's original stream intent in a separate cache slot so SSE
+  // and JSON responses cannot serve the wrong response shape to each other.
   const cacheKey = `${isStreaming ? "sse" : "json"}:${ResponseCache.generateKey(body)}`;
   const reqHeaders: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
@@ -6250,24 +6407,21 @@ async function proxyRequest(
     const cachedResponse = responseCache.get(cacheKey);
     if (cachedResponse) {
       console.log(`[ClawRouter] Cache HIT for ${cachedResponse.model} (saved API call)`);
-      res.writeHead(cachedResponse.status, cachedResponse.headers);
+      res.writeHead(cachedResponse.status, replayResponseHeaders(cachedResponse.headers));
       res.end(cachedResponse.body);
       return;
     }
   }
 
   // --- Dedup check (short-term, 30s TTL for retries) ---
-  // Prefix with the client's original stream intent. The upstream `stream` flag
-  // is rewritten to false before this point (BlockRun API is non-streaming), so
-  // a streaming and non-streaming request with otherwise-identical bodies would
-  // otherwise collide and serve each other's responses (JSON body to an SSE
-  // caller, or vice versa).
+  // Prefix with the client's original stream intent so streaming and JSON
+  // requests with otherwise-identical bodies cannot collide in the cache.
   const dedupKey = `${isStreaming ? "sse" : "json"}:${RequestDeduplicator.hash(body)}`;
 
   // Check dedup cache (catches retries within 30s)
   const cached = deduplicator.getCached(dedupKey);
   if (cached) {
-    res.writeHead(cached.status, cached.headers);
+    res.writeHead(cached.status, replayResponseHeaders(cached.headers));
     res.end(cached.body);
     return;
   }
@@ -6275,6 +6429,61 @@ async function proxyRequest(
   // Check in-flight — wait for the original request to complete
   const inflight = deduplicator.getInflight(dedupKey);
   if (inflight) {
+    const releaseConsumer = deduplicator.acquireInflightConsumer(dedupKey);
+    const onConsumerDone = () => releaseConsumer?.();
+    const cleanupConsumer = () => {
+      releaseConsumer?.();
+      res.removeListener("close", onConsumerDone);
+      res.removeListener("finish", onConsumerDone);
+    };
+    res.once("close", onConsumerDone);
+    res.once("finish", onConsumerDone);
+    if (res.destroyed) onConsumerDone();
+    if (isStreaming && payFetch.supportsNativeStreaming) {
+      const processing = startProcessingKeepalive(res);
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          clearInterval(processing);
+          unsubscribe?.();
+          res.removeListener("close", finish);
+          cleanupConsumer();
+          resolve();
+        };
+        const unsubscribe = deduplicator.subscribeStream(dedupKey, {
+          start(status, headers) {
+            clearInterval(processing);
+            if (canWrite(res)) res.writeHead(status, headers);
+          },
+          chunk(data) {
+            safeWrite(res, data);
+          },
+          end() {
+            if (canWrite(res)) res.end();
+            finish();
+          },
+        });
+        res.once("close", finish);
+        if (!unsubscribe || res.destroyed) finish();
+      });
+      return;
+    }
+    if (isStreaming && payFetch.deferStreamingHeaders === true) {
+      // Deferred mode: the original holds its final headers until payment settles, so this waiter does too.
+      // It shares the original's single paid attempt, so it gets the same status, headers (including
+      // Payment-Receipt), and SSE transcript; an error keeps its real status.
+      const waiterProcessing = startProcessingKeepalive(res);
+      try {
+        const result = await inflight;
+        if (canWrite(res)) {
+          res.writeHead(result.status, result.headers);
+          res.end(result.body);
+        }
+      } finally {
+        clearInterval(waiterProcessing);
+        cleanupConsumer();
+      }
+      return;
+    }
     if (isStreaming) {
       // The original may take minutes (reasoning models get 180s/attempt).
       // Waiting silently recreates the client-timeout/retry storm the
@@ -6308,17 +6517,28 @@ async function proxyRequest(
         res.end();
       } finally {
         clearInterval(waiterHeartbeat);
+        cleanupConsumer();
       }
       return;
     }
-    const result = await inflight;
-    res.writeHead(result.status, result.headers);
-    res.end(result.body);
+    try {
+      const result = await inflight;
+      if (canWrite(res)) {
+        res.writeHead(result.status, result.headers);
+        res.end(result.body);
+      }
+    } finally {
+      cleanupConsumer();
+    }
     return;
   }
 
   // Register this request as in-flight
-  deduplicator.markInflight(dedupKey);
+  const globalController = deduplicator.markInflight(dedupKey);
+  const releaseProducer = deduplicator.acquireInflightConsumer(dedupKey);
+  const releaseProducerConsumer = () => releaseProducer?.();
+  res.once("finish", releaseProducerConsumer);
+  res.once("close", releaseProducerConsumer);
 
   // --- Pre-request balance check ---
   // Estimate cost and check if wallet has sufficient balance
@@ -6562,10 +6782,20 @@ async function proxyRequest(
   }
 
   // --- Streaming: early header flush + heartbeat ---
+  // `headersSentEarly` means "the SSE 200 is committed". With a rail that sets
+  // `deferStreamingHeaders`, nothing is committed while the paid call runs: the client gets HTTP 102
+  // keepalives instead, the final 200 carries the upstream headers (Payment-Receipt), and every error
+  // branch below sees headersSentEarly=false and answers with its real status. `heartbeatInterval` holds
+  // the 102 timer in that mode so every existing clear site stops it.
   let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
   let headersSentEarly = false;
+  const deferStreamingHeaders =
+    isStreaming &&
+    (payFetch.deferStreamingHeaders === true || payFetch.supportsNativeStreaming === true);
 
-  if (isStreaming) {
+  if (deferStreamingHeaders) {
+    heartbeatInterval = startProcessingKeepalive(res);
+  } else if (isStreaming) {
     // Send 200 + SSE headers immediately, before x402 flow
     res.writeHead(200, {
       "content-type": "text/event-stream",
@@ -6606,6 +6836,8 @@ async function proxyRequest(
     // SDK attribution headers (OpenAI x-stainless-*, Anthropic anthropic-*)
     // These are client-side telemetry/protocol headers — not meaningful to BlockRun.
     if (key.startsWith("x-stainless-") || key.startsWith("anthropic-")) continue;
+    // A receipt is settlement output from the seller, never caller input.
+    if (key === PAYMENT_RECEIPT_HEADER) continue;
     if (typeof value === "string") {
       headers[key] = value;
     }
@@ -6616,16 +6848,13 @@ async function proxyRequest(
   headers["user-agent"] = USER_AGENT;
 
   // --- Client disconnect cleanup ---
-  let completed = false;
   res.on("close", () => {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = undefined;
     }
-    // Remove from in-flight if client disconnected before completion
-    if (!completed) {
-      deduplicator.removeInflight(dedupKey);
-    }
+    // The request's abort/error path resolves coalesced callers after notifying
+    // the paid rail. Removing the entry here would race that terminal result.
   });
 
   // --- Request timeout ---
@@ -6634,29 +6863,27 @@ async function proxyRequest(
   // If a model times out individually, we fall back to the next model instead of failing.
   // Only the global timeout causes an immediate error.
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  const globalController = new AbortController();
   const timeoutId = setTimeout(() => globalController.abort(), timeoutMs);
 
-  // Abort in-flight upstream requests when the client disconnects.
-  // OpenClaw 2026.4.7+ aborts gateway requests on client disconnect;
-  // without this, ClawRouter would leave orphan upstream fetches running.
+  // Releasing this response's lease leaves shared work running for any other
+  // coalesced callers. RequestDeduplicator aborts upstream only when the last
+  // consumer disconnects.
   // Must hang off `res` "close", not `req`: on Node (verified on v24.15.0) an
   // IncomingMessage emits "close" when the request-body readable finishes, not
   // when the client hangs up. The body is fully drained above, so a `req`
   // listener would fire at body-end (or never, having missed the event) rather
   // than on disconnect. The media handlers all use `res.on("close")` for this.
-  // True once the client is gone: the response socket is destroyed without us
-  // having finished it. Used to tell a client disconnect apart from the global
-  // timeout — both surface as `globalController.signal.aborted`.
-  const clientDisconnected = () => res.destroyed && !res.writableEnded;
+  // A producer socket can disappear while a coalesced caller still needs the
+  // result. Treat the request as abandoned only when every lease is released.
+  const clientDisconnected = () => !deduplicator.hasInflightConsumers(dedupKey);
   const abortError = () =>
     clientDisconnected()
       ? new ClientDisconnectedError()
       : new Error(`Request timed out after ${timeoutMs}ms`);
   const onClientClose = () => {
     if (!res.writableEnded && !globalController.signal.aborted) {
-      console.log(`[ClawRouter] Client disconnected — aborting upstream request`);
-      globalController.abort();
+      console.log(`[ClawRouter] Client disconnected — releasing shared upstream lease`);
+      releaseProducerConsumer();
     }
   };
   res.on("close", onClientClose);
@@ -6736,7 +6963,6 @@ async function proxyRequest(
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(errPayload);
         }
-        completed = true;
         deduplicator.removeInflight(dedupKey);
         clearTimeout(timeoutId);
         res.removeListener("close", onClientClose);
@@ -6981,12 +7207,14 @@ async function proxyRequest(
     // including a payment failure that arrives as a 500 or a degraded 200.
     const recordAttempt = (
       model: string,
-      r: { success: boolean; errorCategory?: string; errorBody?: string },
+      r: { success: boolean; errorCategory?: string; errorBody?: string; response?: Response },
       timedOut: boolean,
     ) => {
       if (globalController.signal.aborted) return;
-      if (r.success) recordOutcome(model, requestKind, true);
-      else if (
+      if (r.success) {
+        if (!r.response?.headers.get("content-type")?.toLowerCase().includes("text/event-stream"))
+          recordOutcome(model, requestKind, true);
+      } else if (
         timedOut ||
         (!isPaymentFailure(r.errorBody) &&
           (r.errorCategory === "server_error" || r.errorBody?.startsWith("degraded response")))
@@ -7046,7 +7274,7 @@ async function proxyRequest(
       // deadline, which would report a generic timeout and drop the dedup
       // entry so an identical retry could pay again. A client that left still
       // gets the disconnect cleanup below.
-      if (result.paymentInDoubt && !clientDisconnected()) {
+      if (result.paymentInDoubt) {
         lastError = {
           body: result.errorBody || "payment outcome unknown",
           status: result.errorStatus || 502,
@@ -7079,12 +7307,63 @@ async function proxyRequest(
       }
 
       if (result.success && result.response) {
+        const nativeSse =
+          isStreaming &&
+          (result.response.headers.get("content-type") ?? "")
+            .toLowerCase()
+            .includes("text/event-stream");
+        if (nativeSse) {
+          // The response headers are available before the streamed completion.
+          // Select this model now and pipe its body incrementally below; reading
+          // it here would recreate OpenClaw's 120-second first-event timeout.
+          upstream = result.response;
+          actualModelUsed = tryModel;
+          console.log(`[ClawRouter] Native stream started with model: ${tryModel}`);
+          if (sessionSpend && !catalog.freeIds.has(tryModel)) {
+            const costEst = parseMicros(estimate(tryModel, body.length, maxTokens));
+            if (costEst !== undefined) sessionSpend.recordSuccess(costEst);
+          }
+          break;
+        }
+
         // Buffer the body so we can peek for degenerate output before committing
         // to this model. Non-streaming JSON responses are small; this is cheap.
-        const bodyChunks = await readBodyWithTimeout(result.response.body);
+        let bodyChunks: Uint8Array[];
+        try {
+          bodyChunks = await readBodyWithTimeout(result.response.body);
+        } catch (err) {
+          const responseWasPaid =
+            result.responseWasPaid === true || result.response.headers.has(PAYMENT_RECEIPT_HEADER);
+          if (!responseWasPaid) throw err;
+
+          let reason = "paid response body failed before completion";
+          let paymentReference: string | undefined;
+          try {
+            payFetch.onNoCompletion?.(result.response, reason);
+          } catch (paidError) {
+            if (paidError instanceof Error) reason = paidError.message;
+            paymentReference = (paidError as { reference?: string }).reference;
+          }
+          lastError = {
+            body: JSON.stringify({
+              error: {
+                message: reason,
+                type: "payment_settled_no_completion",
+                code: "payment_settled_no_completion",
+                ...(paymentReference ? { payment_reference: paymentReference } : {}),
+              },
+            }),
+            status: 502,
+            requestId: result.upstreamRequestId,
+          };
+          failedAttempts.push({ model: tryModel, reason: "payment_in_doubt", status: 502 });
+          break;
+        }
         const bodyBuf = Buffer.concat(bodyChunks);
 
-        if (isDegenerateCompletion(bodyBuf) && !isLastAttempt) {
+        const responseWasPaid =
+          result.responseWasPaid === true || result.response.headers.has(PAYMENT_RECEIPT_HEADER);
+        if (isDegenerateCompletion(bodyBuf) && !isLastAttempt && !responseWasPaid) {
           console.warn(
             `[ClawRouter] ⚠️  Degenerate output from ${tryModel} (finish_reason=length + repetition loop) — retrying with next fallback`,
           );
@@ -7096,6 +7375,11 @@ async function proxyRequest(
             status: 200,
           });
           continue;
+        }
+        if (isDegenerateCompletion(bodyBuf) && responseWasPaid) {
+          console.warn(
+            `[ClawRouter] Degenerate output from ${tryModel} after payment — returning it without a second paid attempt`,
+          );
         }
 
         // Re-wrap the buffered body so downstream code can read upstream.body normally
@@ -7369,9 +7653,16 @@ async function proxyRequest(
       break;
     }
 
-    // Clear timeout and client-close listener — request attempts completed
-    clearTimeout(timeoutId);
-    res.removeListener("close", onClientClose);
+    // Keep the request deadline and disconnect listener through a native
+    // stream body. Its fetch resolves at response headers, long before the
+    // paid model completion has finished.
+    if (!(
+      isStreaming &&
+      upstream?.headers.get("content-type")?.toLowerCase().includes("text/event-stream")
+    )) {
+      clearTimeout(timeoutId);
+      res.removeListener("close", onClientClose);
+    }
 
     // Clear heartbeat — real data is about to flow
     if (heartbeatInterval) {
@@ -7494,7 +7785,7 @@ async function proxyRequest(
         const errEvent = `data: ${errPayload}\n\n`;
         safeWrite(res, errEvent);
         safeWrite(res, "data: [DONE]\n\n");
-        res.end();
+        if (canWrite(res)) res.end();
 
         const errBuf = Buffer.from(errEvent + "data: [DONE]\n\n");
         deduplicator.complete(dedupKey, {
@@ -7508,14 +7799,16 @@ async function proxyRequest(
         // The gateway's request id rides along so a failing paid call can be
         // traced upstream — the reporter of ClawRouter-Hermes#38 had a paid 500
         // on Solana and no id to hand anyone, on either side.
-        res.writeHead(errStatus, {
-          "Content-Type": "application/json",
-          "x-context-used-kb": String(originalContextSizeKB),
-          "x-context-limit-kb": String(CONTEXT_LIMIT_KB),
-          ...(lastError?.requestId ? { "x-blockrun-request-id": lastError.requestId } : {}),
-          ...(costCapRefusal ? { "X-ClawRouter-Cost-Cap-Exceeded": "1" } : {}),
-        });
-        res.end(transformedErr);
+        if (canWrite(res)) {
+          res.writeHead(errStatus, {
+            "Content-Type": "application/json",
+            "x-context-used-kb": String(originalContextSizeKB),
+            "x-context-limit-kb": String(CONTEXT_LIMIT_KB),
+            ...(lastError?.requestId ? { "x-blockrun-request-id": lastError.requestId } : {}),
+            ...(costCapRefusal ? { "X-ClawRouter-Cost-Cap-Exceeded": "1" } : {}),
+          });
+          res.end(transformedErr);
+        }
 
         deduplicator.complete(dedupKey, {
           status: errStatus,
@@ -7546,16 +7839,135 @@ async function proxyRequest(
 
     // --- Stream response and collect for dedup cache ---
     const responseChunks: Buffer[] = [];
+    const writeStreamFrame = (frame: string) => {
+      const data = Buffer.from(frame);
+      safeWrite(res, data);
+      responseChunks.push(data);
+      deduplicator.streamChunk(dedupKey, data);
+    };
 
-    if (headersSentEarly) {
-      // Streaming: headers already sent. Response should be 200 at this point
-      // (non-200 responses are handled in the fallback loop above)
+    // Context, routing-debug, and cost headers shared by the non-streaming response and the deferred SSE 200.
+    // Reasoning can contain matched multilingual keywords (Cyrillic/CJK) —
+    // must be sanitized or res.writeHead throws ERR_INVALID_CHAR after the
+    // upstream call has already been paid for.
+    const applyRouterHeaders = (target: Record<string, string>): void => {
+      target["x-context-used-kb"] = String(originalContextSizeKB);
+      target["x-context-limit-kb"] = String(CONTEXT_LIMIT_KB);
+      if (debugMode && routingDecision) {
+        target["x-clawrouter-profile"] = routingProfile ?? "auto";
+        target["x-clawrouter-tier"] = routingDecision.tier;
+        target["x-clawrouter-model"] = actualModelUsed;
+        target["x-clawrouter-confidence"] = routingDecision.confidence.toFixed(2);
+        target["x-clawrouter-reasoning"] = sanitizeHeaderValue(routingDecision.reasoning);
+        if (routingDecision.agenticScore !== undefined) {
+          target["x-clawrouter-agentic-score"] = routingDecision.agenticScore.toFixed(2);
+        }
+      }
+      if (routingDecision) {
+        target["x-clawrouter-cost"] = routingDecision.costEstimate.toFixed(6);
+        target["x-clawrouter-savings"] = `${(routingDecision.savings * 100).toFixed(0)}%`;
+      }
+    };
+    const writeHeadSanitizing = (status: number, target: Record<string, string>): void => {
+      try {
+        res.writeHead(status, target);
+      } catch (headerError) {
+        // Defense in depth: a single invalid header value must never destroy a
+        // response the user has already paid for (the failed delivery makes
+        // clients retry — and re-pay — in a loop). Sanitize every value and
+        // deliver the body; the debug headers are best-effort metadata.
+        console.error(
+          `[ClawRouter] Invalid response header, sanitizing all values: ${String(headerError)}`,
+        );
+        for (const [key, value] of Object.entries(target)) {
+          target[key] = sanitizeHeaderValue(value);
+        }
+        res.writeHead(status, target);
+      }
+    };
 
-      // Convert non-streaming JSON response to SSE streaming format for client
-      // (BlockRun API returns JSON since we forced stream:false)
-      // OpenClaw expects: object="chat.completion.chunk" with choices[].delta (not message)
-      // We emit proper incremental deltas to match OpenAI's streaming format exactly
-      if (upstream.body) {
+    // Final headers of the SSE response; kept for in-flight dedup waiters.
+    let streamResponseHeaders: Record<string, string> = { "content-type": "text/event-stream" };
+
+    if (isStreaming) {
+      // Response should be 200 at this point (non-200 responses are handled in the fallback loop above).
+      if (!headersSentEarly) {
+        // Deferred mode: the paid call is done, so the final headers can carry its settlement metadata.
+        streamResponseHeaders = endToEndResponseHeaders(upstream.headers);
+        streamResponseHeaders["content-type"] = "text/event-stream";
+        streamResponseHeaders["cache-control"] = "no-cache";
+        streamResponseHeaders.connection = "keep-alive";
+        applyRouterHeaders(streamResponseHeaders);
+        writeHeadSanitizing(200, streamResponseHeaders);
+        headersSentEarly = true;
+        if (debugMode && routingDecision) {
+          safeWrite(
+            res,
+            `: x-clawrouter-debug profile=${routingProfile ?? "auto"} tier=${routingDecision.tier} model=${actualModelUsed} agentic=${routingDecision.agenticScore?.toFixed(2) ?? "n/a"} confidence=${routingDecision.confidence.toFixed(2)} reasoning=${routingDecision.reasoning}\n\n`,
+          );
+        }
+      }
+
+      deduplicator.startStream(dedupKey, 200, streamResponseHeaders);
+      const nativeSse = (upstream.headers.get("content-type") ?? "")
+        .toLowerCase()
+        .includes("text/event-stream");
+      let nativeStreamFailure: string | undefined;
+      if (nativeSse) {
+        const notices = [balanceFallbackNotice, budgetDowngradeNotice].filter(
+          (notice): notice is string => typeof notice === "string",
+        );
+        if (notices.length > 0) {
+          const noticeBase = {
+            id: `chatcmpl-${Date.now()}`,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: actualModelUsed || "unknown",
+          };
+          for (const notice of notices) {
+            const frame = `data: ${JSON.stringify({
+              ...noticeBase,
+              choices: [{ index: 0, delta: { content: notice }, finish_reason: null }],
+            })}\n\n`;
+            writeStreamFrame(frame);
+          }
+          balanceFallbackNotice = undefined;
+          budgetDowngradeNotice = undefined;
+        }
+
+        if (!upstream.body) {
+          nativeStreamFailure = "upstream returned an empty event stream";
+        } else {
+          try {
+            const streamed = await pumpNativeOpenAIStream(upstream.body, {
+              model: actualModelUsed,
+              tools: requestTools,
+              forwardToolCallProse: forwardToolCallProse(),
+              signal: globalController.signal,
+              onChunk: (frame) => {
+                writeStreamFrame(frame);
+              },
+            });
+            responseInputTokens = streamed.inputTokens;
+            responseOutputTokens = streamed.outputTokens;
+            accumulatedContent += streamed.content;
+            nativeStreamFailure = streamed.error;
+            if (!nativeStreamFailure && !streamed.sawDone) {
+              nativeStreamFailure = "upstream stream ended without the [DONE] marker";
+            }
+            if (!nativeStreamFailure && !streamed.sawFinish) {
+              nativeStreamFailure = "upstream stream ended without a completion finish reason";
+            }
+          } catch (streamError) {
+            nativeStreamFailure =
+              streamError instanceof Error ? streamError.message : String(streamError);
+          }
+        }
+      }
+
+      // JSON-only providers retain the established conversion path. Native
+      // OpenAI-compatible SSE is transformed and written incrementally above.
+      if (!nativeSse && upstream.body) {
         const chunks = await readBodyWithTimeout(upstream.body);
 
         // Combine chunks and transform to streaming format
@@ -7658,8 +8070,7 @@ async function proxyRequest(
                 choices: [{ index, delta: { role }, logprobs: null, finish_reason: null }],
               };
               const roleData = `data: ${JSON.stringify(roleChunk)}\n\n`;
-              safeWrite(res, roleData);
-              responseChunks.push(Buffer.from(roleData));
+              writeStreamFrame(roleData);
 
               // Chunk 1.5: balance fallback notice (tells user they got free model)
               if (balanceFallbackNotice) {
@@ -7675,8 +8086,7 @@ async function proxyRequest(
                   ],
                 };
                 const noticeData = `data: ${JSON.stringify(noticeChunk)}\n\n`;
-                safeWrite(res, noticeData);
-                responseChunks.push(Buffer.from(noticeData));
+                writeStreamFrame(noticeData);
                 balanceFallbackNotice = undefined; // Only inject once
               }
 
@@ -7694,8 +8104,7 @@ async function proxyRequest(
                   ],
                 };
                 const noticeData = `data: ${JSON.stringify(noticeChunk)}\n\n`;
-                safeWrite(res, noticeData);
-                responseChunks.push(Buffer.from(noticeData));
+                writeStreamFrame(noticeData);
                 budgetDowngradeNotice = undefined; // Only inject once
               }
 
@@ -7706,8 +8115,7 @@ async function proxyRequest(
                   choices: [{ index, delta: { content }, logprobs: null, finish_reason: null }],
                 };
                 const contentData = `data: ${JSON.stringify(contentChunk)}\n\n`;
-                safeWrite(res, contentData);
-                responseChunks.push(Buffer.from(contentData));
+                writeStreamFrame(contentData);
               }
 
               // Chunk 2b: tool_calls (forward tool calls from upstream)
@@ -7724,8 +8132,7 @@ async function proxyRequest(
                   ],
                 };
                 const toolCallData = `data: ${JSON.stringify(toolCallChunk)}\n\n`;
-                safeWrite(res, toolCallData);
-                responseChunks.push(Buffer.from(toolCallData));
+                writeStreamFrame(toolCallData);
               }
 
               // Chunk 3: finish_reason (signals completion)
@@ -7744,8 +8151,7 @@ async function proxyRequest(
                 ],
               };
               const finishData = `data: ${JSON.stringify(finishChunk)}\n\n`;
-              safeWrite(res, finishData);
-              responseChunks.push(Buffer.from(finishData));
+              writeStreamFrame(finishData);
             }
           }
         } catch {
@@ -7758,101 +8164,104 @@ async function proxyRequest(
             },
           });
           const sseData = `data: ${errPayload}\n\n`;
-          safeWrite(res, sseData);
-          responseChunks.push(Buffer.from(sseData));
+          writeStreamFrame(sseData);
         }
       }
 
-      // Send a final usage chunk (OpenAI `stream_options.include_usage` format)
-      // carrying both the standard token counts AND the ClawRouter cost breakdown.
-      // OpenClaw's session-cost-usage module reads `usage.cost.{total,input,output}`
-      // from every assistant message, so emitting the cost here feeds both the
-      // per-session footer (/usage full) and the /stats-style reports.
-      if (typeof responseInputTokens === "number" && typeof responseOutputTokens === "number") {
-        const usagePayload: Record<string, unknown> = {
-          prompt_tokens: responseInputTokens,
-          completion_tokens: responseOutputTokens,
-          total_tokens: responseInputTokens + responseOutputTokens,
-        };
-        const costBreakdown = buildCostBreakdown({
-          actualModelUsed,
-          routingProfile: routingProfile ?? undefined,
-          routingDecision,
-          modelPricing: routerOpts.modelPricing,
-          inputTokens: responseInputTokens,
-          outputTokens: responseOutputTokens,
-          tier: routingDecision?.tier,
+      if (nativeStreamFailure) {
+        let paymentFailure: unknown;
+        try {
+          // Pass the original Response so a paid rail can identify the signed
+          // call, record its one credit, and prohibit retries/fallback.
+          payFetch.onNoCompletion?.(upstream, nativeStreamFailure);
+        } catch (err) {
+          paymentFailure = err;
+        }
+        const terminal =
+          paymentFailure instanceof Error ? paymentFailure.message : nativeStreamFailure;
+        const terminalType =
+          paymentFailure instanceof Error && paymentFailure.name === PAYMENT_SETTLED_NO_COMPLETION
+            ? "payment_settled_no_completion"
+            : "upstream_stream_error";
+        const errorFrame = `data: ${JSON.stringify({
+          error: { message: terminal, type: terminalType, code: terminalType },
+        })}\n\n`;
+        writeStreamFrame(errorFrame);
+        writeStreamFrame("data: [DONE]\n\n");
+        res.end();
+        requestHadError = true;
+        deduplicator.complete(
+          dedupKey,
+          {
+            status: 200,
+            headers: streamResponseHeaders,
+            body: Buffer.concat(responseChunks),
+            completedAt: Date.now(),
+          },
+          false,
+        );
+      } else {
+        if (nativeSse && !globalController.signal.aborted)
+          recordOutcome(actualModelUsed, requestKind, true);
+        // Send a final usage chunk (OpenAI `stream_options.include_usage` format)
+        // carrying both the standard token counts AND the ClawRouter cost breakdown.
+        // OpenClaw's session-cost-usage module reads `usage.cost.{total,input,output}`
+        // from every assistant message, so emitting the cost here feeds both the
+        // per-session footer (/usage full) and the /stats-style reports.
+        if (typeof responseInputTokens === "number" && typeof responseOutputTokens === "number") {
+          const usagePayload: Record<string, unknown> = {
+            prompt_tokens: responseInputTokens,
+            completion_tokens: responseOutputTokens,
+            total_tokens: responseInputTokens + responseOutputTokens,
+          };
+          const costBreakdown = buildCostBreakdown({
+            actualModelUsed,
+            routingProfile: routingProfile ?? undefined,
+            routingDecision,
+            modelPricing: routerOpts.modelPricing,
+            inputTokens: responseInputTokens,
+            outputTokens: responseOutputTokens,
+            tier: routingDecision?.tier,
+          });
+          if (costBreakdown) {
+            usagePayload.cost = costBreakdown;
+          }
+          const usageChunk = {
+            id: `chatcmpl-${Date.now()}`,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: actualModelUsed || "unknown",
+            system_fingerprint: null,
+            choices: [],
+            usage: usagePayload,
+          };
+          const usageData = `data: ${JSON.stringify(usageChunk)}\n\n`;
+          writeStreamFrame(usageData);
+        }
+
+        // Send cost summary as SSE comment before terminator (human-readable log)
+        if (routingDecision) {
+          const costComment = `: cost=$${routingDecision.costEstimate.toFixed(4)} savings=${(routingDecision.savings * 100).toFixed(0)}% model=${actualModelUsed} tier=${routingDecision.tier}\n\n`;
+          writeStreamFrame(costComment);
+        }
+
+        // Send SSE terminator
+        writeStreamFrame("data: [DONE]\n\n");
+        res.end();
+
+        // Cache for dedup. In deferred mode these headers carry the original's Payment-Receipt: in-flight
+        // waiters shared that one payment and get it; completed replays strip it (replayResponseHeaders).
+        deduplicator.complete(dedupKey, {
+          status: 200,
+          headers: streamResponseHeaders,
+          body: Buffer.concat(responseChunks),
+          completedAt: Date.now(),
         });
-        if (costBreakdown) {
-          usagePayload.cost = costBreakdown;
-        }
-        const usageChunk = {
-          id: `chatcmpl-${Date.now()}`,
-          object: "chat.completion.chunk",
-          created: Math.floor(Date.now() / 1000),
-          model: actualModelUsed || "unknown",
-          system_fingerprint: null,
-          choices: [],
-          usage: usagePayload,
-        };
-        const usageData = `data: ${JSON.stringify(usageChunk)}\n\n`;
-        safeWrite(res, usageData);
-        responseChunks.push(Buffer.from(usageData));
       }
-
-      // Send cost summary as SSE comment before terminator (human-readable log)
-      if (routingDecision) {
-        const costComment = `: cost=$${routingDecision.costEstimate.toFixed(4)} savings=${(routingDecision.savings * 100).toFixed(0)}% model=${actualModelUsed} tier=${routingDecision.tier}\n\n`;
-        safeWrite(res, costComment);
-        responseChunks.push(Buffer.from(costComment));
-      }
-
-      // Send SSE terminator
-      safeWrite(res, "data: [DONE]\n\n");
-      responseChunks.push(Buffer.from("data: [DONE]\n\n"));
-      res.end();
-
-      // Cache for dedup
-      deduplicator.complete(dedupKey, {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-        body: Buffer.concat(responseChunks),
-        completedAt: Date.now(),
-      });
     } else {
-      // Non-streaming: forward status and headers from upstream
-      const responseHeaders: Record<string, string> = {};
-      upstream.headers.forEach((value, key) => {
-        // Skip hop-by-hop headers and content-encoding (fetch already decompresses)
-        if (key === "transfer-encoding" || key === "connection" || key === "content-encoding")
-          return;
-        responseHeaders[key] = value;
-      });
-
-      // Add context usage headers
-      responseHeaders["x-context-used-kb"] = String(originalContextSizeKB);
-      responseHeaders["x-context-limit-kb"] = String(CONTEXT_LIMIT_KB);
-
-      // Add routing debug headers (on by default; see debugMode above).
-      // Reasoning can contain matched multilingual keywords (Cyrillic/CJK) —
-      // must be sanitized or res.writeHead throws ERR_INVALID_CHAR after the
-      // upstream call has already been paid for.
-      if (debugMode && routingDecision) {
-        responseHeaders["x-clawrouter-profile"] = routingProfile ?? "auto";
-        responseHeaders["x-clawrouter-tier"] = routingDecision.tier;
-        responseHeaders["x-clawrouter-model"] = actualModelUsed;
-        responseHeaders["x-clawrouter-confidence"] = routingDecision.confidence.toFixed(2);
-        responseHeaders["x-clawrouter-reasoning"] = sanitizeHeaderValue(routingDecision.reasoning);
-        if (routingDecision.agenticScore !== undefined) {
-          responseHeaders["x-clawrouter-agentic-score"] = routingDecision.agenticScore.toFixed(2);
-        }
-      }
-
-      // Always include cost visibility headers when routing is active
-      if (routingDecision) {
-        responseHeaders["x-clawrouter-cost"] = routingDecision.costEstimate.toFixed(6);
-        responseHeaders["x-clawrouter-savings"] = `${(routingDecision.savings * 100).toFixed(0)}%`;
-      }
+      // Non-streaming: forward status and end-to-end headers from upstream
+      const responseHeaders = endToEndResponseHeaders(upstream.headers);
+      applyRouterHeaders(responseHeaders);
 
       // Collect full body for possible notice injection
       const bodyParts: Buffer[] = [];
@@ -8000,21 +8409,7 @@ async function proxyRequest(
 
       // Update content-length header since body may have changed
       responseHeaders["content-length"] = String(responseBody.length);
-      try {
-        res.writeHead(upstream.status, responseHeaders);
-      } catch (headerError) {
-        // Defense in depth: a single invalid header value must never destroy a
-        // response the user has already paid for (the failed delivery makes
-        // clients retry — and re-pay — in a loop). Sanitize every value and
-        // deliver the body; the debug headers are best-effort metadata.
-        console.error(
-          `[ClawRouter] Invalid response header, sanitizing all values: ${String(headerError)}`,
-        );
-        for (const [key, value] of Object.entries(responseHeaders)) {
-          responseHeaders[key] = sanitizeHeaderValue(value);
-        }
-        res.writeHead(upstream.status, responseHeaders);
-      }
+      writeHeadSanitizing(upstream.status, responseHeaders);
       safeWrite(res, responseBody);
       responseChunks.push(responseBody);
       res.end();
@@ -8102,8 +8497,10 @@ async function proxyRequest(
       balanceMonitor.deductEstimated(estimatedCostMicros);
     }
 
-    // Mark request as completed (for client disconnect cleanup)
-    completed = true;
+    if (isStreaming) {
+      clearTimeout(timeoutId);
+      res.removeListener("close", onClientClose);
+    }
   } catch (err) {
     // Clear timeout and client-close listener on error
     clearTimeout(timeoutId);
@@ -8115,6 +8512,10 @@ async function proxyRequest(
       heartbeatInterval = undefined;
     }
 
+    // Snapshot this before removeInflight marks the entry terminal and deletes
+    // its consumer count; afterward a live timeout would look like abandonment.
+    const noConsumersAtFailure = clientDisconnected();
+
     // Remove in-flight entry so retries aren't blocked
     deduplicator.removeInflight(dedupKey);
 
@@ -8123,7 +8524,7 @@ async function proxyRequest(
     // reporting this as a 300s timeout to onError would be a lie.
     if (
       err instanceof ClientDisconnectedError ||
-      (err instanceof Error && err.name === "AbortError" && clientDisconnected())
+      (err instanceof Error && err.name === "AbortError" && noConsumersAtFailure)
     ) {
       console.log(`[ClawRouter] Request cancelled — client disconnected`);
       return;
@@ -8139,6 +8540,8 @@ async function proxyRequest(
 
     throw err;
   } finally {
+    clearTimeout(timeoutId);
+    res.removeListener("close", onClientClose);
     // Return whatever budget this request still holds. Spend it signed stays
     // recorded; only the unspent part of the admission hold is released.
     sessionSpend?.release();

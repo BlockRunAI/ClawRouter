@@ -1139,7 +1139,9 @@ export function registerSpendPolicyHook(x402: x402Client, control: SpendControl)
   });
 }
 
-type PayFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type PayFetch = ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) & {
+  isPaidResponse?: (response: Response) => boolean;
+};
 
 /**
  * The gateway's settled charge for a response, in USD, or undefined.
@@ -1198,11 +1200,20 @@ export function withSpendPolicy(
   control: SpendControl,
   consumeEstimateUsd: () => number | undefined,
 ): PayFetch {
-  return async (input, init) => {
+  const paidResponses = new WeakSet<Response>();
+  const fetchWithPolicy: PayFetch = async (input, init) => {
     const published = consumeEstimateUsd();
-    if (published === undefined || !control.hasAmountLimits()) return inner(input, init);
+    if (published === undefined) return inner(input, init);
 
     const estimate = Number.isFinite(published) && published > 0 ? published : 0;
+
+    if (!control.hasAmountLimits()) {
+      const response = await inner(input, init);
+      const settled = settledChargeUsd(response);
+      const charged = response.ok ? (settled ?? estimate) : (settled ?? 0);
+      if (charged > 0) paidResponses.add(response);
+      return response;
+    }
 
     const result = control.checkAmount(estimate);
     if (!result.allowed) {
@@ -1229,10 +1240,15 @@ export function withSpendPolicy(
     const charged = response.ok ? (settled ?? estimate) : (settled ?? 0);
 
     if (reservationId !== undefined) control.releaseReservation(reservationId);
-    if (charged > 0) control.record(charged, { action: "BlockRun account charge" });
+    if (charged > 0) {
+      control.record(charged, { action: "BlockRun account charge" });
+      paidResponses.add(response);
+    }
 
     return response;
   };
+  fetchWithPolicy.isPaidResponse = (response) => paidResponses.has(response);
+  return fetchWithPolicy;
 }
 
 export function formatDuration(seconds: number): string {

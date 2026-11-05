@@ -740,7 +740,9 @@ async function cmdSetup(): Promise<void> {
         const metadata = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8")) as {
           name?: unknown;
         };
-        return metadata.name === "@blockrun/clawrouter" || metadata.name === "@twzrd1111/clawrouter";
+        return (
+          metadata.name === "@blockrun/clawrouter" || metadata.name === "@twzrd1111/clawrouter"
+        );
       } catch {
         return false;
       }
@@ -1071,7 +1073,8 @@ async function cmdUpdate(): Promise<void> {
   }
   if (!fromGlobal) return;
 
-  const installSpec = process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC || "@twzrd1111/clawrouter@latest";
+  const installSpec =
+    process.env.BLOCKRUN_CLAWROUTER_INSTALL_SPEC || "@twzrd1111/clawrouter@latest";
   console.log(`\n→ Updating global CLI (npm install -g ${installSpec})...`);
   try {
     execFileSync("npm", ["install", "-g", installSpec], {

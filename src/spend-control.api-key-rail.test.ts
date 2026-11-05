@@ -76,8 +76,9 @@ describe("withSpendPolicy on the API-key rail", () => {
       publishOnce(0.61),
     );
 
-    await fetchWithPolicy("https://api.blockrun.ai/v1/chat/completions");
+    const response = await fetchWithPolicy("https://api.blockrun.ai/v1/chat/completions");
     expect(c.getStatus().spending.daily).toBeCloseTo(0.004, 6);
+    expect(fetchWithPolicy.isPaidResponse?.(response)).toBe(true);
   });
 
   it("falls back to the estimate when no charge has settled yet", async () => {
@@ -86,8 +87,9 @@ describe("withSpendPolicy on the API-key rail", () => {
     const c = control({ daily: 5 });
     const fetchWithPolicy = withSpendPolicy(async () => ok(), c, publishOnce(0.02));
 
-    await fetchWithPolicy("https://api.blockrun.ai/v1/chat/completions");
+    const response = await fetchWithPolicy("https://api.blockrun.ai/v1/chat/completions");
     expect(c.getStatus().spending.daily).toBeCloseTo(0.02, 6);
+    expect(fetchWithPolicy.isPaidResponse?.(response)).toBe(true);
   });
 
   it("believes an explicit zero charge over the estimate", async () => {
@@ -98,8 +100,9 @@ describe("withSpendPolicy on the API-key rail", () => {
       publishOnce(0.02),
     );
 
-    await fetchWithPolicy("https://api.blockrun.ai/v1/chat/completions");
+    const response = await fetchWithPolicy("https://api.blockrun.ai/v1/chat/completions");
     expect(c.getStatus().spending.daily).toBe(0);
+    expect(fetchWithPolicy.isPaidResponse?.(response)).toBe(false);
   });
 
   it("does not charge the window for a request the gateway rejected", async () => {

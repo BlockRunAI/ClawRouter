@@ -107,3 +107,35 @@ describe("RequestDeduplicator.hash", () => {
     expect(RequestDeduplicator.hash(body1)).not.toBe(RequestDeduplicator.hash(body2));
   });
 });
+
+describe("RequestDeduplicator in-flight consumers", () => {
+  it("keeps shared work alive until the final consumer releases its lease", () => {
+    const dedup = new RequestDeduplicator();
+    const controller = dedup.markInflight("shared");
+    const releaseProducer = dedup.acquireInflightConsumer("shared")!;
+    const releaseJoiner = dedup.acquireInflightConsumer("shared")!;
+
+    releaseProducer();
+    expect(controller.signal.aborted).toBe(false);
+    expect(dedup.hasInflightConsumers("shared")).toBe(true);
+
+    releaseJoiner();
+    expect(controller.signal.aborted).toBe(true);
+    expect(dedup.hasInflightConsumers("shared")).toBe(false);
+  });
+
+  it("does not abort a completed request when a lease is released later", () => {
+    const dedup = new RequestDeduplicator();
+    const controller = dedup.markInflight("shared");
+    const release = dedup.acquireInflightConsumer("shared")!;
+    dedup.complete("shared", {
+      status: 200,
+      headers: {},
+      body: Buffer.from("done"),
+      completedAt: Date.now(),
+    });
+
+    release();
+    expect(controller.signal.aborted).toBe(false);
+  });
+});

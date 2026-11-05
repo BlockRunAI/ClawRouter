@@ -1,0 +1,72 @@
+name: MPP fork integration
+
+on:
+  push:
+    branches: [claude/twzrd-fork]
+  pull_request:
+    branches: [claude/twzrd-fork, claude/stream-receipt]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpp-fork-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Core, rails, and packed consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BLOCKRUN_MODEL_CATALOG_URL: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24"
+          check-latest: true
+          cache: npm
+
+      - name: Install core
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Core checks
+        run: |
+          npx prettier --check .
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+          node scripts/sync-brand-numbers.mjs --check
+
+      # The candidate core is not on npm yet. Tests resolve it to repository source.
+      - name: Install rails development dependencies
+        working-directory: packages/clawrouter-mpp
+        run: npm install --ignore-scripts --legacy-peer-deps --package-lock=false --no-audit --no-fund
+
+      - name: Rails checks
+        working-directory: packages/clawrouter-mpp
+        run: |
+          npm test
+          npm run typecheck
+          npm run build
+
+      - name: Pack and check an outside consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts="$RUNNER_TEMP/mpp-artifacts"
+          consumer="$RUNNER_TEMP/mpp-consumer"
+          mkdir -p "$artifacts" "$consumer"
+          npm pack --pack-destination "$artifacts" --json > "$artifacts/core-pack.json"
+          (cd packages/clawrouter-mpp && npm pack --pack-destination "$artifacts" --json) > "$artifacts/rails-pack.json"
+          node --version
+          npm --version
+          # Preserve SHA-1, SHA-512 integrity, sizes and complete file lists in the run log.
+          cat "$artifacts/core-pack.json" "$artifacts/rails-pack.json"
+          cp scripts/smoke-mpp-packed.mjs "$consumer/smoke.mjs"
+          cd "$consumer"
+          npm init -y > /dev/null
+          npm install --ignore-scripts --no-audit --no-fund "$artifacts"/*.tgz @solana/mpp@0.7.0 mppx@0.17.0
+          node smoke.mjs

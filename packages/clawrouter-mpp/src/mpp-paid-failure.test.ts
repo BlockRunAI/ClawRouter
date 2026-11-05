@@ -1,14 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   boundedSnippet,
-  guardPaid,
+  creditFromChallenge,
+  guardPaid as guardWithPayer,
   markSigned,
   MppPaidNoCompletionError,
+  readCredits,
+  rejectPaidNoCompletion,
 } from "./mpp-paid-failure.js";
 import { guardMethod } from "./mpp-fetch.js";
 import { InMemorySpendControlStorage, SpendControl, SpendPolicyError } from "@twzrd1111/clawrouter";
 
 const PATHUSD = "0x20c0000000000000000000000000000000000000";
+const TEST_PAYER = "0x0000000000000000000000000000000000000001";
+const guardPaid = (spend: SpendControl | undefined, run: () => Promise<Response>) =>
+  guardWithPayer(spend, run, TEST_PAYER);
 const challenge = {
   id: "c1",
   request: {
@@ -33,15 +39,75 @@ const history = (c: SpendControl) =>
   (c as unknown as { history: Array<{ amount: number; note?: string }> }).history;
 
 /** Sign through the real guard, then return what the seller says. */
-const paidCall = (c: SpendControl, respond: () => Response | Promise<Response>) =>
+const paidCall = (
+  c: SpendControl,
+  respond: () => Response | Promise<Response>,
+  id = challenge.id,
+) =>
   guardPaid(c, async () => {
-    await guardMethod(fakeMethod(), c).createCredential({ challenge });
+    await guardMethod(fakeMethod(), c).createCredential({ challenge: { ...challenge, id } });
     return respond();
   });
 
 describe("failure after an MPP payment was signed", () => {
+  it("turns a host-detected HTTP 200 error into a terminal paid failure with one credit", async () => {
+    const c = control();
+    const response = await paidCall(
+      c,
+      () =>
+        new Response('{"error":"overloaded"}', { headers: { "content-type": "application/json" } }),
+      "paid-200-error-unit",
+    );
+    const reject = () => rejectPaidNoCompletion(response, "provider overloaded");
+    expect(reject).toThrow(MppPaidNoCompletionError);
+    expect(reject).toThrow(MppPaidNoCompletionError);
+    expect(
+      readCredits().filter(
+        (r) => r.payer === TEST_PAYER && r.challengeId === "paid-200-error-unit",
+      ),
+    ).toHaveLength(1);
+    expect(history(c)).toHaveLength(1);
+    expect(history(c)[0].note).toContain("signed, no completion (HTTP 200)");
+  });
+
+  it("turns a broken streaming body into one terminal paid failure and credit", async () => {
+    const c = control();
+    const before = readCredits().length;
+    const brokenBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"choices":[]}\n\n'));
+        controller.error(new Error("stream socket broke"));
+      },
+    });
+    const response = await paidCall(
+      c,
+      () => new Response(brokenBody, { headers: { "content-type": "text/event-stream" } }),
+      "paid-stream-body-error",
+    );
+    await expect(response.body!.getReader().read()).rejects.toThrow("stream socket broke");
+    const reject = () => rejectPaidNoCompletion(response, "stream socket broke");
+    expect(reject).toThrow(MppPaidNoCompletionError);
+    expect(readCredits().slice(before)).toEqual([
+      {
+        payer: TEST_PAYER,
+        amount: challenge.request.amount,
+        challengeId: "paid-stream-body-error",
+        reason: "HTTP 200",
+      },
+    ]);
+    expect(history(c)).toHaveLength(1);
+    expect(history(c)[0].note).toContain("signed, no completion (HTTP 200)");
+  });
+
+  it("leaves an unsigned HTTP 200 error eligible for ordinary provider fallback", () => {
+    expect(() =>
+      rejectPaidNoCompletion(new Response('{"error":"overloaded"}'), "provider overloaded"),
+    ).not.toThrow();
+  });
+
   it("a seller 500 after signing stops the call, keeps the spend, and notes it in the ledger", async () => {
     const c = control();
+    const before = readCredits().length;
     const err = await paidCall(c, () => new Response("model crashed", { status: 500 })).catch(
       (e) => e,
     );
@@ -54,6 +120,16 @@ describe("failure after an MPP payment was signed", () => {
     expect(history(c)).toHaveLength(1); // the spend stays
     expect(history(c)[0].note).toContain("signed, no completion (HTTP 500)");
     expect(history(c)[0].note).toContain(err.reference);
+    await paidCall(c, () => new Response("model crashed", { status: 500 })).catch(() => {});
+    const added = readCredits().slice(before);
+    expect(added).toEqual([
+      {
+        payer: TEST_PAYER,
+        amount: challenge.request.amount,
+        challengeId: challenge.id,
+        reason: "HTTP 500",
+      },
+    ]);
   });
 
   it("a never-ending error body cannot stall the failure report", async () => {
@@ -127,7 +203,7 @@ describe("failure after an MPP payment was signed", () => {
 
   it("works without a spend control: still stops, no ledger to annotate", async () => {
     const err = await guardPaid(undefined, async () => {
-      markSigned("tx-bytes");
+      markSigned("tx-bytes", creditFromChallenge(challenge, TEST_PAYER)!);
       return new Response("bad gateway", { status: 502 });
     }).catch((e) => e);
     expect(err).toBeInstanceOf(MppPaidNoCompletionError);
@@ -136,7 +212,7 @@ describe("failure after an MPP payment was signed", () => {
 
   it("runs the call once: the guard itself never retries", async () => {
     const run = vi.fn(async () => {
-      markSigned("tx");
+      markSigned("tx", creditFromChallenge(challenge, TEST_PAYER)!);
       return new Response("x", { status: 503 });
     });
     await guardPaid(undefined, run).catch(() => {});
@@ -147,7 +223,7 @@ describe("failure after an MPP payment was signed", () => {
     const ref = async (p: string) =>
       (
         await guardPaid(undefined, async () => {
-          markSigned(p);
+          markSigned(p, creditFromChallenge(challenge, TEST_PAYER)!);
           return new Response("", { status: 500 });
         }).catch((e) => e)
       ).reference;

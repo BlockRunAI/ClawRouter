@@ -1,0 +1,83 @@
+{
+  "_meta": {
+    "source": "recorded dry run 2026-11-03T21:45:01Z, unpaid",
+    "note": "No payment was made and no signed payload exists. The server nonce (challenge id) was omitted and replaced with a fixed fake placeholder. The request param is base64url (no padding) of compact JSON of decoded.request.",
+    "seller": "https://openrouter.mpp.tempo.xyz",
+    "listing": {
+      "source": "https://mpp.dev/api/services",
+      "id": "openrouter",
+      "serviceUrl": "https://openrouter.mpp.tempo.xyz",
+      "listed_currency_decimals": 6,
+      "listed_endpoint_intent": "session"
+    }
+  },
+  "request": {
+    "method": "POST",
+    "host": "openrouter.mpp.tempo.xyz",
+    "path": "/v1/chat/completions",
+    "url": "https://openrouter.mpp.tempo.xyz/v1/chat/completions",
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "model": "openai/gpt-4o-mini",
+      "max_tokens": 8,
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 402,
+    "headers": {
+      "content-type": "application/problem+json",
+      "www-authenticate": "Payment id=\"fixture-challenge-id\", realm=\"openrouter.mpp.tempo.xyz\", method=\"tempo\", intent=\"charge\", request=\"eyJhbW91bnQiOiI3NTAiLCJjdXJyZW5jeSI6IjB4MjBjMDAwMDAwMDAwMDAwMDAwMDAwMDAwZjM3ZGUzNzQwQURlYzAzMiIsIm1ldGhvZERldGFpbHMiOnsiY2hhaW5JZCI6NDIxNywiZXNjcm93Q29udHJhY3QiOiIweDRkNTA1MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJmZWVQYXllciI6dHJ1ZSwiZmVlVG9rZW4iOiIweDIwYzAwMDAwMDAwMDAwMDAwMDAwMDAwMGI5NTM3ZDExYzYwZThiNTAiLCJzZXNzaW9uUHJvdG9jb2wiOiJ2MiJ9LCJyZWNpcGllbnQiOiIweGNhNGU4MzVGODAzY0IwYjdDNDI4MjIyQjNBM0I5ODUxOGQ0Nzc5RmUiLCJ1bml0VHlwZSI6InJlcXVlc3QifQ\"",
+      "access-control-expose-headers": "WWW-Authenticate,Payment-Receipt,Server-Timing,X-Request-Id,X-Upstream-Request-Id"
+    },
+    "body": {
+      "type": "https://paymentauth.org/problems/payment-required",
+      "title": "Payment Required",
+      "status": 402,
+      "detail": "Payment is required (openai/gpt-4o-mini via OpenRouter)."
+    }
+  },
+  "decoded": {
+    "scheme": "Payment",
+    "params": {
+      "id": "fixture-challenge-id",
+      "realm": "openrouter.mpp.tempo.xyz",
+      "method": "tempo",
+      "intent": "charge",
+      "request": "eyJhbW91bnQiOiI3NTAiLCJjdXJyZW5jeSI6IjB4MjBjMDAwMDAwMDAwMDAwMDAwMDAwMDAwZjM3ZGUzNzQwQURlYzAzMiIsIm1ldGhvZERldGFpbHMiOnsiY2hhaW5JZCI6NDIxNywiZXNjcm93Q29udHJhY3QiOiIweDRkNTA1MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJmZWVQYXllciI6dHJ1ZSwiZmVlVG9rZW4iOiIweDIwYzAwMDAwMDAwMDAwMDAwMDAwMDAwMGI5NTM3ZDExYzYwZThiNTAiLCJzZXNzaW9uUHJvdG9jb2wiOiJ2MiJ9LCJyZWNpcGllbnQiOiIweGNhNGU4MzVGODAzY0IwYjdDNDI4MjIyQjNBM0I5ODUxOGQ0Nzc5RmUiLCJ1bml0VHlwZSI6InJlcXVlc3QifQ"
+    },
+    "request": {
+      "amount": "750",
+      "currency": "0x20c000000000000000000000f37de3740ADec032",
+      "methodDetails": {
+        "chainId": 4217,
+        "escrowContract": "0x4d50500000000000000000000000000000000000",
+        "feePayer": true,
+        "feeToken": "0x20c000000000000000000000b9537d11c60e8b50",
+        "sessionProtocol": "v2"
+      },
+      "recipient": "0xca4e835F803cB0b7C428222B3A3B98518d4779Fe",
+      "unitType": "request"
+    },
+    "amount": "750",
+    "decimals": 6,
+    "amount_usd": "0.00075",
+    "chainId": 4217,
+    "currency": "0x20c000000000000000000000f37de3740ADec032",
+    "recipient": "0xca4e835F803cB0b7C428222B3A3B98518d4779Fe",
+    "methodDetails": {
+      "chainId": 4217,
+      "escrowContract": "0x4d50500000000000000000000000000000000000",
+      "feePayer": true,
+      "feeToken": "0x20c000000000000000000000b9537d11c60e8b50",
+      "sessionProtocol": "v2"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@twzrd1111/clawrouter",
-  "version": "0.12.306",
+  "version": "0.12.307",
   "description": "Smart LLM router — save 84% on inference costs. 90 models (7 free). Pay by credit card (API key) or USDC (x402 wallet).",
   "type": "module",
   "main": "dist/index.js",
@@ -34,6 +34,7 @@
     "docs/*.png",
     "scripts",
     "!scripts/smoke-dist.mjs",
+    "!scripts/smoke-mpp-packed.mjs",
     "!scripts/sync-brand-numbers.mjs",
     "skills",
     "src/top-models.json",
