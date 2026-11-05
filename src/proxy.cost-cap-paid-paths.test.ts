@@ -233,10 +233,14 @@ describe("maxCostPerRun of 0", () => {
     );
   });
 
-  it("refuses a partner data call on the key rail, whatever its method", async () => {
+  it.each([
+    ["a partner data route", "/v1/pm/markets"],
+    ["the poll that settles a finished video", "/v1/videos/generations/job-1"],
+    ["a data route outside the partner prefixes", "/v1/defillama/protocols"],
+    ["a route it has never heard of", "/v1/something-new"],
+  ])("refuses a GET to %s on the key rail", async (_name, path) => {
     const p = await proxy("key", 0);
-    const res = await fetch(`${p.baseUrl}/v1/pm/markets`);
-    await expectRefused(res);
+    await expectRefused(await fetch(`${p.baseUrl}${path}`));
   });
 
   it("still lets the key rail read account data", async () => {

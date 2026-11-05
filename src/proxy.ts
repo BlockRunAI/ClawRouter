@@ -2422,10 +2422,16 @@ function refuseOverCostCap(res: ServerResponse, err: unknown): boolean {
   return true;
 }
 
+/** Reads that cannot bill: catalogs, health, and the account's own usage and balance. */
+const ZERO_CAP_FREE_READ =
+  /^\/v1\/(?:models|usage|balance|audio\/models|audio\/voices|images\/models|video\/models|health\/[^/]+)$/;
+
 /**
  * The key rail's half of a $0 cap. Nothing is signed on this rail, so nothing
  * shows what a call costs: the bearer token is billed server-side. Let through
- * only what cannot bill: a free model on the chat routes, and account reads.
+ * only what cannot bill: a free model on the chat routes, and the listed reads.
+ * A GET can bill too (a data route, or the poll that settles a finished video),
+ * so anything not listed is refused.
  */
 function withZeroCapGuard(
   inner: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
@@ -2453,7 +2459,7 @@ function withZeroCapGuard(
       }
       allowed = typeof model === "string" && isFree(model);
     } else {
-      allowed = !PAID_API_PATH.test(path) && (method === "GET" || method === "HEAD");
+      allowed = ZERO_CAP_FREE_READ.test(path) && (method === "GET" || method === "HEAD");
     }
     if (!allowed) throw new CostCapError(ZERO_CAP_REFUSAL);
     return inner(input, init);
