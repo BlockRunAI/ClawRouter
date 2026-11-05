@@ -223,3 +223,6 @@ export class CostCapError extends SpendPolicyError {
     this.name = "CostCapError";
   }
 }
+
+/** Why a $0 cap refused a call. */
+export const ZERO_CAP_REFUSAL = "ClawRouter cost cap: maxCostPerRun is 0, so no paid call is made";

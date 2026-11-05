@@ -533,9 +533,9 @@ plugins:
   - id: "@blockrun/clawrouter"
     config:
       # Maximum spend per session/run in USD.
-      # Default: disabled (no limit). 0 refuses paid chat completions, so only
-      # free models answer. Pin a free model: strict mode refuses auto and premium,
-      # and graceful mode refuses them on tool calls.
+      # Default: disabled (no limit). 0 refuses every paid call on every endpoint,
+      # so only free models answer. Pin a free model: strict mode refuses auto and
+      # premium, and graceful mode refuses them on tool calls.
       maxCostPerRun: 0.50 # $0.50 per session
 
       # How to enforce the budget cap. Default: graceful
@@ -554,8 +554,8 @@ plugins:
       #   fallbacks) is checked against the cap before it is signed.
       maxCostPerRunMode: graceful # or: strict
 
-      # Note: the cap applies to /v1/chat/completions only. /v1/messages, image, video,
-      # music and speech generation, and the partner and data APIs bypass maxCostPerRun.
+      # Note: a positive cap applies to /v1/chat/completions only. /v1/messages, image,
+      # video, music and speech generation, and the partner and data APIs bypass it.
       # Their cost is charged via x402 micropayment directly and is not tracked per-session.
 
       routing:
