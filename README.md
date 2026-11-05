@@ -366,13 +366,15 @@ curl -X POST http://localhost:8402/v1/videos/generations \
 
 Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agents: `GET https://blockrun.ai/api/v1/models`). Prices are not copied here, so this page never goes stale on a reprice.
 
-| Model                         | Provider            | Duration              |
-| ----------------------------- | ------------------- | --------------------- |
-| `bytedance/seedance-1.5-pro`  | ByteDance Seedance  | 5s default, up to 10s |
-| `bytedance/seedance-2.0-fast` | ByteDance Seedance  | 5s default, up to 10s |
-| `bytedance/seedance-2.0`      | ByteDance Seedance  | 5s default, up to 10s |
-| `azure/sora-2`                | OpenAI Sora (Azure) | 4s default; 4/8/12s   |
-| `xai/grok-imagine-video`      | xAI Grok Imagine    | 8s default            |
+| Model                         | Provider           | Duration              |
+| ----------------------------- | ------------------ | --------------------- |
+| `bytedance/seedance-1.5-pro`  | ByteDance Seedance | 5s default, up to 12s |
+| `bytedance/seedance-2.0-fast` | ByteDance Seedance | 5s default, up to 15s |
+| `bytedance/seedance-2.0-mini` | ByteDance Seedance | 5s default, up to 15s |
+| `bytedance/seedance-2.0`      | ByteDance Seedance | 5s default, up to 15s |
+| `bytedance/seedance-2.5`      | ByteDance Seedance | 5s default, up to 30s |
+| `xai/grok-imagine-video`      | xAI Grok Imagine   | 8s default, up to 15s |
+| `xai/grok-imagine-video-1.5`  | xAI Grok Imagine   | 8s default, up to 15s |
 
 Seedance is **token-priced upstream** at ~20,256 tokens/sec — the blockrun videos route now defaults Seedance to `resolution=720p` with `generate_audio=true` for text-to-video (2× the per-second token count of the older 480p baseline; audio is included in that rate). The quote is `duration × tokens/sec × $/1M tokens × 1.05 margin`. Image-to-video is priced the same as text-to-video (the earlier ~40% i2v discount was removed upstream on 2026-06-01; only video-to-video remains cheaper). Sora 2 is flat-priced at $0.10/sec for both t2v and i2v — note it rejects human faces in reference images (use Seedance + RealFace for real people). Calls block for 30–120s while the upstream polls the job. Seedance 2.0 Fast typically returns in 60–80s; 2.0 Pro trades latency for quality.
 
@@ -473,7 +475,8 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | free/north-mini-code                        | 256K    | coding (Cohere, sub-second)                         |
 | free/nemotron-3-nano-omni-30b-a3b-reasoning | 256K    | reasoning (text only — see note)                    |
 | free/nemotron-3-ultra-550b                  | 1M      | largest free model (550B/55B MoE)                   |
-| free/llama-3.2-11b-vision                   | 128K    | Meta Llama (text only — see note)                   |
+| free/nemotron-3.5-bolt                      | 131K    | vision, about a second to answer                    |
+| free/nemotron-3-super-120b                  | 131K    | reasoning                                           |
 | free/muse-glimmer-30b                       | 131K    | reasoning (Meta Muse, text only)                    |
 | qwen/qwen3.7-flash                          | 1M      | reasoning, tools (fastest Qwen tier)                |
 | poolside/laguna-s-2.1                       | 1M      | coding (paid sibling of laguna-xs)                  |
@@ -563,7 +566,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 
 > **Free tier:** <!-- br:models.free -->8<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other five as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model lightning` for 1M-context reasoning, `/model north-mini` or `/model laguna` for fast coding).
 >
-> **No free vision.** Two free models are catalogued as vision-capable and neither reliably is: on a 64×64 solid-colour probe `nemotron-3-nano-omni` was right 1 of 4 times on Base and answered "white" for red on Solana, and `llama-3.2-11b-vision` replied "I'm unable to see the image" 3 of 3 while answering text fine. Both return HTTP 200, so a wrong answer arrives with no error to branch on. ClawRouter therefore does not flag them for vision, and requests carrying an `image_url` route to a paid vision model instead.
+> **One free model reads images: `free/nemotron-3.5-bolt`.** It got 8 of 8 right on 64×64 solid-colour PNGs across Base and Solana on 2026-11-05, answered by Bolt itself. The rest of the free tier isn't flagged for vision: `nemotron-3-nano-omni` was right 1 of 4 times on Base in August, and only 2 of 8 probes of `nemotron-3-super-120b` reached that model. These failures can arrive as an HTTP 200 with a wrong answer and no error to branch on. Pin `/model vision-free` for free images; otherwise requests carrying an `image_url` route to a paid vision model.
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
 
 ---

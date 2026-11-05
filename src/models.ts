@@ -398,10 +398,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   // Mistral we cannot serve.
   "mistral-free": "free/nemotron-3.5-lightning",
   "glm-free": "free/nemotron-3.5-lightning", // seed-oss-36b (the prior target) EOL'd 2026-08-03
-  // A free Llama exists again: nemotron-super-49b (Llama-3.3-based) hit 410 on
-  // 2026-08-30, and a 12-model sweep of what NVIDIA still serves found Llama 3.2
-  // 11B Vision as the only one that finishes a real completion.
-  "llama-free": "free/llama-3.2-11b-vision",
+  // No free Llama is left: NVIDIA deprovisioned Llama 3.2 11B Vision on 2026-11-02.
+  // blockrun's /free-llama page now leads with Muse, so the shorthand follows it.
+  "llama-free": "free/muse-glimmer-30b", // no free Llama left; Muse is Meta's open line after it
   // qwen3-coder-480b retired 2026-06-14 → seed-oss-36b, which then EOL'd 2026-08-03.
   // Follow the gateway's own retarget rather than chaining to a second dead model.
   "qwen-coder": "free/nemotron-3.5-lightning", // no live free Qwen; follows the free default
@@ -436,18 +435,15 @@ export const MODEL_ALIASES: Record<string, string> = {
   // Vision-capable free models
   "nemotron-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "nano-omni": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
-  // `vision-free` kept for backward compatibility ONLY — it still resolves to
-  // nano-omni, which is the strongest free model, but the free tier no longer
-  // claims working image input on either chain (see the catalog note). Do not
-  // advertise this alias as a way to get free vision.
-  "vision-free": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
+  // `vision-free` names the one free model that proved it reads images.
+  "vision-free": "free/nemotron-3.5-bolt",
   // Retired shorthand aliases redirect to live successors. The catch-all target
   // moved llama-4-maverick → gpt-oss-120b (2026-07-17) → step-3.7-flash
   // (2026-08-29) → nemotron-3.5-lightning (2026-08-30, blockrun #448).
   nemotron: "free/nemotron-3.5-lightning", // strongest live Nemotron
   "nemotron-ultra": "free/nemotron-3.5-lightning",
   "nemotron-253b": "free/nemotron-3.5-lightning",
-  "nemotron-super": "free/nemotron-3.5-lightning",
+  "nemotron-super": "free/nemotron-3-super-120b", // now names a real free model
   "nemotron-49b": "free/nemotron-3.5-lightning",
   "nemotron-120b": "free/nemotron-3.5-lightning",
   devstral: "free/nemotron-3.5-lightning", // seed-oss-36b EOL'd 2026-08-03
@@ -489,6 +485,12 @@ export const MODEL_ALIASES: Record<string, string> = {
   // free on NVIDIA. A reasoning model: a small max_tokens is spent entirely in
   // reasoning and returns empty content.
   "nvidia/muse-glimmer-30b": "free/muse-glimmer-30b",
+  "nvidia/nemotron-3.5-bolt": "free/nemotron-3.5-bolt",
+  "nemotron-3.5-bolt": "free/nemotron-3.5-bolt",
+  bolt: "free/nemotron-3.5-bolt",
+  "nvidia/nemotron-3-super-120b": "free/nemotron-3-super-120b",
+  "nemotron-3-super-120b": "free/nemotron-3-super-120b",
+  "super-120b": "free/nemotron-3-super-120b",
   muse: "free/muse-glimmer-30b",
   "muse-glimmer": "free/muse-glimmer-30b",
   "muse-glimmer-30b": "free/muse-glimmer-30b",
@@ -2331,7 +2333,9 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     // (Llama-3.3-based) hit NVIDIA's 410 EOL. A 12-model sweep found exactly two
     // survivors and only the 11B finishes a real completion. Older than the rest
     // of the tier and deliberately so: it is a real Llama that actually answers.
-    // Slowest in the tier (~18 tok/s) — last rung of the cascade.
+    // Retired 2026-11-02: NVIDIA deprovisioned it and blockrun delisted it. Entry
+    // kept so explicit pins stay routable;
+    // off the picker, the FREE_MODELS cascade and every default.
     id: "free/llama-3.2-11b-vision",
     name: "[Free] Llama 3.2 11B Vision",
     version: "3.2-11b-vision",
@@ -2385,6 +2389,35 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "free/muse-glimmer-30b",
     name: "[Free] Muse Glimmer 30B",
     version: "30b",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    // Nemotron 3.5 Bolt (blockrun 2026-11-04): about a second to answer, no
+    // thinking pass. The one free model flagged for vision. 2026-11-05, 64x64
+    // solid-colour PNGs: 8 of 8 correct across Base and Solana, and every
+    // response's `model` field named Bolt itself, so no rescue did the reading.
+    id: "free/nemotron-3.5-bolt",
+    name: "[Free] Nemotron 3.5 Bolt",
+    version: "3.5-bolt",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    vision: true,
+  },
+  {
+    // Nemotron 3.5 Super, served under its older 3-super-120b id (blockrun
+    // 2026-11-04). Reasoning, and the gateway's redirect target for the retired
+    // Llama. NO `vision`, although blockrun tags it: on 2026-11-05 only 2 of 8
+    // image probes were answered by this model; the rest were rescued by
+    // nano-omni or refused with a capacity 429, which proves nothing about it.
+    id: "free/nemotron-3-super-120b",
+    name: "[Free] Nemotron 3 Super 120B",
+    version: "3-super-120b",
     inputPrice: 0,
     outputPrice: 0,
     contextWindow: 131072,
