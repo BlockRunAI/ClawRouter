@@ -965,7 +965,7 @@ wallet, no key, no signup. See [Paying with a credit card](#paying-with-a-credit
 
 ### Is ClawRouter free?
 
-ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several open-weight models (`nemotron-3.5-lightning`, `laguna-xs-2.1`, `north-mini-code`, `nemotron-3.5-bolt`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3-super-120b`, `nemotron-3-ultra-550b`, `muse-glimmer-30b`) are completely free, and Bolt also reads images. Use `/model free` to smart-route across them, or pick any by name.
+ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several open-weight models (`nemotron-3.5-lightning`, `laguna-xs-2.1`, `north-mini-code`, `nemotron-3.5-bolt`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3-super-120b`, `nemotron-3-ultra-550b`, `muse-glimmer-30b`) are completely free, and Bolt also reads images. Use `/model free` for the free default, or pick any by name.
 
 ---
 

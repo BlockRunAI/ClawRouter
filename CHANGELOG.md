@@ -4,6 +4,34 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.309 — November 5, 2026
+
+### A positive `maxCostPerRun` now covers `/v1/messages`
+
+**Behaviour change:** a positive cap only covered `/v1/chat/completions`, so a client
+on `/v1/messages`, such as Claude Code, could spend past it without limit. If you set
+a cap and call that route, you now get a `429` once the budget can't cover the next
+paid call.
+
+- **Shared budget:** the route draws on the same session budget as chat, on the wallet
+  and API-key rails. Send `x-session-id` to keep both on one budget. Without it, the
+  session comes from the first user message, and clients that format that message
+  differently on each route get separate budgets.
+- **No downgrade:** the route forwards the model you asked for, so both modes refuse
+  rather than swap in a cheaper one. Strict mode answers `cost_cap_exceeded`. Graceful
+  mode answers `budget_exhausted`, with `X-ClawRouter-Budget-Mode: blocked`.
+- **Free models** still answer when the budget is gone.
+
+Image, video, music, speech and partner routes are still outside a positive cap.
+
+### Docs
+
+The routing docs, README and skill still listed Llama as free and left out Bolt and
+Super 120B, and the README and skill still mentioned Sora 2 after v0.12.308. These now
+match the live catalog.
+
+---
+
 ## v0.12.308 — November 5, 2026
 
 ### `maxCostPerRun: 0` now means nothing gets paid for
