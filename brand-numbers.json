@@ -2,17 +2,17 @@
   "$schema": "https://blockrun.ai/brand/numbers.schema.json",
   "version": 1,
   "models": {
-    "chatVisible": 90,
+    "chatVisible": 91,
     "totalVisible": 117,
-    "free": 7,
+    "free": 8,
     "freeWithheld": 27,
     "image": 12,
-    "video": 8,
+    "video": 7,
     "music": 1,
     "speech": 5,
     "soundfx": 1,
-    "withFallback": 29,
-    "withFallbackAllEntries": 69
+    "withFallback": 30,
+    "withFallbackAllEntries": 70
   },
   "clawrouter": {
     "dimensions": 15,
