@@ -86,7 +86,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BlockRunAI/ClawRouter.git"
+    "url": "git+https://github.com/twzrd-sol/ClawRouter-1.git"
   },
   "dependencies": {
     "@blockrun/llm": "^3.23.1",

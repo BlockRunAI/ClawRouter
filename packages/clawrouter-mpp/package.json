@@ -18,6 +18,11 @@
     "LICENSE"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/twzrd-sol/ClawRouter-1.git",
+    "directory": "packages/clawrouter-mpp"
+  },
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
