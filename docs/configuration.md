@@ -554,9 +554,11 @@ plugins:
       #   fallbacks) is checked against the cap before it is signed.
       maxCostPerRunMode: graceful # or: strict
 
-      # Note: a positive cap applies to /v1/chat/completions only. /v1/messages, image,
-      # video, music and speech generation, and the partner and data APIs bypass it.
-      # Their cost is charged via x402 micropayment directly and is not tracked per-session.
+      # Note: a positive cap applies to /v1/chat/completions and /v1/messages, which share
+      # a session's budget. /v1/messages forwards the model you asked for and never
+      # downgrades, so it answers 429 in either mode when the budget can't cover a paid call.
+      # Image, video, music and speech generation and the partner and data APIs bypass the
+      # cap. Their cost is charged directly and is not tracked per-session.
 
       routing:
         # Strategy. Default: portfolio (Router Core V3.4 — constraint-first ranking
