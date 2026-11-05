@@ -271,4 +271,14 @@ describe.each([
     expect(res.status).not.toBe(429);
     expect(res.status).not.toBe(502);
   });
+
+  it("forwards a message with no content for the gateway to answer", async () => {
+    const p = await proxy(rail, 1, mode);
+    const res = await send(
+      p,
+      JSON.stringify({ model: PAID_MODEL, max_tokens: 10, messages: [{ role: "user" }] }),
+    );
+    expect(res.status).toBe(200);
+    expect(billed).toEqual(["/v1/messages"]);
+  });
 });

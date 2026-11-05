@@ -2459,7 +2459,8 @@ function capMessagesRequest(
   }
   const messages = Array.isArray(parsed.messages)
     ? parsed.messages.filter(
-        (m): m is { role: string; content: unknown } => typeof m?.role === "string",
+        (m): m is { role: string; content: unknown } =>
+          typeof m?.role === "string" && m.content !== undefined,
       )
     : [];
   const sessionId =
