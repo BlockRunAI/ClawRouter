@@ -46,7 +46,7 @@ The cache key is a SHA-256 hash of the request body (model + messages + params),
 
 **Bypass cache:**
 
-Either way, the request is neither answered from the cache nor stored in it.
+Either way, the request is neither answered from the cache nor stored in it. The separate 30-second dedup cache still applies, so an identical retry inside that window can replay the response.
 
 ```typescript
 // Via header ("no-store" works too)
