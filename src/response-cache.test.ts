@@ -173,6 +173,14 @@ describe("ResponseCache", () => {
       expect(cache.shouldCache(body, { "cache-control": "no-cache" })).toBe(false);
     });
 
+    it.each(["no-store", "No-Cache", "NO-STORE", "max-age=0, no-store", 'no-cache="set-cookie"'])(
+      "should return false for Cache-Control: %s",
+      (value) => {
+        const body = JSON.stringify({ model: "gpt-4", messages: [] });
+        expect(cache.shouldCache(body, { "cache-control": value })).toBe(false);
+      },
+    );
+
     it("should return true for other Cache-Control values", () => {
       const body = JSON.stringify({ model: "gpt-4", messages: [] });
       expect(cache.shouldCache(body, { "cache-control": "max-age=300" })).toBe(true);
