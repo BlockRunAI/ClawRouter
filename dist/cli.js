@@ -66170,7 +66170,7 @@ var init_response_cache = __esm({
        */
       shouldCache(body, headers) {
         if (!this.config.enabled) return false;
-        if (headers?.["cache-control"]?.includes("no-cache")) {
+        if (/\bno-(?:cache|store)\b/i.test(headers?.["cache-control"] ?? "")) {
           return false;
         }
         try {
@@ -125890,7 +125890,7 @@ var require_webidl = __commonJS({
 var require_util2 = __commonJS({
   "../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/undici/lib/web/fetch/util.js"(exports, module) {
     "use strict";
-    var { Transform } = __require("stream");
+    var { Transform: Transform2 } = __require("stream");
     var zlib2 = __require("zlib");
     var { redirectStatusSet, referrerPolicyTokens, badPortsSet } = require_constants3();
     var { getGlobalOrigin } = require_global();
@@ -126484,7 +126484,7 @@ var require_util2 = __commonJS({
       contentRange += isomorphicEncode(`${fullLength}`);
       return contentRange;
     }
-    var InflateStream = class extends Transform {
+    var InflateStream = class extends Transform2 {
       #zlibOptions;
       /** @param {zlib.ZlibOptions} [zlibOptions] */
       constructor(zlibOptions2) {
@@ -140329,13 +140329,13 @@ var require_mock_pool = __commonJS({
 var require_pending_interceptors_formatter = __commonJS({
   "../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/undici/lib/mock/pending-interceptors-formatter.js"(exports, module) {
     "use strict";
-    var { Transform } = __require("stream");
+    var { Transform: Transform2 } = __require("stream");
     var { Console } = __require("console");
     var PERSISTENT = process.versions.icu ? "\u2705" : "Y ";
     var NOT_PERSISTENT = process.versions.icu ? "\u274C" : "N ";
     module.exports = class PendingInterceptorsFormatter {
       constructor({ disableColors } = {}) {
-        this.transform = new Transform({
+        this.transform = new Transform2({
           transform(chunk, _enc, cb) {
             cb(null, chunk);
           }
@@ -152637,7 +152637,7 @@ var require_eventsource_stream = __commonJS({
   "../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/undici/lib/web/eventsource/eventsource-stream.js"(exports, module) {
     "use strict";
     var buffer2 = __require("buffer");
-    var { Transform } = __require("stream");
+    var { Transform: Transform2 } = __require("stream");
     var { isASCIINumber, isValidLastEventId } = require_util6();
     var BOM = [239, 187, 191];
     var LF = 10;
@@ -152687,7 +152687,7 @@ var require_eventsource_stream = __commonJS({
       error62.aborted = false;
       return error62;
     }
-    var EventSourceStream = class extends Transform {
+    var EventSourceStream = class extends Transform2 {
       /**
        * @type {eventSourceSettings}
        */
@@ -154811,7 +154811,7 @@ var init_v1 = __esm({
 import { AsyncLocalStorage as AsyncLocalStorage2 } from "async_hooks";
 import { createHmac } from "crypto";
 import { createServer } from "http";
-import { finished, Readable as Readable2 } from "stream";
+import { finished, Readable as Readable2, Transform } from "stream";
 import { pipeline } from "stream/promises";
 import { homedir as homedir13 } from "os";
 import { join as join17 } from "path";
@@ -155747,9 +155747,32 @@ function withZeroCapGuard(inner, isFree) {
     return inner(input2, init2);
   };
 }
+function isMessagesPath(url3) {
+  return url3 === "/v1/messages" || (url3?.startsWith("/v1/messages?") ?? false);
+}
+async function relayWithIdleTimeout(source, destination, idleMs, signal) {
+  let timer2;
+  const arm = () => {
+    clearTimeout(timer2);
+    timer2 = setTimeout(() => watchdog.destroy(new Error("Body read timeout")), idleMs);
+  };
+  const watchdog = new Transform({
+    transform(chunk, _encoding, done) {
+      arm();
+      done(null, chunk);
+    }
+  });
+  arm();
+  try {
+    await pipeline(source, watchdog, destination, { signal });
+  } finally {
+    clearTimeout(timer2);
+  }
+}
 async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPaymentUsd, accountPassthrough = false, authMode = "wallet", capRequest) {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
+  const isMessages = isMessagesPath(req.url);
   const isBlockrunExa = req.url?.startsWith("/v1/exa/") ?? false;
   const isModalSandbox = req.url?.startsWith("/v1/modal/") ?? false;
   const isPhone = (req.url?.startsWith("/v1/phone/") ?? false) || (req.url?.startsWith("/v1/voice/") ?? false);
@@ -155791,8 +155814,8 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
   if (accountPassthrough || authMode === "api-key") {
     responseHeaders["cache-control"] = "no-store";
   }
-  res.writeHead(upstream.status, responseHeaders);
   if (accountPassthrough) {
+    res.writeHead(upstream.status, responseHeaders);
     if (upstream.body) {
       await pipeline(
         Readable2.fromWeb(upstream.body),
@@ -155802,12 +155825,23 @@ async function proxyPaidApiRequest(req, res, apiBase, payFetch, getActualPayment
     } else {
       res.end();
     }
-  } else {
+  } else if (isMessages) {
+    res.writeHead(upstream.status, responseHeaders);
     if (upstream.body) {
-      const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
-      for (const chunk of chunks) {
-        safeWrite(res, Buffer.from(chunk));
-      }
+      await relayWithIdleTimeout(
+        Readable2.fromWeb(upstream.body),
+        res,
+        MODEL_BODY_READ_TIMEOUT_MS,
+        clientAbort.signal
+      );
+    } else {
+      res.end();
+    }
+  } else {
+    const chunks = upstream.body ? await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS) : [];
+    res.writeHead(upstream.status, responseHeaders);
+    for (const chunk of chunks) {
+      safeWrite(res, Buffer.from(chunk));
     }
     res.end();
   }
@@ -157128,8 +157162,8 @@ async function startProxy(options) {
         }
         return;
       }
-      const isMessagesPath = req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false);
-      const isVerbatimGatewayPath = isMessagesPath || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
+      const isMessages = isMessagesPath(req.url);
+      const isVerbatimGatewayPath = isMessages || req.url === "/v1/audio/speech" || (req.url?.startsWith("/v1/audio/speech?") ?? false);
       if (isVerbatimGatewayPath || req.url?.match(PAID_API_PATH)) {
         try {
           await proxyPaidApiRequest(
@@ -157141,7 +157175,7 @@ async function startProxy(options) {
             false,
             authMode,
             // $0 is enforced below this, where calls are signed or fetched.
-            isMessagesPath && options.maxCostPerRunUsd !== void 0 && options.maxCostPerRunUsd !== 0 ? (body) => capMessagesRequest(body, req.headers, {
+            isMessages && options.maxCostPerRunUsd !== void 0 && options.maxCostPerRunUsd !== 0 ? (body) => capMessagesRequest(body, req.headers, {
               usd: options.maxCostPerRunUsd,
               mode: options.maxCostPerRunMode ?? "graceful",
               authMode,
@@ -159746,7 +159780,7 @@ data: [DONE]
         body: responseBody,
         completedAt: Date.now()
       });
-      if (upstream.status === 200 && responseCache2.shouldCache(body)) {
+      if (upstream.status === 200 && responseCache2.shouldCache(body, reqHeaders)) {
         responseCache2.set(cacheKey3, {
           body: responseBody,
           status: upstream.status,
