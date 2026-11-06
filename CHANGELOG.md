@@ -4,6 +4,39 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.310 — November 5, 2026
+
+### `/v1/messages` streams, and a stalled response no longer looks like success
+
+If an upstream paused for more than 30 seconds during a `/v1/messages` response, the
+client got a `200` with an empty body and no error, on a call that may have been billed.
+The route also held back the whole stream until it ended.
+
+- **Live streaming:** `stream: true` on `/v1/messages` now delivers events as they're
+  produced.
+- **Longer pauses:** the call fails only after 5 minutes with no data.
+- **Honest failures:** a read that fails breaks the connection, so a cut-off answer can't
+  look complete. If the client disconnects, the upstream call is cancelled.
+
+Speech and the partner and data routes keep their 30-second limit, but a read that fails
+now answers `502` instead of an empty `200`.
+
+### Cache bypass does what it says
+
+- A request sent with `Cache-Control: no-cache` no longer has its response stored. It used
+  to skip only the lookup, so the next identical request was answered from that response.
+  Thanks @0xcfloki (#556).
+- `Cache-Control: no-store` now bypasses the response cache too. Its response used to be
+  stored for 10 minutes.
+- Directive names now match in any case, so `NO-CACHE` works.
+
+The 30-second dedup cache still replays an identical retry, whatever the header says.
+
+**Behaviour change:** these requests no longer refresh the cache, so an earlier entry stays
+until it expires.
+
+---
+
 ## v0.12.309 — November 5, 2026
 
 ### A positive `maxCostPerRun` now covers `/v1/messages`
