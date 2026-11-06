@@ -40,7 +40,7 @@ const paymentStore = new AsyncLocalStorage<{
   /** Signature mark of the Solana batch pay() in progress (see solanaBatch.begin). */
   batchMark?: number;
 }>();
-import { finished, Readable } from "node:stream";
+import { finished, Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
@@ -2573,6 +2573,41 @@ function withZeroCapGuard(
   };
 }
 
+/** The Anthropic-shaped chat route, with or without a query string. */
+function isMessagesPath(url: string | undefined): boolean {
+  return url === "/v1/messages" || (url?.startsWith("/v1/messages?") ?? false);
+}
+
+/**
+ * Pipe a response to the client, failing if the source goes quiet for `idleMs`.
+ * A failure destroys the client's connection, so a cut-off answer can't pass as a
+ * complete one.
+ */
+export async function relayWithIdleTimeout(
+  source: Readable,
+  destination: NodeJS.WritableStream,
+  idleMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => watchdog.destroy(new Error("Body read timeout")), idleMs);
+  };
+  const watchdog = new Transform({
+    transform(chunk, _encoding, done) {
+      arm();
+      done(null, chunk);
+    },
+  });
+  arm();
+  try {
+    await pipeline(source, watchdog, destination, { signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function proxyPaidApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -2585,6 +2620,7 @@ async function proxyPaidApiRequest(
 ): Promise<void> {
   const startTime = Date.now();
   const upstreamUrl = `${apiBase}${req.url}`;
+  const isMessages = isMessagesPath(req.url);
   const isBlockrunExa = req.url?.startsWith("/v1/exa/") ?? false;
   const isModalSandbox = req.url?.startsWith("/v1/modal/") ?? false;
   const isPhone =
@@ -2668,9 +2704,9 @@ async function proxyPaidApiRequest(
   if (accountPassthrough || authMode === "api-key") {
     responseHeaders["cache-control"] = "no-store";
   }
-  res.writeHead(upstream.status, responseHeaders);
 
   if (accountPassthrough) {
+    res.writeHead(upstream.status, responseHeaders);
     // Stream rather than buffer, so these routes keep their native payload,
     // status and SSE contract instead of arriving all at once.
     //
@@ -2689,13 +2725,29 @@ async function proxyPaidApiRequest(
     } else {
       res.end();
     }
-  } else {
-    // Stream response body
+  } else if (isMessages) {
+    // A model can pause for longer than a partner call, and the client asked for
+    // this stream as it happens, so relay it rather than wait for the end of it.
+    res.writeHead(upstream.status, responseHeaders);
     if (upstream.body) {
-      const chunks = await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS);
-      for (const chunk of chunks) {
-        safeWrite(res, Buffer.from(chunk));
-      }
+      await relayWithIdleTimeout(
+        Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream<Uint8Array>),
+        res,
+        MODEL_BODY_READ_TIMEOUT_MS,
+        clientAbort.signal,
+      );
+    } else {
+      res.end();
+    }
+  } else {
+    // Read the body before answering: a read that times out then reaches the caller
+    // as an error, not as a 200 with nothing in it, on a call that was already paid for.
+    const chunks = upstream.body
+      ? await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS)
+      : [];
+    res.writeHead(upstream.status, responseHeaders);
+    for (const chunk of chunks) {
+      safeWrite(res, Buffer.from(chunk));
     }
     res.end();
   }
@@ -4511,14 +4563,12 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       // failed" for an endpoint the gateway serves perfectly well. Both are
       // verified live against api.blockrun.ai and blockrun.ai/api.
       //
-      // Note the passthrough buffers the response before writing it, so an SSE
-      // stream arrives complete rather than incrementally. That is correct but
-      // not incremental; smart routing and the response cache do not apply on these
-      // paths either. A positive cost cap does apply to /v1/messages.
-      const isMessagesPath =
-        req.url === "/v1/messages" || (req.url?.startsWith("/v1/messages?") ?? false);
+      // /v1/messages relays its response as it arrives. Speech is buffered. Smart
+      // routing and the response cache do not apply on either path, and a positive
+      // cost cap applies to /v1/messages only.
+      const isMessages = isMessagesPath(req.url);
       const isVerbatimGatewayPath =
-        isMessagesPath ||
+        isMessages ||
         req.url === "/v1/audio/speech" ||
         (req.url?.startsWith("/v1/audio/speech?") ?? false);
 
@@ -4533,9 +4583,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
             false,
             authMode,
             // $0 is enforced below this, where calls are signed or fetched.
-            isMessagesPath &&
-              options.maxCostPerRunUsd !== undefined &&
-              options.maxCostPerRunUsd !== 0
+            isMessages && options.maxCostPerRunUsd !== undefined && options.maxCostPerRunUsd !== 0
               ? (body) =>
                   capMessagesRequest(body, req.headers, {
                     usd: options.maxCostPerRunUsd!,
