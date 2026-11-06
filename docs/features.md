@@ -49,7 +49,7 @@ The cache key is a SHA-256 hash of the request body (model + messages + params),
 Either way, the request is neither answered from the cache nor stored in it.
 
 ```typescript
-// Via header
+// Via header ("no-store" works too)
 fetch("/v1/chat/completions", {
   headers: { "Cache-Control": "no-cache" }
 })

@@ -102,8 +102,8 @@ describe("ResponseCache Edge Cases", () => {
 
     it("should handle mixed case Cache-Control header", () => {
       const body = JSON.stringify({ model: "gpt-4" });
-      // Headers should be lowercase in HTTP/2, but test robustness
-      expect(cache.shouldCache(body, { "cache-control": "NO-CACHE" })).toBe(true); // only checks "no-cache"
+      // Directive names are case-insensitive (RFC 9111).
+      expect(cache.shouldCache(body, { "cache-control": "NO-CACHE" })).toBe(false);
       expect(cache.shouldCache(body, { "cache-control": "no-cache, no-store" })).toBe(false);
     });
 

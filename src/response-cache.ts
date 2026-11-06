@@ -154,8 +154,8 @@ export class ResponseCache {
   shouldCache(body: Buffer | string, headers?: Record<string, string>): boolean {
     if (!this.config.enabled) return false;
 
-    // Respect Cache-Control: no-cache header
-    if (headers?.["cache-control"]?.includes("no-cache")) {
+    // Respect Cache-Control: no-cache and no-store. Directives are case-insensitive.
+    if (/\bno-(?:cache|store)\b/i.test(headers?.["cache-control"] ?? "")) {
       return false;
     }
 
