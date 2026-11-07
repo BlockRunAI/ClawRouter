@@ -9,6 +9,7 @@
 - **PR #18** — Fulfillment schema v3; wire chain verifier into Solana rail.
 
 **Security (all prior):**
+
 - SPL Memo v1 + v2 guard: malformed UTF-8, leading BOM, and multiple memos cannot silently match.
 - 16-byte → 32-hex nonce format.
 - Boundaries: buyer-side only; echo off by default; no proof-of-compute.
