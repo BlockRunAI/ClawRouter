@@ -4,6 +4,30 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.311 — November 8, 2026
+
+### Smart routing picks up the router-core audit (273c2af)
+
+Bumps `@blockrun/router-core` from `fd6d03d` to `273c2af`. `blockrun/auto`, `eco`
+and `premium` now make the same decisions as `@blockrun/llm` 3.26.4 and
+`blockrun-llm` 1.21.6.
+
+- **Chinese prompts:** debug, refactor, extraction and proof requests in Chinese are
+  no longer classified as plain chat. Japanese prompts no longer get the
+  Mandarin extraction band.
+- **Fewer false agent signals:** a bare language name on a tool turn ("java coffee
+  prices online") no longer goes to the code-agent pool. Tool-name verbs and
+  airline reservation ids no longer match look-alike text ("add" in "address",
+  "CANCEL").
+- **Honest costs:** an unpriced candidate no longer outranks priced ones on cost,
+  and NaN prices or malformed performance data can no longer leak into the
+  ranking. `calculateModelCost` reports no savings for an unpriced model.
+- **Vision evidence:** `toRoutingCatalog` keeps the bundled vision evidence and
+  the fail-closed vision overrides instead of reading only catalog tags.
+- **Capability snapshot:** synced to the 2026-11-08 catalog. `moonshot/kimi-k3`
+  is retained; DeepSeek chat, reasoner and V4.1 Flash stay text-only until an
+  image probe confirms the catalog's new vision tag.
+
 ## v0.12.310 — November 5, 2026
 
 ### `/v1/messages` streams, and a stalled response no longer looks like success
