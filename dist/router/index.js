@@ -1,6 +1,6 @@
 import { createRequire as __blockrun_createRequire } from 'node:module'; const require = __blockrun_createRequire(import.meta.url);
 
-// ../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/@blockrun/router-core/dist/index.js
+// node_modules/@blockrun/router-core/dist/index.js
 var UNSEGMENTED_SCRIPT = /[؀-ۿ　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/;
 var WORD_CHAR = /[\p{L}\p{N}]/u;
 var ASCII_PHRASE = /^[a-z0-9' -]+$/;
@@ -91,7 +91,7 @@ function scoreKeywordMatch(text, keywords, name, signalLabel, thresholds, scores
   return { name, score: scores.none, signal: null };
 }
 function scoreMultiStep(text) {
-  const patterns = [/first.*then/i, /step \d/i, /\d\.\s/];
+  const patterns = [/first.*then/i, /step \d/i, /(?:^|\n)\s*\d+[.)]\s/];
   const hits = patterns.filter((p) => p.test(text));
   if (hits.length > 0) {
     return { name: "multiStepPatterns", score: 0.5, signal: "multi-step" };
@@ -99,7 +99,7 @@ function scoreMultiStep(text) {
   return { name: "multiStepPatterns", score: 0, signal: null };
 }
 function scoreQuestionComplexity(prompt) {
-  const count = (prompt.match(/\?/g) || []).length;
+  const count = (prompt.match(/[?？]/g) || []).length;
   if (count > 3) {
     return { name: "questionComplexity", score: 0.5, signal: `${count} questions` };
   }
@@ -151,6 +151,14 @@ function scoreAgenticTask(text, keywords) {
 }
 function classifyByRules(prompt, systemPrompt, estimatedTokens, config) {
   const userText = prompt.toLowerCase();
+  const reasoningDimension = scoreKeywordMatch(
+    userText,
+    config.reasoningKeywords,
+    "reasoningMarkers",
+    "reasoning",
+    { low: 1, high: 2 },
+    { none: 0, low: 0.7, high: 1 }
+  );
   const dimensions = [
     // Token count uses total estimated tokens (system + user) — context size matters for model selection
     scoreTokenCount(estimatedTokens, config.tokenCountThresholds),
@@ -162,14 +170,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config) {
       { low: 1, high: 2 },
       { none: 0, low: 0.5, high: 1 }
     ),
-    scoreKeywordMatch(
-      userText,
-      config.reasoningKeywords,
-      "reasoningMarkers",
-      "reasoning",
-      { low: 1, high: 2 },
-      { none: 0, low: 0.7, high: 1 }
-    ),
+    reasoningDimension,
     scoreKeywordMatch(
       userText,
       config.technicalKeywords,
@@ -256,8 +257,7 @@ function classifyByRules(prompt, systemPrompt, estimatedTokens, config) {
     const w = weights[d.name] ?? 0;
     weightedScore += d.score * w;
   }
-  const reasoningMatches = config.reasoningKeywords.filter((kw) => matchesKeyword(userText, kw));
-  if (reasoningMatches.length >= 2) {
+  if (reasoningDimension.score === 1) {
     const confidence2 = calibrateConfidence(
       Math.max(weightedScore, 0.3),
       // ensure positive for confidence calc
@@ -303,25 +303,35 @@ function calibrateConfidence(distance, steepness) {
 var BASELINE_MODEL_ID = "anthropic/claude-opus-4.7";
 var BASELINE_INPUT_PRICE = 5;
 var BASELINE_OUTPUT_PRICE = 25;
+function usablePricing(pricing) {
+  if (!pricing) return void 0;
+  const ok = (value) => value === void 0 || Number.isFinite(value) && value >= 0;
+  if (pricing.flatPrice !== void 0) return ok(pricing.flatPrice) ? pricing : void 0;
+  return ok(pricing.inputPrice) && ok(pricing.outputPrice) ? pricing : void 0;
+}
+function rawCost(pricing, estimatedInputTokens, maxOutputTokens) {
+  if (pricing?.flatPrice !== void 0) return pricing.flatPrice;
+  const inputPrice = pricing?.inputPrice ?? 0;
+  const outputPrice = pricing?.outputPrice ?? 0;
+  return estimatedInputTokens / 1e6 * inputPrice + maxOutputTokens / 1e6 * outputPrice;
+}
+function baselineCostFor(modelPricing, estimatedInputTokens, maxOutputTokens) {
+  const opusPricing = usablePricing(modelPricing.get(BASELINE_MODEL_ID));
+  const inputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE;
+  const outputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE;
+  return estimatedInputTokens / 1e6 * inputPrice + maxOutputTokens / 1e6 * outputPrice;
+}
+function savingsFor(costEstimate, baselineCost, pricing, routingProfile) {
+  if (routingProfile === "premium" || pricing === void 0 || !(baselineCost > 0)) return 0;
+  return Math.max(0, (baselineCost - costEstimate) / baselineCost);
+}
 function selectModel(tier, confidence, method, reasoning, tierConfigs, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile, agenticScore) {
   const tierConfig = tierConfigs[tier];
   const model = tierConfig.primary;
-  const pricing = modelPricing.get(model);
-  let costEstimate;
-  if (pricing?.flatPrice !== void 0) {
-    costEstimate = pricing.flatPrice;
-  } else {
-    const inputPrice = pricing?.inputPrice ?? 0;
-    const outputPrice = pricing?.outputPrice ?? 0;
-    costEstimate = estimatedInputTokens / 1e6 * inputPrice + maxOutputTokens / 1e6 * outputPrice;
-  }
-  const opusPricing = modelPricing.get(BASELINE_MODEL_ID);
-  const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE;
-  const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE;
-  const baselineInput = estimatedInputTokens / 1e6 * opusInputPrice;
-  const baselineOutput = maxOutputTokens / 1e6 * opusOutputPrice;
-  const baselineCost = baselineInput + baselineOutput;
-  const savings = routingProfile === "premium" || pricing === void 0 ? 0 : baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
+  const pricing = usablePricing(modelPricing.get(model));
+  const costEstimate = rawCost(pricing, estimatedInputTokens, maxOutputTokens);
+  const baselineCost = baselineCostFor(modelPricing, estimatedInputTokens, maxOutputTokens);
+  const savings = savingsFor(costEstimate, baselineCost, pricing, routingProfile);
   return {
     model,
     tier,
@@ -341,43 +351,28 @@ function getFallbackChain(tier, tierConfigs) {
 var SERVER_MARGIN_PERCENT = 5;
 var MIN_PAYMENT_USD = 1e-3;
 function calculateModelCost(model, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile) {
-  const pricing = modelPricing.get(model);
-  let costEstimate;
-  if (pricing?.flatPrice !== void 0) {
-    costEstimate = Math.max(pricing.flatPrice * (1 + SERVER_MARGIN_PERCENT / 100), MIN_PAYMENT_USD);
-  } else {
-    const inputPrice = pricing?.inputPrice ?? 0;
-    const outputPrice = pricing?.outputPrice ?? 0;
-    const inputCost = estimatedInputTokens / 1e6 * inputPrice;
-    const outputCost = maxOutputTokens / 1e6 * outputPrice;
-    costEstimate = Math.max(
-      (inputCost + outputCost) * (1 + SERVER_MARGIN_PERCENT / 100),
-      MIN_PAYMENT_USD
-    );
-  }
-  const opusPricing = modelPricing.get(BASELINE_MODEL_ID);
-  const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE;
-  const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE;
-  const baselineInput = estimatedInputTokens / 1e6 * opusInputPrice;
-  const baselineOutput = maxOutputTokens / 1e6 * opusOutputPrice;
-  const baselineCost = baselineInput + baselineOutput;
-  const savings = routingProfile === "premium" ? 0 : baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
+  const pricing = usablePricing(modelPricing.get(model));
+  const costEstimate = Math.max(
+    rawCost(pricing, estimatedInputTokens, maxOutputTokens) * (1 + SERVER_MARGIN_PERCENT / 100),
+    MIN_PAYMENT_USD
+  );
+  const baselineCost = baselineCostFor(modelPricing, estimatedInputTokens, maxOutputTokens);
+  const savings = savingsFor(costEstimate, baselineCost, pricing, routingProfile);
   return { costEstimate, baselineCost, savings };
 }
-function filterByToolCalling(models, hasTools, supportsToolCalling) {
-  if (!hasTools) return models;
-  const filtered = models.filter(supportsToolCalling);
+function keepOrFailOpen(models, keep) {
+  const filtered = models.filter(keep);
   return filtered.length > 0 ? filtered : models;
 }
+function filterByToolCalling(models, hasTools, supportsToolCalling) {
+  return hasTools ? keepOrFailOpen(models, supportsToolCalling) : models;
+}
 function filterByVision(models, hasVision, supportsVision) {
-  if (!hasVision) return models;
-  const filtered = models.filter(supportsVision);
-  return filtered.length > 0 ? filtered : models;
+  return hasVision ? keepOrFailOpen(models, supportsVision) : models;
 }
 function filterByExcludeList(models, excludeList) {
   if (excludeList.size === 0) return models;
-  const filtered = models.filter((m) => !excludeList.has(m));
-  return filtered.length > 0 ? filtered : models;
+  return keepOrFailOpen(models, (m) => !excludeList.has(m));
 }
 function getFallbackChainFiltered(tier, tierConfigs, estimatedTotalTokens, getContextWindow) {
   const fullChain = getFallbackChain(tier, tierConfigs);
@@ -407,22 +402,27 @@ function estimateTokens(text) {
   const cjk = text.match(CJK_CHARS)?.length ?? 0;
   return cjk + Math.ceil((text.length - cjk) / 4);
 }
+var MAX_SCAN_CHARS = 8e3;
 function scanLimit(promptTruncationChars) {
-  return Math.max(1, Math.min(8e3, promptTruncationChars));
+  if (!Number.isFinite(promptTruncationChars)) return MAX_SCAN_CHARS;
+  return Math.max(1, Math.min(MAX_SCAN_CHARS, Math.floor(promptTruncationChars)));
 }
 function sampleForScan(value, limit) {
   if (value.length <= limit) return value;
   const prefixLength = Math.ceil(limit / 2);
+  const suffixLength = limit - prefixLength;
+  if (suffixLength <= 0) return value.slice(0, prefixLength);
   return `${value.slice(0, prefixLength)}
-${value.slice(-(limit - prefixLength))}`;
+${value.slice(-suffixLength)}`;
 }
 function applyPromotions(tierConfigs, promotions, profile, now = /* @__PURE__ */ new Date()) {
   if (!promotions || promotions.length === 0) return tierConfigs;
   let result = tierConfigs;
   for (const promo of promotions) {
-    const start = new Date(promo.startDate);
-    const end = new Date(promo.endDate);
-    if (now < start || now >= end) continue;
+    const start = Date.parse(promo.startDate);
+    const end = Date.parse(promo.endDate);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (now.getTime() < start || now.getTime() >= end) continue;
     if (promo.profiles && !promo.profiles.includes(profile)) continue;
     if (result === tierConfigs) {
       result = { ...tierConfigs };
@@ -563,2042 +563,6 @@ function getStrategy(name) {
 }
 function registerStrategy(strategy) {
   registry.set(strategy.name, strategy);
-}
-var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
-  "anthropic/claude-fable-5": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-fable-5.1": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-haiku-4.5": {
-    // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
-    contextWindow: 2e5,
-    maxOutputTokens: 64e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-opus-4.5": {
-    contextWindow: 2e5,
-    maxOutputTokens: 64e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-opus-4.7": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-opus-4.8": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-opus-5": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-opus-5.5": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-sonnet-4.5": {
-    contextWindow: 2e5,
-    maxOutputTokens: 64e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-sonnet-4.6": {
-    // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-sonnet-5": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "anthropic/claude-sonnet-5.5": {
-    contextWindow: 1e6,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "cohere/north-mini-code": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 256e3,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "deepseek/deepseek-chat": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "deepseek/deepseek-reasoner": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "deepseek/deepseek-v4-flash-vision-exp": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "deepseek/deepseek-v4-pro": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "deepseek/deepseek-v4.1-flash": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "google/gemini-2.5-flash": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-2.5-flash-lite": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "google/gemini-2.5-pro": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-3-flash-preview": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-3.1-flash-lite": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "google/gemini-3.1-pro": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-3.5-flash": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-3.5-flash-lite": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "google/gemini-3.6-flash": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-3.8-flash": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "google/gemini-4-argon": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "minimax/minimax-m2.7": {
-    contextWindow: 204800,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "minimax/minimax-m3": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "mistral/mistral-large-4": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 524288,
-    maxOutputTokens: 262144,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "moonshot/kimi-k3": {
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "nvidia/llama-3.2-11b-vision": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 128e3,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "nvidia/muse-glimmer-30b": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 131072,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
-    // override: The catalog tags this model "vision", but a correctly sized probe does not hold up (ClawRouter, 2026-08-31): a 64x64 solid-red PNG was named correctly 1 of 4 times on Base, and on Solana the image was silently dropped and a text model answered "white". An HTTP 200 with a confident wrong answer gives the caller nothing to branch on, so image turns must not be routed here. It is ecoTiers.SIMPLE.fallback[0] since nemotron-3-nano-30b was delisted (2026-09-08); remove once a probe of this size comes back right on both chains.
-    contextWindow: 256e3,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "nvidia/nemotron-3-ultra-550b": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1e6,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "nvidia/nemotron-3.5-lightning": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1e6,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "openai/chat-latest": {
-    contextWindow: 128e3,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-4.1": {
-    contextWindow: 128e3,
-    maxOutputTokens: 32768,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-4.1-mini": {
-    contextWindow: 128e3,
-    maxOutputTokens: 32768,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/gpt-4.1-nano": {
-    contextWindow: 128e3,
-    maxOutputTokens: 32768,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/gpt-4o": {
-    contextWindow: 128e3,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-4o-mini": {
-    contextWindow: 128e3,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/gpt-5-mini": {
-    contextWindow: 2e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/gpt-5.1": {
-    contextWindow: 4e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.2": {
-    contextWindow: 4e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.2-pro": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 4e5,
-    maxOutputTokens: 128e3,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "openai/gpt-5.3-codex": {
-    // supportsTools: gateway unavailable at probe time — fails closed; override: 2026-08-29 probe: every request (6 plain + 3 tool attempts) returned a gateway 500, so the probe measured an incident, not the model. Codex's function calling is established by the 2026-07 Terminal-Bench / tau2 calibration trajectories in portfolio.ts. Hosts observing the 500s should drop it with RouterOptions.unavailableModels rather than this snapshot claiming the model cannot call tools.
-    contextWindow: 4e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/gpt-5.4": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.4-mini": {
-    contextWindow: 4e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.4-nano": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/gpt-5.4-pro": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "openai/gpt-5.5": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.5-pro": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "openai/gpt-5.6-luna": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.6-luna-pro": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "openai/gpt-5.6-sol": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.6-sol-pro": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.6-terra": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-5.6-terra-pro": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-6-astra": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-6-luna": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-6-sol": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/gpt-6.1-sol": {
-    contextWindow: 105e4,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "openai/o1": {
-    contextWindow: 2e5,
-    maxOutputTokens: 1e5,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/o3": {
-    contextWindow: 2e5,
-    maxOutputTokens: 1e5,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/o3-mini": {
-    contextWindow: 128e3,
-    maxOutputTokens: 1e5,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "openai/o4-mini": {
-    contextWindow: 128e3,
-    maxOutputTokens: 1e5,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "poolside/laguna-s-2.1": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1048576,
-    maxOutputTokens: 131072,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "poolside/laguna-xs-2.1": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 131072,
-    maxOutputTokens: 16384,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "qwen/qwen3.7-flash": {
-    contextWindow: 1e6,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "qwen/qwen3.7-max": {
-    contextWindow: 1e6,
-    maxOutputTokens: 65536,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "qwen/qwen3.7-plus": {
-    contextWindow: 1e6,
-    maxOutputTokens: 131072,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "qwen/qwen3.8-flash": {
-    contextWindow: 1e6,
-    maxOutputTokens: 131072,
-    supportsTools: false,
-    supportsVision: true
-  },
-  "qwen/qwen3.8-max": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1e6,
-    maxOutputTokens: 131072,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "tencent/hy4-preview": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1048576,
-    maxOutputTokens: 64e3,
-    supportsTools: false,
-    supportsVision: false
-  },
-  "xai/grok-4.3": {
-    contextWindow: 1e6,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "xai/grok-4.5": {
-    contextWindow: 5e5,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "xai/grok-4.6": {
-    contextWindow: 5e5,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "xai/grok-4.7": {
-    contextWindow: 5e5,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "xai/grok-build-0.1": {
-    contextWindow: 256e3,
-    maxOutputTokens: 16384,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "xiaomi/mimo-v2.5": {
-    contextWindow: 1048576,
-    maxOutputTokens: 131072,
-    supportsTools: true,
-    supportsVision: true
-  },
-  "xiaomi/mimo-v2.5-pro": {
-    contextWindow: 1048576,
-    maxOutputTokens: 131072,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "zai/glm-5": {
-    contextWindow: 2e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "zai/glm-5-turbo": {
-    contextWindow: 2e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "zai/glm-5.1": {
-    contextWindow: 2e5,
-    maxOutputTokens: 128e3,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "zai/glm-5.2": {
-    contextWindow: 1e6,
-    maxOutputTokens: 131072,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "zai/glm-5.3": {
-    contextWindow: 1e6,
-    maxOutputTokens: 131072,
-    supportsTools: true,
-    supportsVision: false
-  },
-  "zai/glm-5.3-flash": {
-    contextWindow: 1e6,
-    maxOutputTokens: 131072,
-    supportsTools: true,
-    supportsVision: true
-  }
-});
-var model_profiles_generated_default = {
-  "anthropic/claude-fable-5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 9298.5,
-    p95LatencyMs: 9873.4,
-    outputTokensPerSecond: 55.17,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-haiku-4.5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3157.4,
-    p95LatencyMs: 3170.7,
-    outputTokensPerSecond: 162.16,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-opus-4.5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6497.7,
-    p95LatencyMs: 6953.7,
-    outputTokensPerSecond: 78.99,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-opus-4.7": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5316.5,
-    p95LatencyMs: 6121.5,
-    outputTokensPerSecond: 97.34,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-opus-4.8": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6216.1,
-    p95LatencyMs: 6847.7,
-    outputTokensPerSecond: 82.81,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-opus-5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 7309,
-    p95LatencyMs: 7745.2,
-    outputTokensPerSecond: 70.17,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-sonnet-4.5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6330.4,
-    p95LatencyMs: 6631.6,
-    outputTokensPerSecond: 81.03,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-sonnet-4.6": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6508,
-    p95LatencyMs: 6698.3,
-    outputTokensPerSecond: 78.6,
-    errorRate: 0,
-    samples: 3
-  },
-  "anthropic/claude-sonnet-5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6165.4,
-    p95LatencyMs: 6582.9,
-    outputTokensPerSecond: 83.62,
-    errorRate: 0,
-    samples: 3
-  },
-  "deepseek/deepseek-chat": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4351.4,
-    p95LatencyMs: 4543.7,
-    outputTokensPerSecond: 117.78,
-    errorRate: 0,
-    samples: 3
-  },
-  "deepseek/deepseek-reasoner": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5201.2,
-    p95LatencyMs: 6079.6,
-    outputTokensPerSecond: 99.77,
-    errorRate: 0,
-    samples: 3
-  },
-  "deepseek/deepseek-v4-pro": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 8781.2,
-    p95LatencyMs: 9881.1,
-    outputTokensPerSecond: 58.98,
-    errorRate: 0,
-    samples: 3
-  },
-  "deepseek/deepseek-v4.1-flash": {
-    measuredAt: "2026-10-20T18:12:51Z",
-    latencyMs: 2383.5,
-    p95LatencyMs: 2547.8,
-    outputTokensPerSecond: 216.53,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-2.5-flash": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5416.4,
-    p95LatencyMs: 6442.8,
-    outputTokensPerSecond: 213.07,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-2.5-flash-lite": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5002.6,
-    p95LatencyMs: 5780.3,
-    outputTokensPerSecond: 408.43,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-2.5-pro": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 28169.5,
-    p95LatencyMs: 29491.4,
-    outputTokensPerSecond: 147.3,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-3-flash-preview": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4717.1,
-    p95LatencyMs: 5037.1,
-    outputTokensPerSecond: 198.71,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-3.1-flash-lite": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 2855.8,
-    p95LatencyMs: 3172.7,
-    outputTokensPerSecond: 286.91,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-3.1-pro": {
-    measuredAt: "2026-08-29T16:59:54Z",
-    latencyMs: 24194.1,
-    p95LatencyMs: 27269.6,
-    outputTokensPerSecond: 109.47,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-3.5-flash": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5320.6,
-    p95LatencyMs: 5429.8,
-    outputTokensPerSecond: 226.21,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-3.5-flash-lite": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3515.8,
-    p95LatencyMs: 4363.4,
-    outputTokensPerSecond: 248.9,
-    errorRate: 0,
-    samples: 3
-  },
-  "google/gemini-3.6-flash": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 13020,
-    p95LatencyMs: 15383.1,
-    outputTokensPerSecond: 187.87,
-    errorRate: 0,
-    samples: 3
-  },
-  "minimax/minimax-m2.7": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 8761.1,
-    p95LatencyMs: 10199.3,
-    outputTokensPerSecond: 59.18,
-    errorRate: 0,
-    samples: 3
-  },
-  "minimax/minimax-m3": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 11101.9,
-    p95LatencyMs: 26087.1,
-    outputTokensPerSecond: 101.12,
-    errorRate: 0,
-    samples: 3
-  },
-  "moonshot/kimi-k3": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 24498.9,
-    p95LatencyMs: 40365.3,
-    outputTokensPerSecond: 25.11,
-    errorRate: 0,
-    samples: 3
-  },
-  "nvidia/mistral-nemotron": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 7349.6,
-    p95LatencyMs: 9932.3,
-    outputTokensPerSecond: 79.48,
-    errorRate: 0.3333,
-    samples: 3
-  },
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
-    measuredAt: "2026-08-29T16:59:54Z",
-    latencyMs: 9324.6,
-    p95LatencyMs: 12992,
-    outputTokensPerSecond: 64.96,
-    errorRate: 0.3333,
-    samples: 3
-  },
-  "nvidia/nemotron-nano-12b-v2-vl": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5846.9,
-    p95LatencyMs: 5846.9,
-    outputTokensPerSecond: 87.57,
-    errorRate: 0.6667,
-    samples: 3
-  },
-  "nvidia/nemotron-nano-9b-v2": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5282.5,
-    p95LatencyMs: 5282.5,
-    outputTokensPerSecond: 96.92,
-    errorRate: 0.6667,
-    samples: 3
-  },
-  "nvidia/step-3.7-flash": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4617.4,
-    p95LatencyMs: 5237.4,
-    outputTokensPerSecond: 112.92,
-    errorRate: 0.3333,
-    samples: 3
-  },
-  "openai/chat-latest": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3690.9,
-    p95LatencyMs: 4344,
-    outputTokensPerSecond: 111.85,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-4.1": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3527.9,
-    p95LatencyMs: 3831.7,
-    outputTokensPerSecond: 141.27,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-4.1-mini": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4268.2,
-    p95LatencyMs: 5101.5,
-    outputTokensPerSecond: 103.42,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-4.1-nano": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3088.3,
-    p95LatencyMs: 3369.2,
-    outputTokensPerSecond: 150.31,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-4o": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 2995.2,
-    p95LatencyMs: 3174.2,
-    outputTokensPerSecond: 171.32,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-4o-mini": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4751.5,
-    p95LatencyMs: 4930.4,
-    outputTokensPerSecond: 107.84,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5-mini": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4558.1,
-    p95LatencyMs: 5081.9,
-    outputTokensPerSecond: 113.25,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.2": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5436.6,
-    p95LatencyMs: 5928.8,
-    outputTokensPerSecond: 95.47,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.3-codex": {
-    measuredAt: "2026-08-29T16:59:54Z",
-    latencyMs: 15290.4,
-    p95LatencyMs: 15290.4,
-    outputTokensPerSecond: 33.49,
-    errorRate: 0.6667,
-    samples: 3
-  },
-  "openai/gpt-5.4": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5596,
-    p95LatencyMs: 5919.4,
-    outputTokensPerSecond: 91.67,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.4-mini": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3377.8,
-    p95LatencyMs: 3646.8,
-    outputTokensPerSecond: 138.08,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.4-nano": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4040.4,
-    p95LatencyMs: 4205.9,
-    outputTokensPerSecond: 118.52,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6367.8,
-    p95LatencyMs: 7330.7,
-    outputTokensPerSecond: 81.29,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.6-luna": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6064.5,
-    p95LatencyMs: 7347.3,
-    outputTokensPerSecond: 87.93,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.6-luna-pro": {
-    measuredAt: "2026-08-29T16:59:54Z",
-    latencyMs: 13914.9,
-    p95LatencyMs: 13914.9,
-    outputTokensPerSecond: 36.79,
-    errorRate: 0.6667,
-    samples: 3
-  },
-  "openai/gpt-5.6-sol": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 7720.2,
-    p95LatencyMs: 9108.2,
-    outputTokensPerSecond: 67.47,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.6-sol-pro": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 11442.7,
-    p95LatencyMs: 13363.1,
-    outputTokensPerSecond: 148.75,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.6-terra": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4941,
-    p95LatencyMs: 5095.3,
-    outputTokensPerSecond: 103.69,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-5.6-terra-pro": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3574.1,
-    p95LatencyMs: 4126.3,
-    outputTokensPerSecond: 133.59,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/gpt-6.1-sol": {
-    measuredAt: "2026-10-20T18:12:51Z",
-    latencyMs: 11324,
-    p95LatencyMs: 12747.6,
-    outputTokensPerSecond: 45.11,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/o1": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4324.9,
-    p95LatencyMs: 5838.1,
-    outputTokensPerSecond: 125.86,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/o3": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 5463.4,
-    p95LatencyMs: 5613.1,
-    outputTokensPerSecond: 93.8,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/o3-mini": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 2912.7,
-    p95LatencyMs: 3092.1,
-    outputTokensPerSecond: 176.49,
-    errorRate: 0,
-    samples: 3
-  },
-  "openai/o4-mini": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 4958.7,
-    p95LatencyMs: 5313,
-    outputTokensPerSecond: 103.81,
-    errorRate: 0,
-    samples: 3
-  },
-  "qwen/qwen3.7-flash": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 3385.5,
-    p95LatencyMs: 4042.7,
-    outputTokensPerSecond: 153.94,
-    errorRate: 0,
-    samples: 3
-  },
-  "qwen/qwen3.7-max": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 9387.1,
-    p95LatencyMs: 10490.2,
-    outputTokensPerSecond: 54.92,
-    errorRate: 0,
-    samples: 3
-  },
-  "qwen/qwen3.7-plus": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 9766.6,
-    p95LatencyMs: 9798.2,
-    outputTokensPerSecond: 52.42,
-    errorRate: 0,
-    samples: 3
-  },
-  "tencent/hy3": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6062.3,
-    p95LatencyMs: 7070.2,
-    outputTokensPerSecond: 87.3,
-    errorRate: 0,
-    samples: 3
-  },
-  "xai/grok-4.3": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 9467.7,
-    p95LatencyMs: 10087.9,
-    outputTokensPerSecond: 48.36,
-    errorRate: 0,
-    samples: 3
-  },
-  "xai/grok-4.5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 13564.8,
-    p95LatencyMs: 17351.9,
-    outputTokensPerSecond: 60.71,
-    errorRate: 0,
-    samples: 3
-  },
-  "xai/grok-build-0.1": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 16394.8,
-    p95LatencyMs: 18035.4,
-    outputTokensPerSecond: 96.86,
-    errorRate: 0,
-    samples: 3
-  },
-  "xiaomi/mimo-v2.5-pro": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 12070.7,
-    p95LatencyMs: 12386.8,
-    outputTokensPerSecond: 42.44,
-    errorRate: 0,
-    samples: 3
-  },
-  "zai/glm-5": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 6839.7,
-    p95LatencyMs: 7261.4,
-    outputTokensPerSecond: 75.16,
-    errorRate: 0,
-    samples: 3
-  },
-  "zai/glm-5-turbo": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 55348.5,
-    p95LatencyMs: 114086.6,
-    outputTokensPerSecond: 14.64,
-    errorRate: 0,
-    samples: 3
-  },
-  "zai/glm-5.1": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 15658.4,
-    p95LatencyMs: 17307.1,
-    outputTokensPerSecond: 32.9,
-    errorRate: 0,
-    samples: 3
-  },
-  "zai/glm-5.2": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 10308.5,
-    p95LatencyMs: 15127.6,
-    outputTokensPerSecond: 54.87,
-    errorRate: 0,
-    samples: 3
-  },
-  "zai/glm-5.3": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 7272.4,
-    p95LatencyMs: 7998.1,
-    outputTokensPerSecond: 71.09,
-    errorRate: 0,
-    samples: 3
-  },
-  "zai/glm-5.3-flash": {
-    measuredAt: "2026-08-29T16:51:33Z",
-    latencyMs: 10545.3,
-    p95LatencyMs: 11672.4,
-    outputTokensPerSecond: 49.01,
-    errorRate: 0,
-    samples: 3
-  }
-};
-var LIVE_MODEL_PROFILES = Object.freeze(
-  model_profiles_generated_default
-);
-var HISTORICAL_MODEL_PROFILES = Object.freeze({
-  "anthropic/claude-haiku-4.5": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 2305,
-    outputTokensPerSecond: 140.6
-  },
-  "anthropic/claude-sonnet-4.6": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 2110,
-    outputTokensPerSecond: 121.3
-  },
-  "deepseek/deepseek-chat": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 1431,
-    outputTokensPerSecond: 179.2,
-    intelligenceIndex: 32
-  },
-  "google/gemini-2.5-flash": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 1238,
-    outputTokensPerSecond: 207.6,
-    intelligenceIndex: 20
-  },
-  "google/gemini-2.5-flash-lite": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 1353,
-    outputTokensPerSecond: 192.5,
-    intelligenceIndex: 20
-  },
-  "google/gemini-2.5-pro": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 1294,
-    outputTokensPerSecond: 197.8
-  },
-  "google/gemini-3.1-pro": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 1609,
-    outputTokensPerSecond: 167.2
-  },
-  "openai/gpt-4o-mini": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 2764,
-    outputTokensPerSecond: 92.8
-  },
-  "openai/gpt-5.3-codex": {
-    measuredAt: "2026-03-16T13:50:48Z",
-    latencyMs: 7935,
-    outputTokensPerSecond: 32.3
-  }
-});
-function inferToolRequirement(prompt, _systemPrompt, toolChoice) {
-  if (toolChoice === "none") return false;
-  if (toolChoice === "required") return true;
-  if (typeof toolChoice === "object" && toolChoice !== null && toolChoice.type === "function") {
-    return true;
-  }
-  const text = prompt;
-  const explicitTool = /\b(?:use|call|invoke)\s+(?:the\s+)?[\w.-]+\s+(?:tool|function|api)\b|\btool[_ -]?call\b|使用.{0,20}(?:工具|函数|接口)|调用.{0,20}(?:工具|函数|接口)/i;
-  const codeEnvironment = /\b(?:run|execute)\s+(?:the\s+)?(?:tests?|command|script|build|linter)|\b(?:edit|modify|patch|create|write|save|delete|rename|move|inspect|read)\b.{0,60}\b(?:file|repository|repo|codebase|directory|folder)\b|\b(?:terminal|shell|bash|zsh|pytest|npm test|pnpm test|git\s+(?:status|diff|commit)|docker)\b|(?:运行|执行).{0,20}(?:测试|命令|脚本|构建)|(?:修改|编辑|修复|创建|读取|检查|保存).{0,30}(?:文件|仓库|代码库|目录)/i;
-  const webAction = /\b(?:browse|search|look up|fetch|open)\b.{0,80}\b(?:web|website|url|online|documentation|docs|news|weather|price)\b|(?:浏览|搜索|查询|打开).{0,30}(?:网页|网站|链接|文档|新闻|天气|价格)/i;
-  const statefulAction = /\b(?:refund|cancel|book|reserve|purchase|buy|return|exchange|transfer|update|change)\b.{0,80}\b(?:order|booking|reservation|account|address|payment|subscription|ticket|flight|item)\b|(?:退款|取消|预订|购买|退货|换货|转账|更新|修改).{0,30}(?:订单|预订|账户|地址|付款|订阅|票|航班|商品)/i;
-  return explicitTool.test(text) || codeEnvironment.test(text) || webAction.test(text) || statefulAction.test(text);
-}
-var DEFAULT_PORTFOLIO_WEIGHTS = {
-  auto: {
-    quality: 0.47,
-    capability: 0.2,
-    cost: 0.18,
-    speed: 0.07,
-    reliability: 0.03,
-    legacy: 0.05
-  },
-  eco: { quality: 0.36, capability: 0.2, cost: 0.28, speed: 0.1, reliability: 0.04, legacy: 0.02 },
-  premium: {
-    quality: 0.58,
-    capability: 0.2,
-    cost: 0.08,
-    speed: 0.06,
-    reliability: 0.06,
-    legacy: 0.02
-  },
-  highStakesBoost: { quality: 0.08, reliability: 0.05 },
-  latencySensitiveSpeedBoost: 0.08,
-  affinityFloorGap: { auto: 0.1, eco: 0.22, premium: 0.05 }
-};
-function likelyNeedsParallelToolCalls(prompt, needsTools, toolCount, toolNames) {
-  if (!needsTools || toolCount === void 0 || toolCount < 1) return false;
-  const text = prompt.trim();
-  const explicitRepeat = /\b(?:in parallel|simultaneously|concurrently|for each|each of|every one|both|(?:two|three|multiple|several)\s+(?:cities|locations|items|tasks|orders|users|files))\b|并行|同时|分别|每个|各自|(?:两个|三个|多个)(?:城市|地点|项目|任务|订单|用户|文件)|cada uno|para cada|simult[aá]neamente/i.test(
-    text
-  );
-  if (explicitRepeat) return true;
-  const sentenceClauses = text.split(/[.!?。！？]+/).map((part) => part.trim()).filter((part) => part.length >= 8);
-  if (/\b(?:also|additionally|furthermore)\b|另外|此外|그리고/i.test(text) && sentenceClauses.length >= 2 || /\band\s+(?:also|for the)\b/i.test(text))
-    return true;
-  const pairedQuantity = /\b\d+(?:\.\d+)?\s+(?:and|or)\s+\d+(?:\.\d+)?\s*(?:gb|mb|tb|kg|g|ml|oz|cups?|cores?|cpus?)\b/i.test(
-    text
-  );
-  if (pairedQuantity) return true;
-  const operationTokens = /* @__PURE__ */ new Set([
-    "add",
-    "delete",
-    "remove",
-    "cancel",
-    "return",
-    "exchange",
-    "modify",
-    "book",
-    "transfer",
-    "send",
-    "upload",
-    "download",
-    "create",
-    "close"
-  ]);
-  const lowered = text.toLowerCase();
-  const matchedOperationTokens = new Set(
-    (toolNames ?? []).flatMap((name) => name.toLowerCase().split(/[^a-z0-9\u3400-\u9fff]+/)).filter((token) => operationTokens.has(token) && lowered.includes(token))
-  );
-  if (matchedOperationTokens.size >= 2) return true;
-  const nonEmptyLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const quantityMentions = text.match(
-    /\b(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:oz|ounce|ounces|g|gram|grams|kg|ml|cups?|pieces?|tablespoons?)\b/gi
-  ) ?? [];
-  if (nonEmptyLines.length >= 2 && quantityMentions.length >= 2) return true;
-  const repeatedLookup = /\b(?:weather|climate|clima|tiempo|temperature|snow|news|report)\b|天气|气象|温度|降雪|新闻|报告/i.test(
-    text
-  );
-  const multiLocationConnector = /\b(?:and also|both|y|e)\b|还有|以及|和|、/i.test(text);
-  const commaSeparatedLocations = (text.match(/[,，]/g) ?? []).length >= 2;
-  if (repeatedLookup && (multiLocationConnector || commaSeparatedLocations)) return true;
-  const distinctOrderParts = /\b(?:food|meal)\b[\s\S]*\bdrink\b|\bdrink\b[\s\S]*\b(?:food|meal)\b/i.test(text);
-  const koreanParallelClauses = (text.match(/,/g) ?? []).length >= 3 && /하고|그리고/.test(text);
-  return distinctOrderParts || koreanParallelClauses;
-}
-function classifyTask(prompt, systemPrompt, options) {
-  const fullText = `${systemPrompt ?? ""} ${prompt}`;
-  const estimatedInputTokens = estimateTokens(fullText);
-  const limit = scanLimit(options.config.classifier.promptTruncationChars);
-  const scannedPrompt = sampleForScan(prompt, limit);
-  const scannedSystemPrompt = sampleForScan(systemPrompt ?? "", limit);
-  const scannedFullText = `${scannedSystemPrompt} ${scannedPrompt}`;
-  const text = scannedPrompt.toLowerCase();
-  const explicitCodeSignal = /```|\b(?:typescript|javascript|python|rust|java|sql|stack trace|traceback|exception)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(
-    scannedPrompt
-  );
-  const codeConstructSignal = /\b(?:implement|refactor|debug|write|edit|modify|create|define|review|fix)\b[\s\S]{0,48}\b(?:api|function|class|method)\b|\b(?:api|function|class|method)\b[\s\S]{0,48}\b(?:code|implementation|typescript|javascript|python|rust|java)\b/i.test(
-    scannedPrompt
-  );
-  const nativeCodeSignal = /\b(?:programmed|written|implemented?|code)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b/i.test(
-    scannedPrompt
-  );
-  const errorClassSignal = /\b[A-Z][A-Za-z]*(?:Error|Exception)\b/.test(scannedPrompt);
-  const hasCode = explicitCodeSignal || codeConstructSignal || nativeCodeSignal || errorClassSignal;
-  const codeArtifact = /```|\b(?:stack trace|traceback)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(scannedPrompt) || codeConstructSignal || nativeCodeSignal || errorClassSignal;
-  const toolsAvailable = options.hasTools ?? false;
-  const needsTools = options.requiresTools ?? (toolsAvailable && inferToolRequirement(scannedPrompt, scannedSystemPrompt));
-  const likelyParallelToolCalls = likelyNeedsParallelToolCalls(
-    scannedPrompt,
-    needsTools,
-    options.toolCount,
-    options.toolNames
-  );
-  const normalizedToolNames = (options.toolNames ?? []).map((name) => name.toLowerCase());
-  const airlineToolSignal = normalizedToolNames.some(
-    (name) => /(?:flight|reservation|airport|baggage|passenger)/.test(name)
-  );
-  const retailToolSignal = normalizedToolNames.some(
-    (name) => /(?:order|product|item|return|exchange|address)/.test(name)
-  );
-  const webResearchToolSignal = normalizedToolNames.some(
-    (name) => /^(?:web_?search|web_?fetch)$/.test(name)
-  );
-  const agentDomain = airlineToolSignal && !retailToolSignal ? "airline" : retailToolSignal && !airlineToolSignal ? "retail" : webResearchToolSignal ? "web_research" : "other";
-  const clueConnectors = scannedFullText.match(
-    /\b(?:after|before|while|where|whose|which|in \d{4}|as of|over \d+|another|also|furthermore)\b|(?:之后|之前|其中|截至|超过|另一个|此外)/gi
-  ) ?? [];
-  const entityResolutionSignal = /\b(?:identify|who (?:is|was)|what (?:is|was) the name|which (?:person|player|company|country|city)|find the (?:person|player|name|entity))\b|(?:找出|识别|是谁|哪位|名称是什么)/i.test(
-    scannedFullText
-  );
-  const exactAnswerSignal = /\b(?:exact answer|single best-supported answer|following clues|multiple public sources)\b|(?:精确答案|根据.*线索|多个公开来源)/i.test(
-    scannedFullText
-  );
-  const deepWebResearch = agentDomain === "web_research" && (exactAnswerSignal || entityResolutionSignal && (clueConnectors.length >= 3 || prompt.length >= 320));
-  const globalOptimizationSignal = /\b(?:cheapest|lowest[- ]price|least expensive|most expensive|highest(?:[- ]priced)?|largest|smallest|maximum|minimum|best available|closest|not (?:cost|exceed))\b|最便宜|最低价|最贵|最高价|最大|最小/i.test(
-    scannedPrompt
-  );
-  const globalScopeSignal = /\b(?:everything|all (?:(?:my|your|their|the) )?(?:future |upcoming )?(?:items|orders|passengers|flights|reservations|bookings)|every (?:item|order|passenger|flight|reservation|booking))\b|全部|所有|每个/i.test(
-    scannedPrompt
-  );
-  const globalChoiceSignal = globalOptimizationSignal || globalScopeSignal;
-  const crossRecordSignal = /\b(?:another|other|different|previous)\s+(?:order|reservation|booking|account|address)\b|另一(?:个)?(?:订单|预订|账户|地址)|其他(?:订单|预订|账户|地址)/i.test(
-    scannedPrompt
-  );
-  const reservationIds = scannedPrompt.match(/\b[A-Z0-9]{6}\b/g) ?? [];
-  const crossReservationBatchSignal = agentDomain === "airline" && (/\b(?:two|three|multiple|several)(?:\s+of\s+(?:my|our|the))?\s+(?:upcoming\s+)?(?:reservations?|bookings?)\b|\b(?:a\s+)?(?:second|third)\s+(?:reservation|booking)\b/i.test(
-    scannedPrompt
-  ) || new Set(reservationIds).size >= 2);
-  const conditionalGlobalWorkflowSignal = agentDomain === "airline" && globalScopeSignal && /\b(?:if|that (?:contain|have)|longer than|shorter than|under|over|at (?:most|least)|wherever possible)\b|如果|超过|少于|不超过|尽可能/i.test(
-    scannedPrompt
-  ) && /\b(?:cancel|change|upgrade|move|book)\b[\s\S]*\b(?:cancel|change|upgrade|move|book)\b|取消[\s\S]*(?:升级|更改)|升级[\s\S]*(?:取消|更改)/i.test(
-    scannedPrompt
-  );
-  const policyExceptionSignal = agentDomain === "retail" && /\b(?:return|refund|send back|get (?:my |the )?money back)\b|退货|退款|退回/i.test(
-    scannedPrompt
-  ) && /\b(?:amex|american express|visa|mastercard|credit card|debit card|different card|another card|other card)\b|信用卡|借记卡|其他卡|另一张卡/i.test(
-    scannedPrompt
-  );
-  const singleSelectedPolicyException = policyExceptionSignal && /\b(?:return|refund|send back)\b[^.!?。！？]{0,96}\b(?:the )?(?:pricier|cheaper|more expensive|less expensive|costlier|one)\b/i.test(
-    scannedPrompt
-  );
-  const negotiatedWorkflowSignal = agentDomain === "retail" && /\b(?:return|exchange)\b|退货|退回|换货|交换/i.test(scannedPrompt);
-  const numberedSteps = (scannedPrompt.match(/(?:^|\s)\d+(?:\.\d+)*[.)]\s+/g) ?? []).length;
-  const complexMultiToolPlan = likelyParallelToolCalls && ((options.toolCount ?? 0) >= 6 || numberedSteps >= 3 || prompt.length > 1200);
-  let agentRisk = needsTools && singleSelectedPolicyException ? "policy_exception_simple" : needsTools && policyExceptionSignal ? "policy_exception" : (
-    // Airline prompts that require a global optimum (for example the
-    // cheapest itinerary across several candidates) are materially harder
-    // than applying one change to every passenger in a known reservation.
-    // Full-session evidence supports Sonnet for the former, while upgrading
-    // the latter merely because it says "all passengers" caused a large cost
-    // increase without a quality gain.
-    needsTools && agentDomain === "airline" && (globalOptimizationSignal || conditionalGlobalWorkflowSignal) ? "complex_high" : needsTools && (likelyParallelToolCalls || globalChoiceSignal || crossRecordSignal || crossReservationBatchSignal || negotiatedWorkflowSignal) ? "high" : "standard"
-  );
-  const needsVision = options.hasVision ?? false;
-  const needsStructuredOutput = options.requiresStructuredOutput ?? false;
-  const latencySensitive = /\b(?:urgent|asap|fast|quick|low latency|real[- ]time)\b|尽快|马上|快速|低延迟/i.test(
-    scannedPrompt
-  );
-  const highStakes = /\b(?:production|security|payment|legal|medical|financial|audit)\b|生产|安全|支付|法律|医疗|财务|审计/i.test(
-    scannedPrompt
-  );
-  const terminalToolSignal = normalizedToolNames.some(
-    (name) => /^(?:terminalexec|terminalinspect|terminalsendkeys)$/.test(name)
-  );
-  const simpleTerminalArtifact = /\b(?:create|write|convert|generate|build|implement|run|fix|repair|debug|make)\b[\s\S]{0,120}\b(?:file|script|csv|parquet|json|txt|server|endpoint)\b/i.test(
-    scannedPrompt
-  );
-  const terminalComplexRepair = terminalToolSignal && /\b(?:multiple|several)\s+(?:scripts?|files?|components?)\b|\b(?:pipeline|dependencies)\b[\s\S]{0,100}\b(?:fail|issue|fix|repair|run|execute)\b|\b(?:identify|find|fix|repair)\s+(?:and\s+)?(?:fix\s+)?all\s+(?:the\s+)?issues\b/i.test(
-    scannedPrompt
-  );
-  const mentionedTerminalRuntimes = new Set(
-    (scannedPrompt.match(/\b(?:gcc|clang|rustc|javac|go\s+build|node|python)\b/gi) ?? []).map(
-      (name) => name.toLowerCase().replace(/\s+/g, " ")
-    )
-  );
-  const terminalCrossRuntimeArtifact = terminalToolSignal && (/\bpolyglot\b/i.test(scannedPrompt) || /\b(?:both|each)\b[\s\S]{0,120}\b(?:compilers?|runtimes?|toolchains?)\b/i.test(
-    scannedPrompt
-  ) || mentionedTerminalRuntimes.size >= 2 && /\b(?:compile|build|run|execute)\b/i.test(scannedPrompt));
-  const terminalFrameworkToNativeArtifact = terminalToolSignal && /\b(?:pytorch|tensorflow|jax|onnx|state[_ -]?dict|checkpoint|safetensors?)\b|\.(?:pth|pt|onnx)\b/i.test(
-    scannedPrompt
-  ) && /\b(?:pure|native|programmed|written|implemented?)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b|\b(?:c\+\+|c|rust|go)\s+(?:program|binary|executable|cli|tool|implementation)\b/i.test(
-    scannedPrompt
-  ) && /\b(?:inference|model|weights?|tensor|export|convert|load)\b/i.test(scannedPrompt);
-  if (needsTools && (terminalComplexRepair || terminalCrossRuntimeArtifact || terminalFrameworkToNativeArtifact) && (agentRisk === "standard" || agentRisk === "high"))
-    agentRisk = "complex_high";
-  const complexTerminalOperation = /\b(?:git|ssh|nginx|https|certificate|authentication|credential|deploy|production|encrypt|gpg|shred|securely delete|decommission|benchmark|evaluate|embedding|chess|image|search the web|schema|statistical|statistics|aggregate|join|multiple inputs?)\b/i.test(
-    scannedPrompt
-  );
-  const terminalCredentialSignal = /\b(?:ssh|nginx|certificate|authentication|credentials?|passwords?|api keys?|deploy|production|encrypt|gpg|shred|securely delete|decommission)\b/i.test(
-    scannedPrompt
-  ) || /\b(?:access|auth|authentication|bearer|secret|api)\s+tokens?\b|\btokens?\s+(?:secret|credential|authentication)\b/i.test(
-    scannedPrompt
-  );
-  const terminalSafetySensitive = terminalToolSignal && (highStakes || terminalCredentialSignal);
-  const implicitTerminalCode = needsTools && terminalToolSignal && agentRisk === "standard" && !highStakes && !complexTerminalOperation && numberedSteps < 3 && prompt.length <= 1e3 && simpleTerminalArtifact;
-  const language = /[\u3400-\u9fff]/.test(scannedPrompt) ? "zh" : "other";
-  const multipleChoiceSignals = (scannedPrompt.match(/(?:^|\n)\s*[A-D][.)]\s+/gim) ?? []).length;
-  const numericSignals = (scannedPrompt.match(/-?\d+(?:[.,]\d+)?/g) ?? []).length;
-  const compactMathProblem = !hasCode && prompt.length < 2500 && numericSignals >= 2 && (/[+×÷=%$€£¥]|\b(?:total|each|per|times|half|twice|percent|how many|how much|calculate)\b/i.test(
-    scannedPrompt
-  ) || /[?？]\s*$/.test(scannedPrompt.trim()) || numericSignals >= 3);
-  let taskType = "chat";
-  if (needsVision) taskType = "vision";
-  else if (estimatedInputTokens > 8e4) taskType = "long_context";
-  else if (needsTools && (hasCode || implicitTerminalCode)) taskType = "code_agent";
-  else if (needsTools && likelyParallelToolCalls && !complexMultiToolPlan)
-    taskType = "tool_agent_parallel";
-  else if (needsTools) taskType = "tool_agent";
-  else if (multipleChoiceSignals >= 3) taskType = "reasoning_mcq";
-  else if (compactMathProblem) taskType = "reasoning_math";
-  else if (errorClassSignal || /\b(?:bug|debug|error|failure|failing|regression|crash|修复|报错|错误|调试)\b/i.test(text))
-    taskType = "debug";
-  else if (hasCode || /\b(?:refactor|implement|patch|edit|rewrite|重构|实现|修改)\b/i.test(text))
-    taskType = "code_edit";
-  else if (needsStructuredOutput || /\b(?:extract|json|schema|csv|字段|提取)\b/i.test(text))
-    taskType = "extraction";
-  else if (/\b(?:prove|derive|theorem|formal|mathematical|reasoning|证明|推导|定理|数学)\b/i.test(text))
-    taskType = "reasoning";
-  return {
-    taskType,
-    estimatedInputTokens,
-    hasCode,
-    needsTools,
-    toolsAvailable,
-    needsVision,
-    needsStructuredOutput,
-    latencySensitive,
-    highStakes,
-    language,
-    likelyParallelToolCalls,
-    complexMultiToolPlan,
-    agentDomain,
-    deepWebResearch,
-    agentRisk,
-    terminalToolSignal,
-    terminalSafetySensitive,
-    implicitTerminalCode,
-    codeArtifact
-  };
-}
-function affinity(modelId, task, language = "other", agentDomain = "other", deepWebResearch = false, agentRisk = "standard", terminalToolSignal = false, terminalSafetySensitive = false) {
-  const id = modelId.toLowerCase();
-  const modelName = id.slice(id.indexOf("/") + 1);
-  const match = (values, score) => values.some((value) => modelName === value) ? score : 0;
-  const base = 0.68;
-  switch (task) {
-    case "code_agent":
-      if (terminalToolSignal && agentRisk === "complex_high") {
-        return Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5.3-codex"], 0.87),
-          match(["gpt-5-mini"], 0.78),
-          match(["gemini-3.5-flash"], 0.76)
-        );
-      }
-      return Math.max(
-        base,
-        match(["gpt-5.3-codex"], 1),
-        match(["claude-sonnet-5"], 0.98),
-        match(["gpt-5-mini"], 0.96),
-        match(["gemini-3.5-flash"], 0.92),
-        match(["kimi-k3"], 0.9),
-        match(["deepseek-v4-pro", "glm-5.2"], 0.88)
-      );
-    case "tool_agent":
-      if (terminalToolSignal && agentRisk === "complex_high") {
-        return Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5.3-codex"], 0.87),
-          match(["gpt-5-mini"], 0.78),
-          match(["gemini-3.5-flash"], 0.76)
-        );
-      }
-      if (terminalToolSignal && !terminalSafetySensitive) {
-        return Math.max(
-          base,
-          match(["gpt-5-mini"], 1),
-          match(["gpt-5.3-codex"], 0.98),
-          match(["claude-sonnet-5"], 0.9),
-          match(["gemini-3.5-flash"], 0.89)
-        );
-      }
-      if (terminalToolSignal && terminalSafetySensitive) {
-        return Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["claude-opus-4.8"], 0.9),
-          match(["gpt-5.3-codex"], 0.84)
-        );
-      }
-      if (agentDomain === "web_research") {
-        return deepWebResearch ? Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.84),
-          match(["claude-opus-5"], 0.8),
-          match(["claude-opus-4.8"], 0.78)
-        ) : Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.86),
-          match(["claude-opus-5"], 0.84),
-          match(["claude-opus-4.8"], 0.82)
-        );
-      }
-      if (agentDomain === "retail") {
-        if (agentRisk === "standard") {
-          return Math.max(
-            base,
-            match(["gpt-5-mini"], 1),
-            match(["claude-sonnet-5"], 0.88),
-            match(["gemini-3.5-flash"], 0.82),
-            match(["gpt-5.3-codex"], 0.81),
-            match(["kimi-k3"], 0.78),
-            match(["deepseek-v4-pro"], 0.76)
-          );
-        }
-        if (agentRisk === "policy_exception") {
-          return Math.max(
-            base,
-            match(["gpt-4.1"], 1),
-            match(["claude-sonnet-5"], 0.9),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-5-mini"], 0.8),
-            match(["gpt-4o-mini"], 0.76)
-          );
-        }
-        if (agentRisk === "policy_exception_simple") {
-          return Math.max(
-            base,
-            match(["gpt-5-mini"], 1),
-            match(["gpt-4.1"], 0.86),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-4o-mini"], 0.8)
-          );
-        }
-        return Math.max(
-          base,
-          match(["deepseek-v4-pro"], 1),
-          match(["claude-sonnet-5"], 0.88),
-          match(["gemini-3.5-flash"], 0.82),
-          match(["gpt-5.3-codex"], 0.81),
-          match(["kimi-k3"], 0.78),
-          match(["gpt-5-mini"], 0.76)
-        );
-      }
-      if (agentDomain === "airline") {
-        if (agentRisk === "complex_high") {
-          return Math.max(
-            base,
-            match(["claude-sonnet-5"], 1),
-            match(["gpt-5-mini"], 0.78),
-            match(["gemini-3.5-flash"], 0.76),
-            match(["deepseek-v4-pro"], 0.74)
-          );
-        }
-        return Math.max(
-          base,
-          match(["gpt-5-mini"], 1),
-          match(["claude-sonnet-5"], 0.9),
-          match(["gemini-3.5-flash"], 0.8),
-          match(["deepseek-v4-pro"], 0.76)
-        );
-      }
-      return Math.max(
-        base,
-        match(["claude-sonnet-5"], 1),
-        match(["gemini-3.5-flash"], 0.88),
-        match(["gpt-5.3-codex"], 0.87),
-        match(["gpt-5-mini"], 0.84),
-        match(["kimi-k3"], 0.85),
-        match(["deepseek-v4-pro"], 0.82)
-      );
-    case "tool_agent_parallel":
-      if (terminalToolSignal) {
-        return terminalSafetySensitive ? Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["claude-opus-4.8"], 0.9),
-          match(["gpt-5.3-codex"], 0.86)
-        ) : Math.max(
-          base,
-          match(["gpt-5-mini"], 1),
-          match(["gpt-5.3-codex"], 0.98),
-          match(["claude-sonnet-5"], 0.92),
-          match(["gemini-3.5-flash"], 0.88)
-        );
-      }
-      if (agentDomain === "web_research") {
-        return deepWebResearch ? Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.84),
-          match(["claude-opus-5"], 0.8),
-          match(["claude-opus-4.8"], 0.78)
-        ) : Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.86),
-          match(["claude-opus-5"], 0.84),
-          match(["claude-opus-4.8"], 0.82)
-        );
-      }
-      if (agentDomain === "retail") {
-        if (agentRisk === "policy_exception") {
-          return Math.max(
-            base,
-            match(["gpt-4.1"], 1),
-            match(["claude-sonnet-5"], 0.9),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-5-mini"], 0.8),
-            match(["gpt-4o-mini"], 0.76)
-          );
-        }
-        if (agentRisk === "policy_exception_simple") {
-          return Math.max(
-            base,
-            match(["gpt-5-mini"], 1),
-            match(["gpt-4.1"], 0.86),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-4o-mini"], 0.8)
-          );
-        }
-        return Math.max(
-          base,
-          match(["deepseek-v4-pro"], 1),
-          match(["claude-sonnet-5"], 0.88),
-          match(["claude-opus-4.8"], 0.84),
-          match(["gpt-5-mini"], 0.78),
-          match(["gemini-3.5-flash"], 0.76)
-        );
-      }
-      if (agentDomain === "airline") {
-        return agentRisk === "complex_high" ? Math.max(
-          base,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.78),
-          match(["claude-opus-4.8"], 0.76),
-          match(["gemini-3.5-flash"], 0.74)
-        ) : Math.max(
-          base,
-          match(["gpt-5-mini"], 1),
-          match(["claude-sonnet-5"], 0.9),
-          match(["gemini-3.5-flash"], 0.8)
-        );
-      }
-      return Math.max(
-        base,
-        match(["claude-opus-4.8"], 1),
-        match(["claude-sonnet-5"], 0.84),
-        match(["grok-4.5"], 0.82),
-        match(["gemini-3.5-flash"], 0.8),
-        match(["deepseek-v4-pro"], 0.78)
-      );
-    case "code_edit":
-    case "debug":
-      return Math.max(
-        base,
-        match(["gpt-5.3-codex"], 1),
-        match(["claude-sonnet-4.6"], 0.94),
-        match(["glm-5.2"], 0.9),
-        match(["deepseek-v4-pro"], 0.86)
-      );
-    case "reasoning":
-      return Math.max(
-        base,
-        match(["claude-sonnet-5", "claude-sonnet-4.6"], 0.98),
-        match(["deepseek-v4-pro"], 0.95),
-        match(["grok-4.5"], 0.94),
-        match(["gemini-3.1-pro", "gemini-3.5-flash"], 0.92)
-      );
-    case "reasoning_mcq":
-      return Math.max(
-        base,
-        match(["gemini-3-flash-preview"], 1),
-        match(["gemini-3.5-flash"], 0.91),
-        match(["grok-4.5"], 0.9),
-        match(["claude-sonnet-5"], 0.88),
-        match(["deepseek-v4-pro"], 0.84)
-      );
-    case "reasoning_math":
-      return Math.max(
-        base,
-        match(["gemini-3.5-flash"], 1),
-        match(["grok-4.5"], 0.93),
-        match(["claude-sonnet-5", "deepseek-v4-pro", "kimi-k3"], 0.9)
-      );
-    case "vision":
-      return Math.max(
-        base,
-        match(["gemini-3.1-pro"], 0.96),
-        match(["qwen3.7-max", "claude-sonnet-4.6", "kimi-k3", "grok-4.3"], 0.9)
-      );
-    case "long_context":
-      return Math.max(
-        base,
-        match(["gemini-3.1-pro"], 1),
-        match(["qwen3.7-max", "glm-5.2"], 0.89),
-        match(["gemini-3.5-flash"], 0.88),
-        match(["deepseek-v4-pro"], 0.85)
-      );
-    case "extraction": {
-      const kimiExtractionAffinity = language === "zh" ? 1 : 0.9;
-      const otherExtractionAffinity = language === "zh" ? 0.88 : 0.9;
-      return Math.max(
-        base,
-        match(["gemini-3.5-flash", "gemini-2.5-flash", "gpt-4o-mini"], otherExtractionAffinity),
-        match(["claude-sonnet-5", "claude-sonnet-4.6"], otherExtractionAffinity),
-        match(["kimi-k3"], kimiExtractionAffinity)
-      );
-    }
-    default:
-      return Math.max(
-        base,
-        match(["gemini-3.5-flash", "gemini-2.5-flash", "kimi-k3"], 0.86)
-      );
-  }
-}
-function evidenceCandidates(task) {
-  if (task === "code_agent") {
-    return [
-      "openai/gpt-5.3-codex",
-      "anthropic/claude-sonnet-5",
-      "openai/gpt-5-mini",
-      "google/gemini-3.5-flash",
-      "moonshot/kimi-k3",
-      "deepseek/deepseek-v4-pro"
-    ];
-  }
-  if (task === "tool_agent") {
-    return [
-      "anthropic/claude-sonnet-5",
-      "anthropic/claude-opus-5",
-      "openai/gpt-5-mini",
-      "openai/gpt-4.1",
-      "openai/gpt-4o-mini",
-      "google/gemini-3.5-flash",
-      "openai/gpt-5.3-codex",
-      "moonshot/kimi-k3",
-      "deepseek/deepseek-v4-pro"
-    ];
-  }
-  if (task === "tool_agent_parallel") {
-    return [
-      "anthropic/claude-opus-5",
-      "anthropic/claude-opus-4.8",
-      "anthropic/claude-sonnet-5",
-      "openai/gpt-5-mini",
-      "openai/gpt-4.1",
-      "openai/gpt-4o-mini",
-      "xai/grok-4.5",
-      "google/gemini-3.5-flash",
-      "deepseek/deepseek-v4-pro"
-    ];
-  }
-  if (task === "long_context") {
-    return [
-      "google/gemini-3.1-pro",
-      "deepseek/deepseek-v4-pro",
-      "qwen/qwen3.7-max",
-      "zai/glm-5.2",
-      "google/gemini-3.5-flash"
-    ];
-  }
-  if (task === "reasoning_mcq") {
-    return [
-      "google/gemini-3-flash-preview",
-      "google/gemini-3.5-flash",
-      "xai/grok-4.5",
-      "anthropic/claude-sonnet-5",
-      "deepseek/deepseek-v4-pro"
-    ];
-  }
-  if (task === "extraction") {
-    return ["moonshot/kimi-k3", "google/gemini-3.5-flash", "anthropic/claude-sonnet-5"];
-  }
-  if (task === "reasoning_math") {
-    return [
-      "google/gemini-3.5-flash",
-      "xai/grok-4.5",
-      "anthropic/claude-sonnet-5",
-      "deepseek/deepseek-v4-pro",
-      "moonshot/kimi-k3"
-    ];
-  }
-  return [];
-}
-var VERIFIED_TOOL_FALLBACKS = [
-  "anthropic/claude-fable-5.1",
-  "anthropic/claude-opus-5.5",
-  "anthropic/claude-sonnet-5.5",
-  "deepseek/deepseek-v4.1-flash",
-  "google/gemini-3.8-flash",
-  "openai/gpt-5.1",
-  "openai/gpt-6-astra",
-  "openai/gpt-6-luna",
-  "openai/gpt-6-sol",
-  "openai/gpt-6.1-sol",
-  "xai/grok-4.6",
-  "xai/grok-4.7",
-  "xiaomi/mimo-v2.5"
-];
-function isEligible(modelId, features, maxOutputTokens, options) {
-  const model = options.modelCapabilities?.[modelId] ?? DEFAULT_MODEL_CAPABILITIES[modelId];
-  if (!model) return true;
-  if (features.needsTools && !model.supportsTools) return false;
-  if (features.needsVision && !model.supportsVision) return false;
-  if (features.needsStructuredOutput && !model.supportsTools) return false;
-  if (model.maxOutputTokens < maxOutputTokens) return false;
-  return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
-}
-function estimatedCost(modelId, options, inputTokens, outputTokens) {
-  const price2 = options.modelPricing.get(modelId);
-  if (!price2) return Number.POSITIVE_INFINITY;
-  if (price2.flatPrice !== void 0) return price2.flatPrice;
-  return (inputTokens * price2.inputPrice + outputTokens * price2.outputPrice) / 1e6;
-}
-function profileScore(modelId, options, now) {
-  const profile = options.modelPerformance?.[modelId] ?? LIVE_MODEL_PROFILES[modelId] ?? HISTORICAL_MODEL_PROFILES[modelId];
-  if (!profile) return void 0;
-  const measuredAt = Date.parse(profile.measuredAt);
-  if (!Number.isFinite(measuredAt)) return void 0;
-  const ageDays = Math.max(0, (now.getTime() - measuredAt) / 864e5);
-  const sampleConfidence = profile.samples === void 0 ? 1 : Math.min(1, Math.max(0, profile.samples) / 10);
-  const freshness = Math.pow(0.5, ageDays / 30) * sampleConfidence;
-  const quality = profile.intelligenceIndex === void 0 ? void 0 : Math.min(1, profile.intelligenceIndex / 50);
-  const speed = Math.min(
-    1,
-    (2e3 / Math.max(500, profile.latencyMs) + profile.outputTokensPerSecond / 250) / 2
-  );
-  const tailSpeed = Math.min(1, 3e3 / Math.max(750, profile.p95LatencyMs ?? profile.latencyMs));
-  const reliability = Math.max(0, 1 - (profile.errorRate ?? 0));
-  return { quality, speed, tailSpeed, reliability, freshness };
-}
-var PortfolioStrategy = class {
-  name = "portfolio";
-  // Rules set the capability tier; the strategy is stateless, so one instance serves every request.
-  rules = new RulesStrategy();
-  route(prompt, systemPrompt, maxOutputTokens, options) {
-    const features = classifyTask(prompt, systemPrompt, options);
-    const base = this.rules.route(prompt, systemPrompt, maxOutputTokens, {
-      ...options,
-      requiresTools: features.needsTools
-    });
-    const tierConfigs = base.tierConfigs;
-    if (!tierConfigs) return base;
-    const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base.tier === "SIMPLE" || base.tier === "MEDIUM") ? "REASONING" : (features.taskType === "debug" || features.taskType === "code_edit") && features.codeArtifact && base.tier === "SIMPLE" ? "MEDIUM" : base.tier;
-    const tierConfig = tierConfigs[targetTier];
-    const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
-    const unavailable = new Set(options.unavailableModels ?? []);
-    const verifiedToolFallbacks = features.needsTools ? VERIFIED_TOOL_FALLBACKS.filter((model2) => options.modelPricing.has(model2)) : [];
-    if (options.routingProfile !== "premium") {
-      const fallbackCost = (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens);
-      verifiedToolFallbacks.sort((a, b) => fallbackCost(a) - fallbackCost(b));
-    }
-    const chain = [
-      .../* @__PURE__ */ new Set([
-        ...configuredCandidates,
-        ...evidenceCandidates(features.taskType),
-        ...verifiedToolFallbacks
-      ])
-    ].filter(
-      (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
-    );
-    const eligible = new Set(
-      chain.filter((model2) => isEligible(model2, features, maxOutputTokens, options))
-    );
-    const eligibleCandidates = eligible.size > 0 ? [...eligible] : chain;
-    if (eligibleCandidates.length === 0) return base;
-    const profileName = options.routingProfile === "eco" ? "eco" : options.routingProfile === "premium" ? "premium" : "auto";
-    const portfolio = options.config.portfolio ?? DEFAULT_PORTFOLIO_WEIGHTS;
-    const getAffinity = (model2) => affinity(
-      model2,
-      features.taskType,
-      features.language,
-      features.agentDomain,
-      features.deepWebResearch,
-      features.agentRisk,
-      features.terminalToolSignal,
-      features.terminalSafetySensitive
-    );
-    const bestAffinity = Math.max(...eligibleCandidates.map(getAffinity));
-    const specificAffinity = eligibleCandidates.filter((model2) => getAffinity(model2) > 0.68);
-    const affinityPool = specificAffinity.length > 0 ? specificAffinity : [eligibleCandidates[0]];
-    const affinityFloorGap = features.terminalToolSignal ? Math.max(
-      portfolio.affinityFloorGap[profileName],
-      features.terminalSafetySensitive ? 0.15 : 0.12
-    ) : portfolio.affinityFloorGap[profileName];
-    const candidates = affinityPool.filter(
-      (model2) => getAffinity(model2) >= bestAffinity - affinityFloorGap
-    );
-    const costs = candidates.map(
-      (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens)
-    );
-    const finiteCosts = costs.filter(Number.isFinite);
-    const minCost = finiteCosts.length > 0 ? Math.min(...finiteCosts) : 0;
-    const maxCost = finiteCosts.length > 0 ? Math.max(...finiteCosts) : 1;
-    const now = options.now ?? /* @__PURE__ */ new Date();
-    const profileWeights = portfolio[profileName];
-    const rankedEntries = candidates.map((model2, index) => {
-      const cost = estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens);
-      const costScore = Number.isFinite(cost) && maxCost > minCost ? 1 - (cost - minCost) / (maxCost - minCost) : 0.5;
-      const capabilityScore = eligible.has(model2) ? 1 : 0;
-      const profile = profileScore(model2, options, now);
-      const observedQuality = profile?.quality === void 0 ? getAffinity(model2) : getAffinity(model2) * (1 - profile.freshness) + profile.quality * profile.freshness;
-      const observedSpeed = profile ? profile.speed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
-      const observedTailSpeed = profile ? profile.tailSpeed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
-      const observedReliability = profile ? profile.reliability * profile.freshness + (1 - profile.freshness) : 1;
-      const legacyScore = 1 - index / Math.max(1, candidates.length - 1);
-      const qualityWeight = profileWeights.quality + (features.highStakes ? portfolio.highStakesBoost.quality : 0);
-      const speedScore = features.latencySensitive ? observedTailSpeed : observedSpeed;
-      const speedWeight = profileWeights.speed + (features.latencySensitive ? portfolio.latencySensitiveSpeedBoost : 0);
-      const reliabilityWeight = profileWeights.reliability + (features.highStakes ? portfolio.highStakesBoost.reliability : 0);
-      const score = observedQuality * qualityWeight + capabilityScore * profileWeights.capability + costScore * profileWeights.cost + speedScore * speedWeight + observedReliability * reliabilityWeight + legacyScore * profileWeights.legacy;
-      return {
-        model: model2,
-        score,
-        quality: observedQuality,
-        cost: costScore,
-        speed: speedScore,
-        reliability: observedReliability
-      };
-    }).sort((a, b) => b.score - a.score);
-    const scoredModels = rankedEntries.map((item) => item.model);
-    const webResearchFallbackOrder = [
-      "anthropic/claude-sonnet-5",
-      "openai/gpt-5-mini",
-      "google/gemini-3.5-flash",
-      "anthropic/claude-opus-5",
-      "anthropic/claude-opus-4.8",
-      "openai/gpt-5.3-codex"
-    ];
-    const ranked = features.agentDomain === "web_research" ? [
-      ...scoredModels,
-      ...webResearchFallbackOrder.filter(
-        (model2) => eligibleCandidates.includes(model2) && !scoredModels.includes(model2)
-      ),
-      ...eligibleCandidates.filter(
-        (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
-      )
-    ] : [...scoredModels, ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))];
-    const model = ranked[0] ?? base.model;
-    const selectedTierConfigs = {
-      ...tierConfigs,
-      [targetTier]: { primary: model, fallback: ranked.slice(1) }
-    };
-    const decision = selectModel(
-      targetTier,
-      base.confidence,
-      "portfolio",
-      `${base.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
-      selectedTierConfigs,
-      options.modelPricing,
-      features.estimatedInputTokens,
-      maxOutputTokens,
-      options.routingProfile,
-      base.agenticScore
-    );
-    return {
-      ...decision,
-      tierConfigs: selectedTierConfigs,
-      profile: base.profile,
-      candidates: ranked,
-      candidateScores: rankedEntries.map(({ model: model2, score, quality, cost, speed, reliability }) => ({
-        model: model2,
-        score,
-        quality,
-        cost,
-        speed,
-        reliability
-      })),
-      taskType: features.taskType,
-      routerVersion: "v3-portfolio"
-    };
-  }
-};
-var MODEL_KINDS = ["chat", "image", "video", "music"];
-var PRICE_KEYS = [
-  "input",
-  "output",
-  "per_image",
-  "per_second",
-  "per_track",
-  "cache_read",
-  "cache_write",
-  "transaction_fee",
-  "per_call_surcharge",
-  "default_duration_seconds",
-  "max_duration_seconds"
-];
-var UNIT_PRICE = { image: "per_image", video: "per_second", music: "per_track" };
-var MODEL_ID = /^[a-z0-9][a-z0-9._-]*\/[a-zA-Z0-9][a-zA-Z0-9._:+-]*$/;
-var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-var price = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
-var capacity = (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
-function parseModelCatalog(value) {
-  if (!record(value) || !Array.isArray(value.data)) {
-    throw new TypeError("Model catalog must contain a data array");
-  }
-  const entries = /* @__PURE__ */ new Map();
-  for (const entry of value.data) {
-    if (record(entry) && typeof entry.id === "string" && entry.id.length <= 200 && MODEL_ID.test(entry.id)) {
-      entries.set(entry.id, entry);
-    }
-  }
-  const result = { models: [], chat: [], image: [], video: [], music: [], unavailable: [] };
-  const models = [];
-  const unavailable = [];
-  for (const [id, entry] of entries) {
-    if (entry.available === false) unavailable.push(id);
-    if (entry.available !== void 0 && entry.available !== true || entry.hidden !== void 0 && entry.hidden !== false || !Array.isArray(entry.categories) || !record(entry.pricing)) continue;
-    const categories = [...new Set(entry.categories.filter((c) => typeof c === "string"))];
-    const rawPricing = entry.pricing;
-    const pricing = {};
-    for (const key of PRICE_KEYS) if (price(rawPricing[key])) pricing[key] = rawPricing[key];
-    const kinds = MODEL_KINDS.filter((kind) => categories.includes(kind) && (kind === "chat" ? price(rawPricing.input) && price(rawPricing.output) : price(rawPricing[UNIT_PRICE[kind]])));
-    if (!kinds.length) continue;
-    const model = {
-      id,
-      name: typeof entry.name === "string" && entry.name.trim() ? entry.name : id,
-      categories,
-      kinds,
-      pricing,
-      free: kinds.includes("chat") && entry.billing_mode === "free" && pricing.input === 0 && pricing.output === 0,
-      ...typeof entry.billing_mode === "string" ? { billingMode: entry.billing_mode } : {},
-      ...capacity(entry.context_window) !== void 0 ? { contextWindow: capacity(entry.context_window) } : {},
-      ...capacity(entry.max_output) !== void 0 ? { maxOutputTokens: capacity(entry.max_output) } : {}
-    };
-    models.push(model);
-  }
-  result.models = models;
-  result.unavailable = unavailable;
-  for (const kind of MODEL_KINDS) result[kind] = models.filter((model) => model.kinds.includes(kind));
-  return result;
-}
-function toRoutingCatalog(catalog, options = {}) {
-  const verified = { ...DEFAULT_MODEL_CAPABILITIES, ...options.verifiedCapabilities };
-  const modelPricing = /* @__PURE__ */ new Map();
-  const modelCapabilities = {};
-  for (const model of catalog.chat) {
-    modelPricing.set(model.id, { inputPrice: model.pricing.input, outputPrice: model.pricing.output });
-    const evidence = verified[model.id];
-    modelCapabilities[model.id] = {
-      contextWindow: model.contextWindow ?? evidence?.contextWindow ?? 0,
-      maxOutputTokens: model.maxOutputTokens ?? evidence?.maxOutputTokens ?? 0,
-      supportsTools: evidence?.supportsTools === true,
-      supportsVision: model.categories.includes("vision")
-    };
-  }
-  return { modelPricing, modelCapabilities, unavailableModels: [...catalog.unavailable] };
 }
 var DEFAULT_ROUTING_CONFIG = {
   version: "3.5",
@@ -4086,6 +2050,2082 @@ var DEFAULT_ROUTING_CONFIG = {
     // Set to `true` to force agentic tiers; `false` to disable them entirely.
   }
 };
+var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
+  "anthropic/claude-fable-5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-fable-5.1": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-haiku-4.5": {
+    // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
+    contextWindow: 2e5,
+    maxOutputTokens: 64e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-opus-4.5": {
+    contextWindow: 2e5,
+    maxOutputTokens: 64e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-opus-4.7": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-opus-4.8": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-opus-5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-opus-5.5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-sonnet-4.5": {
+    contextWindow: 2e5,
+    maxOutputTokens: 64e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-sonnet-4.6": {
+    // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-sonnet-5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-sonnet-5.5": {
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "cohere/north-mini-code": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 256e3,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "deepseek/deepseek-chat": {
+    // override: The 2026-11-08 catalog began tagging deepseek/deepseek-chat "vision" (it was text-only through 2026-10-20), and DeepSeek still ships image input as a separate experimental id (deepseek/deepseek-v4-flash-vision-exp). No image probe has confirmed the tag. Routing an image turn to a model that silently drops the image returns a confident 200 the caller cannot branch on, so this fails closed until a correctly sized image probe passes on both chains; then remove this entry.
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "deepseek/deepseek-reasoner": {
+    // override: The 2026-11-08 catalog began tagging deepseek/deepseek-reasoner "vision" (it was text-only through 2026-10-20), and DeepSeek still ships image input as a separate experimental id (deepseek/deepseek-v4-flash-vision-exp). No image probe has confirmed the tag. Routing an image turn to a model that silently drops the image returns a confident 200 the caller cannot branch on, so this fails closed until a correctly sized image probe passes on both chains; then remove this entry.
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "deepseek/deepseek-v4-flash-vision-exp": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "deepseek/deepseek-v4-pro": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "deepseek/deepseek-v4.1-flash": {
+    // override: The 2026-11-08 catalog began tagging deepseek/deepseek-v4.1-flash "vision" (it was text-only through 2026-10-20), and DeepSeek still ships image input as a separate experimental id (deepseek/deepseek-v4-flash-vision-exp). No image probe has confirmed the tag. Routing an image turn to a model that silently drops the image returns a confident 200 the caller cannot branch on, so this fails closed until a correctly sized image probe passes on both chains; then remove this entry.
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "google/gemini-2.5-flash": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-2.5-flash-lite": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "google/gemini-2.5-pro": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-3-flash-preview": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-3.1-flash-lite": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "google/gemini-3.1-pro": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-3.5-flash": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-3.5-flash-lite": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "google/gemini-3.6-flash": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-3.8-flash": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-4-argon": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "minimax/minimax-m2.7": {
+    contextWindow: 204800,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "minimax/minimax-m3": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "mistral/mistral-large-4": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 524288,
+    maxOutputTokens: 262144,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "moonshot/kimi-k3": {
+    // absent from the 2026-11-08 listing but still routed — previous entry retained; probe before removing
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "moonshot/kimi-k3.1-pro": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "nvidia/minimax-m3.1-flash": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "nvidia/muse-glimmer-30b": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+    // override: The catalog tags this model "vision", but a correctly sized probe does not hold up (ClawRouter, 2026-08-31): a 64x64 solid-red PNG was named correctly 1 of 4 times on Base, and on Solana the image was silently dropped and a text model answered "white". An HTTP 200 with a confident wrong answer gives the caller nothing to branch on, so image turns must not be routed here. It is ecoTiers.SIMPLE.fallback[0] since nemotron-3-nano-30b was delisted (2026-09-08); remove once a probe of this size comes back right on both chains.
+    contextWindow: 256e3,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "nvidia/nemotron-3-super-120b": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "nvidia/nemotron-3-ultra-550b": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1e6,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "nvidia/nemotron-3.5-bolt": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "nvidia/nemotron-3.5-lightning": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1e6,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "openai/chat-latest": {
+    contextWindow: 128e3,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-4.1": {
+    contextWindow: 128e3,
+    maxOutputTokens: 32768,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-4.1-mini": {
+    contextWindow: 128e3,
+    maxOutputTokens: 32768,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/gpt-4o": {
+    contextWindow: 128e3,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-4o-mini": {
+    contextWindow: 128e3,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/gpt-5-mini": {
+    contextWindow: 2e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/gpt-5.1": {
+    contextWindow: 4e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.2": {
+    contextWindow: 4e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.2-pro": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 4e5,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "openai/gpt-5.3-codex": {
+    // supportsTools: gateway unavailable at probe time — fails closed; override: 2026-08-29 probe: every request (6 plain + 3 tool attempts) returned a gateway 500, so the probe measured an incident, not the model. Codex's function calling is established by the 2026-07 Terminal-Bench / tau2 calibration trajectories in portfolio.ts. Hosts observing the 500s should drop it with RouterOptions.unavailableModels rather than this snapshot claiming the model cannot call tools.
+    contextWindow: 4e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/gpt-5.4": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.4-mini": {
+    contextWindow: 4e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.4-nano": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/gpt-5.4-pro": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "openai/gpt-5.5": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.5-pro": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "openai/gpt-5.6-luna": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.6-luna-pro": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "openai/gpt-5.6-sol": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.6-sol-pro": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.6-terra": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-5.6-terra-pro": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6-astra": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6-luna": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6-sol": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6.1-sol": {
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "openai/o1": {
+    contextWindow: 2e5,
+    maxOutputTokens: 1e5,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/o3": {
+    contextWindow: 2e5,
+    maxOutputTokens: 1e5,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/o3-mini": {
+    contextWindow: 128e3,
+    maxOutputTokens: 1e5,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "openai/o4-mini": {
+    contextWindow: 128e3,
+    maxOutputTokens: 1e5,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "poolside/laguna-s-2.1": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 131072,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "poolside/laguna-xs-2.1": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "qwen/qwen3.7-flash": {
+    contextWindow: 1e6,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "qwen/qwen3.7-max": {
+    contextWindow: 1e6,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "qwen/qwen3.7-plus": {
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "qwen/qwen3.8-flash": {
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "qwen/qwen3.8-max": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "tencent/hy4-preview": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 64e3,
+    supportsTools: false,
+    supportsVision: false
+  },
+  "xai/grok-4.3": {
+    contextWindow: 1e6,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "xai/grok-4.5": {
+    contextWindow: 5e5,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "xai/grok-4.6": {
+    contextWindow: 5e5,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "xai/grok-4.7": {
+    contextWindow: 5e5,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "xai/grok-build-0.1": {
+    contextWindow: 256e3,
+    maxOutputTokens: 16384,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "xiaomi/mimo-v2.5": {
+    contextWindow: 1048576,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "xiaomi/mimo-v2.5-pro": {
+    contextWindow: 1048576,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "zai/glm-5": {
+    contextWindow: 2e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "zai/glm-5-turbo": {
+    contextWindow: 2e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "zai/glm-5.1": {
+    contextWindow: 2e5,
+    maxOutputTokens: 128e3,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "zai/glm-5.2": {
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "zai/glm-5.3": {
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: false
+  },
+  "zai/glm-5.3-flash": {
+    contextWindow: 1e6,
+    maxOutputTokens: 131072,
+    supportsTools: true,
+    supportsVision: true
+  }
+});
+var model_profiles_generated_default = {
+  "anthropic/claude-fable-5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 9298.5,
+    p95LatencyMs: 9873.4,
+    outputTokensPerSecond: 55.17,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-haiku-4.5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3157.4,
+    p95LatencyMs: 3170.7,
+    outputTokensPerSecond: 162.16,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-opus-4.5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6497.7,
+    p95LatencyMs: 6953.7,
+    outputTokensPerSecond: 78.99,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-opus-4.7": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5316.5,
+    p95LatencyMs: 6121.5,
+    outputTokensPerSecond: 97.34,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-opus-4.8": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6216.1,
+    p95LatencyMs: 6847.7,
+    outputTokensPerSecond: 82.81,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-opus-5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 7309,
+    p95LatencyMs: 7745.2,
+    outputTokensPerSecond: 70.17,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-sonnet-4.5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6330.4,
+    p95LatencyMs: 6631.6,
+    outputTokensPerSecond: 81.03,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-sonnet-4.6": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6508,
+    p95LatencyMs: 6698.3,
+    outputTokensPerSecond: 78.6,
+    errorRate: 0,
+    samples: 3
+  },
+  "anthropic/claude-sonnet-5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6165.4,
+    p95LatencyMs: 6582.9,
+    outputTokensPerSecond: 83.62,
+    errorRate: 0,
+    samples: 3
+  },
+  "deepseek/deepseek-chat": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4351.4,
+    p95LatencyMs: 4543.7,
+    outputTokensPerSecond: 117.78,
+    errorRate: 0,
+    samples: 3
+  },
+  "deepseek/deepseek-reasoner": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5201.2,
+    p95LatencyMs: 6079.6,
+    outputTokensPerSecond: 99.77,
+    errorRate: 0,
+    samples: 3
+  },
+  "deepseek/deepseek-v4-pro": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 8781.2,
+    p95LatencyMs: 9881.1,
+    outputTokensPerSecond: 58.98,
+    errorRate: 0,
+    samples: 3
+  },
+  "deepseek/deepseek-v4.1-flash": {
+    measuredAt: "2026-10-20T18:12:51Z",
+    latencyMs: 2383.5,
+    p95LatencyMs: 2547.8,
+    outputTokensPerSecond: 216.53,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-2.5-flash": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5416.4,
+    p95LatencyMs: 6442.8,
+    outputTokensPerSecond: 213.07,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-2.5-flash-lite": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5002.6,
+    p95LatencyMs: 5780.3,
+    outputTokensPerSecond: 408.43,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-2.5-pro": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 28169.5,
+    p95LatencyMs: 29491.4,
+    outputTokensPerSecond: 147.3,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-3-flash-preview": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4717.1,
+    p95LatencyMs: 5037.1,
+    outputTokensPerSecond: 198.71,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-3.1-flash-lite": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 2855.8,
+    p95LatencyMs: 3172.7,
+    outputTokensPerSecond: 286.91,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-3.1-pro": {
+    measuredAt: "2026-08-29T16:59:54Z",
+    latencyMs: 24194.1,
+    p95LatencyMs: 27269.6,
+    outputTokensPerSecond: 109.47,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-3.5-flash": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5320.6,
+    p95LatencyMs: 5429.8,
+    outputTokensPerSecond: 226.21,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-3.5-flash-lite": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3515.8,
+    p95LatencyMs: 4363.4,
+    outputTokensPerSecond: 248.9,
+    errorRate: 0,
+    samples: 3
+  },
+  "google/gemini-3.6-flash": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 13020,
+    p95LatencyMs: 15383.1,
+    outputTokensPerSecond: 187.87,
+    errorRate: 0,
+    samples: 3
+  },
+  "minimax/minimax-m2.7": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 8761.1,
+    p95LatencyMs: 10199.3,
+    outputTokensPerSecond: 59.18,
+    errorRate: 0,
+    samples: 3
+  },
+  "minimax/minimax-m3": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 11101.9,
+    p95LatencyMs: 26087.1,
+    outputTokensPerSecond: 101.12,
+    errorRate: 0,
+    samples: 3
+  },
+  "moonshot/kimi-k3": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 24498.9,
+    p95LatencyMs: 40365.3,
+    outputTokensPerSecond: 25.11,
+    errorRate: 0,
+    samples: 3
+  },
+  "nvidia/mistral-nemotron": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 7349.6,
+    p95LatencyMs: 9932.3,
+    outputTokensPerSecond: 79.48,
+    errorRate: 0.3333,
+    samples: 3
+  },
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+    measuredAt: "2026-08-29T16:59:54Z",
+    latencyMs: 9324.6,
+    p95LatencyMs: 12992,
+    outputTokensPerSecond: 64.96,
+    errorRate: 0.3333,
+    samples: 3
+  },
+  "nvidia/nemotron-nano-12b-v2-vl": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5846.9,
+    p95LatencyMs: 5846.9,
+    outputTokensPerSecond: 87.57,
+    errorRate: 0.6667,
+    samples: 3
+  },
+  "nvidia/nemotron-nano-9b-v2": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5282.5,
+    p95LatencyMs: 5282.5,
+    outputTokensPerSecond: 96.92,
+    errorRate: 0.6667,
+    samples: 3
+  },
+  "nvidia/step-3.7-flash": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4617.4,
+    p95LatencyMs: 5237.4,
+    outputTokensPerSecond: 112.92,
+    errorRate: 0.3333,
+    samples: 3
+  },
+  "openai/chat-latest": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3690.9,
+    p95LatencyMs: 4344,
+    outputTokensPerSecond: 111.85,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-4.1": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3527.9,
+    p95LatencyMs: 3831.7,
+    outputTokensPerSecond: 141.27,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-4.1-mini": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4268.2,
+    p95LatencyMs: 5101.5,
+    outputTokensPerSecond: 103.42,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-4.1-nano": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3088.3,
+    p95LatencyMs: 3369.2,
+    outputTokensPerSecond: 150.31,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-4o": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 2995.2,
+    p95LatencyMs: 3174.2,
+    outputTokensPerSecond: 171.32,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-4o-mini": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4751.5,
+    p95LatencyMs: 4930.4,
+    outputTokensPerSecond: 107.84,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5-mini": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4558.1,
+    p95LatencyMs: 5081.9,
+    outputTokensPerSecond: 113.25,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.2": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5436.6,
+    p95LatencyMs: 5928.8,
+    outputTokensPerSecond: 95.47,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.3-codex": {
+    measuredAt: "2026-08-29T16:59:54Z",
+    latencyMs: 15290.4,
+    p95LatencyMs: 15290.4,
+    outputTokensPerSecond: 33.49,
+    errorRate: 0.6667,
+    samples: 3
+  },
+  "openai/gpt-5.4": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5596,
+    p95LatencyMs: 5919.4,
+    outputTokensPerSecond: 91.67,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.4-mini": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3377.8,
+    p95LatencyMs: 3646.8,
+    outputTokensPerSecond: 138.08,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.4-nano": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4040.4,
+    p95LatencyMs: 4205.9,
+    outputTokensPerSecond: 118.52,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6367.8,
+    p95LatencyMs: 7330.7,
+    outputTokensPerSecond: 81.29,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.6-luna": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6064.5,
+    p95LatencyMs: 7347.3,
+    outputTokensPerSecond: 87.93,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.6-luna-pro": {
+    measuredAt: "2026-08-29T16:59:54Z",
+    latencyMs: 13914.9,
+    p95LatencyMs: 13914.9,
+    outputTokensPerSecond: 36.79,
+    errorRate: 0.6667,
+    samples: 3
+  },
+  "openai/gpt-5.6-sol": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 7720.2,
+    p95LatencyMs: 9108.2,
+    outputTokensPerSecond: 67.47,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.6-sol-pro": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 11442.7,
+    p95LatencyMs: 13363.1,
+    outputTokensPerSecond: 148.75,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.6-terra": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4941,
+    p95LatencyMs: 5095.3,
+    outputTokensPerSecond: 103.69,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-5.6-terra-pro": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3574.1,
+    p95LatencyMs: 4126.3,
+    outputTokensPerSecond: 133.59,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/gpt-6.1-sol": {
+    measuredAt: "2026-10-20T18:12:51Z",
+    latencyMs: 11324,
+    p95LatencyMs: 12747.6,
+    outputTokensPerSecond: 45.11,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/o1": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4324.9,
+    p95LatencyMs: 5838.1,
+    outputTokensPerSecond: 125.86,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/o3": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 5463.4,
+    p95LatencyMs: 5613.1,
+    outputTokensPerSecond: 93.8,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/o3-mini": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 2912.7,
+    p95LatencyMs: 3092.1,
+    outputTokensPerSecond: 176.49,
+    errorRate: 0,
+    samples: 3
+  },
+  "openai/o4-mini": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 4958.7,
+    p95LatencyMs: 5313,
+    outputTokensPerSecond: 103.81,
+    errorRate: 0,
+    samples: 3
+  },
+  "qwen/qwen3.7-flash": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 3385.5,
+    p95LatencyMs: 4042.7,
+    outputTokensPerSecond: 153.94,
+    errorRate: 0,
+    samples: 3
+  },
+  "qwen/qwen3.7-max": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 9387.1,
+    p95LatencyMs: 10490.2,
+    outputTokensPerSecond: 54.92,
+    errorRate: 0,
+    samples: 3
+  },
+  "qwen/qwen3.7-plus": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 9766.6,
+    p95LatencyMs: 9798.2,
+    outputTokensPerSecond: 52.42,
+    errorRate: 0,
+    samples: 3
+  },
+  "tencent/hy3": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6062.3,
+    p95LatencyMs: 7070.2,
+    outputTokensPerSecond: 87.3,
+    errorRate: 0,
+    samples: 3
+  },
+  "xai/grok-4.3": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 9467.7,
+    p95LatencyMs: 10087.9,
+    outputTokensPerSecond: 48.36,
+    errorRate: 0,
+    samples: 3
+  },
+  "xai/grok-4.5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 13564.8,
+    p95LatencyMs: 17351.9,
+    outputTokensPerSecond: 60.71,
+    errorRate: 0,
+    samples: 3
+  },
+  "xai/grok-build-0.1": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 16394.8,
+    p95LatencyMs: 18035.4,
+    outputTokensPerSecond: 96.86,
+    errorRate: 0,
+    samples: 3
+  },
+  "xiaomi/mimo-v2.5-pro": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 12070.7,
+    p95LatencyMs: 12386.8,
+    outputTokensPerSecond: 42.44,
+    errorRate: 0,
+    samples: 3
+  },
+  "zai/glm-5": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 6839.7,
+    p95LatencyMs: 7261.4,
+    outputTokensPerSecond: 75.16,
+    errorRate: 0,
+    samples: 3
+  },
+  "zai/glm-5-turbo": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 55348.5,
+    p95LatencyMs: 114086.6,
+    outputTokensPerSecond: 14.64,
+    errorRate: 0,
+    samples: 3
+  },
+  "zai/glm-5.1": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 15658.4,
+    p95LatencyMs: 17307.1,
+    outputTokensPerSecond: 32.9,
+    errorRate: 0,
+    samples: 3
+  },
+  "zai/glm-5.2": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 10308.5,
+    p95LatencyMs: 15127.6,
+    outputTokensPerSecond: 54.87,
+    errorRate: 0,
+    samples: 3
+  },
+  "zai/glm-5.3": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 7272.4,
+    p95LatencyMs: 7998.1,
+    outputTokensPerSecond: 71.09,
+    errorRate: 0,
+    samples: 3
+  },
+  "zai/glm-5.3-flash": {
+    measuredAt: "2026-08-29T16:51:33Z",
+    latencyMs: 10545.3,
+    p95LatencyMs: 11672.4,
+    outputTokensPerSecond: 49.01,
+    errorRate: 0,
+    samples: 3
+  }
+};
+var LIVE_MODEL_PROFILES = Object.freeze(
+  model_profiles_generated_default
+);
+var HISTORICAL_MODEL_PROFILES = Object.freeze({
+  "anthropic/claude-haiku-4.5": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 2305,
+    outputTokensPerSecond: 140.6
+  },
+  "anthropic/claude-sonnet-4.6": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 2110,
+    outputTokensPerSecond: 121.3
+  },
+  "deepseek/deepseek-chat": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 1431,
+    outputTokensPerSecond: 179.2,
+    intelligenceIndex: 32
+  },
+  "google/gemini-2.5-flash": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 1238,
+    outputTokensPerSecond: 207.6,
+    intelligenceIndex: 20
+  },
+  "google/gemini-2.5-flash-lite": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 1353,
+    outputTokensPerSecond: 192.5,
+    intelligenceIndex: 20
+  },
+  "google/gemini-2.5-pro": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 1294,
+    outputTokensPerSecond: 197.8
+  },
+  "google/gemini-3.1-pro": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 1609,
+    outputTokensPerSecond: 167.2
+  },
+  "openai/gpt-4o-mini": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 2764,
+    outputTokensPerSecond: 92.8
+  },
+  "openai/gpt-5.3-codex": {
+    measuredAt: "2026-03-16T13:50:48Z",
+    latencyMs: 7935,
+    outputTokensPerSecond: 32.3
+  }
+});
+function inferToolRequirement(prompt, _systemPrompt, toolChoice) {
+  if (toolChoice === "none") return false;
+  if (toolChoice === "required") return true;
+  if (typeof toolChoice === "object" && toolChoice !== null && toolChoice.type === "function") {
+    return true;
+  }
+  const text = prompt;
+  const explicitTool = /\b(?:use|call|invoke)\s+(?:the\s+)?[\w.-]+\s+(?:tool|function|api)\b|\btool[_ -]?call\b|使用.{0,20}(?:工具|函数|接口)|调用.{0,20}(?:工具|函数|接口)/i;
+  const codeEnvironment = /\b(?:run|execute)\s+(?:the\s+)?(?:tests?|command|script|build|linter)|\b(?:edit|modify|patch|create|write|save|delete|rename|move|inspect|read)\b.{0,60}\b(?:file|repository|repo|codebase|directory|folder)\b|\b(?:terminal|shell|bash|zsh|pytest|npm test|pnpm test|git\s+(?:status|diff|commit)|docker)\b|(?:运行|执行).{0,20}(?:测试|命令|脚本|构建)|(?:修改|编辑|修复|创建|读取|检查|保存).{0,30}(?:文件|仓库|代码库|目录)/i;
+  const webAction = /\b(?:browse|search|look up|fetch|open)\b.{0,80}\b(?:web|website|url|online|documentation|docs|news|weather|price)\b|(?:浏览|搜索|查询|打开).{0,30}(?:网页|网站|链接|文档|新闻|天气|价格)/i;
+  const statefulAction = /\b(?:refund|cancel|book|reserve|purchase|buy|return|exchange|transfer|update|change)\b.{0,80}\b(?:order|booking|reservation|account|address|payment|subscription|ticket|flight|item)\b|(?:退款|取消|预订|购买|退货|换货|转账|更新|修改).{0,30}(?:订单|预订|账户|地址|付款|订阅|票|航班|商品)/i;
+  return explicitTool.test(text) || codeEnvironment.test(text) || webAction.test(text) || statefulAction.test(text);
+}
+var DEFAULT_PORTFOLIO_WEIGHTS = DEFAULT_ROUTING_CONFIG.portfolio;
+function likelyNeedsParallelToolCalls(prompt, needsTools, toolCount, toolNames) {
+  if (!needsTools || toolCount === void 0 || toolCount < 1) return false;
+  const text = prompt.trim();
+  const explicitRepeat = /\b(?:in parallel|simultaneously|concurrently|for each|each of|every one|both|(?:two|three|multiple|several)\s+(?:cities|locations|items|tasks|orders|users|files))\b|并行|同时|分别|每个|各自|(?:两个|三个|多个)(?:城市|地点|项目|任务|订单|用户|文件)|cada uno|para cada|simult[aá]neamente/i.test(
+    text
+  );
+  if (explicitRepeat) return true;
+  const sentenceClauses = text.split(/[.!?。！？]+/).map((part) => part.trim()).filter((part) => part.length >= 8);
+  if (/\b(?:also|additionally|furthermore)\b|另外|此外|그리고/i.test(text) && sentenceClauses.length >= 2 || /\band\s+(?:also|for the)\b/i.test(text))
+    return true;
+  const pairedQuantity = /\b\d+(?:\.\d+)?\s+(?:and|or)\s+\d+(?:\.\d+)?\s*(?:gb|mb|tb|kg|g|ml|oz|cups?|cores?|cpus?)\b/i.test(
+    text
+  );
+  if (pairedQuantity) return true;
+  const operationTokens = /* @__PURE__ */ new Set([
+    "add",
+    "delete",
+    "remove",
+    "cancel",
+    "return",
+    "exchange",
+    "modify",
+    "book",
+    "transfer",
+    "send",
+    "upload",
+    "download",
+    "create",
+    "close"
+  ]);
+  const lowered = text.toLowerCase();
+  const matchedOperationTokens = new Set(
+    (toolNames ?? []).flatMap((name) => name.toLowerCase().split(/[^a-z0-9\u3400-\u9fff]+/)).filter(
+      (token) => operationTokens.has(token) && new RegExp(`\\b${token}(?:s|es|d|ed|ing)?\\b`).test(lowered)
+    )
+  );
+  if (matchedOperationTokens.size >= 2) return true;
+  const nonEmptyLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const quantityMentions = text.match(
+    /\b(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:oz|ounce|ounces|g|gram|grams|kg|ml|cups?|pieces?|tablespoons?)\b/gi
+  ) ?? [];
+  if (nonEmptyLines.length >= 2 && quantityMentions.length >= 2) return true;
+  const repeatedLookup = /\b(?:weather|climate|clima|tiempo|temperature|snow|news|report)\b|天气|气象|温度|降雪|新闻|报告/i.test(
+    text
+  );
+  const multiLocationConnector = /\b(?:and also|both)\b|\s(?:y|e)\s|还有|以及|和|、/i.test(text);
+  const commaSeparatedLocations = (text.match(/[,，]/g) ?? []).length >= 2;
+  if (repeatedLookup && (multiLocationConnector || commaSeparatedLocations)) return true;
+  const distinctOrderParts = /\b(?:food|meal)\b[\s\S]*\bdrink\b|\bdrink\b[\s\S]*\b(?:food|meal)\b/i.test(text);
+  const koreanParallelClauses = (text.match(/,/g) ?? []).length >= 3 && /하고|그리고/.test(text);
+  return distinctOrderParts || koreanParallelClauses;
+}
+function classifyTask(prompt, systemPrompt, options) {
+  const fullText = `${systemPrompt ?? ""} ${prompt}`;
+  const estimatedInputTokens = estimateTokens(fullText);
+  const limit = scanLimit(options.config.classifier.promptTruncationChars);
+  const scannedPrompt = sampleForScan(prompt, limit);
+  const scannedSystemPrompt = sampleForScan(systemPrompt ?? "", limit);
+  const scannedFullText = `${scannedSystemPrompt} ${scannedPrompt}`;
+  const text = scannedPrompt.toLowerCase();
+  const explicitCodeSignal = /```|\b(?:typescript|javascript|python|rust|java|sql|stack trace|traceback|exception)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(
+    scannedPrompt
+  );
+  const codeConstructSignal = /\b(?:implement|refactor|debug|write|edit|modify|create|define|review|fix)\b[\s\S]{0,48}\b(?:api|function|class|method)\b|\b(?:api|function|class|method)\b[\s\S]{0,48}\b(?:code|implementation|typescript|javascript|python|rust|java)\b/i.test(
+    scannedPrompt
+  );
+  const nativeCodeSignal = /\b(?:programmed|written|implemented?|code)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b/i.test(
+    scannedPrompt
+  );
+  const errorClassSignal = /\b[A-Z][A-Za-z]*(?:Error|Exception)\b/.test(scannedPrompt);
+  const hasCode = explicitCodeSignal || codeConstructSignal || nativeCodeSignal || errorClassSignal;
+  const codingAction = /\b(?:write|implement|refactor|debug|fix|patch|compile|build|run|test|script|program|code|function|class|module|repo(?:sitory)?)\b|编写|实现|重构|调试|修复|编译|脚本|代码/i.test(
+    scannedPrompt
+  );
+  const codeArtifact = /```|\b(?:stack trace|traceback)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(scannedPrompt) || codeConstructSignal || nativeCodeSignal || errorClassSignal;
+  const toolsAvailable = options.hasTools ?? false;
+  const needsTools = options.requiresTools ?? (toolsAvailable && inferToolRequirement(scannedPrompt, scannedSystemPrompt));
+  const likelyParallelToolCalls = likelyNeedsParallelToolCalls(
+    scannedPrompt,
+    needsTools,
+    options.toolCount,
+    options.toolNames
+  );
+  const normalizedToolNames = (options.toolNames ?? []).map((name) => name.toLowerCase());
+  const airlineToolSignal = normalizedToolNames.some(
+    (name) => /(?:flight|reservation|airport|baggage|passenger)/.test(name)
+  );
+  const retailToolSignal = normalizedToolNames.some(
+    (name) => /(?:order|product|item|return|exchange|address)/.test(name)
+  );
+  const webResearchToolSignal = normalizedToolNames.some(
+    (name) => /^(?:web_?search|web_?fetch)$/.test(name)
+  );
+  const agentDomain = airlineToolSignal && !retailToolSignal ? "airline" : retailToolSignal && !airlineToolSignal ? "retail" : webResearchToolSignal ? "web_research" : "other";
+  const clueConnectors = scannedFullText.match(
+    /\b(?:after|before|while|where|whose|which|in \d{4}|as of|over \d+|another|also|furthermore)\b|(?:之后|之前|其中|截至|超过|另一个|此外)/gi
+  ) ?? [];
+  const entityResolutionSignal = /\b(?:identify|who (?:is|was)|what (?:is|was) the name|which (?:person|player|company|country|city)|find the (?:person|player|name|entity))\b|(?:找出|识别|是谁|哪位|名称是什么)/i.test(
+    scannedFullText
+  );
+  const exactAnswerSignal = /\b(?:exact answer|single best-supported answer|following clues|multiple public sources)\b|(?:精确答案|根据.*线索|多个公开来源)/i.test(
+    scannedFullText
+  );
+  const deepWebResearch = agentDomain === "web_research" && (exactAnswerSignal || entityResolutionSignal && (clueConnectors.length >= 3 || prompt.length >= 320));
+  const globalOptimizationSignal = /\b(?:cheapest|lowest[- ]price|least expensive|most expensive|highest(?:[- ]priced)?|largest|smallest|maximum|minimum|best available|closest|not (?:cost|exceed))\b|最便宜|最低价|最贵|最高价|最大|最小/i.test(
+    scannedPrompt
+  );
+  const globalScopeSignal = /\b(?:everything|all (?:(?:my|your|their|the) )?(?:future |upcoming )?(?:items|orders|passengers|flights|reservations|bookings)|every (?:item|order|passenger|flight|reservation|booking))\b|全部|所有|每个/i.test(
+    scannedPrompt
+  );
+  const globalChoiceSignal = globalOptimizationSignal || globalScopeSignal;
+  const crossRecordSignal = /\b(?:another|other|different|previous)\s+(?:order|reservation|booking|account|address)\b|另一(?:个)?(?:订单|预订|账户|地址)|其他(?:订单|预订|账户|地址)/i.test(
+    scannedPrompt
+  );
+  const reservationIds = scannedPrompt.match(/\b(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6}\b/g) ?? [];
+  const crossReservationBatchSignal = agentDomain === "airline" && (/\b(?:two|three|multiple|several)(?:\s+of\s+(?:my|our|the))?\s+(?:upcoming\s+)?(?:reservations?|bookings?)\b|\b(?:a\s+)?(?:second|third)\s+(?:reservation|booking)\b/i.test(
+    scannedPrompt
+  ) || new Set(reservationIds).size >= 2);
+  const conditionalGlobalWorkflowSignal = agentDomain === "airline" && globalScopeSignal && /\b(?:if|that (?:contain|have)|longer than|shorter than|under|over|at (?:most|least)|wherever possible)\b|如果|超过|少于|不超过|尽可能/i.test(
+    scannedPrompt
+  ) && /\b(?:cancel|change|upgrade|move|book)\b[\s\S]*\b(?:cancel|change|upgrade|move|book)\b|取消[\s\S]*(?:升级|更改)|升级[\s\S]*(?:取消|更改)/i.test(
+    scannedPrompt
+  );
+  const policyExceptionSignal = agentDomain === "retail" && /\b(?:return|refund|send back|get (?:my |the )?money back)\b|退货|退款|退回/i.test(
+    scannedPrompt
+  ) && /\b(?:amex|american express|visa|mastercard|credit card|debit card|different card|another card|other card)\b|信用卡|借记卡|其他卡|另一张卡/i.test(
+    scannedPrompt
+  );
+  const singleSelectedPolicyException = policyExceptionSignal && /\b(?:return|refund|send back)\b[^.!?。！？]{0,96}\b(?:the )?(?:pricier|cheaper|more expensive|less expensive|costlier|one)\b/i.test(
+    scannedPrompt
+  );
+  const negotiatedWorkflowSignal = agentDomain === "retail" && /\b(?:return|exchange)\b|退货|退回|换货|交换/i.test(scannedPrompt);
+  const numberedSteps = (scannedPrompt.match(/(?:^|\s)\d+(?:\.\d+)*[.)]\s+/g) ?? []).length;
+  const complexMultiToolPlan = likelyParallelToolCalls && ((options.toolCount ?? 0) >= 6 || numberedSteps >= 3 || prompt.length > 1200);
+  let agentRisk = needsTools && singleSelectedPolicyException ? "policy_exception_simple" : needsTools && policyExceptionSignal ? "policy_exception" : (
+    // Airline prompts that require a global optimum (for example the
+    // cheapest itinerary across several candidates) are materially harder
+    // than applying one change to every passenger in a known reservation.
+    // Full-session evidence supports Sonnet for the former, while upgrading
+    // the latter merely because it says "all passengers" caused a large cost
+    // increase without a quality gain.
+    needsTools && agentDomain === "airline" && (globalOptimizationSignal || conditionalGlobalWorkflowSignal) ? "complex_high" : needsTools && (likelyParallelToolCalls || globalChoiceSignal || crossRecordSignal || crossReservationBatchSignal || negotiatedWorkflowSignal) ? "high" : "standard"
+  );
+  const needsVision = options.hasVision ?? false;
+  const needsStructuredOutput = options.requiresStructuredOutput ?? false;
+  const latencySensitive = /\b(?:urgent|asap|fast|quick|low latency|real[- ]time)\b|尽快|马上|快速|低延迟/i.test(
+    scannedPrompt
+  );
+  const highStakes = /\b(?:production|security|payment|legal|medical|financial|audit)\b|生产|安全|支付|法律|医疗|财务|审计/i.test(
+    scannedPrompt
+  );
+  const terminalToolSignal = normalizedToolNames.some(
+    (name) => /^(?:terminalexec|terminalinspect|terminalsendkeys)$/.test(name)
+  );
+  const simpleTerminalArtifact = /\b(?:create|write|convert|generate|build|implement|run|fix|repair|debug|make)\b[\s\S]{0,120}\b(?:file|script|csv|parquet|json|txt|server|endpoint)\b/i.test(
+    scannedPrompt
+  );
+  const terminalComplexRepair = terminalToolSignal && /\b(?:multiple|several)\s+(?:scripts?|files?|components?)\b|\b(?:pipeline|dependencies)\b[\s\S]{0,100}\b(?:fail|issue|fix|repair|run|execute)\b|\b(?:identify|find|fix|repair)\s+(?:and\s+)?(?:fix\s+)?all\s+(?:the\s+)?issues\b/i.test(
+    scannedPrompt
+  );
+  const mentionedTerminalRuntimes = new Set(
+    (scannedPrompt.match(/\b(?:gcc|clang|rustc|javac|go\s+build|node|python)\b/gi) ?? []).map(
+      (name) => name.toLowerCase().replace(/\s+/g, " ")
+    )
+  );
+  const terminalCrossRuntimeArtifact = terminalToolSignal && (/\bpolyglot\b/i.test(scannedPrompt) || /\b(?:both|each)\b[\s\S]{0,120}\b(?:compilers?|runtimes?|toolchains?)\b/i.test(
+    scannedPrompt
+  ) || mentionedTerminalRuntimes.size >= 2 && /\b(?:compile|build|run|execute)\b/i.test(scannedPrompt));
+  const terminalFrameworkToNativeArtifact = terminalToolSignal && /\b(?:pytorch|tensorflow|jax|onnx|state[_ -]?dict|checkpoint|safetensors?)\b|\.(?:pth|pt|onnx)\b/i.test(
+    scannedPrompt
+  ) && /\b(?:pure|native|programmed|written|implemented?)\s+(?:in|using)\s+(?:c\+\+|c|rust|go)\b|\b(?:c\+\+|c|rust|go)\s+(?:program|binary|executable|cli|tool|implementation)\b/i.test(
+    scannedPrompt
+  ) && /\b(?:inference|model|weights?|tensor|export|convert|load)\b/i.test(scannedPrompt);
+  if (needsTools && (terminalComplexRepair || terminalCrossRuntimeArtifact || terminalFrameworkToNativeArtifact) && (agentRisk === "standard" || agentRisk === "high"))
+    agentRisk = "complex_high";
+  const complexTerminalOperation = /\b(?:git|ssh|nginx|https|certificate|authentication|credential|deploy|production|encrypt|gpg|shred|securely delete|decommission|benchmark|evaluate|embedding|chess|image|search the web|schema|statistical|statistics|aggregate|join|multiple inputs?)\b/i.test(
+    scannedPrompt
+  );
+  const terminalCredentialSignal = /\b(?:ssh|nginx|certificate|authentication|credentials?|passwords?|api keys?|deploy|production|encrypt|gpg|shred|securely delete|decommission)\b/i.test(
+    scannedPrompt
+  ) || /\b(?:access|auth|authentication|bearer|secret|api)\s+tokens?\b|\btokens?\s+(?:secret|credential|authentication)\b/i.test(
+    scannedPrompt
+  );
+  const terminalSafetySensitive = terminalToolSignal && (highStakes || terminalCredentialSignal);
+  const implicitTerminalCode = needsTools && terminalToolSignal && agentRisk === "standard" && !highStakes && !complexTerminalOperation && numberedSteps < 3 && prompt.length <= 1e3 && simpleTerminalArtifact;
+  const language = /[\u3400-\u9fff]/.test(scannedPrompt) && !/[\u3040-\u30ff]/.test(scannedPrompt) ? "zh" : "other";
+  const multipleChoiceSignals = (scannedPrompt.match(/(?:^|\n)\s*[A-D][.)]\s+/gim) ?? []).length;
+  const numericSignals = (scannedPrompt.match(/-?\d+(?:[.,]\d+)?/g) ?? []).length;
+  const compactMathProblem = !hasCode && prompt.length < 2500 && numericSignals >= 2 && (/[+×÷=%$€£¥]|\b(?:total|each|per|times|half|twice|percent|how many|how much|calculate)\b/i.test(
+    scannedPrompt
+  ) || /[?？]\s*$/.test(scannedPrompt.trim()) || numericSignals >= 3);
+  let taskType = "chat";
+  if (needsVision) taskType = "vision";
+  else if (estimatedInputTokens > 8e4) taskType = "long_context";
+  else if (needsTools && (codeArtifact || hasCode && codingAction || implicitTerminalCode))
+    taskType = "code_agent";
+  else if (needsTools && likelyParallelToolCalls && !complexMultiToolPlan)
+    taskType = "tool_agent_parallel";
+  else if (needsTools) taskType = "tool_agent";
+  else if (multipleChoiceSignals >= 3) taskType = "reasoning_mcq";
+  else if (compactMathProblem) taskType = "reasoning_math";
+  else if (errorClassSignal || /\b(?:bug|debug|error|failure|failing|regression|crash)\b|修复|报错|错误|调试/i.test(text))
+    taskType = "debug";
+  else if (hasCode || /\b(?:refactor|implement|patch|edit|rewrite)\b|重构|实现|修改/i.test(text))
+    taskType = "code_edit";
+  else if (needsStructuredOutput || /\b(?:extract|json|schema|csv)\b|字段|提取/i.test(text))
+    taskType = "extraction";
+  else if (/\b(?:prove|derive|theorem|formal|mathematical|reasoning)\b|证明|推导|定理|数学/i.test(text))
+    taskType = "reasoning";
+  return {
+    taskType,
+    estimatedInputTokens,
+    hasCode,
+    needsTools,
+    toolsAvailable,
+    needsVision,
+    needsStructuredOutput,
+    latencySensitive,
+    highStakes,
+    language,
+    likelyParallelToolCalls,
+    complexMultiToolPlan,
+    agentDomain,
+    deepWebResearch,
+    agentRisk,
+    terminalToolSignal,
+    terminalSafetySensitive,
+    implicitTerminalCode,
+    codeArtifact
+  };
+}
+var NEUTRAL_AFFINITY = 0.68;
+var TERMINAL_COMPLEX_HIGH = {
+  "claude-sonnet-5": 1,
+  "gpt-5.3-codex": 0.87,
+  "gpt-5-mini": 0.78,
+  "gemini-3.5-flash": 0.76
+};
+var WEB_RESEARCH_DEEP = {
+  "claude-sonnet-5": 1,
+  "gpt-5-mini": 0.88,
+  "gemini-3.5-flash": 0.84,
+  "claude-opus-5": 0.8,
+  "claude-opus-4.8": 0.78
+};
+var WEB_RESEARCH = {
+  "claude-sonnet-5": 1,
+  "gpt-5-mini": 0.88,
+  "gemini-3.5-flash": 0.86,
+  "claude-opus-5": 0.84,
+  "claude-opus-4.8": 0.82
+};
+var RETAIL_POLICY_EXCEPTION = {
+  "gpt-4.1": 1,
+  "claude-sonnet-5": 0.9,
+  "deepseek-v4-pro": 0.82,
+  "gpt-5-mini": 0.8,
+  "gpt-4o-mini": 0.76
+};
+var RETAIL_POLICY_EXCEPTION_SIMPLE = {
+  "gpt-5-mini": 1,
+  "gpt-4.1": 0.86,
+  "deepseek-v4-pro": 0.82,
+  "gpt-4o-mini": 0.8
+};
+var AFFINITY = {
+  // Seven valid full agent + official Terminal-Bench trajectories (2026-07-28)
+  // gave GPT-5 Mini 4/7 resolved tasks versus 1/7 for the prior dynamic
+  // code-agent choice. Its token-normalized total cost was higher in this small
+  // calibration, so Codex and Sonnet keep quality priors above it; admitting
+  // Mini to the scoring band lets the normal quality/cost profile choose it
+  // without erasing stronger fallbacks. DeepSeek V4 Pro is kept below the
+  // primary band after two consecutive mid-trajectory provider timeouts
+  // contaminated its calibration runs.
+  codeAgent: {
+    "gpt-5.3-codex": 1,
+    "claude-sonnet-5": 0.98,
+    "gpt-5-mini": 0.96,
+    "gemini-3.5-flash": 0.92,
+    "kimi-k3": 0.9,
+    "deepseek-v4-pro": 0.88,
+    "glm-5.2": 0.88
+  },
+  // Seven official Terminal-Bench calibration trajectories favoured GPT-5 Mini
+  // over the prior dynamic choice. Codex/Sonnet are close fallbacks; actual
+  // request cost breaks the tie.
+  terminalTool: {
+    "gpt-5-mini": 1,
+    "gpt-5.3-codex": 0.98,
+    "claude-sonnet-5": 0.9,
+    "gemini-3.5-flash": 0.89
+  },
+  // Two complete agent observations on the public Terminal-Bench
+  // new-encrypt-command task ended in Codex repeating the same TerminalExec
+  // input until the loop guard fired. Codex stays an availability fallback,
+  // below the safety-band affinity floor, until its Responses function-output
+  // path is verified on both gateways.
+  terminalToolSafety: {
+    "claude-sonnet-5": 1,
+    "claude-opus-4.8": 0.9,
+    "gpt-5.3-codex": 0.84
+  },
+  // Full-session calibration: GPT-5 Mini completed two local/single retail
+  // workflows at a fraction of Sonnet's token cost. It stays ineligible for
+  // promotion when the prompt asks for multiple actions, cross-record
+  // discovery or a global optimum; those trajectories exposed unstable write
+  // arguments. DeepSeek V4 Pro completed all three high-risk retail calibration
+  // trajectories (global-choice, cross-record, multi-write); Sonnet one.
+  retailStandard: {
+    "gpt-5-mini": 1,
+    "claude-sonnet-5": 0.88,
+    "gemini-3.5-flash": 0.82,
+    "gpt-5.3-codex": 0.81,
+    "kimi-k3": 0.78,
+    "deepseek-v4-pro": 0.76
+  },
+  retailHigh: {
+    "deepseek-v4-pro": 1,
+    "claude-sonnet-5": 0.88,
+    "gemini-3.5-flash": 0.82,
+    "gpt-5.3-codex": 0.81,
+    "kimi-k3": 0.78,
+    "gpt-5-mini": 0.76
+  },
+  // Standard airline workflows stay on GPT-5 Mini: six full-session
+  // development trajectories gave it the same 5/6 success as Sonnet at roughly
+  // one order of magnitude lower normalized token cost. A held-out high-risk
+  // cabin/date negotiation then produced a persistent empty assistant turn on
+  // Mini even after a semantic retry, while Sonnet 5 completed the identical
+  // official tau2 trajectory with reward 1.0. Only global optimization /
+  // conditional-global work is promoted. A known batch of reservations is
+  // operationally high-risk but still a structured tool workflow: current Tau
+  // evidence has Mini and Sonnet at equal task reward there, while Sonnet costs
+  // roughly two orders of magnitude more on the long-tail case.
+  airlineComplex: {
+    "claude-sonnet-5": 1,
+    "gpt-5-mini": 0.78,
+    "gemini-3.5-flash": 0.76,
+    "deepseek-v4-pro": 0.74
+  },
+  airlineStandard: {
+    "gpt-5-mini": 1,
+    "claude-sonnet-5": 0.9,
+    "gemini-3.5-flash": 0.8,
+    "deepseek-v4-pro": 0.76
+  },
+  // Full-trajectory tau2 calibration (2026-07-28, official gpt-4.1 simulator):
+  // Sonnet 5 completed both an airline policy task and a retail multi-write
+  // task with reward 1.0. Gemini 3.5 Flash emitted function calls as plain text
+  // after the first structured calls and looped to the 100-step ceiling on the
+  // airline task.
+  toolAgent: {
+    "claude-sonnet-5": 1,
+    "gemini-3.5-flash": 0.88,
+    "gpt-5.3-codex": 0.87,
+    "kimi-k3": 0.85,
+    "gpt-5-mini": 0.84,
+    "deepseek-v4-pro": 0.82
+  },
+  // Multi-file Terminal work is not equivalent to a one-turn parallel
+  // function-call benchmark. Sonnet is the strongest trajectory-tested
+  // cost-controlled default; Opus remains a close safety fallback.
+  parallelTerminalSafety: {
+    "claude-sonnet-5": 1,
+    "claude-opus-4.8": 0.9,
+    "gpt-5.3-codex": 0.86
+  },
+  parallelTerminal: {
+    "gpt-5-mini": 1,
+    "gpt-5.3-codex": 0.98,
+    "claude-sonnet-5": 0.92,
+    "gemini-3.5-flash": 0.88
+  },
+  parallelRetail: {
+    "deepseek-v4-pro": 1,
+    "claude-sonnet-5": 0.88,
+    "claude-opus-4.8": 0.84,
+    "gpt-5-mini": 0.78,
+    "gemini-3.5-flash": 0.76
+  },
+  parallelAirlineComplex: {
+    "claude-sonnet-5": 1,
+    "gpt-5-mini": 0.78,
+    "claude-opus-4.8": 0.76,
+    "gemini-3.5-flash": 0.74
+  },
+  parallelAirline: {
+    "gpt-5-mini": 1,
+    "claude-sonnet-5": 0.9,
+    "gemini-3.5-flash": 0.8
+  },
+  // RouterBench calibration, 2026-07-26: Opus 4.8 produced complete multi-call
+  // payloads on 2/3 multilingual BFCL parallel cases. Gemini 3.5 Flash, Sonnet
+  // 5, DeepSeek V4 Pro and Grok 4.5 were 0/3. This narrow prior only applies
+  // after the conservative prompt feature in likelyNeedsParallelToolCalls.
+  parallel: {
+    "claude-opus-4.8": 1,
+    "claude-sonnet-5": 0.84,
+    "grok-4.5": 0.82,
+    "gemini-3.5-flash": 0.8,
+    "deepseek-v4-pro": 0.78
+  },
+  codeEdit: {
+    "gpt-5.3-codex": 1,
+    "claude-sonnet-4.6": 0.94,
+    "glm-5.2": 0.9,
+    "deepseek-v4-pro": 0.86
+  },
+  reasoning: {
+    "claude-sonnet-5": 0.98,
+    "claude-sonnet-4.6": 0.98,
+    "deepseek-v4-pro": 0.95,
+    "grok-4.5": 0.94,
+    "gemini-3.1-pro": 0.92,
+    "gemini-3.5-flash": 0.92
+  },
+  // RouterBench calibration (2026-07-28, six stratified GPQA Diamond tasks,
+  // identical agent adapter and 512-token budget): Gemini 3 Flash Preview
+  // scored 5/6, Gemini 3.5 Flash 4/6, and Gemini 3.1 Pro 3/6 while costing
+  // ~170x more than Flash. The measured winner is the narrow default; version
+  // recency alone is not a quality signal. Unused host tools must not change
+  // this reasoning-only model choice.
+  reasoningMcq: {
+    "gemini-3-flash-preview": 1,
+    "gemini-3.5-flash": 0.91,
+    "grok-4.5": 0.9,
+    "claude-sonnet-5": 0.88,
+    "deepseek-v4-pro": 0.84
+  },
+  // Same calibration, five multilingual MGSM tasks: Gemini 3.5 Flash was 5/5
+  // with the lowest cost and latency; four current flagships were 4/5 and Kimi
+  // K2.7 was 3/5.
+  reasoningMath: {
+    "gemini-3.5-flash": 1,
+    "grok-4.5": 0.93,
+    "claude-sonnet-5": 0.9,
+    "deepseek-v4-pro": 0.9,
+    "kimi-k3": 0.9
+  },
+  vision: {
+    "gemini-3.1-pro": 0.96,
+    "qwen3.7-max": 0.9,
+    "claude-sonnet-4.6": 0.9,
+    "kimi-k3": 0.9,
+    "grok-4.3": 0.9
+  },
+  // Long-context eligibility is necessary but not sufficient: a provider can
+  // advertise a 1M window yet return an empty completion near that boundary.
+  // The proven long-context flagship leads, and less-established alternatives
+  // sit in a separate band so price alone cannot displace it.
+  longContext: {
+    "gemini-3.1-pro": 1,
+    "qwen3.7-max": 0.89,
+    "glm-5.2": 0.89,
+    "gemini-3.5-flash": 0.88,
+    "deepseek-v4-pro": 0.85
+  },
+  // A structured extraction must preserve both the output contract and the
+  // source-language fields. For Mandarin input the language-native Kimi
+  // candidate gets a distinct band — a candidate-pool decision, not a post-hoc
+  // override, so it still falls back normally when Kimi is unavailable. Kimi
+  // K3 costs ~5x its retired sibling K2.7, so the band must be wider than the
+  // auto affinityFloorGap (0.10) or price alone re-selects a non-native model
+  // for Mandarin input; 0.12 keeps K3 alone in the primary band for zh and
+  // leaves every other language untouched.
+  extractionZh: {
+    "kimi-k3": 1,
+    "gemini-3.5-flash": 0.88,
+    "gemini-2.5-flash": 0.88,
+    "gpt-4o-mini": 0.88,
+    "claude-sonnet-5": 0.88,
+    "claude-sonnet-4.6": 0.88
+  },
+  extraction: {
+    "kimi-k3": 0.9,
+    "gemini-3.5-flash": 0.9,
+    "gemini-2.5-flash": 0.9,
+    "gpt-4o-mini": 0.9,
+    "claude-sonnet-5": 0.9,
+    "claude-sonnet-4.6": 0.9
+  },
+  chat: {
+    "gemini-3.5-flash": 0.86,
+    "gemini-2.5-flash": 0.86,
+    "kimi-k3": 0.86
+  }
+};
+function affinityBand(features) {
+  const { taskType, agentDomain, agentRisk, deepWebResearch, terminalToolSignal } = features;
+  const terminalSafety = features.terminalSafetySensitive;
+  switch (taskType) {
+    case "code_agent":
+      return terminalToolSignal && agentRisk === "complex_high" ? TERMINAL_COMPLEX_HIGH : AFFINITY.codeAgent;
+    case "tool_agent":
+      if (terminalToolSignal && agentRisk === "complex_high") return TERMINAL_COMPLEX_HIGH;
+      if (terminalToolSignal) return terminalSafety ? AFFINITY.terminalToolSafety : AFFINITY.terminalTool;
+      if (agentDomain === "web_research") return deepWebResearch ? WEB_RESEARCH_DEEP : WEB_RESEARCH;
+      if (agentDomain === "retail") {
+        if (agentRisk === "standard") return AFFINITY.retailStandard;
+        if (agentRisk === "policy_exception") return RETAIL_POLICY_EXCEPTION;
+        if (agentRisk === "policy_exception_simple") return RETAIL_POLICY_EXCEPTION_SIMPLE;
+        return AFFINITY.retailHigh;
+      }
+      if (agentDomain === "airline") {
+        return agentRisk === "complex_high" ? AFFINITY.airlineComplex : AFFINITY.airlineStandard;
+      }
+      return AFFINITY.toolAgent;
+    case "tool_agent_parallel":
+      if (terminalToolSignal) {
+        return terminalSafety ? AFFINITY.parallelTerminalSafety : AFFINITY.parallelTerminal;
+      }
+      if (agentDomain === "web_research") return deepWebResearch ? WEB_RESEARCH_DEEP : WEB_RESEARCH;
+      if (agentDomain === "retail") {
+        if (agentRisk === "policy_exception") return RETAIL_POLICY_EXCEPTION;
+        if (agentRisk === "policy_exception_simple") return RETAIL_POLICY_EXCEPTION_SIMPLE;
+        return AFFINITY.parallelRetail;
+      }
+      if (agentDomain === "airline") {
+        return agentRisk === "complex_high" ? AFFINITY.parallelAirlineComplex : AFFINITY.parallelAirline;
+      }
+      return AFFINITY.parallel;
+    case "code_edit":
+    case "debug":
+      return AFFINITY.codeEdit;
+    case "reasoning":
+      return AFFINITY.reasoning;
+    case "reasoning_mcq":
+      return AFFINITY.reasoningMcq;
+    case "reasoning_math":
+      return AFFINITY.reasoningMath;
+    case "vision":
+      return AFFINITY.vision;
+    case "long_context":
+      return AFFINITY.longContext;
+    case "extraction":
+      return features.language === "zh" ? AFFINITY.extractionZh : AFFINITY.extraction;
+    case "chat":
+      return AFFINITY.chat;
+  }
+}
+function affinityIn(band, modelId) {
+  const name = modelId.toLowerCase().slice(modelId.indexOf("/") + 1);
+  return Math.max(NEUTRAL_AFFINITY, band[name] ?? 0);
+}
+function evidenceCandidates(task) {
+  if (task === "code_agent") {
+    return [
+      "openai/gpt-5.3-codex",
+      "anthropic/claude-sonnet-5",
+      "openai/gpt-5-mini",
+      "google/gemini-3.5-flash",
+      "moonshot/kimi-k3",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "tool_agent") {
+    return [
+      "anthropic/claude-sonnet-5",
+      "anthropic/claude-opus-5",
+      "openai/gpt-5-mini",
+      "openai/gpt-4.1",
+      "openai/gpt-4o-mini",
+      "google/gemini-3.5-flash",
+      "openai/gpt-5.3-codex",
+      "moonshot/kimi-k3",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "tool_agent_parallel") {
+    return [
+      "anthropic/claude-opus-5",
+      "anthropic/claude-opus-4.8",
+      "anthropic/claude-sonnet-5",
+      "openai/gpt-5-mini",
+      "openai/gpt-4.1",
+      "openai/gpt-4o-mini",
+      "xai/grok-4.5",
+      "google/gemini-3.5-flash",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "long_context") {
+    return [
+      "google/gemini-3.1-pro",
+      "deepseek/deepseek-v4-pro",
+      "qwen/qwen3.7-max",
+      "zai/glm-5.2",
+      "google/gemini-3.5-flash"
+    ];
+  }
+  if (task === "reasoning_mcq") {
+    return [
+      "google/gemini-3-flash-preview",
+      "google/gemini-3.5-flash",
+      "xai/grok-4.5",
+      "anthropic/claude-sonnet-5",
+      "deepseek/deepseek-v4-pro"
+    ];
+  }
+  if (task === "extraction") {
+    return ["moonshot/kimi-k3", "google/gemini-3.5-flash", "anthropic/claude-sonnet-5"];
+  }
+  if (task === "reasoning_math") {
+    return [
+      "google/gemini-3.5-flash",
+      "xai/grok-4.5",
+      "anthropic/claude-sonnet-5",
+      "deepseek/deepseek-v4-pro",
+      "moonshot/kimi-k3"
+    ];
+  }
+  return [];
+}
+var VERIFIED_TOOL_FALLBACKS = [
+  "anthropic/claude-fable-5.1",
+  "anthropic/claude-opus-5.5",
+  "anthropic/claude-sonnet-5.5",
+  "deepseek/deepseek-v4.1-flash",
+  "google/gemini-3.8-flash",
+  "openai/gpt-5.1",
+  "openai/gpt-6-astra",
+  "openai/gpt-6-luna",
+  "openai/gpt-6-sol",
+  "openai/gpt-6.1-sol",
+  "xai/grok-4.6",
+  "xai/grok-4.7",
+  "xiaomi/mimo-v2.5"
+];
+function isEligible(modelId, features, maxOutputTokens, options) {
+  const model = options.modelCapabilities?.[modelId] ?? DEFAULT_MODEL_CAPABILITIES[modelId];
+  if (!model) return true;
+  if (features.needsTools && !model.supportsTools) return false;
+  if (features.needsVision && !model.supportsVision) return false;
+  if (features.needsStructuredOutput && !model.supportsTools) return false;
+  if (model.maxOutputTokens < maxOutputTokens) return false;
+  return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
+}
+function estimatedCost(modelId, options, inputTokens, outputTokens) {
+  const price2 = usablePricing(options.modelPricing.get(modelId));
+  if (!price2) return Number.POSITIVE_INFINITY;
+  if (price2.flatPrice !== void 0) return price2.flatPrice;
+  return (inputTokens * price2.inputPrice + outputTokens * price2.outputPrice) / 1e6;
+}
+function profileScore(modelId, options, now) {
+  const profile = options.modelPerformance?.[modelId] ?? LIVE_MODEL_PROFILES[modelId] ?? HISTORICAL_MODEL_PROFILES[modelId];
+  if (!profile) return void 0;
+  const measuredAt = Date.parse(profile.measuredAt);
+  if (!Number.isFinite(measuredAt)) return void 0;
+  const finite = (value, optional) => value === void 0 ? optional : Number.isFinite(value) && value >= 0;
+  if (!finite(profile.latencyMs, false) || !finite(profile.outputTokensPerSecond, false) || !finite(profile.p95LatencyMs, true) || !finite(profile.intelligenceIndex, true) || !finite(profile.errorRate, true) || !finite(profile.samples, true)) {
+    return void 0;
+  }
+  const ageDays = Math.max(0, (now.getTime() - measuredAt) / 864e5);
+  const sampleConfidence = profile.samples === void 0 ? 1 : Math.min(1, Math.max(0, profile.samples) / 10);
+  const freshness = Math.pow(0.5, ageDays / 30) * sampleConfidence;
+  const quality = profile.intelligenceIndex === void 0 ? void 0 : Math.min(1, profile.intelligenceIndex / 50);
+  const speed = Math.min(
+    1,
+    (2e3 / Math.max(500, profile.latencyMs) + profile.outputTokensPerSecond / 250) / 2
+  );
+  const tailSpeed = Math.min(1, 3e3 / Math.max(750, profile.p95LatencyMs ?? profile.latencyMs));
+  const reliability = Math.max(0, 1 - (profile.errorRate ?? 0));
+  return { quality, speed, tailSpeed, reliability, freshness };
+}
+var PortfolioStrategy = class {
+  name = "portfolio";
+  // Rules set the capability tier; the strategy is stateless, so one instance serves every request.
+  rules = new RulesStrategy();
+  route(prompt, systemPrompt, maxOutputTokens, options) {
+    const features = classifyTask(prompt, systemPrompt, options);
+    const base = this.rules.route(prompt, systemPrompt, maxOutputTokens, {
+      ...options,
+      requiresTools: features.needsTools
+    });
+    const tierConfigs = base.tierConfigs;
+    if (!tierConfigs) return base;
+    const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base.tier === "SIMPLE" || base.tier === "MEDIUM") ? "REASONING" : (features.taskType === "debug" || features.taskType === "code_edit") && features.codeArtifact && base.tier === "SIMPLE" ? "MEDIUM" : base.tier;
+    const tierConfig = tierConfigs[targetTier];
+    const configuredCandidates = tierConfig ? getFallbackChain(targetTier, tierConfigs) : [];
+    const unavailable = new Set(options.unavailableModels ?? []);
+    const verifiedToolFallbacks = features.needsTools ? VERIFIED_TOOL_FALLBACKS.filter((model2) => options.modelPricing.has(model2)) : [];
+    if (options.routingProfile !== "premium") {
+      const fallbackCost = (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens);
+      verifiedToolFallbacks.sort((a, b) => fallbackCost(a) - fallbackCost(b));
+    }
+    const chain = [
+      .../* @__PURE__ */ new Set([
+        ...configuredCandidates,
+        ...evidenceCandidates(features.taskType),
+        ...verifiedToolFallbacks
+      ])
+    ].filter(
+      (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
+    );
+    const eligible = new Set(
+      chain.filter((model2) => isEligible(model2, features, maxOutputTokens, options))
+    );
+    const eligibleCandidates = eligible.size > 0 ? [...eligible] : chain;
+    if (eligibleCandidates.length === 0) return base;
+    const profileName = options.routingProfile === "eco" ? "eco" : options.routingProfile === "premium" ? "premium" : "auto";
+    const portfolio = options.config.portfolio ?? DEFAULT_PORTFOLIO_WEIGHTS;
+    const band = affinityBand(features);
+    const affinityCache = /* @__PURE__ */ new Map();
+    const getAffinity = (model2) => {
+      let value = affinityCache.get(model2);
+      if (value === void 0) {
+        value = affinityIn(band, model2);
+        affinityCache.set(model2, value);
+      }
+      return value;
+    };
+    const bestAffinity = Math.max(...eligibleCandidates.map(getAffinity));
+    const specificAffinity = eligibleCandidates.filter((model2) => getAffinity(model2) > NEUTRAL_AFFINITY);
+    const affinityPool = specificAffinity.length > 0 ? specificAffinity : [eligibleCandidates[0]];
+    const affinityFloorGap = features.terminalToolSignal ? Math.max(
+      portfolio.affinityFloorGap[profileName],
+      features.terminalSafetySensitive ? 0.15 : 0.12
+    ) : portfolio.affinityFloorGap[profileName];
+    const candidates = affinityPool.filter(
+      (model2) => getAffinity(model2) >= bestAffinity - affinityFloorGap
+    );
+    const costs = candidates.map(
+      (model2) => estimatedCost(model2, options, features.estimatedInputTokens, maxOutputTokens)
+    );
+    const finiteCosts = costs.filter(Number.isFinite);
+    const minCost = finiteCosts.length > 0 ? Math.min(...finiteCosts) : 0;
+    const maxCost = finiteCosts.length > 0 ? Math.max(...finiteCosts) : 1;
+    const now = options.now ?? /* @__PURE__ */ new Date();
+    const profileWeights = portfolio[profileName];
+    const rankedEntries = candidates.map((model2, index) => {
+      const cost = costs[index];
+      const costScore = !Number.isFinite(cost) ? 0 : maxCost > minCost ? 1 - (cost - minCost) / (maxCost - minCost) : 0.5;
+      const capabilityScore = eligible.has(model2) ? 1 : 0;
+      const profile = profileScore(model2, options, now);
+      const observedQuality = profile?.quality === void 0 ? getAffinity(model2) : getAffinity(model2) * (1 - profile.freshness) + profile.quality * profile.freshness;
+      const observedSpeed = profile ? profile.speed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
+      const observedTailSpeed = profile ? profile.tailSpeed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
+      const observedReliability = profile ? profile.reliability * profile.freshness + (1 - profile.freshness) : 1;
+      const legacyScore = 1 - index / Math.max(1, candidates.length - 1);
+      const qualityWeight = profileWeights.quality + (features.highStakes ? portfolio.highStakesBoost.quality : 0);
+      const speedScore = features.latencySensitive ? observedTailSpeed : observedSpeed;
+      const speedWeight = profileWeights.speed + (features.latencySensitive ? portfolio.latencySensitiveSpeedBoost : 0);
+      const reliabilityWeight = profileWeights.reliability + (features.highStakes ? portfolio.highStakesBoost.reliability : 0);
+      const score = observedQuality * qualityWeight + capabilityScore * profileWeights.capability + costScore * profileWeights.cost + speedScore * speedWeight + observedReliability * reliabilityWeight + legacyScore * profileWeights.legacy;
+      return {
+        model: model2,
+        score,
+        quality: observedQuality,
+        cost: costScore,
+        speed: speedScore,
+        reliability: observedReliability
+      };
+    }).sort((a, b) => b.score - a.score);
+    const scoredModels = rankedEntries.map((item) => item.model);
+    const webResearchFallbackOrder = [
+      "anthropic/claude-sonnet-5",
+      "openai/gpt-5-mini",
+      "google/gemini-3.5-flash",
+      "anthropic/claude-opus-5",
+      "anthropic/claude-opus-4.8",
+      "openai/gpt-5.3-codex"
+    ];
+    const ranked = features.agentDomain === "web_research" ? [
+      ...scoredModels,
+      ...webResearchFallbackOrder.filter(
+        (model2) => eligibleCandidates.includes(model2) && !scoredModels.includes(model2)
+      ),
+      ...eligibleCandidates.filter(
+        (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
+      )
+    ] : [...scoredModels, ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))];
+    const model = ranked[0] ?? base.model;
+    const selectedTierConfigs = {
+      ...tierConfigs,
+      [targetTier]: { primary: model, fallback: ranked.slice(1) }
+    };
+    const decision = selectModel(
+      targetTier,
+      base.confidence,
+      "portfolio",
+      `${base.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
+      selectedTierConfigs,
+      options.modelPricing,
+      features.estimatedInputTokens,
+      maxOutputTokens,
+      options.routingProfile,
+      base.agenticScore
+    );
+    return {
+      ...decision,
+      tierConfigs: selectedTierConfigs,
+      profile: base.profile,
+      candidates: ranked,
+      candidateScores: rankedEntries.map(({ model: model2, score, quality, cost, speed, reliability }) => ({
+        model: model2,
+        score,
+        quality,
+        cost,
+        speed,
+        reliability
+      })),
+      taskType: features.taskType,
+      routerVersion: "v3-portfolio"
+    };
+  }
+};
+var MODEL_KINDS = ["chat", "image", "video", "music"];
+var PRICE_KEYS = [
+  "input",
+  "output",
+  "per_image",
+  "per_second",
+  "per_track",
+  "cache_read",
+  "cache_write",
+  "transaction_fee",
+  "per_call_surcharge",
+  "default_duration_seconds",
+  "max_duration_seconds"
+];
+var UNIT_PRICE = { image: "per_image", video: "per_second", music: "per_track" };
+var MODEL_ID = /^[a-z0-9][a-z0-9._-]*\/[a-zA-Z0-9][a-zA-Z0-9._:+-]*$/;
+var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var price = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+var capacity = (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
+function parseModelCatalog(value) {
+  if (!record(value) || !Array.isArray(value.data)) {
+    throw new TypeError("Model catalog must contain a data array");
+  }
+  const entries = /* @__PURE__ */ new Map();
+  for (const entry of value.data) {
+    if (record(entry) && typeof entry.id === "string" && entry.id.length <= 200 && MODEL_ID.test(entry.id)) {
+      entries.set(entry.id, entry);
+    }
+  }
+  const result = { models: [], chat: [], image: [], video: [], music: [], unavailable: [] };
+  const models = [];
+  const unavailable = [];
+  for (const [id, entry] of entries) {
+    if (entry.available === false) unavailable.push(id);
+    if (entry.available !== void 0 && entry.available !== true || entry.hidden !== void 0 && entry.hidden !== false || !Array.isArray(entry.categories) || !record(entry.pricing)) continue;
+    const categories = [...new Set(entry.categories.filter((c) => typeof c === "string"))];
+    const rawPricing = entry.pricing;
+    const pricing = {};
+    for (const key of PRICE_KEYS) if (price(rawPricing[key])) pricing[key] = rawPricing[key];
+    const kinds = MODEL_KINDS.filter((kind) => categories.includes(kind) && (kind === "chat" ? price(rawPricing.input) && price(rawPricing.output) : price(rawPricing[UNIT_PRICE[kind]])));
+    if (!kinds.length) continue;
+    const model = {
+      id,
+      name: typeof entry.name === "string" && entry.name.trim() ? entry.name : id,
+      categories,
+      kinds,
+      pricing,
+      free: kinds.includes("chat") && entry.billing_mode === "free" && pricing.input === 0 && pricing.output === 0,
+      ...typeof entry.billing_mode === "string" ? { billingMode: entry.billing_mode } : {},
+      ...capacity(entry.context_window) !== void 0 ? { contextWindow: capacity(entry.context_window) } : {},
+      ...capacity(entry.max_output) !== void 0 ? { maxOutputTokens: capacity(entry.max_output) } : {}
+    };
+    models.push(model);
+  }
+  result.models = models;
+  result.unavailable = unavailable;
+  for (const kind of MODEL_KINDS) result[kind] = models.filter((model) => model.kinds.includes(kind));
+  return result;
+}
+function toRoutingCatalog(catalog, options = {}) {
+  const verified = { ...DEFAULT_MODEL_CAPABILITIES, ...options.verifiedCapabilities };
+  const modelPricing = /* @__PURE__ */ new Map();
+  const modelCapabilities = {};
+  for (const model of catalog.chat) {
+    modelPricing.set(model.id, { inputPrice: model.pricing.input, outputPrice: model.pricing.output });
+    const evidence = verified[model.id];
+    modelCapabilities[model.id] = {
+      contextWindow: model.contextWindow ?? evidence?.contextWindow ?? 0,
+      maxOutputTokens: model.maxOutputTokens ?? evidence?.maxOutputTokens ?? 0,
+      supportsTools: evidence?.supportsTools === true,
+      // Verified evidence wins over the category tag in both directions: the
+      // catalog omits "vision" for some models that accept images and tags
+      // others whose image input does not hold up (see capability-overrides).
+      supportsVision: evidence?.supportsVision ?? model.categories.includes("vision")
+    };
+  }
+  return { modelPricing, modelCapabilities, unavailableModels: [...catalog.unavailable] };
+}
 registerStrategy(new PortfolioStrategy());
 function route(prompt, systemPrompt, maxOutputTokens, options) {
   const strategy = getStrategy(options.config.strategy ?? "portfolio");
