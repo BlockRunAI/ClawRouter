@@ -55,6 +55,21 @@ afterEach(() => {
 });
 
 describe("update.sh wallet address derivation", () => {
+  it("routes both wallet displays through the file-reading helper", () => {
+    // The backup step and the closing summary are the two places that show the
+    // address; both must go through derive_wallet_address, and the only key
+    // derivation in the script must be the helper's (which reads the file).
+    expect(UPDATE_SH).toMatch(/WALLET_ADDRESS=\$\(derive_wallet_address "\$WALLET_FILE" "[^"]+"\)/);
+    expect(UPDATE_SH).toMatch(/FINAL_ADDRESS=\$\(derive_wallet_address "\$WALLET_FILE" "[^"]+"\)/);
+    expect(UPDATE_SH.match(/privateKeyToAccount\(/g)).toHaveLength(1);
+    expect(extractFunction(UPDATE_SH, "print_wallet_address")).toContain("privateKeyToAccount(");
+    // The key may be read into a shell variable for format validation, but no
+    // shell variable holding it may ever be expanded on a node command line.
+    for (const line of UPDATE_SH.split("\n").filter((l) => /\bnode\b/.test(l))) {
+      expect(line).not.toMatch(/\$\{?(WALLET_KEY|FINAL_KEY)\b/);
+    }
+  });
+
   it("never interpolates a wallet key into a node program", () => {
     // Any `$WALLET_KEY` / `$FINAL_KEY` / `${...KEY}` inside a double-quoted
     // `node -e "..."` body is expanded by bash into node's argv.
