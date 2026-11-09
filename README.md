@@ -9,7 +9,7 @@ Agents can only sign transactions.<br><br>
 <strong>ClawRouter is the only LLM router that lets agents operate independently.</strong><br><br>
 <em>Pay however you like: <strong>credit card</strong> — sign up at <a href="https://user.blockrun.ai"><strong>user.blockrun.ai</strong></a>, top up, mint an API key<br>
 or <strong>USDC</strong> on Solana or Base (x402 wallet, no account at all).<br>
-Or neither — <!-- br:models.free -->8<!-- /br:models.free --> models are free, with no signup, no key and no wallet.</em></p>
+Or neither — <!-- br:models.free -->9<!-- /br:models.free --> models are free, with no signup, no key and no wallet.</em></p>
 
 <br>
 
@@ -65,7 +65,7 @@ Every other LLM router was built for **human developers** — create an account,
 
 ClawRouter is built for the agent-first world:
 
-- **Starts at $0** — <!-- br:models.free -->8<!-- /br:models.free --> open-weight models are free forever (incl. a 1M-context reasoner and two sub-second coders). Image turns route to paid models — see the free-tier note below.
+- **Starts at $0** — <!-- br:models.free -->9<!-- /br:models.free --> open-weight models are free forever (incl. a 1M-context reasoner and two sub-second coders). Image turns route to paid models — see the free-tier note below.
 - **No accounts needed** — a wallet is generated locally, no signup
 - **No API keys needed** — your wallet signature IS authentication
 - **No model selection** — <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring + constraint-first ranking ([router-core](https://github.com/BlockRunAI/router-core)) picks the right model automatically
@@ -93,7 +93,7 @@ Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key
 |                  | OpenRouter        | LiteLLM          | Martian           | Portkey           | **ClawRouter**                                                         |
 | ---------------- | ----------------- | ---------------- | ----------------- | ----------------- | ---------------------------------------------------------------------- |
 | **Models**       | 200+              | 100+             | Smart routing     | Gateway           | **<!-- br:models.chatVisible -->91<!-- /br:models.chatVisible -->**    |
-| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->8<!-- /br:models.free --> models, no signup** |
+| **Free tier**    | Rate-limited      | BYO keys         | No                | No                | **<!-- br:models.free -->9<!-- /br:models.free --> models, no signup** |
 | **Routing**      | Manual selection  | Manual selection | Smart (closed)    | Observability     | **Smart (open source)**                                                |
 | **Auth**         | Account + API key | Your API keys    | Account + API key | Account + API key | **Wallet signature _or_ API key**                                      |
 | **Payment**      | Credit card       | BYO keys         | Credit card       | $49-499/mo        | **USDC per-request _or_ card credit**                                  |
@@ -109,7 +109,7 @@ Full walkthrough: [Paying with a credit card](#paying-with-a-credit-card-api-key
 
 ## Quick Start
 
-> **No wallet? <!-- br:models.free -->8<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->8<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add a credit card or USDC later when you want paid models.
+> **No wallet? <!-- br:models.free -->9<!-- /br:models.free --> models work free out of the box.** Install, run, and pin `free/nemotron-3.5-lightning` (or any of the <!-- br:models.free -->9<!-- /br:models.free -->) — no crypto, no signup, no balance required. Add a credit card or USDC later when you want paid models.
 
 **Two ways to pay for the paid ones — pick one, the rest of ClawRouter is identical:**
 
@@ -193,7 +193,7 @@ npx @blockrun/clawrouter
 ```
 
 **2. Fund your wallet** — optional, skip for free tier
-Your wallet address is printed on first run. For paid models, send a few USDC on Solana (the default chain) or Base — $5 covers thousands of requests. Prefer a card? [Sign up at user.blockrun.ai](https://user.blockrun.ai) and run `clawrouter login brk_live_…` instead. To stay at $0, pin any of the <!-- br:models.free -->8<!-- /br:models.free --> free models (e.g. `free/nemotron-3.5-lightning`) or use `/model free` inside OpenClaw.
+Your wallet address is printed on first run. For paid models, send a few USDC on Solana (the default chain) or Base — $5 covers thousands of requests. Prefer a card? [Sign up at user.blockrun.ai](https://user.blockrun.ai) and run `clawrouter login brk_live_…` instead. To stay at $0, pin any of the <!-- br:models.free -->9<!-- /br:models.free --> free models (e.g. `free/nemotron-3.5-lightning`) or use `/model free` inside OpenClaw.
 
 **3. Point your client at `http://localhost:8402`**
 
@@ -460,7 +460,7 @@ LLM agents discover all eight operations as `blockrun_phone_*` / `blockrun_voice
 
 ## Models & Pricing
 
-<!-- br:models.chatVisible -->91<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->8<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
+<!-- br:models.chatVisible -->91<!-- /br:models.chatVisible --> models across 9 providers, one wallet. **<!-- br:models.free -->9<!-- /br:models.free --> models are $0 — paid models start at fractions of a cent.**
 
 > **💡** Models are grouped by typical cost of a chat message (~500 input + 500 output tokens). Paid requests also carry a flat **$0.001/tx settlement fee** (covers on-chain gas; already included in the price the gateway quotes). Free models never pay it.
 
@@ -564,7 +564,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | openai/gpt-5.4-pro          | 1M      | reasoning, tools                                       |
 | openai/gpt-5.5-pro          | 1M      | reasoning, vision, tools                               |
 
-> **Free tier:** <!-- br:models.free -->8<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other five as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model lightning` for 1M-context reasoning, `/model north-mini` or `/model laguna` for fast coding).
+> **Free tier:** <!-- br:models.free -->9<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other five as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model lightning` for 1M-context reasoning, `/model north-mini` or `/model laguna` for fast coding).
 >
 > **One free model reads images: `free/nemotron-3.5-bolt`.** It got 8 of 8 right on 64×64 solid-colour PNGs across Base and Solana on 2026-11-05, answered by Bolt itself. The rest of the free tier isn't flagged for vision: `nemotron-3-nano-omni` was right 1 of 4 times on Base in August, and only 2 of 8 probes of `nemotron-3-super-120b` reached that model. These failures can arrive as an HTTP 200 with a wrong answer and no error to branch on. Pin `/model vision-free` for free images; otherwise requests carrying an `image_url` route to a paid vision model.
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
@@ -712,7 +712,7 @@ chains, the response cache and the local spend controls.
 - **Balance lives server-side.** There is no local balance to check: a call that
   outruns your credit comes back as HTTP `402 insufficient_quota`, naming the
   top-up page. Free models stay free and need no credit at all — all
-  <!-- br:models.free -->8<!-- /br:models.free --> are served on the API-key gateway too.
+  <!-- br:models.free -->9<!-- /br:models.free --> are served on the API-key gateway too.
 - **One key covers nearly everything.** Verified live against `api.blockrun.ai`
   on 2026-09-05: chat completions (`/v1/chat/completions`), the Anthropic-shaped
   `/v1/messages`, `/v1/models`, image generation, speech, video, and the partner
@@ -960,7 +960,7 @@ No. A wallet is the default because it is what lets an _agent_ pay for itself,
 but you can sign up at **[user.blockrun.ai](https://user.blockrun.ai)**, top up
 with a credit card, mint an API key and run `clawrouter login brk_live_…`. Calls
 then go to `api.blockrun.ai` on a bearer token and bill your account credit — no
-crypto, no gas, no seed phrase. And the <!-- br:models.free -->8<!-- /br:models.free --> free models need neither: no
+crypto, no gas, no seed phrase. And the <!-- br:models.free -->9<!-- /br:models.free --> free models need neither: no
 wallet, no key, no signup. See [Paying with a credit card](#paying-with-a-credit-card-api-key).
 
 ### Is ClawRouter free?

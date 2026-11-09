@@ -4,15 +4,15 @@
   "models": {
     "chatVisible": 91,
     "totalVisible": 117,
-    "free": 8,
+    "free": 9,
     "freeWithheld": 27,
     "image": 12,
     "video": 7,
     "music": 1,
     "speech": 5,
     "soundfx": 1,
-    "withFallback": 30,
-    "withFallbackAllEntries": 70
+    "withFallback": 31,
+    "withFallbackAllEntries": 71
   },
   "clawrouter": {
     "dimensions": 15,

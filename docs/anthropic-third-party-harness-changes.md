@@ -79,7 +79,7 @@ Then point your agent at `http://localhost:8402/v1/` with any OpenAI-compatible 
 - **Budget caps** — set a max spend per session, ClawRouter gracefully downgrades when budget runs low
 - **Token compression** — 7-layer pipeline reduces token costs by 7–40% before they hit any provider
 - **Response caching** — identical requests within 10 minutes cost $0
-- **<!-- br:models.free -->8<!-- /br:models.free --> free models** — for tasks that don't need a paid model at all
+- **<!-- br:models.free -->9<!-- /br:models.free --> free models** — for tasks that don't need a paid model at all
 
 ### Routing Profiles
 
