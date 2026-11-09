@@ -4,6 +4,27 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.312 — November 9, 2026
+
+### `clawrouter update` no longer puts your wallet key on a command line
+
+To print your wallet address, `clawrouter update` passed the private key into a
+`node -e` command (once while backing up the wallet, once in the closing summary).
+That put the key in the process's command line. On Linux, other local accounts can
+read command lines from `/proc`, and exec-auditing tools record them.
+
+- **Fix:** node now reads `~/.openclaw/blockrun/wallet.key` directly, so the key
+  never appears in a command line or in program text. The address and fallback
+  messages are unchanged.
+- **Regression test:** runs the real shell function under macOS `/bin/bash` 3.2
+  with a `node` that records its arguments, and checks the key never shows up.
+- **Curl installer:** `blockrun.ai/ClawRouter-update` serves its own copy of
+  `update.sh`, which is updated separately. The npm package carries the fixed
+  script from this release on.
+
+Advisory GHSA-27x5-82hg-xwr6. Thanks to [@0xLittleDream](https://github.com/0xLittleDream)
+for the report.
+
 ## v0.12.311 — November 8, 2026
 
 ### Smart routing picks up the router-core audit (273c2af)
