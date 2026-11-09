@@ -112,6 +112,40 @@ if (best) console.log(path.dirname(best.packagePath));
 NODE
 }
 
+# Print the EVM address for the wallet key in $1, or $2 if it can't be derived.
+# The key is read by node from the file itself: it must never be interpolated
+# into a `node -e` program or passed as an argument, because a process's argv
+# is visible to other local users (/proc/<pid>/cmdline) and to exec auditing.
+# See GHSA-27x5-82hg-xwr6.
+derive_wallet_address() {
+  local address
+  # The heredoc lives in its own function: bash 3.2 (macOS /bin/bash) can't
+  # parse a heredoc nested inside $(...).
+  address=$(print_wallet_address "$1" 2>/dev/null) || address=""
+  if [ -n "$address" ]; then
+    echo "$address"
+  else
+    echo "$2"
+  fi
+}
+
+print_wallet_address() {
+  WALLET_KEY_FILE="$1" PACKAGE_DIR="$ACTIVE_PACKAGE_DIR" node <<'NODE'
+try {
+  const fs = require('fs');
+  const key = fs.readFileSync(process.env.WALLET_KEY_FILE, 'utf8').replace(/\s+/g, '');
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) process.exit(1);
+  const { privateKeyToAccount } = require(
+    require.resolve('viem/accounts', { paths: [process.env.PACKAGE_DIR || process.cwd()] }),
+  );
+  console.log(privateKeyToAccount(key).address);
+} catch {
+  // viem not resolvable yet (fresh install path) or unreadable key file
+  process.exit(1);
+}
+NODE
+}
+
 sync_cli_shim() {
   local package_dir="$1"
   if [ -z "$package_dir" ] || [ ! -f "$package_dir/dist/cli.js" ]; then
@@ -256,16 +290,7 @@ if [ -f "$WALLET_FILE" ]; then
 
   if [[ "$WALLET_KEY" == 0x* ]] && [ "$KEY_LEN" -eq 66 ]; then
     # Derive wallet address via node (viem is available post-install)
-    WALLET_ADDRESS=$(node -e "
-      try {
-        const { privateKeyToAccount } = require(require.resolve('viem/accounts', { paths: ['$ACTIVE_PACKAGE_DIR'] }));
-        const acct = privateKeyToAccount('$WALLET_KEY');
-        console.log(acct.address);
-      } catch {
-        // viem not available yet (fresh install path), skip address check
-        console.log('(address check skipped)');
-      }
-    " 2>/dev/null || echo "(address check skipped)")
+    WALLET_ADDRESS=$(derive_wallet_address "$WALLET_FILE" "(address check skipped)")
 
     WALLET_BACKUP="$(mktemp "$HOME/.openclaw/blockrun/wallet.key.bak.XXXXXX")"
     cp "$WALLET_FILE" "$WALLET_BACKUP"
@@ -1251,13 +1276,7 @@ echo ""
 
 # Show final wallet address
 if [ -f "$WALLET_FILE" ]; then
-  FINAL_KEY=$(cat "$WALLET_FILE" | tr -d '[:space:]')
-  FINAL_ADDRESS=$(node -e "
-    try {
-      const { privateKeyToAccount } = require(require.resolve('viem/accounts', { paths: ['$ACTIVE_PACKAGE_DIR'] }));
-      console.log(privateKeyToAccount('$FINAL_KEY').address);
-    } catch { console.log('(run /wallet in OpenClaw to see your address)'); }
-  " 2>/dev/null || echo "(run /wallet in OpenClaw to see your address)")
+  FINAL_ADDRESS=$(derive_wallet_address "$WALLET_FILE" "(run /wallet in OpenClaw to see your address)")
 
   echo "  Wallet: $FINAL_ADDRESS"
   echo "  Key file: $WALLET_FILE"
