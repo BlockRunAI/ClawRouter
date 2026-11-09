@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -15,7 +16,7 @@ const NEEDS_INSTALL_SCRIPTS: Record<string, string> = {
   "@deepseek-ai/dsh": "native modules (node-pty, koffi) and spawn helper",
 };
 
-const ELECTRON_DIR = new URL("../electron/", import.meta.url).pathname;
+const ELECTRON_DIR = fileURLToPath(new URL("../electron/", import.meta.url));
 
 async function sourceFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -38,7 +39,13 @@ function ensureNpmPackageCalls(source: string): string[] {
     for (let i = match.index + "ensureNpmPackage".length; i < source.length; i++) {
       if (source[i] === "(") depth++;
       else if (source[i] === ")" && --depth === 0) {
-        calls.push(source.slice(match.index, i + 1));
+        // Drop comments so a commented-out option can't satisfy the check.
+        calls.push(
+          source
+            .slice(match.index, i + 1)
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/\/\/[^\n]*/g, ""),
+        );
         break;
       }
     }
