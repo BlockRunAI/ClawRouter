@@ -83,7 +83,9 @@ export class ServiceSupervisor {
       this.context,
       "@blockrun/clawrouter-codex",
       "clawrouter-codex",
-      { version: "0.4.0" },
+      // The bridge is plain JS; its only install hook is esbuild's postinstall,
+      // which arrives via @blockrun/clawrouter (already installed script-free).
+      { version: "0.4.0", ignoreScripts: true },
     );
     const child = await this.start("codex-bridge", command, ["bridge"], {
       ...process.env,

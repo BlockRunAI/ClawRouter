@@ -36,6 +36,9 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async install(context: AdapterContext, options: InstallOptions): Promise<void> {
+    // Deliberately NOT ignoreScripts: node-pty and koffi build/fetch native
+    // binaries at install time and dsh-subprocess-local's postinstall stages its
+    // spawn helper. Exempted in tests/npm-install-scripts.test.ts.
     const dsh = await ensureNpmPackage(context, "@deepseek-ai/dsh", "dsh", {
       version: "0.1.2-rc.1",
     });
