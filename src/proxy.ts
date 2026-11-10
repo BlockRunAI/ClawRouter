@@ -442,22 +442,43 @@ class ClientDisconnectedError extends Error {
 async function readBodyWithTimeout(
   body: ReadableStream<Uint8Array> | null,
   timeoutMs: number = MODEL_BODY_READ_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): Promise<Uint8Array[]> {
   if (!body) return [];
+  if (signal?.aborted) {
+    await body.cancel().catch(() => {});
+    throw new ClientDisconnectedError();
+  }
 
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortHandler: (() => void) | undefined;
   try {
     while (true) {
+      if (signal?.aborted) {
+        throw new ClientDisconnectedError();
+      }
+      const abortPromise = signal
+        ? new Promise<never>((_, reject) => {
+            abortHandler = () => reject(new ClientDisconnectedError());
+            signal.addEventListener("abort", abortHandler, { once: true });
+          })
+        : null;
+
       const result = await Promise.race([
         reader.read(),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error("Body read timeout")), timeoutMs);
         }),
+        ...(abortPromise ? [abortPromise] : []),
       ]);
       clearTimeout(timer);
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler);
+        abortHandler = undefined;
+      }
       if (result.done) break;
       chunks.push(result.value);
     }
@@ -468,6 +489,9 @@ async function readBodyWithTimeout(
     throw err;
   } finally {
     clearTimeout(timer);
+    if (signal && abortHandler) {
+      signal.removeEventListener("abort", abortHandler);
+    }
     reader.releaseLock();
   }
 
@@ -2661,9 +2685,22 @@ async function proxyPaidApiRequest(
 
   // Cancel the upstream call (and its payment) if the client disconnects.
   const clientAbort = new AbortController();
-  res.on("close", () => {
-    if (!res.writableEnded) clientAbort.abort();
+  const onClientDisconnect = () => {
+    if (!res.writableEnded && !clientAbort.signal.aborted) {
+      clientAbort.abort();
+    }
+  };
+  res.on("close", onClientDisconnect);
+  req.on("close", () => {
+    if (!req.complete || !res.writableEnded) onClientDisconnect();
   });
+  req.socket?.on("close", onClientDisconnect);
+  if (
+    (res.destroyed || (req.destroyed && !req.complete) || req.socket?.destroyed) &&
+    !res.writableEnded
+  ) {
+    onClientDisconnect();
+  }
 
   // Billable, but ClawRouter has no local price for partner endpoints — publish
   // 0 and let the gateway's settled charge feed the windows.
@@ -2743,7 +2780,7 @@ async function proxyPaidApiRequest(
     // Read the body before answering: a read that times out then reaches the caller
     // as an error, not as a 200 with nothing in it, on a call that was already paid for.
     const chunks = upstream.body
-      ? await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS)
+      ? await readBodyWithTimeout(upstream.body, ERROR_BODY_READ_TIMEOUT_MS, clientAbort.signal)
       : [];
     res.writeHead(upstream.status, responseHeaders);
     for (const chunk of chunks) {
@@ -4597,15 +4634,27 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           );
         } catch (err) {
           if (refuseOverCostCap(res, err)) return;
-          const error = err instanceof Error ? err : new Error(String(err));
-          options.onError?.(error);
+          const isClientAbort =
+            err instanceof ClientDisconnectedError ||
+            (err instanceof Error &&
+              (err.name === "AbortError" || err.message.includes("aborted")) &&
+              (res.destroyed || req.destroyed || !res.writableEnded));
+          if (!isClientAbort) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            options.onError?.(error);
+          }
           if (!res.headersSent) {
-            res.writeHead(502, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: { message: `Partner proxy error: ${error.message}`, type: "partner_error" },
-              }),
-            );
+            if (!isClientAbort) {
+              res.writeHead(502, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  error: {
+                    message: `Partner proxy error: ${err instanceof Error ? err.message : String(err)}`,
+                    type: "partner_error",
+                  },
+                }),
+              );
+            }
           } else if (!res.writableEnded) {
             // Headers already sent (e.g. body-read timeout mid-stream) — end the
             // response instead of leaving the client hanging until socket timeout.
@@ -4650,18 +4699,32 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           );
         } catch (err) {
           if (refuseOverCostCap(res, err)) return;
-          const error = err instanceof Error ? err : new Error(String(err));
-          options.onError?.(error);
+          const isClientAbort =
+            err instanceof ClientDisconnectedError ||
+            (err instanceof Error &&
+              (err.name === "AbortError" || err.message.includes("aborted")) &&
+              (res.destroyed || req.destroyed || !res.writableEnded));
+          if (!isClientAbort) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            options.onError?.(error);
+          }
           if (!res.headersSent) {
-            res.writeHead(502, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: { message: `Account API error: ${error.message}`, type: "account_error" },
-              }),
-            );
+            if (!isClientAbort) {
+              res.writeHead(502, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  error: {
+                    message: `Account API error: ${err instanceof Error ? err.message : String(err)}`,
+                    type: "account_error",
+                  },
+                }),
+              );
+            }
           } else if (!res.writableEnded) {
             res.end();
           }
+        } finally {
+          paymentStore.getStore()?.sessionSpend?.release();
         }
         return;
       }
@@ -6828,9 +6891,10 @@ async function proxyRequest(
       if (canWrite(res)) {
         safeWrite(res, ": heartbeat\n\n");
       } else {
-        // Socket closed, stop heartbeat
+        // Socket closed, stop heartbeat and abort upstream request
         clearInterval(heartbeatInterval);
         heartbeatInterval = undefined;
+        onClientClose();
       }
     }, HEARTBEAT_INTERVAL_MS);
   }
@@ -6892,7 +6956,10 @@ async function proxyRequest(
   // True once the client is gone: the response socket is destroyed without us
   // having finished it. Used to tell a client disconnect apart from the global
   // timeout — both surface as `globalController.signal.aborted`.
-  const clientDisconnected = () => res.destroyed && !res.writableEnded;
+  const clientDisconnected = () =>
+    (res.destroyed && !res.writableEnded) ||
+    (req.destroyed && !req.complete && !res.writableEnded) ||
+    (req.socket?.destroyed && !res.writableEnded);
   const abortError = () =>
     clientDisconnected()
       ? new ClientDisconnectedError()
@@ -6904,11 +6971,20 @@ async function proxyRequest(
     }
   };
   res.on("close", onClientClose);
+  req.on("close", () => {
+    if (!req.complete && !res.writableEnded) onClientClose();
+  });
+  req.socket?.on("close", onClientClose);
   // The body was drained ~1,500 lines above and several awaits ran since
   // (context compression, the balance check). If the client hung up in that
   // window, `res` "close" has already fired and the listener above will never
   // run — check the socket state now so that disconnect still aborts.
-  if (res.destroyed) onClientClose();
+  if (
+    (res.destroyed || (req.destroyed && !req.complete) || req.socket?.destroyed) &&
+    !res.writableEnded
+  ) {
+    onClientClose();
+  }
 
   try {
     // --- Build fallback chain ---
@@ -7808,7 +7884,11 @@ async function proxyRequest(
       // OpenClaw expects: object="chat.completion.chunk" with choices[].delta (not message)
       // We emit proper incremental deltas to match OpenAI's streaming format exactly
       if (upstream.body) {
-        const chunks = await readBodyWithTimeout(upstream.body);
+        const chunks = await readBodyWithTimeout(
+          upstream.body,
+          MODEL_BODY_READ_TIMEOUT_MS,
+          globalController.signal,
+        );
 
         // Combine chunks and transform to streaming format
         const jsonBody = Buffer.concat(chunks);
@@ -8000,7 +8080,8 @@ async function proxyRequest(
               responseChunks.push(Buffer.from(finishData));
             }
           }
-        } catch {
+        } catch (err) {
+          if (err instanceof ClientDisconnectedError) throw err;
           // If parsing fails, wrap in OpenAI error format so SDKs surface a
           // meaningful message instead of throwing a generic "Unexpected error".
           const errPayload = JSON.stringify({
@@ -8109,7 +8190,11 @@ async function proxyRequest(
       // Collect full body for possible notice injection
       const bodyParts: Buffer[] = [];
       if (upstream.body) {
-        const chunks = await readBodyWithTimeout(upstream.body);
+        const chunks = await readBodyWithTimeout(
+          upstream.body,
+          MODEL_BODY_READ_TIMEOUT_MS,
+          globalController.signal,
+        );
         for (const chunk of chunks) {
           bodyParts.push(Buffer.from(chunk));
         }
