@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@blockrun/clawrouter': 0.12.309
+  '@blockrun/clawrouter': 0.12.312
   axios: ^1.20.0
   undici: ^8.12.3
   ws: ^8.21.2
@@ -30,8 +30,8 @@ importers:
   .:
     dependencies:
       '@blockrun/clawrouter':
-        specifier: 0.12.309
-        version: 0.12.309(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+        specifier: 0.12.312
+        version: 0.12.312(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@blockrun/clawrouter-codex':
         specifier: 0.4.0
         version: 0.4.0(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
@@ -187,8 +187,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@blockrun/clawrouter@0.12.309':
-    resolution: {integrity: sha512-Uc1E8Ysc2X9aWOx4wdbi7fZNto2jgiLMOd4LZ1ie++NbxqOzkmqDMYW2jA/kKsdzPaEJ7BP93wMYUqDcVJpIzw==}
+  '@blockrun/clawrouter@0.12.312':
+    resolution: {integrity: sha512-gG2CX2Eo1Q93pBJ2jKLuQ/fBMnbZuxM8fcPTIt3QXxqhNUIy1QldSaJWVOR6sZJMp8+kOXUhiTk2ngKgnNhXsw==}
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -2983,7 +2983,9 @@ packages:
   '@smithy/core@3.33.3':
     resolution: {integrity: sha512-CsOeKq/9kA3y6VJHt+/+VTCtBaxJ4OTFpgrjIUhPpDIKxBci1k2bJaQASF2h/ELWrulGp+t97DZ0mevfAD8idg==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -4909,7 +4911,7 @@ snapshots:
 
   '@blockrun/clawrouter-codex@0.4.0(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
-      '@blockrun/clawrouter': 0.12.309(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+      '@blockrun/clawrouter': 0.12.312(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.6.7)
       viem: 2.57.13(typescript@5.9.3)(zod@4.6.7)
     transitivePeerDependencies:
@@ -4928,7 +4930,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@blockrun/clawrouter@0.12.309(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
+  '@blockrun/clawrouter@0.12.312(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
       '@blockrun/llm': 3.25.0(@solana/kit@8.6.0(typescript@5.9.3))(@x402/core@2.29.0)(@x402/svm@2.29.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@noble/hashes': 2.4.0
