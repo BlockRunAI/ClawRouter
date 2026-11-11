@@ -2091,8 +2091,9 @@ export const IMAGE_MODEL_ALIASES: Record<string, string> = Object.freeze({
 // same 5% margin server-side uses, so values land on blockrun's quote.
 // Seedance is token-priced upstream — base $/sec = tokensPerSec × $/1M tokens.
 // As of blockrun e6dc1f1 (2026-05-22) the videos route defaults Seedance to
-// resolution=720p + generate_audio=true(t2v) / false(i2v), which doubles the
-// per-second token count from 10128 → 20256 vs. the older 480p baseline.
+// resolution=720p + generate_audio=true, which doubles the per-second token
+// count from 10128 → 20256 vs. the older 480p baseline. Audio was default-on
+// for t2v only until 2026-11-11; it is now default-on for every input.
 // pricePerSecondImageInput, when set, is used if the request body has image_url.
 // Since blockrun 403e61e (2026-06-01) image-to-video is NOT discounted upstream
 // (only video-to-video is cheaper) — i2v rates equal the text rates.
