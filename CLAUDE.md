@@ -57,7 +57,7 @@ src/
 - TypeScript strict mode, ESM
 - Build with tsup, test with vitest
 - Lint with eslint, format with prettier
-- Node >= 22
+- Node >= 22.19 (the floor of bundled undici 8; `test/engines-floor.test.ts` keeps `engines.node` at or above every runtime dependency's floor). Develop on Node 24: the openclaw devDependency refuses `npm ci` below 24.16
 - MIT license
 - npm registry: `@blockrun/clawrouter`
 - <!-- br:clawrouter.dimensions -->15<!-- /br:clawrouter.dimensions -->-dimension scoring for model routing (all local, < 1ms)
