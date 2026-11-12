@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@blockrun/clawrouter': 0.12.313
+  '@blockrun/clawrouter': 0.12.314
   axios: ^1.20.0
   undici: ^8.12.3
   ws: ^8.21.2
@@ -30,8 +30,8 @@ importers:
   .:
     dependencies:
       '@blockrun/clawrouter':
-        specifier: 0.12.313
-        version: 0.12.313(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+        specifier: 0.12.314
+        version: 0.12.314(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@blockrun/clawrouter-codex':
         specifier: 0.4.0
         version: 0.4.0(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
@@ -187,8 +187,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@blockrun/clawrouter@0.12.313':
-    resolution: {integrity: sha512-MnT0qAgu8l2E1P5KepXAV3M2ku1qNB6qJg2tSfXkKqFvK94QP/UrgflNRyYXsgjLGmaB3s/gKEcIOpP3Np2CIA==}
+  '@blockrun/clawrouter@0.12.314':
+    resolution: {integrity: sha512-s63CweoSrdIW5m8Abw16hfgNqqEj8xHn7DiVdAJk7XtNP2HpXTfvBF7MoXa1ALcEQqDrwqrK0Ro8Ctwg0zw7ag==}
     engines: {node: '>=22.19.0'}
     hasBin: true
     peerDependencies:
@@ -4911,7 +4911,7 @@ snapshots:
 
   '@blockrun/clawrouter-codex@0.4.0(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
-      '@blockrun/clawrouter': 0.12.313(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+      '@blockrun/clawrouter': 0.12.314(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.6.7)
       viem: 2.57.13(typescript@5.9.3)(zod@4.6.7)
     transitivePeerDependencies:
@@ -4930,7 +4930,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@blockrun/clawrouter@0.12.313(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
+  '@blockrun/clawrouter@0.12.314(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
       '@blockrun/llm': 3.25.0(@solana/kit@8.6.0(typescript@5.9.3))(@x402/core@2.30.0)(@x402/svm@2.30.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@noble/hashes': 2.4.0
