@@ -17,7 +17,7 @@ text-to-video. The video tool and docs say so, and the bundled model catalog
 ### Node 22.19 or newer
 
 The bundled undici 8 needs Node 22.19, so `engines.node` now says `>=22.19`.
-Install now refuses an older Node up front.
+npm warns at install time on an older Node.
 
 ---
 
