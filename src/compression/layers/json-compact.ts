@@ -16,16 +16,36 @@ export interface JsonCompactResult {
 }
 
 /**
- * Compact a JSON string by parsing and re-stringifying without formatting.
+ * Compact a JSON string by removing whitespace between tokens.
+ *
+ * Tokens are copied as written. Re-stringifying a parsed value would change the
+ * data: integers above 2^53 lose digits and 1e400 becomes null.
  */
 function compactJson(jsonString: string): string {
+  // A client body can hold null or a number here.
+  if (typeof jsonString !== "string") return jsonString;
   try {
-    const parsed = JSON.parse(jsonString);
-    return JSON.stringify(parsed);
+    JSON.parse(jsonString); // only touch valid JSON
   } catch {
-    // Not valid JSON, return as-is
     return jsonString;
   }
+
+  let out = "";
+  let start = 0;
+  let inString = false;
+  for (let i = 0; i < jsonString.length; i++) {
+    const ch = jsonString[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      out += jsonString.slice(start, i);
+      start = i + 1;
+    }
+  }
+  return out + jsonString.slice(start);
 }
 
 /**
