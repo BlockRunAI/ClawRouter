@@ -16,12 +16,23 @@ export interface JsonCompactResult {
 }
 
 /**
- * Compact a JSON string by parsing and re-stringifying without formatting.
+ * Minify a JSON string by removing whitespace outside string literals.
+ * This preserves number representations losslessly, including integers
+ * above Number.MAX_SAFE_INTEGER, arbitrary precision decimals, and exponents.
  */
-function compactJson(jsonString: string): string {
+function minifyJson(jsonString: string): string {
+  return jsonString.replace(/("(?:\\(?:[\s\S])|[^"\\])*")|[ \t\n\r]+/g, (match, str) =>
+    str !== undefined ? str : "",
+  );
+}
+
+/**
+ * Compact a JSON string by validating and stripping whitespace without re-serializing.
+ */
+export function compactJson(jsonString: string): string {
   try {
-    const parsed = JSON.parse(jsonString);
-    return JSON.stringify(parsed);
+    JSON.parse(jsonString);
+    return minifyJson(jsonString);
   } catch {
     // Not valid JSON, return as-is
     return jsonString;
