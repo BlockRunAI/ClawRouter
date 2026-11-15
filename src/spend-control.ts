@@ -486,11 +486,10 @@ export class SpendControl {
       data = this.storage.load();
     } catch (err) {
       if (err instanceof UnreadableSpendPolicyError) {
-        // The constructor can start fresh on an unreadable file because it has
-        // nothing to lose. A reload does: dropping the live limits here would
-        // widen what the agent may pay because a read failed. Keep enforcing
-        // what is already loaded and leave any refusal state alone.
-        console.error(`${err.message} — keeping the limits already in effect`);
+        // Dropping the live limits here would widen what the agent may pay
+        // because a read failed. Keep enforcing what is already loaded and
+        // leave any refusal state alone.
+        console.error(`${err.message}: keeping the limits already in effect`);
         return;
       }
       if (!(err instanceof MalformedSpendPolicyError)) throw err;
@@ -893,25 +892,20 @@ export class SpendControl {
     try {
       data = this.storage.load();
     } catch (err) {
-      if (err instanceof UnreadableSpendPolicyError) {
-        // Unchanged startup behaviour: begin with no limits, and say loudly
-        // that whatever the file configured is not in effect.
+      if (err instanceof UnreadableSpendPolicyError || err instanceof MalformedSpendPolicyError) {
+        // Refuse every paid request rather than either (a) running with the
+        // policy silently dropped on restart or an unreadable file, or (b)
+        // throwing out of the constructor and taking the whole proxy down,
+        // which would kill free models too, for a file that only governs
+        // payments.
+        this.policyFileBroken = err.message;
+        console.error(`[ClawRouter] ${err.message}`);
         console.error(
-          `${err.message} — starting fresh (any configured spend policy is NOT in effect until this file is repaired)`,
+          "[ClawRouter] All paid requests will be refused until spending.json is repaired. Free models are unaffected.",
         );
         return;
       }
-      if (!(err instanceof MalformedSpendPolicyError)) throw err;
-      // Refuse every paid request rather than either (a) running with the
-      // policy silently dropped, or (b) throwing out of the constructor and
-      // taking the whole proxy down — which would kill free models too, for a
-      // file that only governs payments.
-      this.policyFileBroken = err.message;
-      console.error(`[ClawRouter] ${err.message}`);
-      console.error(
-        "[ClawRouter] All paid requests will be refused until spending.json is repaired. Free models are unaffected.",
-      );
-      return;
+      throw err;
     }
     if (data) {
       this.limits = cloneLimits(data.limits);

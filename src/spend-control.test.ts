@@ -461,17 +461,21 @@ describe("counterparty policy", () => {
 describe("FileSpendControlStorage persistence", () => {
   let tmpHome: string | undefined;
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
 
   afterEach(() => {
     if (tmpHome) fs.rmSync(tmpHome, { recursive: true, force: true });
     tmpHome = undefined;
     if (originalHome !== undefined) process.env.HOME = originalHome;
     else delete process.env.HOME;
+    if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+    else delete process.env.USERPROFILE;
   });
 
   it("round-trips policy lists, not just spend limits, across save/load", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -498,6 +502,7 @@ describe("FileSpendControlStorage persistence", () => {
   it("refuses to load when a policy list has a malformed entry", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -516,6 +521,7 @@ describe("FileSpendControlStorage persistence", () => {
     // would take the proxy down over a legal edit.
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -534,6 +540,7 @@ describe("FileSpendControlStorage persistence", () => {
   it("normalizes persisted checksummed payees on load", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -557,6 +564,7 @@ describe("FileSpendControlStorage persistence", () => {
     // on every payment would erase an operator's hand-edit seconds later.
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const spendingFile = path.join(tmpHome, ".openclaw", "blockrun", "spending.json");
@@ -969,6 +977,25 @@ describe("reloadLimits (in-process proxy restart)", () => {
     live.reloadLimits();
     expect(live.check(0.01).allowed).toBe(true);
     expect(live.getPolicyFileError()).toBeUndefined();
+    errors.mockRestore();
+  });
+
+  it("fails closed and records policy file error when constructor encounters an unreadable policy file", () => {
+    class AlwaysTornStorage extends InMemorySpendControlStorage {
+      override load() {
+        throw new UnreadableSpendPolicyError(new Error("EACCES: permission denied"));
+        return super.load();
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const control = new SpendControl({ storage: new AlwaysTornStorage() });
+    expect(control.getPolicyFileError()).toMatch(/EACCES: permission denied/);
+    const result = control.check(0.01);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Spend policy is unreadable, refusing all payments/);
+    const amountResult = control.checkAmount(0.01);
+    expect(amountResult.allowed).toBe(false);
+    expect(amountResult.reason).toMatch(/Spend policy is unreadable, refusing all payments/);
     errors.mockRestore();
   });
 });
