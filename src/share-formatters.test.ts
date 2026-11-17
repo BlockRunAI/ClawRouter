@@ -419,4 +419,24 @@ describe("splitTelegramMessage", () => {
     expect(chunks.length).toBe(2);
     expect(chunks.every((c) => c.length <= 4096 + 30)).toBe(true); // +30 for (i/N) suffix
   });
+
+  it("hard-splits a single line longer than the 4096-char limit", () => {
+    const longLine = "x".repeat(9000);
+    const chunks = splitTelegramMessage(longLine);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(4096);
+    // Every character of the original line survives the split (the suffix has no x).
+    expect(chunks.join("").match(/x/g)?.length ?? 0).toBe(9000);
+  });
+
+  it("hard-splits an over-long line without dropping its neighbouring lines", () => {
+    const big = "intro\n" + "y".repeat(5000) + "\noutro";
+    const chunks = splitTelegramMessage(big);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(4096);
+    const joined = chunks.join("");
+    expect(joined).toContain("intro");
+    expect(joined).toContain("outro");
+    expect(joined.match(/y/g)?.length ?? 0).toBe(5000);
+  });
 });
