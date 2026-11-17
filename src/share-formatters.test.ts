@@ -439,4 +439,56 @@ describe("splitTelegramMessage", () => {
     expect(joined).toContain("outro");
     expect(joined.match(/y/g)?.length ?? 0).toBe(5000);
   });
+
+  it("does not split a UTF-16 surrogate pair at the hard-split boundary", () => {
+    // "x"*4071 + emoji (2 code units) + "yyyy" -> the first hard-split boundary
+    // (4072) used to land between the emoji's high and low surrogates.
+    const input = "x".repeat(4071) + "😀yyyy\n" + "z".repeat(30);
+    const chunks = splitTelegramMessage(input);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(4096);
+      for (let i = 0; i < chunk.length; i++) {
+        const unit = chunk.charCodeAt(i);
+        // No chunk may contain a lone high or low surrogate.
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+          expect(chunk.charCodeAt(i + 1) >= 0xdc00 && chunk.charCodeAt(i + 1) <= 0xdfff).toBe(true);
+        } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+          expect(chunk.charCodeAt(i - 1) >= 0xd800 && chunk.charCodeAt(i - 1) <= 0xdbff).toBe(true);
+        }
+      }
+    }
+    // The emoji (both surrogates) survives in exactly one chunk.
+    const emoji = "😀";
+    expect(chunks.filter((c) => c.includes(emoji)).length).toBe(1);
+  });
+
+  it("does not end a hard-split chunk on a dangling MarkdownV2 escape backslash", () => {
+    // transformForTelegramSplit escapes "!" -> "\!"; a boundary used to leave a
+    // trailing lone "\" in one chunk and an unescaped "!" at the start of the next.
+    // transformForTelegramSplit escapes "!" -> "\!" and then splits in one step.
+    const chunks = transformForTelegramSplit("x".repeat(4071) + "!yyyy\n" + "z".repeat(30));
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(4096);
+      const content = chunk.replace(/\n\n\\\(\d+\/\d+\\\)$/, "");
+      let trailing = 0;
+      for (let i = content.length - 1; i >= 0 && content[i] === "\\"; i--) trailing++;
+      expect(trailing % 2).toBe(0);
+    }
+  });
+
+  it("handles supplementary-only text, combining marks, and empty input at boundaries", () => {
+    expect(splitTelegramMessage("")).toEqual([""]);
+    const below = "x".repeat(4095);
+    expect(splitTelegramMessage(below)).toEqual([below]);
+    const atLimit = "x".repeat(4096);
+    expect(splitTelegramMessage(atLimit)).toEqual([atLimit]);
+    const over = "x".repeat(4097);
+    expect(splitTelegramMessage(over).length).toBeGreaterThan(1);
+
+    for (const sample of ["😀".repeat(3000), "e\u0301".repeat(3000), "\u{1F680}".repeat(2500)]) {
+      const chunks = splitTelegramMessage(sample);
+      expect(chunks.length).toBeGreaterThan(1);
+      for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(4096);
+    }
+  });
 });

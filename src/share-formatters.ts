@@ -39,6 +39,9 @@ const TELEGRAM_MAX_LEN = 4096;
 const TELEGRAM_SUFFIX_RESERVE = 24;
 const TELEGRAM_CHUNK_CONTENT_LIMIT = TELEGRAM_MAX_LEN - TELEGRAM_SUFFIX_RESERVE;
 
+const isHighSurrogate = (unit: number): boolean => unit >= 0xd800 && unit <= 0xdbff;
+const isLowSurrogate = (unit: number): boolean => unit >= 0xdc00 && unit <= 0xdfff;
+
 // Sentinel strings for placeholder substitution. Long enough to never collide with
 // real text the assistant emits.
 const PH_BOLD = "__CR_PH_BOLD_";
@@ -389,6 +392,22 @@ function preProcessTelegram(text: string): string {
   return text.replace(/^(#{1,6}) +(.+)$/gm, (_, _h: string, body: string) => `**${body.trim()}**`);
 }
 
+/**
+ * Pick a hard-split end that never lands between a UTF-16 surrogate pair or
+ * inside a MarkdownV2 `\X` escape pair, so each emitted chunk is self-contained.
+ */
+function safeSplitEnd(line: string, start: number, limit: number): number {
+  let end = Math.min(start + limit, line.length);
+  if (end >= line.length) return end;
+  if (isHighSurrogate(line.charCodeAt(end - 1)) && isLowSurrogate(line.charCodeAt(end))) {
+    end--;
+  }
+  let backslashes = 0;
+  for (let j = end - 1; j >= start && line[j] === "\\"; j--) backslashes++;
+  if (backslashes % 2 === 1 && end - 1 > start) end--;
+  return end;
+}
+
 function splitTelegramMessage(s: string): string[] {
   if (s.length <= TELEGRAM_MAX_LEN) return [s];
   const chunks: string[] = [];
@@ -406,8 +425,10 @@ function splitTelegramMessage(s: string): string[] {
       // a code line with no newlines), instead of emitting an oversized message
       // that sendMessage rejects outright.
       flush();
-      for (let i = 0; i < line.length; i += TELEGRAM_CHUNK_CONTENT_LIMIT) {
-        chunks.push(line.slice(i, i + TELEGRAM_CHUNK_CONTENT_LIMIT));
+      for (let i = 0; i < line.length;) {
+        const end = safeSplitEnd(line, i, TELEGRAM_CHUNK_CONTENT_LIMIT);
+        chunks.push(line.slice(i, end));
+        i = end;
       }
       continue;
     }
