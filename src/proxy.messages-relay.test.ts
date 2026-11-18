@@ -157,6 +157,71 @@ describe.each(["wallet", "key"] as const)("/v1/messages on the %s rail", (rail) 
       expect(await res.text()).toBe("event: message_stop\n\n");
     }
   });
+
+  it("releases in-flight budget reservation immediately when client disconnects during SSE relay", async () => {
+    let upstreamAbortedResolve: () => void;
+    const upstreamAborted = new Promise<void>((r) => {
+      upstreamAbortedResolve = r;
+    });
+
+    handler = (res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write("event: message_start\n\n");
+      res.on("close", () => {
+        if (!res.writableEnded) upstreamAbortedResolve();
+      });
+    };
+
+    // Cap is $0.020. Each request holds an estimate of $0.008.
+    // If the in-flight hold is NOT released on disconnect, a second request would be rejected
+    // (on wallet rail: 0.008 spent + 0.008 dangling hold + 0.008 next estimate = 0.024 > 0.020).
+    const p = await proxy(rail, { maxCostPerRunUsd: 0.02, maxCostPerRunMode: "strict" });
+    const client = new AbortController();
+    const res = await post(p, "/v1/messages", client.signal);
+    await res.body!.getReader().read();
+
+    // Client disconnects mid-stream
+    client.abort();
+    await upstreamAborted;
+
+    // Next request must be admitted because the hold was released
+    handler = (res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.end("event: message_stop\n\n");
+    };
+    const nextRes = await post(p, "/v1/messages");
+    expect(nextRes.status).toBe(200);
+    expect(await nextRes.text()).toBe("event: message_stop\n\n");
+  });
+});
+
+describe("client-disconnect listeners on a keep-alive connection", () => {
+  it("does not add a socket listener per request", async () => {
+    // Sequential requests reuse one pooled connection. A per-request
+    // `req.socket.on("close")` piles up a listener (and its closure over
+    // `res`) for the life of that connection, and Node warns past 10.
+    const warnings: Error[] = [];
+    const onWarning = (w: Error) => {
+      if (w.name === "MaxListenersExceededWarning") warnings.push(w);
+    };
+    process.on("warning", onWarning);
+    try {
+      handler = (res) => {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.end("event: message_stop\n\n");
+      };
+      const p = await proxy("key");
+      for (let i = 0; i < 15; i++) {
+        const res = await post(p, "/v1/messages");
+        expect(res.status).toBe(200);
+        await res.text();
+      }
+      await new Promise((r) => setImmediate(r));
+      expect(warnings).toEqual([]);
+    } finally {
+      process.off("warning", onWarning);
+    }
+  });
 });
 
 describe("a buffered route", () => {
