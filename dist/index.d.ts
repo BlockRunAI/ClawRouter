@@ -904,7 +904,7 @@ interface SpendControlStorage {
 }
 declare class FileSpendControlStorage implements SpendControlStorage {
     private readonly spendingFile;
-    constructor();
+    constructor(spendingFile?: string);
     load(): {
         limits: SpendLimits;
         history: SpendRecord[];
@@ -958,6 +958,8 @@ declare class SpendControl {
     private diskLimits;
     /** Set when spending.json held an unusable policy list: refuse every payment. */
     private policyFileBroken?;
+    /** Whether persisted history loaded successfully; when false, recovery from an initial failure restores history. */
+    private initialHistoryLoaded;
     private readonly storage;
     private readonly now;
     constructor(options?: SpendControlOptions);

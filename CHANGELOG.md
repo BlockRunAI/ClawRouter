@@ -4,6 +4,51 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.315 — November 17, 2026
+
+### A client that hangs up stops the upstream call and frees its cost-cap hold
+
+When a client disconnected during a streamed or buffered reply, ClawRouter kept
+reading from the gateway until the body finished or a 5-minute timeout ran out.
+In strict cost-cap mode the request's hold stayed reserved for that time, so the
+next request in the session could be refused with `cost_cap_exceeded`. A
+disconnect now interrupts the read at once, and the account route releases its
+hold on every exit. A client that is still connected always gets a response: an
+upstream abort is no longer mistaken for the client leaving. Disconnect
+detection uses one listener per response, so keep-alive connections no longer
+collect a listener per request. (#578, thanks @Tyagiquamar)
+
+### An unreadable spending.json refuses paid calls instead of dropping the policy
+
+If `spending.json` existed but could not be read at startup (permissions, a
+truncated write), ClawRouter started with no limits, and the first payment then
+rewrote the file with the limits removed. It now refuses paid requests until the
+file is repaired, exactly as it already did for a malformed policy list. Free
+models keep working. A missing file still means "no policy". (#608, fixes #606,
+thanks @Tyagiquamar)
+
+### JSON compaction keeps numbers exactly as written
+
+The compaction layer, which runs on requests over 180 KB, re-serialized tool
+arguments and tool results, so integers above 2^53 lost digits and `1e400`
+became `null`. A long agent session could send the model a different ID than
+the tool returned. It now only removes whitespace outside strings. (#594, fixes
+#593, thanks @goranai)
+
+### Long Telegram shares split cleanly
+
+A single line longer than Telegram's 4096-character limit (a long URL, minified
+JSON) was sent as one oversized message that Telegram rejects. Such lines are now
+split, never inside an emoji or a MarkdownV2 escape, and every part leaves room
+for its `(i/N)` marker. (#615, thanks @Tyagiquamar)
+
+### Dependencies
+
+x402 packages 2.31 (all four in lockstep), axios 1.21.1,
+`@polymarket/clob-client-v2` 1.2.1, and dev-dependency updates.
+
+---
+
 ## v0.12.314 — November 12, 2026
 
 ### Catalog sync: Gemini 4 Carbon, Fable 5.2, Kimi K3.1 Pro
