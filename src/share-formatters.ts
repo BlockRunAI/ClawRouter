@@ -31,6 +31,17 @@ export function isSharePreset(s: string): s is SharePreset {
 /** Telegram MarkdownV2 max message length. Longer messages are split. */
 const TELEGRAM_MAX_LEN = 4096;
 
+/**
+ * Room reserved in each chunk for the `\n\n\(i/N\)` part suffix. The suffix is
+ * appended after splitting and its width depends on the final chunk count, so
+ * content is capped below the hard limit to guarantee every emitted chunk fits.
+ */
+const TELEGRAM_SUFFIX_RESERVE = 24;
+const TELEGRAM_CHUNK_CONTENT_LIMIT = TELEGRAM_MAX_LEN - TELEGRAM_SUFFIX_RESERVE;
+
+const isHighSurrogate = (unit: number): boolean => unit >= 0xd800 && unit <= 0xdbff;
+const isLowSurrogate = (unit: number): boolean => unit >= 0xdc00 && unit <= 0xdfff;
+
 // Sentinel strings for placeholder substitution. Long enough to never collide with
 // real text the assistant emits.
 const PH_BOLD = "__CR_PH_BOLD_";
@@ -381,19 +392,54 @@ function preProcessTelegram(text: string): string {
   return text.replace(/^(#{1,6}) +(.+)$/gm, (_, _h: string, body: string) => `**${body.trim()}**`);
 }
 
+/**
+ * Pick a hard-split end that never lands between a UTF-16 surrogate pair or
+ * inside a MarkdownV2 `\X` escape pair, so each emitted chunk is self-contained.
+ */
+function safeSplitEnd(line: string, start: number, limit: number): number {
+  let end = Math.min(start + limit, line.length);
+  if (end >= line.length) return end;
+  if (isHighSurrogate(line.charCodeAt(end - 1)) && isLowSurrogate(line.charCodeAt(end))) {
+    end--;
+  }
+  let backslashes = 0;
+  for (let j = end - 1; j >= start && line[j] === "\\"; j--) backslashes++;
+  if (backslashes % 2 === 1 && end - 1 > start) end--;
+  return end;
+}
+
 function splitTelegramMessage(s: string): string[] {
   if (s.length <= TELEGRAM_MAX_LEN) return [s];
   const chunks: string[] = [];
   let buf = "";
+  const flush = () => {
+    if (buf.length > 0) {
+      chunks.push(buf);
+      buf = "";
+    }
+  };
   for (const line of s.split("\n")) {
-    if (buf.length + line.length + 1 > TELEGRAM_MAX_LEN) {
-      if (buf.length > 0) chunks.push(buf);
+    if (line.length > TELEGRAM_CHUNK_CONTENT_LIMIT) {
+      // A single line longer than the cap cannot be broken at a line boundary.
+      // Hard-split it so no chunk exceeds Telegram's limit (e.g. a long URL or
+      // a code line with no newlines), instead of emitting an oversized message
+      // that sendMessage rejects outright.
+      flush();
+      for (let i = 0; i < line.length;) {
+        const end = safeSplitEnd(line, i, TELEGRAM_CHUNK_CONTENT_LIMIT);
+        chunks.push(line.slice(i, end));
+        i = end;
+      }
+      continue;
+    }
+    if (buf.length + line.length + 1 > TELEGRAM_CHUNK_CONTENT_LIMIT) {
+      flush();
       buf = line;
     } else {
       buf = buf ? buf + "\n" + line : line;
     }
   }
-  if (buf.length > 0) chunks.push(buf);
+  flush();
   if (chunks.length > 1) {
     return chunks.map((c, i) => `${c}\n\n\\(${i + 1}/${chunks.length}\\)`);
   }
