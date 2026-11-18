@@ -195,6 +195,35 @@ describe.each(["wallet", "key"] as const)("/v1/messages on the %s rail", (rail) 
   });
 });
 
+describe("client-disconnect listeners on a keep-alive connection", () => {
+  it("does not add a socket listener per request", async () => {
+    // Sequential requests reuse one pooled connection. A per-request
+    // `req.socket.on("close")` piles up a listener (and its closure over
+    // `res`) for the life of that connection, and Node warns past 10.
+    const warnings: Error[] = [];
+    const onWarning = (w: Error) => {
+      if (w.name === "MaxListenersExceededWarning") warnings.push(w);
+    };
+    process.on("warning", onWarning);
+    try {
+      handler = (res) => {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        res.end("event: message_stop\n\n");
+      };
+      const p = await proxy("key");
+      for (let i = 0; i < 15; i++) {
+        const res = await post(p, "/v1/messages");
+        expect(res.status).toBe(200);
+        await res.text();
+      }
+      await new Promise((r) => setImmediate(r));
+      expect(warnings).toEqual([]);
+    } finally {
+      process.off("warning", onWarning);
+    }
+  });
+});
+
 describe("a buffered route", () => {
   it.each(["wallet", "key"] as const)(
     "answers 502, not an empty 200, when the body can't be read (%s rail)",

@@ -439,15 +439,31 @@ class ClientDisconnectedError extends Error {
   }
 }
 
+/**
+ * True when `err` is the client hanging up, not an upstream failure. An abort
+ * only counts when the response really was torn down without us finishing it:
+ * matching on the error text alone would swallow an upstream abort and leave a
+ * still-connected client without a response.
+ */
+function isClientAbortError(err: unknown, res: ServerResponse): boolean {
+  if (err instanceof ClientDisconnectedError) return true;
+  if (!(err instanceof Error)) return false;
+  const clientGone = res.destroyed && !res.writableEnded;
+  return clientGone && (err.name === "AbortError" || err.message.includes("aborted"));
+}
+
 async function readBodyWithTimeout(
   body: ReadableStream<Uint8Array> | null,
   timeoutMs: number = MODEL_BODY_READ_TIMEOUT_MS,
   signal?: AbortSignal,
+  // What an abort of `signal` means. A signal that also fires on a timeout must
+  // say so here, or a timeout reads as the client hanging up.
+  abortError: () => Error = () => new ClientDisconnectedError(),
 ): Promise<Uint8Array[]> {
   if (!body) return [];
   if (signal?.aborted) {
     await body.cancel().catch(() => {});
-    throw new ClientDisconnectedError();
+    throw abortError();
   }
 
   const reader = body.getReader();
@@ -458,11 +474,11 @@ async function readBodyWithTimeout(
   try {
     while (true) {
       if (signal?.aborted) {
-        throw new ClientDisconnectedError();
+        throw abortError();
       }
       const abortPromise = signal
         ? new Promise<never>((_, reject) => {
-            abortHandler = () => reject(new ClientDisconnectedError());
+            abortHandler = () => reject(abortError());
             signal.addEventListener("abort", abortHandler, { once: true });
           })
         : null;
@@ -2691,15 +2707,12 @@ async function proxyPaidApiRequest(
       clientAbort.abort();
     }
   };
+  // `res` "close" is the per-request disconnect signal. Don't listen on
+  // `req.socket`: it outlives the request on a keep-alive connection, so a
+  // listener per request piles up for the life of that connection. And `req`
+  // "close" already fired when the body above was drained.
   res.on("close", onClientDisconnect);
-  req.on("close", () => {
-    if (!req.complete || !res.writableEnded) onClientDisconnect();
-  });
-  req.socket?.on("close", onClientDisconnect);
-  if (
-    (res.destroyed || (req.destroyed && !req.complete) || req.socket?.destroyed) &&
-    !res.writableEnded
-  ) {
+  if ((res.destroyed || req.socket?.destroyed) && !res.writableEnded) {
     onClientDisconnect();
   }
 
@@ -4635,27 +4648,21 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           );
         } catch (err) {
           if (refuseOverCostCap(res, err)) return;
-          const isClientAbort =
-            err instanceof ClientDisconnectedError ||
-            (err instanceof Error &&
-              (err.name === "AbortError" || err.message.includes("aborted")) &&
-              (res.destroyed || req.destroyed || !res.writableEnded));
-          if (!isClientAbort) {
-            const error = err instanceof Error ? err : new Error(String(err));
-            options.onError?.(error);
-          }
-          if (!res.headersSent) {
-            if (!isClientAbort) {
-              res.writeHead(502, { "Content-Type": "application/json" });
-              res.end(
-                JSON.stringify({
-                  error: {
-                    message: `Partner proxy error: ${err instanceof Error ? err.message : String(err)}`,
-                    type: "partner_error",
-                  },
-                }),
-              );
-            }
+          const clientGone = isClientAbortError(err, res);
+          if (!clientGone) options.onError?.(err instanceof Error ? err : new Error(String(err)));
+          if (clientGone) {
+            // The client is gone: nothing to answer.
+            if (!res.writableEnded) res.destroy();
+          } else if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: {
+                  message: `Partner proxy error: ${err instanceof Error ? err.message : String(err)}`,
+                  type: "partner_error",
+                },
+              }),
+            );
           } else if (!res.writableEnded) {
             // Headers already sent (e.g. body-read timeout mid-stream) — end the
             // response instead of leaving the client hanging until socket timeout.
@@ -4700,27 +4707,21 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
           );
         } catch (err) {
           if (refuseOverCostCap(res, err)) return;
-          const isClientAbort =
-            err instanceof ClientDisconnectedError ||
-            (err instanceof Error &&
-              (err.name === "AbortError" || err.message.includes("aborted")) &&
-              (res.destroyed || req.destroyed || !res.writableEnded));
-          if (!isClientAbort) {
-            const error = err instanceof Error ? err : new Error(String(err));
-            options.onError?.(error);
-          }
-          if (!res.headersSent) {
-            if (!isClientAbort) {
-              res.writeHead(502, { "Content-Type": "application/json" });
-              res.end(
-                JSON.stringify({
-                  error: {
-                    message: `Account API error: ${err instanceof Error ? err.message : String(err)}`,
-                    type: "account_error",
-                  },
-                }),
-              );
-            }
+          const clientGone = isClientAbortError(err, res);
+          if (!clientGone) options.onError?.(err instanceof Error ? err : new Error(String(err)));
+          if (clientGone) {
+            // The client is gone: nothing to answer.
+            if (!res.writableEnded) res.destroy();
+          } else if (!res.headersSent) {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: {
+                  message: `Account API error: ${err instanceof Error ? err.message : String(err)}`,
+                  type: "account_error",
+                },
+              }),
+            );
           } else if (!res.writableEnded) {
             res.end();
           }
@@ -6958,9 +6959,7 @@ async function proxyRequest(
   // having finished it. Used to tell a client disconnect apart from the global
   // timeout — both surface as `globalController.signal.aborted`.
   const clientDisconnected = () =>
-    (res.destroyed && !res.writableEnded) ||
-    (req.destroyed && !req.complete && !res.writableEnded) ||
-    (req.socket?.destroyed && !res.writableEnded);
+    (res.destroyed || req.socket?.destroyed === true) && !res.writableEnded;
   const abortError = () =>
     clientDisconnected()
       ? new ClientDisconnectedError()
@@ -6971,19 +6970,14 @@ async function proxyRequest(
       globalController.abort();
     }
   };
+  // Only `res` "close": a per-request `req.socket` listener would pile up on a
+  // keep-alive connection (see proxyPaidApiRequest).
   res.on("close", onClientClose);
-  req.on("close", () => {
-    if (!req.complete && !res.writableEnded) onClientClose();
-  });
-  req.socket?.on("close", onClientClose);
   // The body was drained ~1,500 lines above and several awaits ran since
   // (context compression, the balance check). If the client hung up in that
   // window, `res` "close" has already fired and the listener above will never
   // run — check the socket state now so that disconnect still aborts.
-  if (
-    (res.destroyed || (req.destroyed && !req.complete) || req.socket?.destroyed) &&
-    !res.writableEnded
-  ) {
+  if (clientDisconnected()) {
     onClientClose();
   }
 
@@ -7889,6 +7883,7 @@ async function proxyRequest(
           upstream.body,
           MODEL_BODY_READ_TIMEOUT_MS,
           globalController.signal,
+          abortError,
         );
 
         // Combine chunks and transform to streaming format
@@ -8082,7 +8077,10 @@ async function proxyRequest(
             }
           }
         } catch (err) {
+          // An abort (client gone or request timeout) is not a parse failure.
+          // Report the abort itself, whatever the parser threw on the way out.
           if (err instanceof ClientDisconnectedError) throw err;
+          if (globalController.signal.aborted) throw abortError();
           // If parsing fails, wrap in OpenAI error format so SDKs surface a
           // meaningful message instead of throwing a generic "Unexpected error".
           const errPayload = JSON.stringify({
@@ -8195,6 +8193,7 @@ async function proxyRequest(
           upstream.body,
           MODEL_BODY_READ_TIMEOUT_MS,
           globalController.signal,
+          abortError,
         );
         for (const chunk of chunks) {
           bodyParts.push(Buffer.from(chunk));
