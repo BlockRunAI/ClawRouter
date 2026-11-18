@@ -1090,3 +1090,75 @@ describe("reloadLimits (in-process proxy restart)", () => {
     }
   });
 });
+
+/**
+ * GHSA-9xv2-9567-rxrw: separate proxy processes on one wallet share one
+ * spending.json. Each SpendControl below stands in for one process: its own
+ * in-memory ledger and reservations, the same file underneath.
+ */
+describe("hourly/daily windows across processes sharing spending.json", () => {
+  let dir: string | undefined;
+  afterEach(() => {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  function sharedFile(limits: { hourly?: number; daily?: number }) {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-xproc-"));
+    const file = path.join(dir, "spending.json");
+    fs.writeFileSync(file, JSON.stringify({ limits, history: [] }));
+    const proc = () => new SpendControl({ storage: new FileSpendControlStorage(file) });
+    const stored = () =>
+      (JSON.parse(fs.readFileSync(file, "utf8")) as { history: { amount: number }[] }).history;
+    return { proc, stored };
+  }
+
+  it("a process started before another one paid still sees that payment", () => {
+    const { proc, stored } = sharedFile({ hourly: 1 });
+    const [a, b, c, d] = [proc(), proc(), proc(), proc()];
+
+    expect(a.check(0.6).allowed).toBe(true);
+    a.record(0.6);
+
+    // The report's fan-out: B, C and D were all started before A paid.
+    for (const p of [b, c, d]) {
+      const result = p.check(0.6);
+      expect(result.allowed).toBe(false);
+      expect(result.blockedBy).toBe("hourly");
+    }
+    expect(stored().map((r) => r.amount)).toEqual([0.6]);
+  });
+
+  it("each process's spend survives the other's write", () => {
+    const { proc, stored } = sharedFile({ daily: 10 });
+    const a = proc();
+    const b = proc();
+
+    a.record(0.25);
+    b.record(0.5); // used to replace the file with B's ledger alone
+    a.record(0.125);
+
+    // Same-millisecond records have no meaningful order; compare as a set.
+    expect(
+      stored()
+        .map((r) => r.amount)
+        .sort(),
+    ).toEqual([0.125, 0.25, 0.5]);
+    expect(a.getSpending("daily")).toBeCloseTo(0.875);
+    b.check(0); // a check re-reads the file
+    expect(b.getSpending("daily")).toBeCloseTo(0.875);
+  });
+
+  it("records written before ids existed merge without double-counting", () => {
+    const { proc, stored } = sharedFile({ hourly: 1 });
+    const legacy = { timestamp: Date.now() - 1000, amount: 0.3 };
+    const file = path.join(dir!, "spending.json");
+    fs.writeFileSync(file, JSON.stringify({ limits: { hourly: 1 }, history: [legacy] }));
+
+    const a = proc();
+    a.record(0.2);
+    a.check(0);
+    expect(stored().map((r) => r.amount)).toEqual([0.3, 0.2]);
+    expect(a.getSpending("hourly")).toBeCloseTo(0.5);
+  });
+});

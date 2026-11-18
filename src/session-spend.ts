@@ -63,6 +63,8 @@ export class SessionSpend {
   private signedMicros = 0n;
   /** Each signature this request made, in order, at the amount that still counts. */
   private readonly signedLog: bigint[] = [];
+  /** API-key rail: the latest dispatch's charge was reported by the gateway and recorded. */
+  private lastDispatchCharged = false;
   private released = false;
 
   private constructor(
@@ -185,14 +187,35 @@ export class SessionSpend {
   }
 
   /**
+   * API-key rail: a dispatch is about to go out. Its charge, if the gateway
+   * reports one, belongs to it alone — an earlier attempt's reported charge
+   * must not stand in for this one's estimate.
+   */
+  beginDispatch(): void {
+    this.lastDispatchCharged = false;
+  }
+
+  /**
+   * API-key rail: the gateway reported what it charged for the latest
+   * dispatch (`x-blockrun-cost-usd`), on whatever status. It is spend now.
+   */
+  recordCharged(chargedMicros: bigint): void {
+    this.lastDispatchCharged = true;
+    if (chargedMicros <= 0n) return;
+    this.store.addSessionCost(this.sessionId, chargedMicros);
+    this.shrinkHold(chargedMicros);
+  }
+
+  /**
    * An attempt succeeded. When nothing was signed for this request (the API
-   * key rail), the local estimate is the only record of the spend. When a
-   * payment was signed, it is already recorded at its real amount.
+   * key rail), the local estimate is the only record of the spend — unless the
+   * gateway reported the winning dispatch's charge, which is already recorded.
+   * When a payment was signed, it is already recorded at its real amount.
    */
   recordSuccess(estimateMicros: bigint): void {
     // Any signature at all means the spend is already on the books, at what
     // was signed or what a receipt settled it to (zero included).
-    if (this.signedLog.length > 0 || estimateMicros <= 0n) return;
+    if (this.signedLog.length > 0 || this.lastDispatchCharged || estimateMicros <= 0n) return;
     this.store.addSessionCost(this.sessionId, estimateMicros);
     this.shrinkHold(estimateMicros);
   }

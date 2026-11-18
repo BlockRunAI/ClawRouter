@@ -44237,7 +44237,7 @@ var init_chunk_XW2CWVLZ = __esm({
   }
 });
 
-// node_modules/@x402/core/dist/esm/chunk-PVRH2E6N.mjs
+// node_modules/@x402/core/dist/esm/chunk-U5TAZTKB.mjs
 function encodePaymentSignatureHeader(paymentPayload) {
   return safeBase64Encode(JSON.stringify(paymentPayload));
 }
@@ -44260,8 +44260,8 @@ function decodePaymentResponseHeader(paymentResponseHeader) {
   );
 }
 var MAX_CONTROL_PLANE_RESPONSE_BYTES, verifyResponseSchema, settleResponseSchema, supportedKindSchema, supportedResponseSchema, x402HTTPClient, requireDecodedJsonObject;
-var init_chunk_PVRH2E6N = __esm({
-  "node_modules/@x402/core/dist/esm/chunk-PVRH2E6N.mjs"() {
+var init_chunk_U5TAZTKB = __esm({
+  "node_modules/@x402/core/dist/esm/chunk-U5TAZTKB.mjs"() {
     "use strict";
     init_chunk_Z7WXFCST();
     init_chunk_VE37GDG2();
@@ -44574,7 +44574,7 @@ var DEFAULT_MAX_AMOUNT_PER_PAYMENT, x402Client;
 var init_client = __esm({
   "node_modules/@x402/core/dist/esm/client/index.mjs"() {
     "use strict";
-    init_chunk_PVRH2E6N();
+    init_chunk_U5TAZTKB();
     init_chunk_Z7WXFCST();
     init_chunk_VE37GDG2();
     init_chunk_MA7F3CLI();
@@ -45215,7 +45215,7 @@ var init_client = __esm({
 var init_http3 = __esm({
   "node_modules/@x402/core/dist/esm/http/index.mjs"() {
     "use strict";
-    init_chunk_PVRH2E6N();
+    init_chunk_U5TAZTKB();
     init_chunk_Z7WXFCST();
     init_chunk_VE37GDG2();
     init_chunk_MA7F3CLI();
@@ -80345,7 +80345,7 @@ var init_src3 = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-DAIKIZVB.mjs
+// node_modules/@x402/svm/dist/esm/chunk-TYATVISX.mjs
 function normalizeNetwork(network) {
   if (network.includes(":")) {
     const supported = [SOLANA_MAINNET_CAIP2, SOLANA_DEVNET_CAIP2, SOLANA_TESTNET_CAIP2];
@@ -80582,8 +80582,8 @@ async function recordPendingOrTerminal(store, key3, signature3, payer, network, 
   };
 }
 var TOKEN_PROGRAM_ADDRESS3, TOKEN_2022_PROGRAM_ADDRESS2, COMPUTE_BUDGET_PROGRAM_ADDRESS2, MEMO_PROGRAM_ADDRESS, LIGHTHOUSE_PROGRAM_ADDRESS, DEVNET_RPC_URL, TESTNET_RPC_URL, MAINNET_RPC_URL, DEVNET_WS_URL, TESTNET_WS_URL, MAINNET_WS_URL, DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS, MAX_COMPUTE_UNIT_PRICE_MICROLAMPORTS, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_MAX_COMPUTE_UNITS, DEFAULT_MAX_REQUIRED_SIGNATURES, MAX_MEMO_BYTES, ACCEPTED_TRANSACTION_VERSIONS, ADVERTISED_TRANSACTION_VERSIONS, CLIENT_SUPPORTED_TRANSACTION_VERSIONS, SETTLEMENT_TTL_MS, SVM_ADDRESS_REGEX, SOLANA_MAINNET_CAIP2, SOLANA_DEVNET_CAIP2, SOLANA_TESTNET_CAIP2, V1_TO_V2_NETWORK_MAP, ErrInvalidPayloadTransaction, ErrUnsupportedTransactionVersion, ErrFeePayerTransferringFunds, ErrMemoMismatch, ErrMemoCount, ErrSmartWalletFeePayerNotIsolated, ErrSmartWalletMalformedComputeBudget, ErrSmartWalletMalformedComputeLimit, ErrSmartWalletMalformedComputePrice, ErrSmartWalletComputeUnitsTooHigh, ErrSmartWalletPriorityFeeTooHigh, ErrSmartWalletUnsupportedComputeBudget, ErrSmartWalletAltResolutionUnavailable, ErrSmartWalletAltResolutionFailed, ErrSmartWalletComputeBudgetViolation, ErrSmartWalletSimulationFailed, ErrSmartWalletCannotDeriveATA, ErrSmartWalletNoTransferInSimulation, ErrSmartWalletTransferMismatch, ErrSmartWalletMultipleMatchingTransfers, USDC_MAINNET_ADDRESS, USDC_DEVNET_ADDRESS, USDC_TESTNET_ADDRESS, DEFAULT_ASSETS2, getDefaultAsset2, findDefaultAsset2, BASIS_POINTS_DENOMINATOR, SLOT_COMMITMENT, TransactionOnchainFailureError;
-var init_chunk_DAIKIZVB = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-DAIKIZVB.mjs"() {
+var init_chunk_TYATVISX = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-TYATVISX.mjs"() {
     "use strict";
     init_sha2563();
     init_index_node39();
@@ -80803,7 +80803,7 @@ var init_src4 = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-RZ6M7L3U.mjs
+// node_modules/@x402/svm/dist/esm/chunk-A5U3JRDR.mjs
 function maxTransactionSize(version31) {
   return version31 === 1 ? V1_MAX_TRANSACTION_SIZE : V0_MAX_TRANSACTION_SIZE;
 }
@@ -80901,10 +80901,10 @@ function checkTransactionV1Budget(config2, programAddresses, limits) {
   return void 0;
 }
 var V0_MAX_TRANSACTION_SIZE, V1_MAX_TRANSACTION_SIZE, DEFAULT_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
-var init_chunk_RZ6M7L3U = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-RZ6M7L3U.mjs"() {
+var init_chunk_A5U3JRDR = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-A5U3JRDR.mjs"() {
     "use strict";
-    init_chunk_DAIKIZVB();
+    init_chunk_TYATVISX();
     init_index_node39();
     init_src4();
     V0_MAX_TRANSACTION_SIZE = 1232;
@@ -80913,7 +80913,7 @@ var init_chunk_RZ6M7L3U = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-DP3B4MQJ.mjs
+// node_modules/@x402/svm/dist/esm/chunk-BU4OMUDH.mjs
 function encodeVoucherMessageBytes(args) {
   const channelBytes = getBase58Encoder().encode(args.channelId);
   if (channelBytes.byteLength !== 32) {
@@ -81359,11 +81359,11 @@ function randomU64() {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, true);
 }
 var VOUCHER_MAGIC, PAYMENT_CHANNELS_PROGRAM_ADDRESS, ASSOCIATED_TOKEN_PROGRAM_ID, PAYMENT_CHANNELS_PROGRAM_ID, MAINNET_TREASURY_OWNER_BYTES, MAINNET_TREASURY_OWNER, DEVNET_TREASURY_OWNER, OPEN_DISCRIMINATOR, TOP_UP_DISCRIMINATOR, U64_MAX2, OPEN_MAX_COMPUTE_UNIT_LIMIT, OPEN_DEFAULT_COMPUTE_UNIT_LIMIT, RENT_SYSVAR, MAX_CHANNEL_PDA_CACHE_ENTRIES, channelPdaCache;
-var init_chunk_DP3B4MQJ = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-DP3B4MQJ.mjs"() {
+var init_chunk_BU4OMUDH = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-BU4OMUDH.mjs"() {
     "use strict";
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_index_node39();
     init_index_node39();
     init_index_node39();
@@ -81428,7 +81428,7 @@ var init_chunk_DP3B4MQJ = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-VITMNYMM.mjs
+// node_modules/@x402/svm/dist/esm/chunk-3WM4BBCN.mjs
 function getRequestCloseInstructionDataEncoder() {
   return transformEncoder(getStructEncoder([["discriminator", getU8Encoder()]]), (value) => ({
     ...value,
@@ -81501,12 +81501,12 @@ function requestMemo(value) {
   );
 }
 var REQUEST_CLOSE_DISCRIMINATOR;
-var init_chunk_VITMNYMM = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-VITMNYMM.mjs"() {
+var init_chunk_3WM4BBCN = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-3WM4BBCN.mjs"() {
     "use strict";
-    init_chunk_DP3B4MQJ();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_BU4OMUDH();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_index_node39();
     init_index_node39();
     init_index_node40();
@@ -81514,7 +81514,7 @@ var init_chunk_VITMNYMM = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-NUK2USQ3.mjs
+// node_modules/@x402/svm/dist/esm/chunk-CHLO3MPU.mjs
 function getChannelDecoder() {
   return getStructDecoder([
     ["discriminator", getU8Decoder()],
@@ -81536,15 +81536,15 @@ function getChannelDecoder() {
     ["openSlot", getU64Decoder()]
   ]);
 }
-var init_chunk_NUK2USQ3 = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-NUK2USQ3.mjs"() {
+var init_chunk_CHLO3MPU = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-CHLO3MPU.mjs"() {
     "use strict";
-    init_chunk_DP3B4MQJ();
+    init_chunk_BU4OMUDH();
     init_index_node39();
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-RMG2KWUT.mjs
+// node_modules/@x402/svm/dist/esm/chunk-PQ3QK4Z4.mjs
 function channelAddressFilters(value, offset) {
   return [
     { dataSize: CHANNEL_ACCOUNT_SIZE },
@@ -81615,11 +81615,11 @@ async function validateDiscoveredAccount(pubkey, owner, base64Data, expectedProg
   return { channelId: pubkey, channel };
 }
 var CHANNEL_ACCOUNT_SIZE, CHANNEL_RENT_PAYER_OFFSET, CHANNEL_PAYER_OFFSET;
-var init_chunk_RMG2KWUT = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-RMG2KWUT.mjs"() {
+var init_chunk_PQ3QK4Z4 = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-PQ3QK4Z4.mjs"() {
     "use strict";
-    init_chunk_NUK2USQ3();
-    init_chunk_DP3B4MQJ();
+    init_chunk_CHLO3MPU();
+    init_chunk_BU4OMUDH();
     init_index_node39();
     CHANNEL_ACCOUNT_SIZE = 256n;
     CHANNEL_RENT_PAYER_OFFSET = 216n;
@@ -81627,7 +81627,7 @@ var init_chunk_RMG2KWUT = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-CJ2GGI22.mjs
+// node_modules/@x402/svm/dist/esm/chunk-GAYY7QRO.mjs
 function isBatchVoucher(value) {
   if (!isRecord(value)) return false;
   return typeof value.channelId === "string" && typeof value.maxClaimableAmount === "string" && typeof value.expiresAt === "number" && typeof value.signature === "string";
@@ -81812,12 +81812,12 @@ function parseReceiverBindingMemo(memo2) {
   return isAddress2(authorizer) ? authorizer : void 0;
 }
 var BATCH_SETTLEMENT_SCHEME2, MIN_WITHDRAW_DELAY2, MAX_WITHDRAW_DELAY, FULL_SPLIT_BPS, CLIENT_VOUCHER_EXPIRES_AT, AUTHORIZATION_DOMAIN, CLOSE_DOMAIN, V1_MAX_CLAIM_CHANNELS, V1_MAX_SETTLE_CHANNELS, PREFIX, BatchError, isDecimal, isSafeUint, isOptional, isString, RECEIVER_BINDING_MEMO_PREFIX;
-var init_chunk_CJ2GGI22 = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-CJ2GGI22.mjs"() {
+var init_chunk_GAYY7QRO = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-GAYY7QRO.mjs"() {
     "use strict";
-    init_chunk_DP3B4MQJ();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_BU4OMUDH();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_index_node39();
     init_index_node39();
     BATCH_SETTLEMENT_SCHEME2 = "batch-settlement";
@@ -81865,7 +81865,7 @@ var init_chunk_CJ2GGI22 = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-2RSZYSMO.mjs
+// node_modules/@x402/svm/dist/esm/chunk-5EQYNZXP.mjs
 function parseTokenProgramHint(extra) {
   const hint = extra?.tokenProgram;
   if (hint === void 0 || hint === null || hint === "") {
@@ -81893,14 +81893,14 @@ function requireTokenProgramHint(extra, invalid) {
   if (hinted === void 0) throw new Error(invalid);
   return hinted;
 }
-var init_chunk_2RSZYSMO = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-2RSZYSMO.mjs"() {
+var init_chunk_5EQYNZXP = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-5EQYNZXP.mjs"() {
     "use strict";
-    init_chunk_DAIKIZVB();
+    init_chunk_TYATVISX();
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-HRH33QP2.mjs
+// node_modules/@x402/svm/dist/esm/chunk-Y7W3OBHW.mjs
 async function checkCorrectiveState(args) {
   const state = args.accept.extra?.channelState;
   if (!isBatchChannelState(state)) {
@@ -82341,15 +82341,15 @@ async function buildBatchRefundPayload(args) {
   });
 }
 var BatchChannelTracker, NoBatchChannelToRefundError, DEFAULT_SERVER_SIGNED_MAX_DEPOSIT, UntrustedOperatorError, ServerSignedTrustPolicy, DEFAULT_DEPOSIT_MULTIPLIER, MIN_DEPOSIT_MULTIPLIER, OPERATION_KEY_SEPARATOR, BatchSvmScheme;
-var init_chunk_HRH33QP2 = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-HRH33QP2.mjs"() {
+var init_chunk_Y7W3OBHW = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-Y7W3OBHW.mjs"() {
     "use strict";
-    init_chunk_VITMNYMM();
-    init_chunk_RMG2KWUT();
-    init_chunk_CJ2GGI22();
-    init_chunk_2RSZYSMO();
-    init_chunk_DP3B4MQJ();
-    init_chunk_DAIKIZVB();
+    init_chunk_3WM4BBCN();
+    init_chunk_PQ3QK4Z4();
+    init_chunk_GAYY7QRO();
+    init_chunk_5EQYNZXP();
+    init_chunk_BU4OMUDH();
+    init_chunk_TYATVISX();
     init_index_node39();
     init_http3();
     init_utils9();
@@ -83337,7 +83337,7 @@ var init_chunk_HRH33QP2 = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-HQM7VUNZ.mjs
+// node_modules/@x402/svm/dist/esm/chunk-7IXSBHSJ.mjs
 function getChannelDistributionHash(splits) {
   const hasher = sha2568.create();
   const count = new Uint8Array(4);
@@ -83351,19 +83351,19 @@ function getChannelDistributionHash(splits) {
   }
   return hasher.digest();
 }
-var init_chunk_HQM7VUNZ = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-HQM7VUNZ.mjs"() {
+var init_chunk_7IXSBHSJ = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-7IXSBHSJ.mjs"() {
     "use strict";
-    init_chunk_NUK2USQ3();
-    init_chunk_DP3B4MQJ();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_CHLO3MPU();
+    init_chunk_BU4OMUDH();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_sha2563();
     init_index_node39();
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-SINLL373.mjs
+// node_modules/@x402/svm/dist/esm/chunk-OT6AP35X.mjs
 function encodeCloseAuthorizationDigest(binding) {
   const base582 = getBase58Encoder();
   const network = new TextEncoder().encode(binding.network);
@@ -83434,11 +83434,11 @@ async function verifyCloseAuthorization(authorization, binding, receiverAuthoriz
     return false;
   }
 }
-var init_chunk_SINLL373 = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-SINLL373.mjs"() {
+var init_chunk_OT6AP35X = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-OT6AP35X.mjs"() {
     "use strict";
-    init_chunk_CJ2GGI22();
-    init_chunk_DP3B4MQJ();
+    init_chunk_GAYY7QRO();
+    init_chunk_BU4OMUDH();
     init_sha2563();
     init_index_node39();
   }
@@ -83471,14 +83471,14 @@ var init_chunk_WIPN332D = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-2P7IHAQJ.mjs
+// node_modules/@x402/svm/dist/esm/chunk-OJGL5KXB.mjs
 var ExactSvmScheme;
-var init_chunk_2P7IHAQJ = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-2P7IHAQJ.mjs"() {
+var init_chunk_OJGL5KXB = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-OJGL5KXB.mjs"() {
     "use strict";
     init_chunk_WIPN332D();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_src2();
     init_src3();
     init_index_node39();
@@ -83592,7 +83592,7 @@ var init_chunk_2P7IHAQJ = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-7TSGYOB2.mjs
+// node_modules/@x402/svm/dist/esm/chunk-FHYNBUS4.mjs
 function assertSmartWalletLimits(limits) {
   assertLimit("smartWalletMaxComputeUnits", limits?.maxComputeUnits, 1);
   assertLimit("smartWalletMaxPriorityFeeMicroLamports", limits?.maxPriorityFeeMicroLamports, 0);
@@ -84018,11 +84018,11 @@ async function verifyPostSettlement(signer, signature3, network, requirements, s
   return { verified: false, method: "unverified" };
 }
 var DEFAULT_SMART_WALLET_MAX_COMPUTE_UNITS, DEFAULT_SMART_WALLET_MAX_PRIORITY_FEE_MICROLAMPORTS, IX_SET_COMPUTE_UNIT_LIMIT, IX_SET_COMPUTE_UNIT_PRICE, IX_TOKEN_TRANSFER_CHECKED, TOKEN_PROGRAMS, SMART_WALLET_V1_BUDGET_REASONS;
-var init_chunk_7TSGYOB2 = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-7TSGYOB2.mjs"() {
+var init_chunk_FHYNBUS4 = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-FHYNBUS4.mjs"() {
     "use strict";
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_src4();
     init_src2();
     init_src3();
@@ -84048,12 +84048,12 @@ var init_chunk_7TSGYOB2 = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-L56Y5KBE.mjs
+// node_modules/@x402/svm/dist/esm/chunk-BAY4U3CP.mjs
 var SettlementCache;
-var init_chunk_L56Y5KBE = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-L56Y5KBE.mjs"() {
+var init_chunk_BAY4U3CP = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-BAY4U3CP.mjs"() {
     "use strict";
-    init_chunk_DAIKIZVB();
+    init_chunk_TYATVISX();
     SettlementCache = class {
       constructor() {
         this.entries = /* @__PURE__ */ new Map();
@@ -84100,7 +84100,7 @@ var init_chunk_L56Y5KBE = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-NQRJ53N4.mjs
+// node_modules/@x402/svm/dist/esm/chunk-HHRGQ6BR.mjs
 function resolveUptoSvmPaymentChannelConfig(requirements) {
   const feePayer = requirements.extra?.feePayer;
   if (typeof feePayer !== "string" || feePayer.length === 0) {
@@ -84117,22 +84117,22 @@ function resolveUptoSvmPaymentChannelConfig(requirements) {
   const splits = [{ bps: BASIS_POINTS_DENOMINATOR, recipient: requirements.payTo }];
   return { feePayer, receiverAuthorizer, splits, withdrawDelay };
 }
-var init_chunk_NQRJ53N4 = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-NQRJ53N4.mjs"() {
+var init_chunk_HHRGQ6BR = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-HHRGQ6BR.mjs"() {
     "use strict";
-    init_chunk_DAIKIZVB();
+    init_chunk_TYATVISX();
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-QPYYLXPW.mjs
+// node_modules/@x402/svm/dist/esm/chunk-XBZL4F4W.mjs
 var UptoSvmScheme;
-var init_chunk_QPYYLXPW = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-QPYYLXPW.mjs"() {
+var init_chunk_XBZL4F4W = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-XBZL4F4W.mjs"() {
     "use strict";
-    init_chunk_NQRJ53N4();
-    init_chunk_2RSZYSMO();
-    init_chunk_DP3B4MQJ();
-    init_chunk_DAIKIZVB();
+    init_chunk_HHRGQ6BR();
+    init_chunk_5EQYNZXP();
+    init_chunk_BU4OMUDH();
+    init_chunk_TYATVISX();
     init_src3();
     init_src2();
     UptoSvmScheme = class {
@@ -84606,23 +84606,23 @@ var init_esm5 = __esm({
   "node_modules/@x402/svm/dist/esm/index.mjs"() {
     "use strict";
     init_chunk_NLVYNPNC();
-    init_chunk_HRH33QP2();
-    init_chunk_HQM7VUNZ();
-    init_chunk_VITMNYMM();
-    init_chunk_RMG2KWUT();
-    init_chunk_SINLL373();
-    init_chunk_CJ2GGI22();
-    init_chunk_NUK2USQ3();
-    init_chunk_2P7IHAQJ();
+    init_chunk_Y7W3OBHW();
+    init_chunk_7IXSBHSJ();
+    init_chunk_3WM4BBCN();
+    init_chunk_PQ3QK4Z4();
+    init_chunk_OT6AP35X();
+    init_chunk_GAYY7QRO();
+    init_chunk_CHLO3MPU();
+    init_chunk_OJGL5KXB();
     init_chunk_WIPN332D();
-    init_chunk_7TSGYOB2();
-    init_chunk_L56Y5KBE();
-    init_chunk_QPYYLXPW();
-    init_chunk_NQRJ53N4();
-    init_chunk_2RSZYSMO();
-    init_chunk_DP3B4MQJ();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_FHYNBUS4();
+    init_chunk_BAY4U3CP();
+    init_chunk_XBZL4F4W();
+    init_chunk_HHRGQ6BR();
+    init_chunk_5EQYNZXP();
+    init_chunk_BU4OMUDH();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_index_node39();
   }
 });
@@ -84649,15 +84649,15 @@ __export(client_exports2, {
 var init_client2 = __esm({
   "node_modules/@x402/svm/dist/esm/batch-settlement/client/index.mjs"() {
     "use strict";
-    init_chunk_HRH33QP2();
-    init_chunk_VITMNYMM();
-    init_chunk_RMG2KWUT();
-    init_chunk_CJ2GGI22();
-    init_chunk_NUK2USQ3();
-    init_chunk_2RSZYSMO();
-    init_chunk_DP3B4MQJ();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_Y7W3OBHW();
+    init_chunk_3WM4BBCN();
+    init_chunk_PQ3QK4Z4();
+    init_chunk_GAYY7QRO();
+    init_chunk_CHLO3MPU();
+    init_chunk_5EQYNZXP();
+    init_chunk_BU4OMUDH();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
   }
 });
 
@@ -84776,7 +84776,7 @@ import * as path4 from "path";
 import * as os3 from "os";
 import { createPrivateKey as createPrivateKey2, createPublicKey as createPublicKey2, sign as ed25519Sign } from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
-import { randomUUID } from "crypto";
+import { randomUUID as randomUUID2 } from "crypto";
 import * as fs6 from "fs";
 import * as path5 from "path";
 import * as fs7 from "fs";
@@ -87316,7 +87316,7 @@ function lockChannelFile(file2) {
   if (registry22.locks.has(file2)) return void 0;
   const lock = `${file2}.lock`;
   fs6.mkdirSync(path5.dirname(lock), { recursive: true, mode: 448 });
-  const token = randomUUID();
+  const token = randomUUID2();
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const tmp = `${lock}.${process.pid}.${token}.tmp`;
     try {
@@ -87536,7 +87536,7 @@ function withDepositBlockhash(paymentRequired, blockhash2) {
 function withPaymentIdentifier(paymentRequired) {
   const declared = paymentRequired.extensions?.[PAYMENT_IDENTIFIER];
   if (typeof declared?.info?.required !== "boolean") return paymentRequired;
-  const id2 = `pay_${randomUUID().replace(/-/g, "")}`;
+  const id2 = `pay_${randomUUID2().replace(/-/g, "")}`;
   return {
     ...paymentRequired,
     extensions: { ...paymentRequired.extensions, [PAYMENT_IDENTIFIER]: { ...declared, info: { ...declared.info, id: id2 } } }
@@ -96028,7 +96028,7 @@ var init_dist = __esm({
           fsyncDirectory(dir);
           return;
         }
-        const tmp = `${this.file}.${process.pid}.${randomUUID()}.tmp`;
+        const tmp = `${this.file}.${process.pid}.${randomUUID2()}.tmp`;
         const fd = fs6.openSync(tmp, "w", 384);
         try {
           fs6.writeSync(fd, JSON.stringify({ version: 1, intents }, null, 2));
@@ -130567,14 +130567,14 @@ var init_chunk_WWACQNRQ = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-PQ2KWLVO.mjs
+// node_modules/@x402/svm/dist/esm/chunk-RERS6LWQ.mjs
 var ExactSvmSchemeV1;
-var init_chunk_PQ2KWLVO = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-PQ2KWLVO.mjs"() {
+var init_chunk_RERS6LWQ = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-RERS6LWQ.mjs"() {
     "use strict";
     init_chunk_WIPN332D();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_src2();
     init_src3();
     init_index_node39();
@@ -130702,15 +130702,15 @@ var init_facilitator = __esm({
   }
 });
 
-// node_modules/@x402/svm/dist/esm/chunk-RCDWMK2L.mjs
+// node_modules/@x402/svm/dist/esm/chunk-CUM4W6LX.mjs
 var addressEncoder, compiledMessageDecoder, compiledMessageDecoder2;
-var init_chunk_RCDWMK2L = __esm({
-  "node_modules/@x402/svm/dist/esm/chunk-RCDWMK2L.mjs"() {
+var init_chunk_CUM4W6LX = __esm({
+  "node_modules/@x402/svm/dist/esm/chunk-CUM4W6LX.mjs"() {
     "use strict";
-    init_chunk_7TSGYOB2();
-    init_chunk_L56Y5KBE();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_FHYNBUS4();
+    init_chunk_BAY4U3CP();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_index_node39();
     init_facilitator();
     init_index_node39();
@@ -130755,15 +130755,15 @@ function registerExactSvmScheme(client, config2) {
 var init_client3 = __esm({
   "node_modules/@x402/svm/dist/esm/exact/client/index.mjs"() {
     "use strict";
-    init_chunk_2P7IHAQJ();
+    init_chunk_OJGL5KXB();
     init_chunk_WWACQNRQ();
-    init_chunk_PQ2KWLVO();
+    init_chunk_RERS6LWQ();
     init_chunk_WIPN332D();
-    init_chunk_RCDWMK2L();
-    init_chunk_7TSGYOB2();
-    init_chunk_L56Y5KBE();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_CUM4W6LX();
+    init_chunk_FHYNBUS4();
+    init_chunk_BAY4U3CP();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
     init_utils9();
   }
 });
@@ -130778,13 +130778,13 @@ var init_v1 = __esm({
   "node_modules/@x402/svm/dist/esm/v1/index.mjs"() {
     "use strict";
     init_chunk_WWACQNRQ();
-    init_chunk_PQ2KWLVO();
+    init_chunk_RERS6LWQ();
     init_chunk_WIPN332D();
-    init_chunk_RCDWMK2L();
-    init_chunk_7TSGYOB2();
-    init_chunk_L56Y5KBE();
-    init_chunk_RZ6M7L3U();
-    init_chunk_DAIKIZVB();
+    init_chunk_CUM4W6LX();
+    init_chunk_FHYNBUS4();
+    init_chunk_BAY4U3CP();
+    init_chunk_A5U3JRDR();
+    init_chunk_TYATVISX();
   }
 });
 
@@ -261218,7 +261218,7 @@ var require_axios = __commonJS({
     function getEnv2(key3) {
       return process.env[key3.toLowerCase()] || process.env[key3.toUpperCase()] || "";
     }
-    var VERSION4 = "1.21.1";
+    var VERSION4 = "1.21.0";
     function parseProtocol2(url4) {
       const match = /^([-+\w]{1,25}):(?:\/\/)?/.exec(url4);
       return match && match[1].toLowerCase() || "";
@@ -264426,11 +264426,8 @@ var require_axios = __commonJS({
         throw new CanceledError3(null, config2);
       }
     }
-    function resolveClock2() {
-      return typeof performance !== "undefined" && utils$1.isFunction(performance.now) ? () => performance.now() : Date.now;
-    }
-    function elapsedSince2(now2, start) {
-      return Math.max(0, Math.round(now2() - start));
+    function elapsedSince2(start) {
+      return Math.max(0, Date.now() - start);
     }
     function dispatchRequest2(_config) {
       const config2 = utils$1.toSafeFlatObject(_config);
@@ -264441,11 +264438,10 @@ var require_axios = __commonJS({
         config2.headers.setContentType("application/x-www-form-urlencoded", false);
       }
       const adapter2 = adapters.getAdapter(config2.adapter || defaults2.adapter, config2);
-      const now2 = resolveClock2();
-      const start = now2();
+      const start = Date.now();
       return adapter2(config2).then(function onAdapterResolution(response) {
         throwIfCancellationRequested2(config2);
-        response.duration = elapsedSince2(now2, start);
+        response.duration = elapsedSince2(start);
         config2.response = response;
         try {
           response.data = transformData2.call(config2, config2.transformResponse, response);
@@ -264458,7 +264454,7 @@ var require_axios = __commonJS({
         if (!isCancel3(reason)) {
           throwIfCancellationRequested2(config2);
           if (reason && reason.response) {
-            reason.response.duration = elapsedSince2(now2, start);
+            reason.response.duration = elapsedSince2(start);
             config2.response = reason.response;
             try {
               reason.response.data = transformData2.call(config2, config2.transformResponse, reason.response);
@@ -282545,6 +282541,7 @@ function resolveMaxTokens(parsed, fallback2 = DEFAULT_MAX_TOKENS) {
 import * as fs from "fs";
 import * as path from "path";
 import { homedir as homedir2 } from "os";
+import { randomUUID } from "crypto";
 
 // src/payment-chain.ts
 var PAYMENT_CHAINS = ["base", "solana", "arc"];
@@ -282617,6 +282614,15 @@ function cloneLimits(limits) {
   }
   return clone2;
 }
+function recordKey(r2) {
+  return r2.id ?? `${r2.timestamp}|${r2.amount}|${r2.model ?? ""}|${r2.action ?? ""}`;
+}
+function mergeSpendHistory(a, b) {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const r2 of a) byKey.set(recordKey(r2), r2);
+  for (const r2 of b) if (!byKey.has(recordKey(r2))) byKey.set(recordKey(r2), r2);
+  return [...byKey.values()].sort((x, y) => x.timestamp - y.timestamp);
+}
 function canonicalLimits(limits) {
   return JSON.stringify(
     Object.fromEntries(Object.entries(limits).sort(([a], [b]) => a < b ? -1 : 1))
@@ -282672,7 +282678,8 @@ var FileSpendControlStorage = class {
               timestamp: r2.timestamp,
               amount: r2.amount,
               model: typeof r2.model === "string" ? r2.model : void 0,
-              action: typeof r2.action === "string" ? r2.action : void 0
+              action: typeof r2.action === "string" ? r2.action : void 0,
+              ...typeof r2.id === "string" && r2.id !== "" ? { id: r2.id } : {}
             });
           }
         }
@@ -282946,6 +282953,9 @@ var SpendControl = class {
       };
     }
     const now2 = this.now();
+    if (this.limits.hourly !== void 0 || this.limits.daily !== void 0) {
+      this.syncHistory();
+    }
     if (this.limits.perRequest !== void 0) {
       if (estimatedCost3 > this.limits.perRequest) {
         return {
@@ -283008,7 +283018,8 @@ var SpendControl = class {
       timestamp: this.now(),
       amount,
       model: metadata?.model,
-      action: metadata?.action
+      action: metadata?.action,
+      id: randomUUID()
     };
     this.history.push(record2);
     this.sessionSpent += amount;
@@ -283139,6 +283150,32 @@ var SpendControl = class {
     this.sessionSpent = 0;
     this.sessionCalls = 0;
   }
+  /**
+   * Fold in spend that other processes recorded to the same spending.json.
+   *
+   * The hourly and daily windows are per wallet, not per process, but each
+   * process used to read the file once at startup and then trust its own copy:
+   * N proxies started on one wallet each let the full window through, and the
+   * last writer's history replaced the others' on disk (GHSA-9xv2-9567-rxrw).
+   * Re-reading before every amount check and every write closes that for
+   * anything not signed in the same instant. Two processes checking within
+   * one signing round trip of each other can still both pass; reservations
+   * are per process by design (see reserve()).
+   *
+   * A read failure keeps the ledger this instance already has: a file we
+   * cannot read is no reason to forget spend we know about.
+   */
+  syncHistory() {
+    let data;
+    try {
+      data = this.storage.load();
+    } catch {
+      return;
+    }
+    if (!data || data.history.length === 0) return;
+    this.history = mergeSpendHistory(this.history, data.history);
+    this.cleanup();
+  }
   cleanup() {
     const cutoff = this.now() - DAY_MS;
     this.history = this.history.filter((r2) => r2.timestamp >= cutoff);
@@ -283148,6 +283185,7 @@ var SpendControl = class {
       return;
     }
     if (!this.limitsDirty && this.storage.saveHistory) {
+      this.syncHistory();
       this.storage.saveHistory([...this.history]);
       return;
     }
@@ -283627,7 +283665,7 @@ function createPermit2Nonce() {
   return BigInt(toHex(randomBytes9)).toString();
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-5AIYL4HT.mjs
+// node_modules/@x402/evm/dist/esm/chunk-GPMYUGHX.mjs
 var EVM_NETWORK_CHAIN_ID_MAP = {
   ethereum: 1,
   sepolia: 11155111,
@@ -283652,9 +283690,7 @@ var EVM_NETWORK_CHAIN_ID_MAP = {
   stable: 988,
   "stable-testnet": 2201,
   celo: 42220,
-  flare: 14,
-  hemi: 43111,
-  "hemi-testnet": 743111
+  flare: 14
 };
 var NETWORKS = Object.keys(EVM_NETWORK_CHAIN_ID_MAP);
 function getEvmChainIdV1(network) {
@@ -283739,7 +283775,7 @@ var DEFAULT_MAX_PRIORITY_FEE_PER_GAS = 100000000n;
 var PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 var x402ExactPermit2ProxyAddress = "0x402085c248EeA27D92E8b30b2C58ed07f9E20001";
 
-// node_modules/@x402/evm/dist/esm/chunk-AB46Q4WU.mjs
+// node_modules/@x402/evm/dist/esm/chunk-DIAR36YQ.mjs
 var EIP2612_GAS_SPONSORING_KEY = "eip2612GasSponsoring";
 var ERC20_APPROVAL_GAS_SPONSORING_KEY = "erc20ApprovalGasSponsoring";
 var ERC20_APPROVAL_GAS_SPONSORING_VERSION = "1";
@@ -283975,7 +284011,7 @@ async function trySignErc20ApprovalExtension(signer, options, requirements, cont
   };
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-6XWQF37J.mjs
+// node_modules/@x402/evm/dist/esm/chunk-LQQ3M4DU.mjs
 var DEFAULT_ASSETS = {
   "eip155:8453": [
     {
@@ -284290,39 +284326,8 @@ var DEFAULT_ASSETS = {
       decimals: 6,
       symbol: "USDC"
     }
-  ],
-  // Arc Testnet USDC (EIP-3009 supported)
-  "eip155:4663": [
-    {
-      asset: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
-      name: "Global Dollar",
-      version: "1",
-      decimals: 6,
-      symbol: "USDG"
-    }
-  ],
-  // Robinhood Chain mainnet USDG (EIP-3009 supported)
-  "eip155:43111": [
-    {
-      asset: "0xad11a8BEb98bbf61dbb1aa0F6d6F2ECD87b35afA",
-      name: "Bridged USDC (Stargate)",
-      version: "2",
-      decimals: 6,
-      symbol: "USDC.e"
-    }
-  ],
-  // Hemi mainnet USDC.e (EIP-3009 supported)
-  "eip155:743111": [
-    {
-      asset: "0xD47971C7F5B1067d25cd45d30b2c9eb60de96443",
-      name: "USDC.e",
-      version: "1",
-      decimals: 6,
-      symbol: "USDC.e",
-      assetTransferMethod: "permit2"
-    }
   ]
-  // Hemi testnet USDC.e (no EIP-3009, no EIP-2612)
+  // Arc Testnet USDC (EIP-3009 supported)
 };
 function resolveNetworkKey(network) {
   if (network in DEFAULT_ASSETS) {
@@ -284344,7 +284349,7 @@ var findDefaultAsset = (asset, network) => {
   return assets.find((entry) => entry.asset.toLowerCase() === normalized);
 };
 
-// node_modules/@x402/evm/dist/esm/chunk-X42JDBHW.mjs
+// node_modules/@x402/evm/dist/esm/chunk-7TZ3NXXP.mjs
 var ExactEvmSchemeV1 = class {
   /**
    * Creates a new ExactEvmClientV1 instance.
@@ -284426,7 +284431,7 @@ var ExactEvmSchemeV1 = class {
   }
 };
 
-// node_modules/@x402/evm/dist/esm/chunk-QKR4OFMY.mjs
+// node_modules/@x402/evm/dist/esm/chunk-UNNRPMWF.mjs
 async function createPermit2PayloadForProxy(proxyAddress, signer, x402Version2, paymentRequirements) {
   const now2 = Math.floor(Date.now() / 1e3);
   const nonce = createPermit2Nonce();
@@ -284478,7 +284483,7 @@ async function signPermit2Authorization(signer, permit2Authorization, requiremen
   });
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-H3CLVT6Z.mjs
+// node_modules/@x402/evm/dist/esm/chunk-WC3UEIYC.mjs
 var MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 async function createPermit2Payload(signer, x402Version2, paymentRequirements) {
   return createPermit2PayloadForProxy(
@@ -284489,7 +284494,7 @@ async function createPermit2Payload(signer, x402Version2, paymentRequirements) {
   );
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-374U7QOG.mjs
+// node_modules/@x402/evm/dist/esm/chunk-CJ62XFQ3.mjs
 init_utils9();
 async function createEIP3009Payload(signer, x402Version2, paymentRequirements) {
   const nonce = createNonce();
@@ -284629,7 +284634,7 @@ function registerExactEvmScheme(client, config2) {
   return client;
 }
 
-// node_modules/@x402/evm/dist/esm/chunk-BBPWOJXX.mjs
+// node_modules/@x402/evm/dist/esm/chunk-F43KMW3I.mjs
 var SALT_BINDING_TYPEHASH = keccak256(
   toBytes(
     "x402AuthCaptureSaltBinding(address receiverAuthorizer,address policy,uint256 saltNonce)"
@@ -284641,7 +284646,7 @@ var PAYMENT_INFO_TYPEHASH = keccak256(
   )
 );
 
-// node_modules/@x402/evm/dist/esm/chunk-7DJ4WEQ5.mjs
+// node_modules/@x402/evm/dist/esm/chunk-X3UZRZQA.mjs
 var CHANNEL_CONFIG_TYPEHASH = keccak256(
   toBytes(
     "ChannelConfig(address payer,address payerAuthorizer,address receiver,address receiverAuthorizer,address token,uint40 withdrawDelay,bytes32 salt)"
@@ -284649,7 +284654,7 @@ var CHANNEL_CONFIG_TYPEHASH = keccak256(
 );
 var UINT96_MASK = (1n << 96n) - 1n;
 
-// node_modules/@x402/evm/dist/esm/chunk-AEYKXGQA.mjs
+// node_modules/@x402/evm/dist/esm/chunk-AHBFVQIT.mjs
 init_http3();
 init_http3();
 init_client();
@@ -290027,6 +290032,8 @@ var SessionSpend = class _SessionSpend {
   signedMicros = 0n;
   /** Each signature this request made, in order, at the amount that still counts. */
   signedLog = [];
+  /** API-key rail: the latest dispatch's charge was reported by the gateway and recorded. */
+  lastDispatchCharged = false;
   released = false;
   /**
    * Strict mode: admit the request only if the session's spend, plus what its
@@ -290117,12 +290124,31 @@ var SessionSpend = class _SessionSpend {
     this.store.addSessionCost(this.sessionId, delta);
   }
   /**
+   * API-key rail: a dispatch is about to go out. Its charge, if the gateway
+   * reports one, belongs to it alone — an earlier attempt's reported charge
+   * must not stand in for this one's estimate.
+   */
+  beginDispatch() {
+    this.lastDispatchCharged = false;
+  }
+  /**
+   * API-key rail: the gateway reported what it charged for the latest
+   * dispatch (`x-blockrun-cost-usd`), on whatever status. It is spend now.
+   */
+  recordCharged(chargedMicros) {
+    this.lastDispatchCharged = true;
+    if (chargedMicros <= 0n) return;
+    this.store.addSessionCost(this.sessionId, chargedMicros);
+    this.shrinkHold(chargedMicros);
+  }
+  /**
    * An attempt succeeded. When nothing was signed for this request (the API
-   * key rail), the local estimate is the only record of the spend. When a
-   * payment was signed, it is already recorded at its real amount.
+   * key rail), the local estimate is the only record of the spend — unless the
+   * gateway reported the winning dispatch's charge, which is already recorded.
+   * When a payment was signed, it is already recorded at its real amount.
    */
   recordSuccess(estimateMicros) {
-    if (this.signedLog.length > 0 || estimateMicros <= 0n) return;
+    if (this.signedLog.length > 0 || this.lastDispatchCharged || estimateMicros <= 0n) return;
     this.store.addSessionCost(this.sessionId, estimateMicros);
     this.shrinkHold(estimateMicros);
   }
@@ -293825,6 +293851,26 @@ function withZeroCapGuard(inner, isFree) {
     return inner(input2, init2);
   };
 }
+function withSessionCostCap(inner) {
+  return async (input2, init2) => {
+    const store = paymentStore.getStore();
+    const spend = store?.sessionSpend;
+    const published = store?.estimatedUsd;
+    if (spend?.isStrict && published !== void 0) {
+      const attemptMicros = usdToMicros(published);
+      if (!spend.coverPayment(attemptMicros)) {
+        throw new CostCapError(
+          `ClawRouter cost cap exceeded: dispatching an estimated $${microsToUsd(attemptMicros).toFixed(6)} would push this session past its maxCostPerRun limit`
+        );
+      }
+    }
+    if (published !== void 0) spend?.beginDispatch();
+    const response = await inner(input2, init2);
+    const charged = gatewaySettledCostUsd(response);
+    if (spend && charged !== void 0) spend.recordCharged(usdToMicros(charged));
+    return response;
+  };
+}
 function isMessagesPath(url3) {
   return url3 === "/v1/messages" || (url3?.startsWith("/v1/messages?") ?? false);
 }
@@ -294264,15 +294310,17 @@ async function startProxy(options) {
     const { freeIds } = catalog.current();
     return freeIds.has(resolveModelAlias(model)) || [...freeIds].some((id2) => toUpstreamModelId(id2) === model);
   };
-  const payFetch = authMode === "api-key" ? withSpendPolicy(
-    options.maxCostPerRunUsd === 0 ? withZeroCapGuard(keyFetch, isFreeForCap) : keyFetch,
-    options.spendControl ?? getSharedSpendControl(),
-    () => {
-      const store = paymentStore.getStore();
-      const published = store?.estimatedUsd;
-      if (store) store.estimatedUsd = void 0;
-      return published;
-    }
+  const payFetch = authMode === "api-key" ? withSessionCostCap(
+    withSpendPolicy(
+      options.maxCostPerRunUsd === 0 ? withZeroCapGuard(keyFetch, isFreeForCap) : keyFetch,
+      options.spendControl ?? getSharedSpendControl(),
+      () => {
+        const store = paymentStore.getStore();
+        const published = store?.estimatedUsd;
+        if (store) store.estimatedUsd = void 0;
+        return published;
+      }
+    )
   ) : createPayFetchWithPreAuth(fetch, x402, void 0, {
     skipPreAuth: paymentChain === "solana",
     // Per-request cost estimate so pre-auth is only reused when the cached
@@ -298302,7 +298350,7 @@ import {
 } from "fs";
 import { readFile as readFileAsync } from "fs/promises";
 import { homedir as homedir15 } from "os";
-import { randomUUID as randomUUID2 } from "crypto";
+import { randomUUID as randomUUID3 } from "crypto";
 import { join as join19 } from "path";
 init_accounts();
 
@@ -299451,7 +299499,7 @@ var AMOY_CONTRACTS = {
   conditionalTokens: "0x69308FB512518e39F9b16112fA8d994F4e2Bf8bB",
   exchangeV2: "0xE111180000d2663C0091e4f400237545B87B996B",
   negRiskExchangeV2: "0xe2222d279d744050d28e00520010520000310F59",
-  exchangeV3: "0xe3333700cA9d93003F00f0F71f8515005F6c00Aa"
+  exchangeV3: "0x9fE6e61422AdB6F610d8597F9684b16912D50C3D"
 };
 var MATIC_CONTRACTS = {
   exchange: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E",
@@ -302501,7 +302549,7 @@ import { resolve as resolvePath } from "path";
 import zlib from "zlib";
 
 // node_modules/axios/lib/env/data.js
-var VERSION2 = "1.21.1";
+var VERSION2 = "1.21.0";
 
 // node_modules/axios/lib/helpers/parseProtocol.js
 function parseProtocol(url3) {
@@ -306002,11 +306050,8 @@ function throwIfCancellationRequested(config2) {
     throw new CanceledError_default(null, config2);
   }
 }
-function resolveClock() {
-  return typeof performance !== "undefined" && utils_default.isFunction(performance.now) ? () => performance.now() : Date.now;
-}
-function elapsedSince(now2, start) {
-  return Math.max(0, Math.round(now2() - start));
+function elapsedSince(start) {
+  return Math.max(0, Date.now() - start);
 }
 function dispatchRequest(_config) {
   const config2 = utils_default.toSafeFlatObject(_config);
@@ -306017,12 +306062,11 @@ function dispatchRequest(_config) {
     config2.headers.setContentType("application/x-www-form-urlencoded", false);
   }
   const adapter2 = adapters_default.getAdapter(config2.adapter || defaults_default.adapter, config2);
-  const now2 = resolveClock();
-  const start = now2();
+  const start = Date.now();
   return adapter2(config2).then(
     function onAdapterResolution(response) {
       throwIfCancellationRequested(config2);
-      response.duration = elapsedSince(now2, start);
+      response.duration = elapsedSince(start);
       config2.response = response;
       try {
         response.data = transformData.call(config2, config2.transformResponse, response);
@@ -306036,7 +306080,7 @@ function dispatchRequest(_config) {
       if (!isCancel(reason)) {
         throwIfCancellationRequested(config2);
         if (reason && reason.response) {
-          reason.response.duration = elapsedSince(now2, start);
+          reason.response.duration = elapsedSince(start);
           config2.response = reason.response;
           try {
             reason.response.data = transformData.call(
@@ -310660,7 +310704,7 @@ async function waitForProxyHealth(port, timeoutMs = 3e3) {
   return false;
 }
 function writePrivateJsonSync(path8, value) {
-  const temporary = `${path8}.tmp.${randomUUID2()}`;
+  const temporary = `${path8}.tmp.${randomUUID3()}`;
   try {
     writeFileSync8(temporary, JSON.stringify(value, null, 2), { mode: 384 });
     renameSync3(temporary, path8);
@@ -312683,6 +312727,6 @@ js-sha3/src/sha3.js:
    *)
 
 axios/dist/node/axios.cjs:
-  (*! Axios v1.21.1 Copyright (c) 2026 Matt Zabriskie and contributors *)
+  (*! Axios v1.21.0 Copyright (c) 2026 Matt Zabriskie and contributors *)
 */
 //# sourceMappingURL=index.js.map

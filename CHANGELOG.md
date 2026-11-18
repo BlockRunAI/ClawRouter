@@ -4,6 +4,33 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.316 — November 18, 2026
+
+### Strict `maxCostPerRun` re-checks every dispatch on the API-key rail
+
+Since v0.12.283 the wallet rail re-checks the strict cap before every payment it
+signs, so a retry or fallback inside one request cannot sign past it. The
+API-key rail signs nothing, so it was checked once at admission: a retry, or a
+fallback to a pricier model, dispatched again without a check, and a charge the
+gateway reported on a failed attempt (`x-blockrun-cost-usd`) never counted
+against the session. Every billable dispatch on that rail is now checked against
+what the session has left, and a reported charge is recorded on any status,
+replacing the local estimate when the gateway states it. (GHSA-86hx-xv73-9qch,
+reported by @webrainsec)
+
+### Hourly and daily spend limits hold across processes sharing one wallet
+
+Two or more ClawRouter processes started on the same wallet each read
+`spending.json` once at startup and then trusted their own copy, so each let the
+full hourly or daily window through, and the last one to write replaced the
+others' history on disk. Every amount check and every write now merges the
+ledger on disk first; records carry an id so nothing is counted twice. Two
+processes signing within the same round trip can still both pass; the
+`session` window stays per process, as documented. (GHSA-9xv2-9567-rxrw,
+reported by @Aviral2642)
+
+---
+
 ## v0.12.315 — November 17, 2026
 
 ### A client that hangs up stops the upstream call and frees its cost-cap hold

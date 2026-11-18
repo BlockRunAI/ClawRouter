@@ -2614,6 +2614,46 @@ function withZeroCapGuard(
   };
 }
 
+/**
+ * The key rail's half of the per-attempt `maxCostPerRun` check (GHSA-86hx-xv73-9qch).
+ *
+ * Admission holds one estimate per request, but a retry or a fallback inside
+ * that request dispatches again, possibly to a pricier model. On the wallet
+ * rail the signing hook re-checks every payment against its quote; this rail
+ * signs nothing, so the same check sits on the fetch every billable dispatch
+ * passes through. A dispatch is billable when the caller published its cost
+ * (`publishDispatchCost`); an unpublished one (a status poll) is not checked.
+ *
+ * A charge the gateway reports (`x-blockrun-cost-usd`) is recorded against the
+ * session on any status: a call that settled and then failed was still paid
+ * for. Absent means nothing settled at response time, so nothing is recorded
+ * here and a success falls back to the local estimate, as before.
+ */
+function withSessionCostCap(
+  inner: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return async (input, init) => {
+    const store = paymentStore.getStore();
+    const spend = store?.sessionSpend;
+    // Read, not consume: the spend-window wrapper inside consumes it.
+    const published = store?.estimatedUsd;
+    if (spend?.isStrict && published !== undefined) {
+      const attemptMicros = usdToMicros(published);
+      if (!spend.coverPayment(attemptMicros)) {
+        throw new CostCapError(
+          `ClawRouter cost cap exceeded: dispatching an estimated $${microsToUsd(attemptMicros).toFixed(6)} would push this session past its maxCostPerRun limit`,
+        );
+      }
+    }
+    // A poll is part of the dispatch it follows, not a new one.
+    if (published !== undefined) spend?.beginDispatch();
+    const response = await inner(input, init);
+    const charged = gatewaySettledCostUsd(response);
+    if (spend && charged !== undefined) spend.recordCharged(usdToMicros(charged));
+    return response;
+  };
+}
+
 /** The Anthropic-shaped chat route, with or without a query string. */
 function isMessagesPath(url: string | undefined): boolean {
   return url === "/v1/messages" || (url?.startsWith("/v1/messages?") ?? false);
@@ -3402,15 +3442,17 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   };
   const payFetch =
     authMode === "api-key"
-      ? withSpendPolicy(
-          options.maxCostPerRunUsd === 0 ? withZeroCapGuard(keyFetch!, isFreeForCap) : keyFetch!,
-          options.spendControl ?? getSharedSpendControl(),
-          () => {
-            const store = paymentStore.getStore();
-            const published = store?.estimatedUsd;
-            if (store) store.estimatedUsd = undefined; // consume: polls are not billable
-            return published;
-          },
+      ? withSessionCostCap(
+          withSpendPolicy(
+            options.maxCostPerRunUsd === 0 ? withZeroCapGuard(keyFetch!, isFreeForCap) : keyFetch!,
+            options.spendControl ?? getSharedSpendControl(),
+            () => {
+              const store = paymentStore.getStore();
+              const published = store?.estimatedUsd;
+              if (store) store.estimatedUsd = undefined; // consume: polls are not billable
+              return published;
+            },
+          ),
         )
       : createPayFetchWithPreAuth(fetch, x402!, undefined, {
           skipPreAuth: paymentChain === "solana",

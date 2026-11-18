@@ -17,6 +17,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import type { x402Client } from "@x402/fetch";
 import { readTextFileSync } from "./fs-read.js";
 import { CAIP2_ARC } from "./payment-chain.js";
@@ -162,6 +163,24 @@ export interface SpendRecord {
   amount: number;
   model?: string;
   action?: string;
+  /**
+   * Unique per record, so ledgers written by separate processes sharing one
+   * spending.json can be merged without double-counting. Absent on records
+   * written before it existed; those merge on their content.
+   */
+  id?: string;
+}
+
+function recordKey(r: SpendRecord): string {
+  return r.id ?? `${r.timestamp}|${r.amount}|${r.model ?? ""}|${r.action ?? ""}`;
+}
+
+/** Union of two ledgers, each record once, oldest first. */
+export function mergeSpendHistory(a: SpendRecord[], b: SpendRecord[]): SpendRecord[] {
+  const byKey = new Map<string, SpendRecord>();
+  for (const r of a) byKey.set(recordKey(r), r);
+  for (const r of b) if (!byKey.has(recordKey(r))) byKey.set(recordKey(r), r);
+  return [...byKey.values()].sort((x, y) => x.timestamp - y.timestamp);
 }
 
 export interface SpendingStatus {
@@ -286,6 +305,7 @@ export class FileSpendControlStorage implements SpendControlStorage {
               amount: r.amount,
               model: typeof r.model === "string" ? r.model : undefined,
               action: typeof r.action === "string" ? r.action : undefined,
+              ...(typeof r.id === "string" && r.id !== "" ? { id: r.id } : {}),
             });
           }
         }
@@ -622,6 +642,10 @@ export class SpendControl {
 
     const now = this.now();
 
+    if (this.limits.hourly !== undefined || this.limits.daily !== undefined) {
+      this.syncHistory();
+    }
+
     if (this.limits.perRequest !== undefined) {
       if (estimatedCost > this.limits.perRequest) {
         return {
@@ -694,6 +718,7 @@ export class SpendControl {
       amount,
       model: metadata?.model,
       action: metadata?.action,
+      id: randomUUID(),
     };
 
     this.history.push(record);
@@ -855,6 +880,33 @@ export class SpendControl {
     this.sessionCalls = 0;
   }
 
+  /**
+   * Fold in spend that other processes recorded to the same spending.json.
+   *
+   * The hourly and daily windows are per wallet, not per process, but each
+   * process used to read the file once at startup and then trust its own copy:
+   * N proxies started on one wallet each let the full window through, and the
+   * last writer's history replaced the others' on disk (GHSA-9xv2-9567-rxrw).
+   * Re-reading before every amount check and every write closes that for
+   * anything not signed in the same instant. Two processes checking within
+   * one signing round trip of each other can still both pass; reservations
+   * are per process by design (see reserve()).
+   *
+   * A read failure keeps the ledger this instance already has: a file we
+   * cannot read is no reason to forget spend we know about.
+   */
+  private syncHistory(): void {
+    let data: { limits: SpendLimits; history: SpendRecord[] } | null;
+    try {
+      data = this.storage.load();
+    } catch {
+      return;
+    }
+    if (!data || data.history.length === 0) return;
+    this.history = mergeSpendHistory(this.history, data.history);
+    this.cleanup();
+  }
+
   private cleanup(): void {
     const cutoff = this.now() - DAY_MS;
     this.history = this.history.filter((r) => r.timestamp >= cutoff);
@@ -865,6 +917,9 @@ export class SpendControl {
       return; // never rewrite a file we could not fully parse
     }
     if (!this.limitsDirty && this.storage.saveHistory) {
+      // Merge first: writing this instance's ledger alone would drop what
+      // another process recorded since this one last read the file.
+      this.syncHistory();
       this.storage.saveHistory([...this.history]);
       return;
     }

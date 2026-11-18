@@ -855,6 +855,12 @@ interface SpendRecord {
     amount: number;
     model?: string;
     action?: string;
+    /**
+     * Unique per record, so ledgers written by separate processes sharing one
+     * spending.json can be merged without double-counting. Absent on records
+     * written before it existed; those merge on their content.
+     */
+    id?: string;
 }
 interface SpendingStatus {
     limits: SpendLimits;
@@ -1044,6 +1050,22 @@ declare class SpendControl {
      * windows are deliberately untouched.
      */
     resetSession(): void;
+    /**
+     * Fold in spend that other processes recorded to the same spending.json.
+     *
+     * The hourly and daily windows are per wallet, not per process, but each
+     * process used to read the file once at startup and then trust its own copy:
+     * N proxies started on one wallet each let the full window through, and the
+     * last writer's history replaced the others' on disk (GHSA-9xv2-9567-rxrw).
+     * Re-reading before every amount check and every write closes that for
+     * anything not signed in the same instant. Two processes checking within
+     * one signing round trip of each other can still both pass; reservations
+     * are per process by design (see reserve()).
+     *
+     * A read failure keeps the ledger this instance already has: a file we
+     * cannot read is no reason to forget spend we know about.
+     */
+    private syncHistory;
     private cleanup;
     private save;
     private load;
