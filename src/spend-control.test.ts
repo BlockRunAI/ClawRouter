@@ -1161,4 +1161,18 @@ describe("hourly/daily windows across processes sharing spending.json", () => {
     expect(stored().map((r) => r.amount)).toEqual([0.3, 0.2]);
     expect(a.getSpending("hourly")).toBeCloseTo(0.5);
   });
+
+  it("identical legacy records in one ledger stay separate payments", () => {
+    const { proc, stored } = sharedFile({ hourly: 1 });
+    const legacy = { timestamp: Date.now() - 1000, amount: 0.3 };
+    const file = path.join(dir!, "spending.json");
+    fs.writeFileSync(file, JSON.stringify({ limits: { hourly: 1 }, history: [legacy, legacy] }));
+
+    const a = proc();
+    // $0.60 already spent: $0.50 more would pass the $1 cap.
+    expect(a.check(0.5).allowed).toBe(false);
+    a.record(0.1);
+    expect(stored().map((r) => r.amount)).toEqual([0.3, 0.3, 0.1]);
+    expect(a.getSpending("hourly")).toBeCloseTo(0.7);
+  });
 });

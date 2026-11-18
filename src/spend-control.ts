@@ -171,16 +171,38 @@ export interface SpendRecord {
   id?: string;
 }
 
-function recordKey(r: SpendRecord): string {
-  return r.id ?? `${r.timestamp}|${r.amount}|${r.model ?? ""}|${r.action ?? ""}`;
-}
-
-/** Union of two ledgers, each record once, oldest first. */
+/**
+ * Union of two ledgers, each record once, oldest first.
+ *
+ * Records with an id merge on it. Records without one (written before ids
+ * existed) merge on their content, but two identical ones in the same ledger
+ * are two payments, not one: each content key is kept as many times as the
+ * ledger holding the most copies of it has it.
+ */
 export function mergeSpendHistory(a: SpendRecord[], b: SpendRecord[]): SpendRecord[] {
-  const byKey = new Map<string, SpendRecord>();
-  for (const r of a) byKey.set(recordKey(r), r);
-  for (const r of b) if (!byKey.has(recordKey(r))) byKey.set(recordKey(r), r);
-  return [...byKey.values()].sort((x, y) => x.timestamp - y.timestamp);
+  const merged: SpendRecord[] = [];
+  const ids = new Set<string>();
+  const legacyKept = new Map<string, number>();
+  for (const ledger of [a, b]) {
+    const legacySeen = new Map<string, number>();
+    for (const r of ledger) {
+      if (r.id !== undefined) {
+        if (!ids.has(r.id)) {
+          ids.add(r.id);
+          merged.push(r);
+        }
+        continue;
+      }
+      const key = `${r.timestamp}|${r.amount}|${r.model ?? ""}|${r.action ?? ""}`;
+      const nth = (legacySeen.get(key) ?? 0) + 1;
+      legacySeen.set(key, nth);
+      if (nth > (legacyKept.get(key) ?? 0)) {
+        legacyKept.set(key, nth);
+        merged.push(r);
+      }
+    }
+  }
+  return merged.sort((x, y) => x.timestamp - y.timestamp);
 }
 
 export interface SpendingStatus {
