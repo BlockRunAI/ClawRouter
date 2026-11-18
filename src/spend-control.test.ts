@@ -10,6 +10,7 @@ import { x402Client } from "@x402/fetch";
 import {
   SpendControl,
   InMemorySpendControlStorage,
+  FileSpendControlStorage,
   formatDuration,
   registerSpendPolicyHook,
   assertSpendPolicyAllows,
@@ -461,17 +462,21 @@ describe("counterparty policy", () => {
 describe("FileSpendControlStorage persistence", () => {
   let tmpHome: string | undefined;
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
 
   afterEach(() => {
     if (tmpHome) fs.rmSync(tmpHome, { recursive: true, force: true });
     tmpHome = undefined;
     if (originalHome !== undefined) process.env.HOME = originalHome;
     else delete process.env.HOME;
+    if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+    else delete process.env.USERPROFILE;
   });
 
   it("round-trips policy lists, not just spend limits, across save/load", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -498,6 +503,7 @@ describe("FileSpendControlStorage persistence", () => {
   it("refuses to load when a policy list has a malformed entry", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -516,6 +522,7 @@ describe("FileSpendControlStorage persistence", () => {
     // would take the proxy down over a legal edit.
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -534,6 +541,7 @@ describe("FileSpendControlStorage persistence", () => {
   it("normalizes persisted checksummed payees on load", async () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const storage = new mod.FileSpendControlStorage();
@@ -557,6 +565,7 @@ describe("FileSpendControlStorage persistence", () => {
     // on every payment would erase an operator's hand-edit seconds later.
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-spend-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     vi.resetModules();
     const mod = await import("./spend-control.js");
     const spendingFile = path.join(tmpHome, ".openclaw", "blockrun", "spending.json");
@@ -970,5 +979,114 @@ describe("reloadLimits (in-process proxy restart)", () => {
     expect(live.check(0.01).allowed).toBe(true);
     expect(live.getPolicyFileError()).toBeUndefined();
     errors.mockRestore();
+  });
+
+  it("fails closed and records policy file error when constructor encounters an unreadable policy file", () => {
+    class AlwaysTornStorage extends InMemorySpendControlStorage {
+      override load() {
+        throw new UnreadableSpendPolicyError(new Error("EACCES: permission denied"));
+        return super.load();
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const control = new SpendControl({ storage: new AlwaysTornStorage() });
+    expect(control.getPolicyFileError()).toMatch(/EACCES: permission denied/);
+    const result = control.check(0.01);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Spend policy is unreadable, refusing all payments/);
+    const amountResult = control.checkAmount(0.01);
+    expect(amountResult.allowed).toBe(false);
+    expect(amountResult.reason).toMatch(/Spend policy is unreadable, refusing all payments/);
+    errors.mockRestore();
+  });
+
+  it("restores persisted history when recovering from an initial load failure via reloadLimits", () => {
+    let broken = true;
+    const now = Date.now();
+    class RecoveringStorage extends InMemorySpendControlStorage {
+      override load() {
+        if (broken) {
+          throw new UnreadableSpendPolicyError(new Error("EACCES: permission denied"));
+        }
+        return {
+          limits: { daily: 10 },
+          history: [{ timestamp: now - 1000, amount: 9 }],
+        };
+      }
+    }
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const control = new SpendControl({
+      storage: new RecoveringStorage(),
+      now: () => now,
+    });
+    // Initially broken: payments refused
+    expect(control.check(2).allowed).toBe(false);
+
+    // Operator fixes file permissions and reloads
+    broken = false;
+    control.reloadLimits();
+    expect(control.getPolicyFileError()).toBeUndefined();
+
+    // Restored history had 9 spent out of daily 10 limit: 2 more exceeds 10
+    const checkResult = control.check(2);
+    expect(checkResult.allowed).toBe(false);
+    expect(checkResult.reason).toMatch(/Daily/i);
+
+    // 1 more is within remaining limit (9 + 1 <= 10)
+    expect(control.check(1).allowed).toBe(true);
+    errors.mockRestore();
+  });
+
+  it("preserves in-memory live history across ordinary limit reloads", () => {
+    const now = Date.now();
+    class NormalStorage extends InMemorySpendControlStorage {
+      override load() {
+        return {
+          limits: { daily: 10 },
+          history: [],
+        };
+      }
+    }
+    const control = new SpendControl({
+      storage: new NormalStorage(),
+      now: () => now,
+    });
+    // Record a payment live in memory
+    control.record(8);
+    expect(control.check(3).allowed).toBe(false); // 8 + 3 = 11 > 10
+
+    // Reload limits (e.g. disk file still has history: [])
+    control.reloadLimits();
+
+    // Live history in memory must be preserved, not wiped back to empty
+    expect(control.check(3).allowed).toBe(false);
+    expect(control.check(1).allowed).toBe(true);
+  });
+
+  it("FileSpendControlStorage distinguishes ENOENT from permission errors", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-test-"));
+    try {
+      const nonExistentFile = path.join(tmpDir, "non-existent-spending.json");
+      const storage = new FileSpendControlStorage(nonExistentFile);
+
+      // Clean start: file does not exist -> load() returns null
+      expect(storage.load()).toBeNull();
+
+      // Create a policy file with invalid JSON
+      const tornFile = path.join(tmpDir, "torn-spending.json");
+      fs.writeFileSync(tornFile, '{"limits": {');
+      const tornStorage = new FileSpendControlStorage(tornFile);
+      expect(() => tornStorage.load()).toThrow(UnreadableSpendPolicyError);
+
+      // Create a valid policy file
+      const validFile = path.join(tmpDir, "valid-spending.json");
+      fs.writeFileSync(validFile, JSON.stringify({ limits: { daily: 5 }, history: [] }));
+      const validStorage = new FileSpendControlStorage(validFile);
+      const loaded = validStorage.load();
+      expect(loaded).not.toBeNull();
+      expect(loaded?.limits.daily).toBe(5);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

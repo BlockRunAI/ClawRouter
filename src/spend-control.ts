@@ -230,59 +230,68 @@ export class SpendPolicyConflictError extends Error {
 export class FileSpendControlStorage implements SpendControlStorage {
   private readonly spendingFile: string;
 
-  constructor() {
-    this.spendingFile = path.join(WALLET_DIR, "spending.json");
+  constructor(spendingFile?: string) {
+    this.spendingFile = spendingFile ?? path.join(WALLET_DIR, "spending.json");
   }
 
   load(): { limits: SpendLimits; history: SpendRecord[] } | null {
+    let raw: string;
     try {
-      if (fs.existsSync(this.spendingFile)) {
-        const data = JSON.parse(readTextFileSync(this.spendingFile));
-        const rawLimits = data.limits ?? {};
-        const rawHistory = data.history ?? [];
-
-        const limits: SpendLimits = {};
-        for (const key of ["perRequest", "hourly", "daily", "session"] as const) {
-          const val = rawLimits[key];
-          if (typeof val === "number" && val > 0 && Number.isFinite(val)) {
-            limits[key] = val;
-          }
-        }
-        for (const key of POLICY_LISTS) {
-          if (!Object.prototype.hasOwnProperty.call(rawLimits, key)) continue;
-          const val = rawLimits[key];
-          if (!isValidPolicyValues(val)) {
-            throw new MalformedSpendPolicyError(key);
-          }
-          // An empty array is how an operator clears a list by hand. Treat it
-          // as "not configured" rather than corruption — refusing to start
-          // over an empty array would brick the proxy on a legal edit.
-          if (val.length === 0) continue;
-          limits[key] = normalizePolicyValues(key, val);
-        }
-
-        const history: SpendRecord[] = [];
-        if (Array.isArray(rawHistory)) {
-          for (const r of rawHistory) {
-            if (
-              typeof r?.timestamp === "number" &&
-              typeof r?.amount === "number" &&
-              Number.isFinite(r.timestamp) &&
-              Number.isFinite(r.amount) &&
-              r.amount >= 0
-            ) {
-              history.push({
-                timestamp: r.timestamp,
-                amount: r.amount,
-                model: typeof r.model === "string" ? r.model : undefined,
-                action: typeof r.action === "string" ? r.action : undefined,
-              });
-            }
-          }
-        }
-
-        return { limits, history };
+      raw = readTextFileSync(this.spendingFile);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        return null;
       }
+      throw new UnreadableSpendPolicyError(err);
+    }
+
+    try {
+      const data = JSON.parse(raw);
+      const rawLimits = data.limits ?? {};
+      const rawHistory = data.history ?? [];
+
+      const limits: SpendLimits = {};
+      for (const key of ["perRequest", "hourly", "daily", "session"] as const) {
+        const val = rawLimits[key];
+        if (typeof val === "number" && val > 0 && Number.isFinite(val)) {
+          limits[key] = val;
+        }
+      }
+      for (const key of POLICY_LISTS) {
+        if (!Object.prototype.hasOwnProperty.call(rawLimits, key)) continue;
+        const val = rawLimits[key];
+        if (!isValidPolicyValues(val)) {
+          throw new MalformedSpendPolicyError(key);
+        }
+        // An empty array is how an operator clears a list by hand. Treat it
+        // as "not configured" rather than corruption — refusing to start
+        // over an empty array would brick the proxy on a legal edit.
+        if (val.length === 0) continue;
+        limits[key] = normalizePolicyValues(key, val);
+      }
+
+      const history: SpendRecord[] = [];
+      if (Array.isArray(rawHistory)) {
+        for (const r of rawHistory) {
+          if (
+            typeof r?.timestamp === "number" &&
+            typeof r?.amount === "number" &&
+            Number.isFinite(r.timestamp) &&
+            Number.isFinite(r.amount) &&
+            r.amount >= 0
+          ) {
+            history.push({
+              timestamp: r.timestamp,
+              amount: r.amount,
+              model: typeof r.model === "string" ? r.model : undefined,
+              action: typeof r.action === "string" ? r.action : undefined,
+            });
+          }
+        }
+      }
+
+      return { limits, history };
     } catch (err) {
       if (err instanceof MalformedSpendPolicyError) {
         throw err;
@@ -293,7 +302,6 @@ export class FileSpendControlStorage implements SpendControlStorage {
       // what it already has.
       throw new UnreadableSpendPolicyError(err);
     }
-    return null;
   }
 
   save(data: { limits: SpendLimits; history: SpendRecord[] }): void {
@@ -413,6 +421,8 @@ export class SpendControl {
   private diskLimits: SpendLimits = {};
   /** Set when spending.json held an unusable policy list: refuse every payment. */
   private policyFileBroken?: string;
+  /** Whether persisted history loaded successfully; when false, recovery from an initial failure restores history. */
+  private initialHistoryLoaded = false;
   private readonly storage: SpendControlStorage;
   private readonly now: () => number;
 
@@ -486,17 +496,23 @@ export class SpendControl {
       data = this.storage.load();
     } catch (err) {
       if (err instanceof UnreadableSpendPolicyError) {
-        // The constructor can start fresh on an unreadable file because it has
-        // nothing to lose. A reload does: dropping the live limits here would
-        // widen what the agent may pay because a read failed. Keep enforcing
-        // what is already loaded and leave any refusal state alone.
-        console.error(`${err.message} — keeping the limits already in effect`);
+        // Dropping the live limits here would widen what the agent may pay
+        // because a read failed. Keep enforcing what is already loaded and
+        // leave any refusal state alone.
+        console.error(`${err.message}: keeping the limits already in effect`);
         return;
       }
       if (!(err instanceof MalformedSpendPolicyError)) throw err;
       this.policyFileBroken = err.message;
       console.error(`[ClawRouter] ${err.message}`);
       return;
+    }
+    if (!this.initialHistoryLoaded) {
+      if (data) {
+        this.history = data.history;
+        this.cleanup();
+      }
+      this.initialHistoryLoaded = true;
     }
     this.policyFileBroken = undefined;
     this.limits = data ? cloneLimits(data.limits) : {};
@@ -893,25 +909,20 @@ export class SpendControl {
     try {
       data = this.storage.load();
     } catch (err) {
-      if (err instanceof UnreadableSpendPolicyError) {
-        // Unchanged startup behaviour: begin with no limits, and say loudly
-        // that whatever the file configured is not in effect.
+      if (err instanceof UnreadableSpendPolicyError || err instanceof MalformedSpendPolicyError) {
+        // Refuse every paid request rather than either (a) running with the
+        // policy silently dropped on restart or an unreadable file, or (b)
+        // throwing out of the constructor and taking the whole proxy down,
+        // which would kill free models too, for a file that only governs
+        // payments.
+        this.policyFileBroken = err.message;
+        console.error(`[ClawRouter] ${err.message}`);
         console.error(
-          `${err.message} — starting fresh (any configured spend policy is NOT in effect until this file is repaired)`,
+          "[ClawRouter] All paid requests will be refused until spending.json is repaired. Free models are unaffected.",
         );
         return;
       }
-      if (!(err instanceof MalformedSpendPolicyError)) throw err;
-      // Refuse every paid request rather than either (a) running with the
-      // policy silently dropped, or (b) throwing out of the constructor and
-      // taking the whole proxy down — which would kill free models too, for a
-      // file that only governs payments.
-      this.policyFileBroken = err.message;
-      console.error(`[ClawRouter] ${err.message}`);
-      console.error(
-        "[ClawRouter] All paid requests will be refused until spending.json is repaired. Free models are unaffected.",
-      );
-      return;
+      throw err;
     }
     if (data) {
       this.limits = cloneLimits(data.limits);
@@ -919,6 +930,7 @@ export class SpendControl {
       this.history = data.history;
       this.cleanup();
     }
+    this.initialHistoryLoaded = true;
   }
 }
 

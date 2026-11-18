@@ -257,12 +257,15 @@ describe("runPolicyCommand (in-memory store)", () => {
 describe("runPolicyCommand (spending.json on disk)", () => {
   let tmpHome: string | undefined;
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
 
   afterEach(() => {
     if (tmpHome) fs.rmSync(tmpHome, { recursive: true, force: true });
     tmpHome = undefined;
     if (originalHome !== undefined) process.env.HOME = originalHome;
     else delete process.env.HOME;
+    if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+    else delete process.env.USERPROFILE;
     vi.restoreAllMocks();
   });
 
@@ -270,6 +273,7 @@ describe("runPolicyCommand (spending.json on disk)", () => {
   async function seeded(limits: unknown) {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "clawrouter-policy-"));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     const file = path.join(tmpHome, ".openclaw", "blockrun", "spending.json");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ limits, history: [] }));

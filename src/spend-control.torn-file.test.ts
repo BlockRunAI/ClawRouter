@@ -33,10 +33,11 @@ beforeEach(() => {
 afterAll(() => rmSync(TEMP_HOME, { recursive: true, force: true }));
 
 describe("a truncated spending.json on disk", () => {
-  it("does not take the constructor down, and starts with no limits", () => {
+  it("does not take the constructor down, and fails closed when spending.json is unreadable", () => {
     writeFileSync(SPENDING, TORN);
     const control = new SpendControl();
-    expect(control.check(5).allowed).toBe(true); // unchanged startup behaviour
+    expect(control.getPolicyFileError()).toMatch(/Failed to load spending data/);
+    expect(control.check(5).allowed).toBe(false);
   });
 
   it("does not widen a running instance's limits on reload", () => {
