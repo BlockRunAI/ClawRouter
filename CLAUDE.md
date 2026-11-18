@@ -45,6 +45,8 @@ src/
 └── partners/            # Partner integrations
 ```
 
+`packages/clawrouter-alias/` is the source of the unscoped npm name `clawrouter` (held so `npx clawrouter` runs us). Published by hand, not by CI; see its `PUBLISHING.md`.
+
 ## Key dependencies
 
 - `@x402/fetch`, `@x402/evm`, `@x402/svm` — x402 payment protocol
