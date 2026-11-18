@@ -8,18 +8,32 @@ import { VERSION } from "./version.js";
 const NPM_REGISTRY = "https://registry.npmjs.org/@blockrun/clawrouter/latest";
 const CHECK_TIMEOUT_MS = 5_000; // Don't block startup for more than 5s
 
+/** Parse the numeric release core of a version, ignoring prerelease/build suffixes. */
+function versionCore(version: string): number[] {
+  const core = version.split(/[+-]/, 1)[0] ?? "";
+  return core.split(".").map((part) => {
+    const value = Number(part);
+    return Number.isFinite(value) ? value : 0;
+  });
+}
+
 /**
  * Compare semver versions. Returns:
  *  1 if a > b
  *  0 if a === b
  * -1 if a < b
+ *
+ * Only the numeric core is compared. Passing a prerelease such as
+ * `0.12.316-rc.1` through `Number()` yields NaN, and the old `|| 0` fallback
+ * turned its patch into 0, so a newer prerelease looked older than the
+ * installed stable release and no update hint was printed.
  */
-function compareSemver(a: string, b: string): number {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
+export function compareSemver(a: string, b: string): number {
+  const pa = versionCore(a);
+  const pb = versionCore(b);
   for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1;
+    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1;
   }
   return 0;
 }
