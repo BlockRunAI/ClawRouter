@@ -8,7 +8,7 @@ allowBuilds:
 packages:
   - "."
 overrides:
-  "@blockrun/clawrouter": 0.12.314
+  "@blockrun/clawrouter": 0.12.315
   # Mirrors the root package.json security pins. This runtime is a SEPARATE pnpm
   # install that electron-builder packages into the app, so the root `overrides`
   # never reach it — @polymarket/builder-relayer-client was still dragging
@@ -20,8 +20,8 @@ overrides:
   fast-uri: ^3.1.9
   ip-address: 10.7.4
   proxy-addr: ^2.0.8
-  hono: 4.13.11
-  "@hono/node-server": 2.1.3
+  hono: 4.13.16
+  "@hono/node-server": 2.1.6
   sharp: ^0.35.5
   follow-redirects: 1.16.2
   "@modelcontextprotocol/sdk": 1.32.0
@@ -36,5 +36,5 @@ overrides:
   viem: 2.57.13
   "@preact/signals-core": 1.14.4
 minimumReleaseAgeExclude:
-  - "@blockrun/clawrouter@0.12.314"
+  - "@blockrun/clawrouter@0.12.315"
   - minimatch@11.0.4
