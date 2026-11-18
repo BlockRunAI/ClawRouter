@@ -51,6 +51,8 @@ export const MODEL_ALIASES: Record<string, string> = {
   // accepts is safe to alias.
   "fable-5.1": "anthropic/claude-fable-5.1",
   "fable-5-1": "anthropic/claude-fable-5.1",
+  "fable-5.2": "anthropic/claude-fable-5.2",
+  "fable-5-2": "anthropic/claude-fable-5.2",
   "anthropic/claude-fable-5-1": "anthropic/claude-fable-5.1",
   // Opus 5 (2026-07-24) takes the bare `opus` alias: identical $5/$25 and the
   // same 1M/128K envelope as 4.8, so a wallet with a per-call cost cap sees no
@@ -177,6 +179,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   kimi: "moonshot/kimi-k2.7",
   moonshot: "moonshot/kimi-k2.7",
   "kimi-k3": "moonshot/kimi-k3",
+  // K3.1 Pro superseded K3 on BlockRun 2026-10-25 (K3 hidden, still routable) and is
+  // cheaper ($2/$10 vs $3/$15). Bare `kimi` stays on K2.7 for the reason above.
+  "kimi-k3.1": "moonshot/kimi-k3.1-pro",
+  "kimi-k3.1-pro": "moonshot/kimi-k3.1-pro",
   "kimi-k2": "moonshot/kimi-k2.7",
   "kimi-k2.7": "moonshot/kimi-k2.7",
   "kimi-k2.6": "moonshot/kimi-k2.6",
@@ -456,6 +462,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   "nvidia/nemotron-3.5-lightning": "free/nemotron-3.5-lightning",
   "nvidia/nemotron-3-nano-30b": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "nvidia/nemotron-3-ultra-550b": "free/nemotron-3-ultra-550b",
+  "nvidia/minimax-m3.1-flash": "free/minimax-m3.1-flash",
   "nvidia/llama-3.2-11b-vision": "free/llama-3.2-11b-vision",
   // The two non-NVIDIA free models keep the `free/` picker convention; their
   // real upstream ids are accepted as pins and rewritten in toUpstreamModelId
@@ -470,6 +477,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   "nemotron-nano-30b": "free/nemotron-3-nano-omni-30b-a3b-reasoning",
   "ultra-550b": "free/nemotron-3-ultra-550b",
   "nemotron-ultra-550b": "free/nemotron-3-ultra-550b",
+  "minimax-m3.1-flash": "free/minimax-m3.1-flash",
   "llama-vision": "free/llama-3.2-11b-vision",
   "llama-3.2-vision": "free/llama-3.2-11b-vision",
   "north-mini": "free/north-mini-code",
@@ -1332,6 +1340,21 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
   {
+    // Successor to Fable 5.1 at a lower price; always-on thinking. Listed on
+    // Base only (sol.blockrun.ai does not carry it as of 2026-11-12).
+    id: "anthropic/claude-fable-5.2",
+    name: "Claude Fable 5.2",
+    version: "5.2",
+    inputPrice: 8.0,
+    outputPrice: 40.0,
+    contextWindow: 1000000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
     id: "anthropic/claude-opus-5.5",
     name: "Claude Opus 5.5",
     version: "5.5",
@@ -1395,6 +1418,20 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     // 2026-11-30 and 4/20 from 2026-12-01 (ai.google.dev/gemini-api/docs/pricing;
     // blockrun's src/lib/models.ts carries the same dated note). Leaving 2/10 past
     // that date under-reports spend 2x and lets maxCostPerRun run to twice its cap.
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // Gemini 4's top reasoning tier (blockrun added 2026-11-11). Same dated
+    // ⏰ INTRO RATE as Argon above: 2/10 through 2026-11-30, 4/20 from 2026-12-01.
+    id: "google/gemini-4-carbon",
+    name: "Gemini 4 Carbon",
+    version: "4",
     inputPrice: 2.0,
     outputPrice: 10.0,
     contextWindow: 1048576,
@@ -1591,6 +1628,23 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
+    agentic: true,
+    toolCalling: true,
+  },
+
+  // Kimi K3.1 Pro — post-trained successor to K3 for long-horizon coding and agents
+  // (blockrun 2026-10-25, which hid K3). 1M context, image + text input, returns
+  // reasoning_content. $2/$10 raw cost, cheaper than K3.
+  {
+    id: "moonshot/kimi-k3.1-pro",
+    name: "Kimi K3.1 Pro",
+    version: "k3.1-pro",
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
     agentic: true,
     toolCalling: true,
   },
@@ -2327,6 +2381,20 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1000000,
     maxOutput: 16384,
     reasoning: true,
+  },
+  {
+    // MiniMax M3.1 Flash, hosted free by NVIDIA (blockrun 2026-11-05). Pin-only:
+    // off the picker and the FREE_MODELS cascade until it has its own probe record
+    // here. The gateway health-gates it (it may answer `available: false`).
+    id: "free/minimax-m3.1-flash",
+    name: "[Free] MiniMax M3.1 Flash",
+    version: "m3.1-flash",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 1048576,
+    maxOutput: 16384,
+    reasoning: true,
+    toolCalling: true,
   },
   {
     // Meta Llama 3.2 11B Vision — restores a free Llama after nemotron-super-49b

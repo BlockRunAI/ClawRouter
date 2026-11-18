@@ -376,7 +376,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | `xai/grok-imagine-video`      | xAI Grok Imagine   | 8s default, up to 15s |
 | `xai/grok-imagine-video-1.5`  | xAI Grok Imagine   | 8s default, up to 15s |
 
-Seedance is **token-priced upstream** at ~20,256 tokens/sec — the blockrun videos route now defaults Seedance to `resolution=720p` with `generate_audio=true` for text-to-video (2× the per-second token count of the older 480p baseline; audio is included in that rate). The quote is `duration × tokens/sec × $/1M tokens × 1.05 margin`. Image-to-video is priced the same as text-to-video (the earlier ~40% i2v discount was removed upstream on 2026-06-01; only video-to-video remains cheaper). For real people in reference images, use Seedance + RealFace. Calls block for 30–120s while the upstream polls the job. Seedance 2.0 Fast typically returns in 60–80s; 2.0 Pro trades latency for quality.
+Seedance is **token-priced upstream** at ~20,256 tokens/sec — the blockrun videos route now defaults Seedance to `resolution=720p` with `generate_audio=true` for every input — text, image-to-video, first/last frame, reference media and RealFace; pass `false` for a silent clip (2× the per-second token count of the older 480p baseline; audio is included in that rate). The quote is `duration × tokens/sec × $/1M tokens × 1.05 margin`. Image-to-video is priced the same as text-to-video (the earlier ~40% i2v discount was removed upstream on 2026-06-01; only video-to-video remains cheaper). For real people in reference images, use Seedance + RealFace. Calls block for 30–120s while the upstream polls the job. Seedance 2.0 Fast typically returns in 60–80s; 2.0 Pro trades latency for quality.
 
 ### BytePlus RealFace (Seedance 2.0 only)
 

@@ -1,4 +1,28 @@
+import { readFileSync } from "node:fs";
 import { configDefaults, defineConfig } from "vitest/config";
+import { compareVersions, formatVersion, parseVersion, rangeFloor } from "./test/node-engines";
+
+/**
+ * Refuse to run on a Node below `engines.node`. Below it the suite does not fail
+ * cleanly: on Node 22.14 `test/upstream-proxy.test.ts` dies at import with
+ * "Cannot read properties of undefined (reading 'bind')" inside undici, because
+ * undici 8 binds `zlib.createZstdDecompress`, which Node only added in 22.15.
+ * Every other file passes, so the run looks like one broken test rather than an
+ * unsupported runtime. Say which it is instead.
+ */
+const { engines } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const nodeFloor = rangeFloor(engines.node);
+const running = parseVersion(process.versions.node);
+if (!nodeFloor || !running) {
+  throw new Error(
+    `vitest.config.ts: cannot compare Node ${process.versions.node} to engines.node "${engines.node}"`,
+  );
+}
+if (compareVersions(running, nodeFloor) < 0) {
+  throw new Error(
+    `ClawRouter needs Node ${formatVersion(nodeFloor)} or newer (engines.node "${engines.node}"); this is Node ${process.versions.node}. Use Node 24 (see .nvmrc).`,
+  );
+}
 
 /**
  * Default test run: hermetic tests only.

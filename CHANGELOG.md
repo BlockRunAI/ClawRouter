@@ -4,6 +4,37 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.314 — November 12, 2026
+
+### Catalog sync: Gemini 4 Carbon, Fable 5.2, Kimi K3.1 Pro
+
+- New models: `google/gemini-4-carbon`, `anthropic/claude-fable-5.2` (Base only),
+  `moonshot/kimi-k3.1-pro`, and `free/minimax-m3.1-flash` (pin only, not in the free
+  cascade). New aliases `fable-5.2`, `kimi-k3.1`, `kimi-k3.1-pro`, `minimax-m3.1-flash`.
+- Smart routing's medium and agentic tiers use Kimi K3.1 Pro instead of the retired
+  K3, at a lower price ($2/$10 vs $3/$15). The free vision set drops the retired
+  Llama 3.2 Vision and keeps Nemotron Nano Omni.
+- Bundled model catalog 2026.11.12.2: current prices and descriptions from both gateways.
+
+---
+
+## v0.12.313 — November 12, 2026
+
+### Seedance synced audio defaults on for every input
+
+The gateway now turns synced audio on by default for every Seedance input (text,
+image, first/last frame, reference image, video or audio, RealFace), not only
+text-to-video. The video tool and docs say so, and the bundled model catalog
+(2026.11.12.1) carries the gateway's updated Seedance descriptions. Pass
+`generate_audio: false` for a silent clip. The price does not depend on it.
+
+### Node 22.19 or newer
+
+The bundled undici 8 needs Node 22.19, so `engines.node` now says `>=22.19`.
+npm warns at install time on an older Node.
+
+---
+
 ## v0.12.312 — November 9, 2026
 
 ### `clawrouter update` no longer puts your wallet key on a command line

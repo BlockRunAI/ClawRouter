@@ -742,11 +742,11 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
     name: "Video Generation",
     partner: "BlockRun",
     category: "Image & Video",
-    shortDescription: "Grok Imagine + Seedance, 5–10s (720p + audio on t2v)",
+    shortDescription: "Grok Imagine + Seedance, 5–10s (720p + audio)",
     description:
       "Generate a short video (5–10s) via xai/grok-imagine-video or bytedance/seedance-1.5-pro " +
       "(default, cheapest) / seedance-2.0-fast / seedance-2.0. Seedance defaults to 720p with " +
-      "synced audio for text-to-video. Seedance 2.0 variants accept optional " +
+      "synced audio for every input (generate_audio: false for silent). Seedance 2.0 variants accept optional " +
       "`real_face_asset_id` (`ta_xxxxxxxx`) for BytePlus RealFace character consistency — " +
       "mutually exclusive with `image_url`. Async — upstream polling takes 30–120 seconds. " +
       "Returns a local http://localhost:8402/videos/<file>.mp4 URL.",
