@@ -60319,14 +60319,30 @@ function cloneLimits(limits) {
   }
   return clone2;
 }
-function recordKey(r2) {
-  return r2.id ?? `${r2.timestamp}|${r2.amount}|${r2.model ?? ""}|${r2.action ?? ""}`;
-}
 function mergeSpendHistory(a, b) {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const r2 of a) byKey.set(recordKey(r2), r2);
-  for (const r2 of b) if (!byKey.has(recordKey(r2))) byKey.set(recordKey(r2), r2);
-  return [...byKey.values()].sort((x, y) => x.timestamp - y.timestamp);
+  const merged = [];
+  const ids = /* @__PURE__ */ new Set();
+  const legacyKept = /* @__PURE__ */ new Map();
+  for (const ledger2 of [a, b]) {
+    const legacySeen = /* @__PURE__ */ new Map();
+    for (const r2 of ledger2) {
+      if (r2.id !== void 0) {
+        if (!ids.has(r2.id)) {
+          ids.add(r2.id);
+          merged.push(r2);
+        }
+        continue;
+      }
+      const key3 = `${r2.timestamp}|${r2.amount}|${r2.model ?? ""}|${r2.action ?? ""}`;
+      const nth = (legacySeen.get(key3) ?? 0) + 1;
+      legacySeen.set(key3, nth);
+      if (nth > (legacyKept.get(key3) ?? 0)) {
+        legacyKept.set(key3, nth);
+        merged.push(r2);
+      }
+    }
+  }
+  return merged.sort((x, y) => x.timestamp - y.timestamp);
 }
 function canonicalLimits(limits) {
   return JSON.stringify(
@@ -91755,12 +91771,19 @@ var init_session = __esm({
 });
 
 // src/updater.ts
+function versionCore(version31) {
+  const core = version31.split(/[+-]/, 1)[0] ?? "";
+  return core.split(".").map((part) => {
+    const value = Number(part);
+    return Number.isFinite(value) ? value : 0;
+  });
+}
 function compareSemver(a, b) {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
+  const pa = versionCore(a);
+  const pb = versionCore(b);
   for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1;
+    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1;
   }
   return 0;
 }

@@ -4,6 +4,23 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.317 — November 18, 2026
+
+### Identical legacy spend records count as separate payments
+
+v0.12.316 began merging `spending.json` across processes. Records written
+before that release carry no id and merge on their content, so two identical
+ones (same millisecond, amount and model) collapsed into one, under-counting the
+hourly or daily window once at upgrade. Each is now kept as a separate payment.
+
+### The update hint recognises a newer prerelease
+
+The startup update check read `0.12.316-rc.1` as patch `0`, so a newer
+prerelease looked older than the installed release and no hint was printed.
+Versions are now compared by their numeric core. (#617, thanks @Tyagiquamar)
+
+---
+
 ## v0.12.316 — November 18, 2026
 
 ### Strict `maxCostPerRun` re-checks every dispatch on the API-key rail
