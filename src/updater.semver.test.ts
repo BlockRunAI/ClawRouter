@@ -53,14 +53,14 @@ describe("checkForUpdates version comparison", () => {
   }
 
   it("prints a hint for a newer stable release", async () => {
-    const [major, minor, patch] = VERSION.split(".").map(Number);
+    const [major, minor, patch] = (VERSION.split(/[+-]/, 1)[0] ?? "").split(".").map(Number);
     const newer = `${major}.${minor}.${patch + 1}`;
     const lines = await runWithLatest(newer);
     expect(lines.some((line) => line.includes(`${newer} available`))).toBe(true);
   });
 
   it("prints a hint for a newer prerelease instead of treating its patch as zero", async () => {
-    const [major, minor, patch] = VERSION.split(".").map(Number);
+    const [major, minor, patch] = (VERSION.split(/[+-]/, 1)[0] ?? "").split(".").map(Number);
     const newerPrerelease = `${major}.${minor}.${patch + 1}-rc.1`;
     const lines = await runWithLatest(newerPrerelease);
     expect(lines.some((line) => line.includes(`${newerPrerelease} available`))).toBe(true);
