@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@blockrun/clawrouter': 0.12.314
+  '@blockrun/clawrouter': 0.12.315
   axios: ^1.20.0
   undici: ^8.12.3
   ws: ^8.21.2
@@ -13,8 +13,8 @@ overrides:
   fast-uri: ^3.1.9
   ip-address: 10.7.4
   proxy-addr: ^2.0.8
-  hono: 4.13.11
-  '@hono/node-server': 2.1.3
+  hono: 4.13.16
+  '@hono/node-server': 2.1.6
   sharp: ^0.35.5
   follow-redirects: 1.16.2
   '@modelcontextprotocol/sdk': 1.32.0
@@ -30,8 +30,8 @@ importers:
   .:
     dependencies:
       '@blockrun/clawrouter':
-        specifier: 0.12.314
-        version: 0.12.314(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+        specifier: 0.12.315
+        version: 0.12.315(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@blockrun/clawrouter-codex':
         specifier: 0.4.0
         version: 0.4.0(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
@@ -187,8 +187,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@blockrun/clawrouter@0.12.314':
-    resolution: {integrity: sha512-s63CweoSrdIW5m8Abw16hfgNqqEj8xHn7DiVdAJk7XtNP2HpXTfvBF7MoXa1ALcEQqDrwqrK0Ro8Ctwg0zw7ag==}
+  '@blockrun/clawrouter@0.12.315':
+    resolution: {integrity: sha512-VXXYaepnILpxo/sXkjDM6IVY4N5vnp+jS95dHJZ/an6PMpkltysgXZXfQa+nq3TDYr4J8sKgO3ypxQIjcVATAw==}
     engines: {node: '>=22.19.0'}
     hasBin: true
     peerDependencies:
@@ -2381,11 +2381,11 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@hono/node-server@2.1.3':
-    resolution: {integrity: sha512-TA//nWMqPhbfdfneACk6t5a9eqbS9lABEPyKn0/xZTah3H3U2XaVg85rJFl0/Fyit0I552YDHgXGVSf3GwqbUw==}
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: 4.13.11
+      hono: 4.13.16
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -2927,10 +2927,9 @@ packages:
     resolution: {integrity: sha512-rZLCFxEdYahl5FiJmhe22RDXysS1ibFJlWz4NT0s3itJRYq3XJzXXHXEZkAQplU+nIS1IlbbKjA4zDQaeCyYtg==}
     deprecated: This package is deprecated. Please migrate to the unified Polymarket SDK. Follow https://docs.polymarket.com/migrate/clob-sdk-to-unified-sdk to get started.
 
-  '@polymarket/clob-client-v2@1.2.0':
-    resolution: {integrity: sha512-LmqNqKxp3EZetixMytW2RH4X60pfh8YHJKeRxCsZiLuegeUpXS4ggsQgPdRP4h7JCWB0DdygxjpEBjBDWvOOiQ==}
+  '@polymarket/clob-client-v2@1.2.1':
+    resolution: {integrity: sha512-4K+eb/uhR4/BpRty9opIBmRLjtXqMZQX0sR5ZmMeysmEKP7+eRoZ0+nd5EEgRwHiLm/vKDPexTVBtfiHzByw2g==}
     engines: {node: '>=20.10'}
-    deprecated: This package is deprecated. Please migrate to the unified Polymarket SDK. Follow https://docs.polymarket.com/migrate/clob-sdk-to-unified-sdk to get started.
 
   '@preact/signals-core@1.14.4':
     resolution: {integrity: sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA==}
@@ -3543,17 +3542,17 @@ packages:
   '@vscode/ripgrep@1.18.0':
     resolution: {integrity: sha512-ns5lWe44tSfbTMbVUsyB+I1819PVSw4AdpgK0RNkzfWfwy6+3IUNSxwSrfTno1/oWaS/hERNz+XLWVyga2aJBQ==}
 
-  '@x402/core@2.30.0':
-    resolution: {integrity: sha512-gvMxCum2QlNI6jI/3NL1jdrmOgtX9sWEWxSIOmeI67/5ndOJvYOtP7JZLSO8o8af+O+A+Vhhjza1NCda0yVppg==}
+  '@x402/core@2.31.0':
+    resolution: {integrity: sha512-7ToCOwHfftfFEERW5Mp6Fc5U1+JrtCLTkbQnEVsBl13IutltP9lWIBYi/J+zy8vQWaLUmACq8A2qywzdt/RRIQ==}
 
-  '@x402/evm@2.30.0':
-    resolution: {integrity: sha512-/iaEB820OPJb1JkUqaCTq90FwjbmBB/rAFaH7ZAL2AmcesSVPO/FjdHD2wmXqBzXkEnPG9f6m1SuNpCtVlA9LQ==}
+  '@x402/evm@2.31.0':
+    resolution: {integrity: sha512-CCOqou/7f0/5kKQXlcVvWbiVnFmk/CqaSCs8YkJ2GPzxDYoQD13iKAjo0Uv7y/dVlkkOH0p/eJVxgcrO6aagbw==}
 
-  '@x402/fetch@2.30.0':
-    resolution: {integrity: sha512-rEC8CHQN5ZFn2W9b1mZ8ZvRyEw9Zkc5LuuVXo1CBU9w3PCtQO3c7+ChS7Ht9MvF66JTicK3ja0KgUF+fpChvNA==}
+  '@x402/fetch@2.31.0':
+    resolution: {integrity: sha512-Td+Nxhy0TIwKMZ4G7q+lv+oD5SsRI1T0peGE34lSZaaZwXvqQbeR/TQDzex6tQpljq12+D7Mjwp1wX0Maa2Zeg==}
 
-  '@x402/svm@2.30.0':
-    resolution: {integrity: sha512-Orh66DJYt737ry50m/5i1X6Z8FNcXVhy3g9C0dckVaebmXcUzugScN66E+m+KkogaKbok5mqQRi2ISc12j3mtg==}
+  '@x402/svm@2.31.0':
+    resolution: {integrity: sha512-nWoh/wVG/rbIB9tY3GZKh7G/E1vUVFCP8Y+CAQJVSH+weqMpenqIRzoX8Q3Y94L6ZL5QD9BEgUSIkJmbuVb3ig==}
     peerDependencies:
       '@solana/kit': '>=8.0.0'
 
@@ -4005,8 +4004,8 @@ packages:
   hmac-drbg@1.0.1:
     resolution: {integrity: sha512-Tti3gMqLdZfhOQY1Mzf/AanLiqh1WTiJgEj26ZuYQ9fbkLomzGchCws4FyrSd4VkpBfiNhaE1On+lOz894jvXg==}
 
-  hono@4.13.11:
-    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
+  hono@4.13.16:
+    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@9.0.3:
@@ -4911,7 +4910,7 @@ snapshots:
 
   '@blockrun/clawrouter-codex@0.4.0(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
-      '@blockrun/clawrouter': 0.12.314(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+      '@blockrun/clawrouter': 0.12.315(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@blockrun/llm': 3.13.2(typescript@5.9.3)(zod@4.6.7)
       viem: 2.57.13(typescript@5.9.3)(zod@4.6.7)
     transitivePeerDependencies:
@@ -4930,20 +4929,20 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@blockrun/clawrouter@0.12.314(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
+  '@blockrun/clawrouter@0.12.315(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
-      '@blockrun/llm': 3.25.0(@solana/kit@8.6.0(typescript@5.9.3))(@x402/core@2.30.0)(@x402/svm@2.30.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
+      '@blockrun/llm': 3.25.0(@solana/kit@8.6.0(typescript@5.9.3))(@x402/core@2.31.0)(@x402/svm@2.31.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)
       '@noble/hashes': 2.4.0
       '@polymarket/builder-relayer-client': 0.0.10(zod@4.6.7)
       '@polymarket/builder-signing-sdk': 0.0.8
-      '@polymarket/clob-client-v2': 1.2.0(typescript@5.9.3)(zod@4.6.7)
+      '@polymarket/clob-client-v2': 1.2.1(typescript@5.9.3)(zod@4.6.7)
       '@scure/bip32': 2.4.0
       '@scure/bip39': 1.6.0
       '@solana/kit': 8.6.0(typescript@5.9.3)
-      '@x402/core': 2.30.0
-      '@x402/evm': 2.30.0(typescript@5.9.3)
-      '@x402/fetch': 2.30.0
-      '@x402/svm': 2.30.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)
+      '@x402/core': 2.31.0
+      '@x402/evm': 2.31.0(typescript@5.9.3)
+      '@x402/fetch': 2.31.0
+      '@x402/svm': 2.31.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)
       axios: 1.20.0
       bs58: 6.0.0
       https-proxy-agent: 9.1.0
@@ -4976,15 +4975,15 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@blockrun/llm@3.25.0(@solana/kit@8.6.0(typescript@5.9.3))(@x402/core@2.30.0)(@x402/svm@2.30.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
+  '@blockrun/llm@3.25.0(@solana/kit@8.6.0(typescript@5.9.3))(@x402/core@2.31.0)(@x402/svm@2.31.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3))(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
       '@anthropic-ai/sdk': 0.123.0(zod@4.6.7)
       bs58: 6.0.0
       viem: 2.57.13(typescript@5.9.3)(zod@4.6.7)
     optionalDependencies:
       '@solana/kit': 8.6.0(typescript@5.9.3)
-      '@x402/core': 2.30.0
-      '@x402/svm': 2.30.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)
+      '@x402/core': 2.31.0
+      '@x402/svm': 2.31.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
       - typescript
@@ -7783,9 +7782,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@hono/node-server@2.1.3(hono@4.13.11)':
+  '@hono/node-server@2.1.6(hono@4.13.16)':
     dependencies:
-      hono: 4.13.11
+      hono: 4.13.16
 
   '@img/colour@1.1.0': {}
 
@@ -8084,7 +8083,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.0(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.3(hono@4.13.11)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -8094,7 +8093,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.2.1
       express-rate-limit: 8.7.0(express@5.2.1)
-      hono: 4.13.11
+      hono: 4.13.16
       jose: 6.2.10
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -8257,7 +8256,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@polymarket/clob-client-v2@1.2.0(typescript@5.9.3)(zod@4.6.7)':
+  '@polymarket/clob-client-v2@1.2.1(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
       '@ethersproject/providers': 5.8.0
       '@ethersproject/wallet': 5.8.0
@@ -8977,13 +8976,13 @@ snapshots:
       '@vscode/ripgrep-win32-ia32': 1.18.0
       '@vscode/ripgrep-win32-x64': 1.18.0
 
-  '@x402/core@2.30.0':
+  '@x402/core@2.31.0':
     dependencies:
       zod: 4.6.7
 
-  '@x402/evm@2.30.0(typescript@5.9.3)':
+  '@x402/evm@2.31.0(typescript@5.9.3)':
     dependencies:
-      '@x402/core': 2.30.0
+      '@x402/core': 2.31.0
       viem: 2.57.13(typescript@5.9.3)(zod@4.6.7)
       zod: 4.6.7
     transitivePeerDependencies:
@@ -8991,11 +8990,11 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@x402/fetch@2.30.0':
+  '@x402/fetch@2.31.0':
     dependencies:
-      '@x402/core': 2.30.0
+      '@x402/core': 2.31.0
 
-  '@x402/svm@2.30.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)':
+  '@x402/svm@2.31.0(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@noble/hashes': 1.8.0
       '@solana-program/compute-budget': 0.18.1(@solana/kit@8.6.0(typescript@5.9.3))
@@ -9003,7 +9002,7 @@ snapshots:
       '@solana-program/token-2022': 0.16.1(@solana/kit@8.6.0(typescript@5.9.3))(@solana/sysvars@8.6.0(typescript@5.9.3))
       '@solana/kit': 8.6.0(typescript@5.9.3)
       '@solana/program-client-core': 8.6.0(typescript@5.9.3)
-      '@x402/core': 2.30.0
+      '@x402/core': 2.31.0
     transitivePeerDependencies:
       - '@solana/sysvars'
       - '@solana/zk-sdk'
@@ -9520,7 +9519,7 @@ snapshots:
       minimalistic-assert: 1.0.1
       minimalistic-crypto-utils: 1.0.1
 
-  hono@4.13.11: {}
+  hono@4.13.16: {}
 
   hosted-git-info@9.0.3:
     dependencies:
