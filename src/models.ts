@@ -675,6 +675,13 @@ export type BlockRunModel = {
    * Unlike promo, this never expires. Takes precedence over promo.
    */
   flatPrice?: number;
+  /**
+   * Platform fee percent the gateway adds to this model's per-token cost
+   * (`platform_fee_percent` on its `/v1/models` row; see platform-fee.ts).
+   * Set only from a live catalog; absent means 0. The bundled list below never
+   * carries it, so the fee is never a number typed here.
+   */
+  platformFeePercent?: number;
 };
 
 export const BLOCKRUN_MODELS: BlockRunModel[] = [
