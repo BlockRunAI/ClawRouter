@@ -571,6 +571,41 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 
 ---
 
+### Shared model catalog
+
+ClawRouter refreshes model metadata through `@blockrun/model-catalog`, pinned to
+an immutable commit and bundled into the plugin. The active Base, Solana or
+API-key gateway supplies live chat model IDs, prices and limits. A background
+refresh at startup and every five minutes updates `/v1/models`, price estimates,
+and the plugin's OpenClaw provider/allowlist and per-agent model caches. Newly discovered chat models become
+explicit picker choices without rebuilding ClawRouter. OpenClaw must reload its
+provider configuration to display a changed list; the proxy serves the updated
+list immediately.
+
+Restart an already-running proxy once after installing this integration. Reusing
+an older external proxy cannot give that process the new refresh behavior.
+
+The public picker policy defaults to
+`https://raw.githubusercontent.com/BlockRunAI/model-catalog/main/dist/snapshot.v1.json`.
+Set `BLOCKRUN_MODEL_CATALOG_URL` to another policy URL, or an empty string to use
+the bundled policy with live gateway rows. Policy requests never receive the API
+key; catalog redirects are refused. Each proxy owns its cache. Network failures
+retain the last complete view, and offline startup retains the existing bundled
+ClawRouter catalog. Invalid policy keeps the last good policy while valid gateway
+rows can still refresh.
+
+Existing aliases, curated legacy entries, virtual routes, free fallback order,
+and Auto routing candidates remain product policy. Live rows update prices for
+known models and add new chat choices; they do not promote a new model into Auto
+or assume that a `coding` category proves structured tool support. Known
+capability overrides remain in place. A gateway update cannot reclassify a pinned
+`free/` choice as paid. Models absent from a later refresh lose newly discovered
+picker entries; legacy pinned IDs remain available for gateway redirects.
+
+This integrates metadata, not payment signing or upstream protocol support.
+New protocols still require gateway compatibility. Gateway payment quotes and
+account settlement remain authoritative; catalog prices are estimates.
+
 ## Payment
 
 Two rails. This section covers the wallet one; the card/API-key one is
@@ -967,6 +1002,14 @@ wallet, no key, no signup. See [Paying with a credit card](#paying-with-a-credit
 
 ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several open-weight models (`nemotron-3.5-lightning`, `laguna-xs-2.1`, `north-mini-code`, `nemotron-3.5-bolt`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3-super-120b`, `nemotron-3-ultra-550b`, `muse-glimmer-30b`) are completely free, and Bolt also reads images. Use `/model free` for the free default, or pick any by name.
 
+## Thanks
+
+Thanks to [@Tyagiquamar](https://github.com/Tyagiquamar) for a run of careful fixes:
+SSRF guard hardening for IPv6 link-local and IPv4-embedded addresses (#534, #547),
+a `/stats` window fallback for invalid day counts (#535), prerelease-aware semver
+comparison in the updater (#617), and full-content deduplication in the
+observation compression layer (#621).
+
 ---
 
 <div align="center">
@@ -976,46 +1019,3 @@ ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls r
 ⭐ If ClawRouter powers your agents, consider starring the repo!
 
 </div>
-
-### Shared model catalog
-
-ClawRouter refreshes model metadata through `@blockrun/model-catalog`, pinned to
-an immutable commit and bundled into the plugin. The active Base, Solana or
-API-key gateway supplies live chat model IDs, prices and limits. A background
-refresh at startup and every five minutes updates `/v1/models`, price estimates,
-and the plugin's OpenClaw provider/allowlist and per-agent model caches. Newly discovered chat models become
-explicit picker choices without rebuilding ClawRouter. OpenClaw must reload its
-provider configuration to display a changed list; the proxy serves the updated
-list immediately.
-
-Restart an already-running proxy once after installing this integration. Reusing
-an older external proxy cannot give that process the new refresh behavior.
-
-The public picker policy defaults to
-`https://raw.githubusercontent.com/BlockRunAI/model-catalog/main/dist/snapshot.v1.json`.
-Set `BLOCKRUN_MODEL_CATALOG_URL` to another policy URL, or an empty string to use
-the bundled policy with live gateway rows. Policy requests never receive the API
-key; catalog redirects are refused. Each proxy owns its cache. Network failures
-retain the last complete view, and offline startup retains the existing bundled
-ClawRouter catalog. Invalid policy keeps the last good policy while valid gateway
-rows can still refresh.
-
-Existing aliases, curated legacy entries, virtual routes, free fallback order,
-and Auto routing candidates remain product policy. Live rows update prices for
-known models and add new chat choices; they do not promote a new model into Auto
-or assume that a `coding` category proves structured tool support. Known
-capability overrides remain in place. A gateway update cannot reclassify a pinned
-`free/` choice as paid. Models absent from a later refresh lose newly discovered
-picker entries; legacy pinned IDs remain available for gateway redirects.
-
-This integrates metadata, not payment signing or upstream protocol support.
-New protocols still require gateway compatibility. Gateway payment quotes and
-account settlement remain authoritative; catalog prices are estimates.
-
-## Thanks
-
-Thanks to [@Tyagiquamar](https://github.com/Tyagiquamar) for a run of careful fixes:
-SSRF guard hardening for IPv6 link-local and IPv4-embedded addresses (#534, #547),
-a `/stats` window fallback for invalid day counts (#535), prerelease-aware semver
-comparison in the updater (#617), and full-content deduplication in the
-observation compression layer (#621).
