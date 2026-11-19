@@ -94,6 +94,7 @@ import {
   getActivePromoPrice,
 } from "./models.js";
 import { DEFAULT_MAX_TOKENS, resolveMaxTokens } from "./max-tokens.js";
+import { withPlatformFee } from "./platform-fee.js";
 import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats, clearStats, resolveStatsDays } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
@@ -1968,9 +1969,14 @@ export function estimateAmount(
     // Rough estimate: ~4 chars per token for input
     const estimatedInputTokens = Math.ceil(bodyLength / 4);
     const estimatedOutputTokens = maxTokens || model.maxOutput || 4096;
-    costUsd =
+    // Per-token cost at list rates, plus the gateway's platform fee on it
+    // (PF-8; 0 when the catalog row does not publish one). A flat or promo
+    // price above is already final and pays no fee.
+    costUsd = withPlatformFee(
       (estimatedInputTokens / 1_000_000) * model.inputPrice +
-      (estimatedOutputTokens / 1_000_000) * model.outputPrice;
+        (estimatedOutputTokens / 1_000_000) * model.outputPrice,
+      model.platformFeePercent,
+    );
   }
 
   // blockrun charges a flat $0.001 per-transaction fee on every PAID product
@@ -8584,12 +8590,18 @@ async function proxyRequest(
         // So price it the way the gateway does, and prefer the token counts the
         // response actually reported over an estimate from body length:
         //   (12 * 0.15 + 8 * 0.60) / 1e6 = $0.0000066, matching to the cent.
+        //
+        // Plus whatever platform fee that gateway's catalog publishes for the
+        // row (PF-8). A gateway that charges none does not send the field, so
+        // this stays list price there.
         const inTokens = responseInputTokens ?? chargedInputTokens;
         const outTokens = responseOutputTokens ?? 0;
-        logCost =
+        logCost = withPlatformFee(
           (inTokens * (apiKeyPricing.inputPrice ?? 0) +
             outTokens * (apiKeyPricing.outputPrice ?? 0)) /
-          1_000_000;
+            1_000_000,
+          modelsById.get(logModel)?.platformFeePercent,
+        );
         logSavings =
           costs.baselineCost > 0
             ? Math.max(0, (costs.baselineCost - logCost) / costs.baselineCost)

@@ -10,6 +10,7 @@ import {
   type BlockRunModel,
 } from "./models.js";
 import type { ModelDefinitionConfig } from "./types.js";
+import { platformFeePercentOf } from "./platform-fee.js";
 
 export type ModelCatalogView = {
   models: BlockRunModel[];
@@ -82,7 +83,12 @@ export function projectClawCatalog(state: CatalogState): ModelCatalogView {
     model.outputPrice = row.billing_mode === "paid" ? row.pricing.output : 0;
     delete model.promo;
     delete model.flatPrice;
+    delete model.platformFeePercent;
     if (row.billing_mode === "flat") model.flatPrice = row.pricing.flat;
+    // PF-8: the fee the gateway adds to per-token paid chat. 0 (and so not
+    // set) for free and flat rows, and for a gateway that does not publish it.
+    const feePercent = platformFeePercentOf(row);
+    if (feePercent > 0) model.platformFeePercent = feePercent;
     if (row.context_window) model.contextWindow = row.context_window;
     if (row.max_output) model.maxOutput = row.max_output;
     if (!old) {
@@ -188,6 +194,7 @@ function fingerprint(view: ModelCatalogView): string {
       m.inputPrice,
       m.outputPrice,
       m.flatPrice ?? null,
+      m.platformFeePercent ?? 0,
       m.contextWindow,
       m.maxOutput,
     ]),
