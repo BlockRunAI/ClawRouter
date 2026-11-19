@@ -112,8 +112,10 @@ function deduplicateLargeBlocks(messages: NormalizedMessage[]): {
       return msg;
     }
 
-    // Hash first 200 chars as block identifier
-    const blockKey = msg.content.slice(0, 200);
+    // Use the full content as the block identifier. A 200-char prefix can match
+    // two messages whose tails differ, which would drop distinct information and
+    // emit a false "same content" pointer for the second message.
+    const blockKey = msg.content;
 
     if (blockHashes.has(blockKey)) {
       const firstIdx = blockHashes.get(blockKey)!;
