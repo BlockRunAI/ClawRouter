@@ -1011,3 +1011,11 @@ picker entries; legacy pinned IDs remain available for gateway redirects.
 This integrates metadata, not payment signing or upstream protocol support.
 New protocols still require gateway compatibility. Gateway payment quotes and
 account settlement remain authoritative; catalog prices are estimates.
+
+## Thanks
+
+Thanks to [@Tyagiquamar](https://github.com/Tyagiquamar) for a run of careful fixes:
+SSRF guard hardening for IPv6 link-local and IPv4-embedded addresses (#534, #547),
+a `/stats` window fallback for invalid day counts (#535), prerelease-aware semver
+comparison in the updater (#617), and full-content deduplication in the
+observation compression layer (#621).
