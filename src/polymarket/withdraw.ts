@@ -32,6 +32,7 @@ import { getFundsAddress } from "./positions.js";
 import { sendWalletBatch } from "./relayer.js";
 import { getPublicClient } from "./setup.js";
 import { signUnderSpendPolicy, type PolymarketSpendDeps } from "./spend-policy.js";
+import { usdToBaseUnits } from "./units.js";
 
 async function rawPusdBalance(owner: Hex): Promise<bigint> {
   return getPublicClient().readContract({
@@ -89,9 +90,7 @@ export async function withdrawFunds(
       };
     }
     const amountRaw =
-      input.amount_usd !== undefined
-        ? BigInt(Math.floor(input.amount_usd * 10 ** PUSD_DECIMALS))
-        : balanceRaw;
+      input.amount_usd !== undefined ? usdToBaseUnits(input.amount_usd, PUSD_DECIMALS) : balanceRaw;
     if (amountRaw > balanceRaw) {
       return {
         text: `Requested $${input.amount_usd} exceeds the pUSD balance of $${balanceUsd.toFixed(2)}.`,
