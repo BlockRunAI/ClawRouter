@@ -17,6 +17,7 @@ import { getFundsAddress } from "./positions.js";
 import { getPublicClient } from "./setup.js";
 import type { ToolResult } from "./orders.js";
 import { signUnderSpendPolicy, type PolymarketSpendDeps } from "./spend-policy.js";
+import { usdToBaseUnits } from "./units.js";
 
 const FUND_FEE_USD = 0.01;
 const USDC_DECIMALS = 6;
@@ -122,7 +123,7 @@ export async function fundVault(
     // goes to, so a blocked/unlisted bridge, network, or asset refuses here
     // before anything is signed (and before the fee leg below is charged).
     const privateKey = getOrCreateWalletKey();
-    const amountMicro = String(Math.floor(amountUsd * 10 ** USDC_DECIMALS));
+    const amountMicro = String(usdToBaseUnits(amountUsd, USDC_DECIMALS));
     const network = `eip155:${BASE_CHAIN_ID}`;
     const depositAuthorization = await signUnderSpendPolicy(
       deps,
