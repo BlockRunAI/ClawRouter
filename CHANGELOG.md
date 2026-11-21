@@ -4,6 +4,35 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.318 — November 20, 2026
+
+### Local cost estimates include the gateway's chat platform fee
+
+blockrun.ai and sol.blockrun.ai bill paid per-token chat at the list rates plus
+a platform fee, published as `platform_fee_percent` on each `/v1/models` row.
+ClawRouter read only the list rates, so the estimate behind the balance
+preflight, payment pre-auth and the strict `maxCostPerRun` check undershot the
+real charge by the fee. The fee is now read from the live catalog and applied
+to token cost; flat and promo prices are unchanged, and a gateway that
+publishes no fee (api.blockrun.ai today) stays at list price. (#622)
+
+### Polymarket deposits and withdrawals no longer lose a base unit
+
+`fund` and `withdraw` converted dollars to 6-decimal units with
+`Math.floor(amount * 10 ** 6)`. That product is not exact in floating point
+(`2.01 * 1e6` is `2009999.9999999998`), so 151 of the 10,000 two-decimal
+amounts from $0.01 to $100 signed one base unit short. Amounts now round to the
+nearest base unit. (#623, thanks @A5Infinity)
+
+### Compression dedup compares whole blocks
+
+The observation-dedup layer keyed large blocks by their first 200 characters,
+so two different blocks sharing a prefix were treated as duplicates. It now
+keys by full content. The layer is disabled in the proxy, so live traffic was
+unaffected. (#621, thanks @Tyagiquamar)
+
+---
+
 ## v0.12.317 — November 18, 2026
 
 ### Identical legacy spend records count as separate payments
