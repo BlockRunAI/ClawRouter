@@ -4,6 +4,27 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.321 — November 23, 2026
+
+### Request deadlines and client disconnects reach a paid call in flight again
+
+Node's fetch ties a request to the abort signal it was built from only through
+a weak reference. The payment layer builds its own request from the proxy's
+and sends it or copies of it, so once that request was garbage-collected, the
+proxy's deadline and its abort on client disconnect no longer reached the call
+in flight. A hung upstream, including a Solana batch payment waiting for its
+answer, then held the request until the socket timed out (a 1.5s deadline sat
+for 30s+ in testing) instead of failing at the deadline. Every upstream send
+now carries the caller's own signal. An explicit `signal: null` still detaches
+an input request's signal. (#641)
+
+### Scripts are linted
+
+`npm run lint` and CI now cover `scripts/` as well as `src/`, with Node's
+globals declared for those files. (#642)
+
+---
+
 ## v0.12.320 — November 23, 2026
 
 ### Kimi K3.1 Pro's math routing score is measured, not copied
