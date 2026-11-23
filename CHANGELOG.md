@@ -4,6 +4,22 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.319 — November 23, 2026
+
+### The Kimi slot routes to Kimi K3.1 Pro
+
+The gateway hid `moonshot/kimi-k3` from its model list when Kimi K3.1 Pro
+($2/$10 per million tokens, 1M context) became the featured Kimi, but the
+routing chains still named K3. `@blockrun/router-core` is now pinned to
+02136fb (router-core#14), which puts K3.1 Pro in every chain position and
+affinity band K3 held. K3.1 Pro passed a live probe first: three completions
+with no errors and a well-formed tool call. Its task-affinity values are
+carried over from K3, not re-measured. An explicit `kimi-k3` pin still
+resolves to K3. The pin also brings in Gemini 4 Carbon as a tool-capable
+fallback (router-core#13). (#636)
+
+---
+
 ## v0.12.318 — November 20, 2026
 
 ### Local cost estimates include the gateway's chat platform fee

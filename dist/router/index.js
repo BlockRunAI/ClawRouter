@@ -1,6 +1,6 @@
 import { createRequire as __blockrun_createRequire } from 'node:module'; const require = __blockrun_createRequire(import.meta.url);
 
-// ../../../../../../../Users/vickyfu/Documents/blockrun-web/ClawRouter/node_modules/@blockrun/router-core/dist/index.js
+// node_modules/@blockrun/router-core/dist/index.js
 var UNSEGMENTED_SCRIPT = /[؀-ۿ　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/;
 var WORD_CHAR = /[\p{L}\p{N}]/u;
 var ASCII_PHRASE = /^[a-z0-9' -]+$/;
@@ -1714,8 +1714,8 @@ var DEFAULT_ROUTING_CONFIG = {
         // $2.50/$15 — previous flagship, benchmarked
         "zai/glm-5.3",
         // $1.40/$4.40, 1M ctx, always-on thinking — verified live 2026-08-19
-        "moonshot/kimi-k3",
-        // $3/$15, 1M ctx — Moonshot flagship (K2.7 successor)
+        "moonshot/kimi-k3.1-pro",
+        // $2/$10, 1M ctx — Moonshot flagship (K3 successor)
         "deepseek/deepseek-v4-pro",
         // $0.435/$0.87 — strongest open-weight reasoner
         "deepseek/deepseek-chat",
@@ -1855,8 +1855,8 @@ var DEFAULT_ROUTING_CONFIG = {
       fallback: [
         "anthropic/claude-sonnet-5",
         // $3/$15 — code_agent band 0.98
-        "moonshot/kimi-k3",
-        // $3/$15, 1M ctx — Moonshot flagship
+        "moonshot/kimi-k3.1-pro",
+        // $2/$10, 1M ctx — Moonshot flagship
         "zai/glm-5.3",
         // $1.40/$4.40 — long-horizon coding
         "google/gemini-3.6-flash",
@@ -1894,7 +1894,7 @@ var DEFAULT_ROUTING_CONFIG = {
         "anthropic/claude-sonnet-4.6",
         "xai/grok-4.5",
         // xAI flagship — 503-resistant, direct-xAI SKU
-        "moonshot/kimi-k3",
+        "moonshot/kimi-k3.1-pro",
         // Moonshot flagship, independent infra
         "openai/gpt-5.6-terra",
         // GPT-5.6 balanced tier — stable (Sol excluded: #202)
@@ -1974,8 +1974,8 @@ var DEFAULT_ROUTING_CONFIG = {
         // $1/$5
         "deepseek/deepseek-chat",
         // $0.14/$0.28
-        "moonshot/kimi-k3"
-        // $3/$15 — tool_agent band 0.85
+        "moonshot/kimi-k3.1-pro"
+        // $2/$10 — tool_agent band 0.85
       ]
     },
     COMPLEX: {
@@ -1997,7 +1997,7 @@ var DEFAULT_ROUTING_CONFIG = {
         // Flagship Opus — in-family hot swap
         "xai/grok-4.5",
         // xAI flagship — strong tool use, independent infra
-        "moonshot/kimi-k3",
+        "moonshot/kimi-k3.1-pro",
         // Moonshot flagship — independent infra
         "openai/gpt-5.6-terra",
         // GPT-5.6 balanced tier — stable (Sol excluded: #202)
@@ -2061,6 +2061,13 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     contextWindow: 1e6,
     maxOutputTokens: 128e3,
     supportsTools: true,
+    supportsVision: true
+  },
+  "anthropic/claude-fable-5.2": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1e6,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
     supportsVision: true
   },
   "anthropic/claude-haiku-4.5": {
@@ -2232,6 +2239,26 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: false,
     supportsVision: true
   },
+  "google/gemini-4-carbon": {
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: true,
+    supportsVision: true
+  },
+  "google/gemini-4-hydrogen": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "google/gemini-4-neon": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    supportsTools: false,
+    supportsVision: true
+  },
   "minimax/minimax-m2.7": {
     contextWindow: 204800,
     maxOutputTokens: 16384,
@@ -2251,18 +2278,10 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     supportsTools: false,
     supportsVision: true
   },
-  "moonshot/kimi-k3": {
-    // absent from the 2026-11-08 listing but still routed — previous entry retained; probe before removing
+  "moonshot/kimi-k3.1-pro": {
     contextWindow: 1048576,
     maxOutputTokens: 65536,
     supportsTools: true,
-    supportsVision: true
-  },
-  "moonshot/kimi-k3.1-pro": {
-    // supportsTools: not probed — fails closed
-    contextWindow: 1048576,
-    maxOutputTokens: 65536,
-    supportsTools: false,
     supportsVision: true
   },
   "nvidia/minimax-m3.1-flash": {
@@ -2472,6 +2491,20 @@ var DEFAULT_MODEL_CAPABILITIES = Object.freeze({
     contextWindow: 105e4,
     maxOutputTokens: 128e3,
     supportsTools: true,
+    supportsVision: true
+  },
+  "openai/gpt-6.2-astra": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
+    supportsVision: true
+  },
+  "openai/gpt-6.2-sol": {
+    // supportsTools: not probed — fails closed
+    contextWindow: 105e4,
+    maxOutputTokens: 128e3,
+    supportsTools: false,
     supportsVision: true
   },
   "openai/o1": {
@@ -2827,6 +2860,14 @@ var model_profiles_generated_default = {
     latencyMs: 24498.9,
     p95LatencyMs: 40365.3,
     outputTokensPerSecond: 25.11,
+    errorRate: 0,
+    samples: 3
+  },
+  "moonshot/kimi-k3.1-pro": {
+    measuredAt: "2026-11-23T20:18:18Z",
+    latencyMs: 9243.1,
+    p95LatencyMs: 10504.1,
+    outputTokensPerSecond: 55.89,
     errorRate: 0,
     samples: 3
   },
@@ -3521,7 +3562,7 @@ var AFFINITY = {
     "claude-sonnet-5": 0.98,
     "gpt-5-mini": 0.96,
     "gemini-3.5-flash": 0.92,
-    "kimi-k3": 0.9,
+    "kimi-k3.1-pro": 0.9,
     "deepseek-v4-pro": 0.88,
     "glm-5.2": 0.88
   },
@@ -3555,7 +3596,7 @@ var AFFINITY = {
     "claude-sonnet-5": 0.88,
     "gemini-3.5-flash": 0.82,
     "gpt-5.3-codex": 0.81,
-    "kimi-k3": 0.78,
+    "kimi-k3.1-pro": 0.78,
     "deepseek-v4-pro": 0.76
   },
   retailHigh: {
@@ -3563,7 +3604,7 @@ var AFFINITY = {
     "claude-sonnet-5": 0.88,
     "gemini-3.5-flash": 0.82,
     "gpt-5.3-codex": 0.81,
-    "kimi-k3": 0.78,
+    "kimi-k3.1-pro": 0.78,
     "gpt-5-mini": 0.76
   },
   // Standard airline workflows stay on GPT-5 Mini: six full-session
@@ -3597,7 +3638,7 @@ var AFFINITY = {
     "claude-sonnet-5": 1,
     "gemini-3.5-flash": 0.88,
     "gpt-5.3-codex": 0.87,
-    "kimi-k3": 0.85,
+    "kimi-k3.1-pro": 0.85,
     "gpt-5-mini": 0.84,
     "deepseek-v4-pro": 0.82
   },
@@ -3679,13 +3720,13 @@ var AFFINITY = {
     "grok-4.5": 0.93,
     "claude-sonnet-5": 0.9,
     "deepseek-v4-pro": 0.9,
-    "kimi-k3": 0.9
+    "kimi-k3.1-pro": 0.9
   },
   vision: {
     "gemini-3.1-pro": 0.96,
     "qwen3.7-max": 0.9,
     "claude-sonnet-4.6": 0.9,
-    "kimi-k3": 0.9,
+    "kimi-k3.1-pro": 0.9,
     "grok-4.3": 0.9
   },
   // Long-context eligibility is necessary but not sufficient: a provider can
@@ -3702,13 +3743,18 @@ var AFFINITY = {
   // A structured extraction must preserve both the output contract and the
   // source-language fields. For Mandarin input the language-native Kimi
   // candidate gets a distinct band — a candidate-pool decision, not a post-hoc
-  // override, so it still falls back normally when Kimi is unavailable. Kimi
-  // K3 costs ~5x its retired sibling K2.7, so the band must be wider than the
-  // auto affinityFloorGap (0.10) or price alone re-selects a non-native model
-  // for Mandarin input; 0.12 keeps K3 alone in the primary band for zh and
-  // leaves every other language untouched.
+  // override, so it still falls back normally when Kimi is unavailable. The
+  // Kimi flagship costs several times the cheap extraction models, so the band
+  // must be wider than the auto affinityFloorGap (0.10) or price alone
+  // re-selects a non-native model for Mandarin input; 0.12 keeps Kimi alone in
+  // the primary band for zh and leaves every other language untouched.
+  //
+  // Every "kimi-k3.1-pro" value in AFFINITY is carried over from the Kimi
+  // flagship it replaced (K3, whose values were in turn carried from K2.7);
+  // none is a K3.1 Pro trajectory measurement. K3.1 Pro's own evidence is the
+  // 2026-11-23 live probe: 3/3 completions, 0 errors, a well-formed tool call.
   extractionZh: {
-    "kimi-k3": 1,
+    "kimi-k3.1-pro": 1,
     "gemini-3.5-flash": 0.88,
     "gemini-2.5-flash": 0.88,
     "gpt-4o-mini": 0.88,
@@ -3716,7 +3762,7 @@ var AFFINITY = {
     "claude-sonnet-4.6": 0.88
   },
   extraction: {
-    "kimi-k3": 0.9,
+    "kimi-k3.1-pro": 0.9,
     "gemini-3.5-flash": 0.9,
     "gemini-2.5-flash": 0.9,
     "gpt-4o-mini": 0.9,
@@ -3726,7 +3772,7 @@ var AFFINITY = {
   chat: {
     "gemini-3.5-flash": 0.86,
     "gemini-2.5-flash": 0.86,
-    "kimi-k3": 0.86
+    "kimi-k3.1-pro": 0.86
   }
 };
 function affinityBand(features) {
@@ -3793,7 +3839,7 @@ function evidenceCandidates(task) {
       "anthropic/claude-sonnet-5",
       "openai/gpt-5-mini",
       "google/gemini-3.5-flash",
-      "moonshot/kimi-k3",
+      "moonshot/kimi-k3.1-pro",
       "deepseek/deepseek-v4-pro"
     ];
   }
@@ -3806,7 +3852,7 @@ function evidenceCandidates(task) {
       "openai/gpt-4o-mini",
       "google/gemini-3.5-flash",
       "openai/gpt-5.3-codex",
-      "moonshot/kimi-k3",
+      "moonshot/kimi-k3.1-pro",
       "deepseek/deepseek-v4-pro"
     ];
   }
@@ -3842,7 +3888,7 @@ function evidenceCandidates(task) {
     ];
   }
   if (task === "extraction") {
-    return ["moonshot/kimi-k3", "google/gemini-3.5-flash", "anthropic/claude-sonnet-5"];
+    return ["moonshot/kimi-k3.1-pro", "google/gemini-3.5-flash", "anthropic/claude-sonnet-5"];
   }
   if (task === "reasoning_math") {
     return [
@@ -3850,7 +3896,7 @@ function evidenceCandidates(task) {
       "xai/grok-4.5",
       "anthropic/claude-sonnet-5",
       "deepseek/deepseek-v4-pro",
-      "moonshot/kimi-k3"
+      "moonshot/kimi-k3.1-pro"
     ];
   }
   return [];
@@ -3861,6 +3907,7 @@ var VERIFIED_TOOL_FALLBACKS = [
   "anthropic/claude-sonnet-5.5",
   "deepseek/deepseek-v4.1-flash",
   "google/gemini-3.8-flash",
+  "google/gemini-4-carbon",
   "openai/gpt-5.1",
   "openai/gpt-6-astra",
   "openai/gpt-6-luna",
