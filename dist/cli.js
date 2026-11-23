@@ -106424,14 +106424,14 @@ function resolveUptoSvmMemo(extra) {
   const memo2 = extra?.memo;
   return typeof memo2 === "string" && memo2 !== "" ? memo2 : void 0;
 }
-function requireTokenProgramHint(extra, invalid) {
+function requireTokenProgramHint(extra, invalid2) {
   let hinted;
   try {
     hinted = parseTokenProgramHint(extra);
   } catch {
     hinted = void 0;
   }
-  if (hinted === void 0) throw new Error(invalid);
+  if (hinted === void 0) throw new Error(invalid2);
   return hinted;
 }
 var init_chunk_2RSZYSMO = __esm({
@@ -109211,11 +109211,14 @@ __export(dist_exports, {
   AnthropicClient: () => AnthropicClient,
   BASE_CHAIN_ID: () => BASE_CHAIN_ID,
   BLOCKRUN_SOL_OPERATOR: () => BLOCKRUN_SOL_OPERATOR,
+  BatchChannelBusyError: () => BatchChannelBusyError,
   BatchChannelLockedError: () => BatchChannelLockedError,
   BatchCloseDeferredError: () => BatchCloseDeferredError,
   BatchPaymentUnresolvedError: () => BatchPaymentUnresolvedError,
   BlockrunClient: () => BlockrunClient,
   BlockrunError: () => BlockrunError,
+  DECISIONS_DEFAULT_MODEL: () => DECISIONS_DEFAULT_MODEL,
+  DEFAULT_BATCH_BUSY_WAIT_MS: () => DEFAULT_BATCH_BUSY_WAIT_MS,
   DEFAULT_BATCH_IN_DOUBT: () => DEFAULT_BATCH_IN_DOUBT,
   DEFAULT_BATCH_LOCK_WAIT_MS: () => DEFAULT_BATCH_LOCK_WAIT_MS,
   DEFAULT_BATCH_RATE_LIMIT: () => DEFAULT_BATCH_RATE_LIMIT,
@@ -109226,10 +109229,12 @@ __export(dist_exports, {
   MusicClient: () => MusicClient,
   NETWORK_ALIASES: () => NETWORK_ALIASES,
   OpenAI: () => OpenAI,
+  PAYMENT_REPLAY: () => PAYMENT_REPLAY,
   PHONE_PRICES: () => PHONE_PRICES,
   PORTAL_URL: () => PORTAL_URL2,
   PORTRAIT_ENROLLMENT_PRICE_USD: () => PORTRAIT_ENROLLMENT_PRICE_USD,
   PaymentError: () => PaymentError,
+  PaymentReplayError: () => PaymentReplayError,
   PhoneClient: () => PhoneClient,
   PortraitClient: () => PortraitClient,
   PriceClient: () => PriceClient,
@@ -109252,6 +109257,7 @@ __export(dist_exports, {
   VoiceClient: () => VoiceClient,
   WALLET_DIR_PATH: () => WALLET_DIR_PATH,
   WALLET_FILE_PATH: () => WALLET_FILE_PATH,
+  buildPaymentRejectedError: () => buildPaymentRejectedError,
   clearCache: () => clearCache,
   createPaymentPayload: () => createPaymentPayload,
   createSolanaPaymentPayload: () => createSolanaPaymentPayload,
@@ -109276,12 +109282,14 @@ __export(dist_exports, {
   getWalletAddress: () => getWalletAddress,
   importSolanaWallet: () => importSolanaWallet,
   importWallet: () => importWallet,
+  isPaymentReplay: () => isPaymentReplay,
   listDiscoveredSolanaWallets: () => listDiscoveredSolanaWallets,
   listDiscoveredWallets: () => listDiscoveredWallets2,
   loadSolanaWallet: () => loadSolanaWallet,
   loadWallet: () => loadWallet,
   logCost: () => logCost,
   parsePaymentRequired: () => parsePaymentRequired,
+  paymentRejectedErrorFromBody: () => paymentRejectedErrorFromBody,
   readSettlement: () => readSettlement,
   retryDisposition: () => retryDisposition,
   saveSolanaWallet: () => saveSolanaWallet,
@@ -109416,6 +109424,17 @@ function validateApiUrl(url3) {
     );
   }
 }
+function paymentFactsNote(errorBody) {
+  if (typeof errorBody !== "object" || errorBody === null) return "";
+  const { payment_status: status2, tx_hash: txHash } = errorBody;
+  if (status2 === "settled") {
+    const tx = typeof txHash === "string" && txHash ? ` (tx ${txHash})` : "";
+    return `. Payment settled${tx}. Do not pay for this job again.`;
+  }
+  if (status2 === "unknown") return ". Payment state unknown. Check your wallet before paying again.";
+  if (status2 === "not_charged" || status2 === "settlement_failed") return ". No payment was taken.";
+  return "";
+}
 function sanitizeErrorResponse(errorBody) {
   if (typeof errorBody !== "object" || errorBody === null) {
     return { message: "API request failed" };
@@ -109426,7 +109445,10 @@ function sanitizeErrorResponse(errorBody) {
     message: typeof body.error === "string" ? body.error : "API request failed",
     code: typeof body.code === "string" ? body.code : void 0,
     ...detail ? { detail } : {},
-    ...typeof body.hint === "string" ? { hint: body.hint } : {}
+    ...typeof body.hint === "string" ? { hint: body.hint } : {},
+    ...Object.fromEntries(
+      PAYMENT_FACT_FIELDS.filter((field) => typeof body[field] === "string").map((field) => [field, body[field]])
+    )
   };
 }
 function validateResourceUrl(url3, baseUrl) {
@@ -109450,6 +109472,70 @@ function validateResourceUrl(url3, baseUrl) {
     console.warn(`Invalid resource URL format: ${url3}. Using safe default.`);
     return `${baseUrl}/v1/chat/completions`;
   }
+}
+function asRecord(body) {
+  return body && typeof body === "object" && !Array.isArray(body) ? body : {};
+}
+function bodyCode(body) {
+  if (typeof body.code === "string") return body.code;
+  const nested = asRecord(body.error);
+  return typeof nested.code === "string" ? nested.code : void 0;
+}
+function isPaymentReplay(body) {
+  return bodyCode(asRecord(body))?.toUpperCase() === PAYMENT_REPLAY;
+}
+function namesEarlierResult(body) {
+  const record2 = asRecord(body);
+  return ["recoverable", "poll_url", "job_id", "wallet_auth"].some((key3) => Boolean(record2[key3]));
+}
+function boundedString(value, max) {
+  return typeof value === "string" && value.length > 0 && value.length < max ? value : void 0;
+}
+function replayError(body, statusCode) {
+  const detail = {};
+  for (const key3 of REPLAY_FIELDS) if (body[key3] !== void 0 && body[key3] !== null) detail[key3] = body[key3];
+  detail.code = PAYMENT_REPLAY;
+  for (const field of PAYMENT_FACT_FIELDS) if (typeof body[field] === "string") detail[field] = body[field];
+  const serverMessage = typeof body.message === "string" ? body.message : "";
+  const pollUrl = typeof body.poll_url === "string" ? body.poll_url : "";
+  const details = typeof body.details === "string" ? body.details : "";
+  let text = "Payment authorization already used (PAYMENT_REPLAY): an earlier request with this authorization was accepted and may already have been charged. Nothing new was signed; a fresh payment for the same request can charge twice.";
+  if (pollUrl) text += ` Its result can be collected at ${pollUrl}.`;
+  if (serverMessage) text += ` Gateway: ${serverMessage}`;
+  if (details && details !== serverMessage) text += ` (${details})`;
+  return new PaymentReplayError(text, { statusCode, response: detail });
+}
+function paymentRejectedErrorFromBody(body, statusCode = 402, options = {}) {
+  const record2 = asRecord(body);
+  if (options.replay ?? isPaymentReplay(record2)) return replayError(record2, statusCode);
+  const sanitized = { ...sanitizeErrorResponse(record2) };
+  const details = boundedString(record2.details, 256);
+  if (details) sanitized.details = details;
+  const invalidMessage = boundedString(record2.invalidMessage, 256);
+  if (invalidMessage) sanitized.invalidMessage = invalidMessage;
+  const reason = boundedString(record2.reason, 128);
+  if (reason) sanitized.reason = reason;
+  const nested = asRecord(record2.error);
+  const title = typeof record2.error === "string" ? record2.error : typeof nested.message === "string" ? nested.message : "";
+  const serverMessage = typeof record2.message === "string" ? record2.message : "";
+  let detailPart = details || title;
+  if (!details && serverMessage && serverMessage !== detailPart) {
+    detailPart = detailPart ? `${detailPart}: ${serverMessage}` : serverMessage;
+  }
+  if (invalidMessage) detailPart = detailPart ? `${detailPart} (${invalidMessage})` : invalidMessage;
+  const message = detailPart ? `Payment rejected by gateway: ${detailPart}` : `Payment rejected by gateway (HTTP ${statusCode}); it gave no reason`;
+  return new PaymentError(message, { statusCode, response: sanitized });
+}
+async function buildPaymentRejectedError(response, options = {}) {
+  let body;
+  try {
+    const text = await response.text();
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = {};
+  }
+  const replay = options.replay ? options.replay(body) || void 0 : void 0;
+  return paymentRejectedErrorFromBody(body, response.status, { replay });
 }
 function retryDelay(ms, signal) {
   signal?.throwIfAborted();
@@ -109641,6 +109727,46 @@ function withCost(body, response, bookedUsd, scheme) {
   body.settlement = readSettlement(response, bookedUsd, scheme).settlement;
   return body;
 }
+function isGemini(model) {
+  return typeof model === "string" && model.trim().replace(/^google\//, "") === GEMINI_DECISIONS_MODEL;
+}
+function invalid(message) {
+  throw withDisposition(new Error(`decisions: ${message}`), "unpaid");
+}
+function buildDecisionsBody(request2) {
+  if (!request2 || typeof request2 !== "object") invalid("request must be an object");
+  const { input: input2, questions } = request2;
+  const emptyInput = typeof input2 === "string" ? input2.length === 0 : !Array.isArray(input2) || input2.length === 0;
+  if (emptyInput) invalid("input must be a non-empty string or a non-empty array of messages");
+  if (!Array.isArray(questions) || questions.length === 0) invalid("questions must be a non-empty array");
+  const names2 = /* @__PURE__ */ new Set();
+  questions.forEach((q, i) => {
+    if (!q || typeof q !== "object") invalid(`questions[${i}] must be an object`);
+    if (!QUESTION_TYPES.has(q.type)) invalid(`questions[${i}].type must be "predicate", "choice" or "score"`);
+    if (typeof q.name !== "string" || q.name.length === 0) invalid(`questions[${i}].name must be a non-empty string`);
+    if (typeof q.instructions !== "string" || q.instructions.length === 0) {
+      invalid(`questions[${i}].instructions must be a non-empty string`);
+    }
+    if (names2.has(q.name)) invalid(`questions[${i}].name "${q.name}" is used twice; answers are keyed by name`);
+    names2.add(q.name);
+    if (q.type === "choice" && (!Array.isArray(q.choices) || q.choices.length === 0)) {
+      invalid(`questions[${i}] (choice) needs a non-empty choices array`);
+    }
+    if (q.type === "score" && (!Array.isArray(q.levels) || q.levels.length === 0)) {
+      invalid(`questions[${i}] (score) needs a non-empty levels array, lowest first`);
+    }
+    if (isGemini(request2.model) && (q.type === "choice" || q.type === "score")) {
+      const key3 = q.type === "choice" ? "choices" : "levels";
+      const items = (q.type === "choice" ? q.choices : q.levels) ?? [];
+      items.forEach((item, j) => {
+        if (!item || typeof item !== "object" || typeof item.description !== "string") {
+          invalid(`questions[${i}].${key3}[${j}].description must be a string for ${GEMINI_DECISIONS_MODEL} (it may be empty: "")`);
+        }
+      });
+    }
+  });
+  return { ...request2, model: request2.model ?? DECISIONS_DEFAULT_MODEL };
+}
 function escapeRegExp3(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -109718,7 +109844,7 @@ function scoreKeywordMatch2(text, keywords, name, signalLabel, thresholds, score
   return { name, score: scores.none, signal: null };
 }
 function scoreMultiStep2(text) {
-  const patterns = [/first.*then/i, /step \d/i, /\d\.\s/];
+  const patterns = [/first.*then/i, /step \d/i, /(?:^|\n)\s*\d+[.)]\s/];
   const hits = patterns.filter((p) => p.test(text));
   if (hits.length > 0) {
     return { name: "multiStepPatterns", score: 0.5, signal: "multi-step" };
@@ -109726,7 +109852,7 @@ function scoreMultiStep2(text) {
   return { name: "multiStepPatterns", score: 0, signal: null };
 }
 function scoreQuestionComplexity2(prompt) {
-  const count = (prompt.match(/\?/g) || []).length;
+  const count = (prompt.match(/[?？]/g) || []).length;
   if (count > 3) {
     return { name: "questionComplexity", score: 0.5, signal: `${count} questions` };
   }
@@ -109778,6 +109904,14 @@ function scoreAgenticTask2(text, keywords) {
 }
 function classifyByRules2(prompt, systemPrompt, estimatedTokens, config2) {
   const userText = prompt.toLowerCase();
+  const reasoningDimension = scoreKeywordMatch2(
+    userText,
+    config2.reasoningKeywords,
+    "reasoningMarkers",
+    "reasoning",
+    { low: 1, high: 2 },
+    { none: 0, low: 0.7, high: 1 }
+  );
   const dimensions = [
     // Token count uses total estimated tokens (system + user) — context size matters for model selection
     scoreTokenCount2(estimatedTokens, config2.tokenCountThresholds),
@@ -109789,14 +109923,7 @@ function classifyByRules2(prompt, systemPrompt, estimatedTokens, config2) {
       { low: 1, high: 2 },
       { none: 0, low: 0.5, high: 1 }
     ),
-    scoreKeywordMatch2(
-      userText,
-      config2.reasoningKeywords,
-      "reasoningMarkers",
-      "reasoning",
-      { low: 1, high: 2 },
-      { none: 0, low: 0.7, high: 1 }
-    ),
+    reasoningDimension,
     scoreKeywordMatch2(
       userText,
       config2.technicalKeywords,
@@ -109883,8 +110010,7 @@ function classifyByRules2(prompt, systemPrompt, estimatedTokens, config2) {
     const w = weights[d.name] ?? 0;
     weightedScore += d.score * w;
   }
-  const reasoningMatches = config2.reasoningKeywords.filter((kw) => matchesKeyword2(userText, kw));
-  if (reasoningMatches.length >= 2) {
+  if (reasoningDimension.score === 1) {
     const confidence2 = calibrateConfidence2(
       Math.max(weightedScore, 0.3),
       // ensure positive for confidence calc
@@ -109927,25 +110053,35 @@ function classifyByRules2(prompt, systemPrompt, estimatedTokens, config2) {
 function calibrateConfidence2(distance, steepness) {
   return 1 / (1 + Math.exp(-steepness * distance));
 }
+function usablePricing2(pricing) {
+  if (!pricing) return void 0;
+  const ok = (value) => value === void 0 || Number.isFinite(value) && value >= 0;
+  if (pricing.flatPrice !== void 0) return ok(pricing.flatPrice) ? pricing : void 0;
+  return ok(pricing.inputPrice) && ok(pricing.outputPrice) ? pricing : void 0;
+}
+function rawCost2(pricing, estimatedInputTokens, maxOutputTokens) {
+  if (pricing?.flatPrice !== void 0) return pricing.flatPrice;
+  const inputPrice = pricing?.inputPrice ?? 0;
+  const outputPrice = pricing?.outputPrice ?? 0;
+  return estimatedInputTokens / 1e6 * inputPrice + maxOutputTokens / 1e6 * outputPrice;
+}
+function baselineCostFor2(modelPricing, estimatedInputTokens, maxOutputTokens) {
+  const opusPricing = usablePricing2(modelPricing.get(BASELINE_MODEL_ID2));
+  const inputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE2;
+  const outputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE2;
+  return estimatedInputTokens / 1e6 * inputPrice + maxOutputTokens / 1e6 * outputPrice;
+}
+function savingsFor2(costEstimate, baselineCost, pricing, routingProfile) {
+  if (routingProfile === "premium" || pricing === void 0 || !(baselineCost > 0)) return 0;
+  return Math.max(0, (baselineCost - costEstimate) / baselineCost);
+}
 function selectModel2(tier, confidence, method, reasoning, tierConfigs, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile, agenticScore) {
   const tierConfig = tierConfigs[tier];
   const model = tierConfig.primary;
-  const pricing = modelPricing.get(model);
-  let costEstimate;
-  if (pricing?.flatPrice !== void 0) {
-    costEstimate = pricing.flatPrice;
-  } else {
-    const inputPrice = pricing?.inputPrice ?? 0;
-    const outputPrice = pricing?.outputPrice ?? 0;
-    costEstimate = estimatedInputTokens / 1e6 * inputPrice + maxOutputTokens / 1e6 * outputPrice;
-  }
-  const opusPricing = modelPricing.get(BASELINE_MODEL_ID2);
-  const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE2;
-  const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE2;
-  const baselineInput = estimatedInputTokens / 1e6 * opusInputPrice;
-  const baselineOutput = maxOutputTokens / 1e6 * opusOutputPrice;
-  const baselineCost = baselineInput + baselineOutput;
-  const savings = routingProfile === "premium" || pricing === void 0 ? 0 : baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
+  const pricing = usablePricing2(modelPricing.get(model));
+  const costEstimate = rawCost2(pricing, estimatedInputTokens, maxOutputTokens);
+  const baselineCost = baselineCostFor2(modelPricing, estimatedInputTokens, maxOutputTokens);
+  const savings = savingsFor2(costEstimate, baselineCost, pricing, routingProfile);
   return {
     model,
     tier,
@@ -109963,27 +110099,13 @@ function getFallbackChain2(tier, tierConfigs) {
   return [config2.primary, ...config2.fallback];
 }
 function calculateModelCost2(model, modelPricing, estimatedInputTokens, maxOutputTokens, routingProfile) {
-  const pricing = modelPricing.get(model);
-  let costEstimate;
-  if (pricing?.flatPrice !== void 0) {
-    costEstimate = Math.max(pricing.flatPrice * (1 + SERVER_MARGIN_PERCENT2 / 100), MIN_PAYMENT_USD2);
-  } else {
-    const inputPrice = pricing?.inputPrice ?? 0;
-    const outputPrice = pricing?.outputPrice ?? 0;
-    const inputCost = estimatedInputTokens / 1e6 * inputPrice;
-    const outputCost = maxOutputTokens / 1e6 * outputPrice;
-    costEstimate = Math.max(
-      (inputCost + outputCost) * (1 + SERVER_MARGIN_PERCENT2 / 100),
-      MIN_PAYMENT_USD2
-    );
-  }
-  const opusPricing = modelPricing.get(BASELINE_MODEL_ID2);
-  const opusInputPrice = opusPricing?.inputPrice ?? BASELINE_INPUT_PRICE2;
-  const opusOutputPrice = opusPricing?.outputPrice ?? BASELINE_OUTPUT_PRICE2;
-  const baselineInput = estimatedInputTokens / 1e6 * opusInputPrice;
-  const baselineOutput = maxOutputTokens / 1e6 * opusOutputPrice;
-  const baselineCost = baselineInput + baselineOutput;
-  const savings = routingProfile === "premium" ? 0 : baselineCost > 0 ? Math.max(0, (baselineCost - costEstimate) / baselineCost) : 0;
+  const pricing = usablePricing2(modelPricing.get(model));
+  const costEstimate = Math.max(
+    rawCost2(pricing, estimatedInputTokens, maxOutputTokens) * (1 + SERVER_MARGIN_PERCENT2 / 100),
+    MIN_PAYMENT_USD2
+  );
+  const baselineCost = baselineCostFor2(modelPricing, estimatedInputTokens, maxOutputTokens);
+  const savings = savingsFor2(costEstimate, baselineCost, pricing, routingProfile);
   return { costEstimate, baselineCost, savings };
 }
 function filterCandidatesByCapacity2(models, estimatedInputTokens, requestedOutputTokens, getCapabilities2) {
@@ -110000,21 +110122,25 @@ function estimateTokens2(text) {
   return cjk + Math.ceil((text.length - cjk) / 4);
 }
 function scanLimit2(promptTruncationChars) {
-  return Math.max(1, Math.min(8e3, promptTruncationChars));
+  if (!Number.isFinite(promptTruncationChars)) return MAX_SCAN_CHARS2;
+  return Math.max(1, Math.min(MAX_SCAN_CHARS2, Math.floor(promptTruncationChars)));
 }
 function sampleForScan2(value, limit) {
   if (value.length <= limit) return value;
   const prefixLength = Math.ceil(limit / 2);
+  const suffixLength = limit - prefixLength;
+  if (suffixLength <= 0) return value.slice(0, prefixLength);
   return `${value.slice(0, prefixLength)}
-${value.slice(-(limit - prefixLength))}`;
+${value.slice(-suffixLength)}`;
 }
 function applyPromotions2(tierConfigs, promotions, profile, now2 = /* @__PURE__ */ new Date()) {
   if (!promotions || promotions.length === 0) return tierConfigs;
   let result = tierConfigs;
   for (const promo of promotions) {
-    const start = new Date(promo.startDate);
-    const end = new Date(promo.endDate);
-    if (now2 < start || now2 >= end) continue;
+    const start = Date.parse(promo.startDate);
+    const end = Date.parse(promo.endDate);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (now2.getTime() < start || now2.getTime() >= end) continue;
     if (promo.profiles && !promo.profiles.includes(profile)) continue;
     if (result === tierConfigs) {
       result = { ...tierConfigs };
@@ -110100,7 +110226,9 @@ function likelyNeedsParallelToolCalls2(prompt, needsTools, toolCount, toolNames)
   ]);
   const lowered = text.toLowerCase();
   const matchedOperationTokens = new Set(
-    (toolNames ?? []).flatMap((name) => name.toLowerCase().split(/[^a-z0-9\u3400-\u9fff]+/)).filter((token) => operationTokens.has(token) && lowered.includes(token))
+    (toolNames ?? []).flatMap((name) => name.toLowerCase().split(/[^a-z0-9\u3400-\u9fff]+/)).filter(
+      (token) => operationTokens.has(token) && new RegExp(`\\b${token}(?:s|es|d|ed|ing)?\\b`).test(lowered)
+    )
   );
   if (matchedOperationTokens.size >= 2) return true;
   const nonEmptyLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -110111,7 +110239,7 @@ function likelyNeedsParallelToolCalls2(prompt, needsTools, toolCount, toolNames)
   const repeatedLookup = /\b(?:weather|climate|clima|tiempo|temperature|snow|news|report)\b|天气|气象|温度|降雪|新闻|报告/i.test(
     text
   );
-  const multiLocationConnector = /\b(?:and also|both|y|e)\b|还有|以及|和|、/i.test(text);
+  const multiLocationConnector = /\b(?:and also|both)\b|\s(?:y|e)\s|还有|以及|和|、/i.test(text);
   const commaSeparatedLocations = (text.match(/[,，]/g) ?? []).length >= 2;
   if (repeatedLookup && (multiLocationConnector || commaSeparatedLocations)) return true;
   const distinctOrderParts = /\b(?:food|meal)\b[\s\S]*\bdrink\b|\bdrink\b[\s\S]*\b(?:food|meal)\b/i.test(text);
@@ -110137,6 +110265,9 @@ function classifyTask2(prompt, systemPrompt, options) {
   );
   const errorClassSignal = /\b[A-Z][A-Za-z]*(?:Error|Exception)\b/.test(scannedPrompt);
   const hasCode = explicitCodeSignal || codeConstructSignal || nativeCodeSignal || errorClassSignal;
+  const codingAction = /\b(?:write|implement|refactor|debug|fix|patch|compile|build|run|test|script|program|code|function|class|module|repo(?:sitory)?)\b|编写|实现|重构|调试|修复|编译|脚本|代码/i.test(
+    scannedPrompt
+  );
   const codeArtifact = /```|\b(?:stack trace|traceback)\b|\.(?:ts|tsx|js|py|go|rs)\b/i.test(scannedPrompt) || codeConstructSignal || nativeCodeSignal || errorClassSignal;
   const toolsAvailable = options.hasTools ?? false;
   const needsTools = options.requiresTools ?? (toolsAvailable && inferToolRequirement2(scannedPrompt, scannedSystemPrompt));
@@ -110177,7 +110308,7 @@ function classifyTask2(prompt, systemPrompt, options) {
   const crossRecordSignal = /\b(?:another|other|different|previous)\s+(?:order|reservation|booking|account|address)\b|另一(?:个)?(?:订单|预订|账户|地址)|其他(?:订单|预订|账户|地址)/i.test(
     scannedPrompt
   );
-  const reservationIds = scannedPrompt.match(/\b[A-Z0-9]{6}\b/g) ?? [];
+  const reservationIds = scannedPrompt.match(/\b(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6}\b/g) ?? [];
   const crossReservationBatchSignal = agentDomain === "airline" && (/\b(?:two|three|multiple|several)(?:\s+of\s+(?:my|our|the))?\s+(?:upcoming\s+)?(?:reservations?|bookings?)\b|\b(?:a\s+)?(?:second|third)\s+(?:reservation|booking)\b/i.test(
     scannedPrompt
   ) || new Set(reservationIds).size >= 2);
@@ -110248,7 +110379,7 @@ function classifyTask2(prompt, systemPrompt, options) {
   );
   const terminalSafetySensitive = terminalToolSignal && (highStakes || terminalCredentialSignal);
   const implicitTerminalCode = needsTools && terminalToolSignal && agentRisk === "standard" && !highStakes && !complexTerminalOperation && numberedSteps < 3 && prompt.length <= 1e3 && simpleTerminalArtifact;
-  const language = /[\u3400-\u9fff]/.test(scannedPrompt) ? "zh" : "other";
+  const language = /[\u3400-\u9fff]/.test(scannedPrompt) && !/[\u3040-\u30ff]/.test(scannedPrompt) ? "zh" : "other";
   const multipleChoiceSignals = (scannedPrompt.match(/(?:^|\n)\s*[A-D][.)]\s+/gim) ?? []).length;
   const numericSignals = (scannedPrompt.match(/-?\d+(?:[.,]\d+)?/g) ?? []).length;
   const compactMathProblem = !hasCode && prompt.length < 2500 && numericSignals >= 2 && (/[+×÷=%$€£¥]|\b(?:total|each|per|times|half|twice|percent|how many|how much|calculate)\b/i.test(
@@ -110257,19 +110388,20 @@ function classifyTask2(prompt, systemPrompt, options) {
   let taskType = "chat";
   if (needsVision) taskType = "vision";
   else if (estimatedInputTokens > 8e4) taskType = "long_context";
-  else if (needsTools && (hasCode || implicitTerminalCode)) taskType = "code_agent";
+  else if (needsTools && (codeArtifact || hasCode && codingAction || implicitTerminalCode))
+    taskType = "code_agent";
   else if (needsTools && likelyParallelToolCalls && !complexMultiToolPlan)
     taskType = "tool_agent_parallel";
   else if (needsTools) taskType = "tool_agent";
   else if (multipleChoiceSignals >= 3) taskType = "reasoning_mcq";
   else if (compactMathProblem) taskType = "reasoning_math";
-  else if (errorClassSignal || /\b(?:bug|debug|error|failure|failing|regression|crash|修复|报错|错误|调试)\b/i.test(text))
+  else if (errorClassSignal || /\b(?:bug|debug|error|failure|failing|regression|crash)\b|修复|报错|错误|调试/i.test(text))
     taskType = "debug";
-  else if (hasCode || /\b(?:refactor|implement|patch|edit|rewrite|重构|实现|修改)\b/i.test(text))
+  else if (hasCode || /\b(?:refactor|implement|patch|edit|rewrite)\b|重构|实现|修改/i.test(text))
     taskType = "code_edit";
-  else if (needsStructuredOutput || /\b(?:extract|json|schema|csv|字段|提取)\b/i.test(text))
+  else if (needsStructuredOutput || /\b(?:extract|json|schema|csv)\b|字段|提取/i.test(text))
     taskType = "extraction";
-  else if (/\b(?:prove|derive|theorem|formal|mathematical|reasoning|证明|推导|定理|数学)\b/i.test(text))
+  else if (/\b(?:prove|derive|theorem|formal|mathematical|reasoning)\b|证明|推导|定理|数学/i.test(text))
     taskType = "reasoning";
   return {
     taskType,
@@ -110293,289 +110425,62 @@ function classifyTask2(prompt, systemPrompt, options) {
     codeArtifact
   };
 }
-function affinity(modelId, task, language = "other", agentDomain = "other", deepWebResearch = false, agentRisk = "standard", terminalToolSignal = false, terminalSafetySensitive = false) {
-  const id2 = modelId.toLowerCase();
-  const modelName = id2.slice(id2.indexOf("/") + 1);
-  const match = (values, score) => values.some((value) => modelName === value) ? score : 0;
-  const base4 = 0.68;
-  switch (task) {
+function affinityBand2(features) {
+  const { taskType, agentDomain, agentRisk, deepWebResearch, terminalToolSignal } = features;
+  const terminalSafety = features.terminalSafetySensitive;
+  switch (taskType) {
     case "code_agent":
-      if (terminalToolSignal && agentRisk === "complex_high") {
-        return Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5.3-codex"], 0.87),
-          match(["gpt-5-mini"], 0.78),
-          match(["gemini-3.5-flash"], 0.76)
-        );
-      }
-      return Math.max(
-        base4,
-        match(["gpt-5.3-codex"], 1),
-        match(["claude-sonnet-5"], 0.98),
-        match(["gpt-5-mini"], 0.96),
-        match(["gemini-3.5-flash"], 0.92),
-        match(["kimi-k3"], 0.9),
-        match(["deepseek-v4-pro", "glm-5.2"], 0.88)
-      );
+      return terminalToolSignal && agentRisk === "complex_high" ? TERMINAL_COMPLEX_HIGH2 : AFFINITY2.codeAgent;
     case "tool_agent":
-      if (terminalToolSignal && agentRisk === "complex_high") {
-        return Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5.3-codex"], 0.87),
-          match(["gpt-5-mini"], 0.78),
-          match(["gemini-3.5-flash"], 0.76)
-        );
-      }
-      if (terminalToolSignal && !terminalSafetySensitive) {
-        return Math.max(
-          base4,
-          match(["gpt-5-mini"], 1),
-          match(["gpt-5.3-codex"], 0.98),
-          match(["claude-sonnet-5"], 0.9),
-          match(["gemini-3.5-flash"], 0.89)
-        );
-      }
-      if (terminalToolSignal && terminalSafetySensitive) {
-        return Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["claude-opus-4.8"], 0.9),
-          match(["gpt-5.3-codex"], 0.84)
-        );
-      }
-      if (agentDomain === "web_research") {
-        return deepWebResearch ? Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.84),
-          match(["claude-opus-5"], 0.8),
-          match(["claude-opus-4.8"], 0.78)
-        ) : Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.86),
-          match(["claude-opus-5"], 0.84),
-          match(["claude-opus-4.8"], 0.82)
-        );
-      }
+      if (terminalToolSignal && agentRisk === "complex_high") return TERMINAL_COMPLEX_HIGH2;
+      if (terminalToolSignal) return terminalSafety ? AFFINITY2.terminalToolSafety : AFFINITY2.terminalTool;
+      if (agentDomain === "web_research") return deepWebResearch ? WEB_RESEARCH_DEEP2 : WEB_RESEARCH2;
       if (agentDomain === "retail") {
-        if (agentRisk === "standard") {
-          return Math.max(
-            base4,
-            match(["gpt-5-mini"], 1),
-            match(["claude-sonnet-5"], 0.88),
-            match(["gemini-3.5-flash"], 0.82),
-            match(["gpt-5.3-codex"], 0.81),
-            match(["kimi-k3"], 0.78),
-            match(["deepseek-v4-pro"], 0.76)
-          );
-        }
-        if (agentRisk === "policy_exception") {
-          return Math.max(
-            base4,
-            match(["gpt-4.1"], 1),
-            match(["claude-sonnet-5"], 0.9),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-5-mini"], 0.8),
-            match(["gpt-4o-mini"], 0.76)
-          );
-        }
-        if (agentRisk === "policy_exception_simple") {
-          return Math.max(
-            base4,
-            match(["gpt-5-mini"], 1),
-            match(["gpt-4.1"], 0.86),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-4o-mini"], 0.8)
-          );
-        }
-        return Math.max(
-          base4,
-          match(["deepseek-v4-pro"], 1),
-          match(["claude-sonnet-5"], 0.88),
-          match(["gemini-3.5-flash"], 0.82),
-          match(["gpt-5.3-codex"], 0.81),
-          match(["kimi-k3"], 0.78),
-          match(["gpt-5-mini"], 0.76)
-        );
+        if (agentRisk === "standard") return AFFINITY2.retailStandard;
+        if (agentRisk === "policy_exception") return RETAIL_POLICY_EXCEPTION2;
+        if (agentRisk === "policy_exception_simple") return RETAIL_POLICY_EXCEPTION_SIMPLE2;
+        return AFFINITY2.retailHigh;
       }
       if (agentDomain === "airline") {
-        if (agentRisk === "complex_high") {
-          return Math.max(
-            base4,
-            match(["claude-sonnet-5"], 1),
-            match(["gpt-5-mini"], 0.78),
-            match(["gemini-3.5-flash"], 0.76),
-            match(["deepseek-v4-pro"], 0.74)
-          );
-        }
-        return Math.max(
-          base4,
-          match(["gpt-5-mini"], 1),
-          match(["claude-sonnet-5"], 0.9),
-          match(["gemini-3.5-flash"], 0.8),
-          match(["deepseek-v4-pro"], 0.76)
-        );
+        return agentRisk === "complex_high" ? AFFINITY2.airlineComplex : AFFINITY2.airlineStandard;
       }
-      return Math.max(
-        base4,
-        match(["claude-sonnet-5"], 1),
-        match(["gemini-3.5-flash"], 0.88),
-        match(["gpt-5.3-codex"], 0.87),
-        match(["gpt-5-mini"], 0.84),
-        match(["kimi-k3"], 0.85),
-        match(["deepseek-v4-pro"], 0.82)
-      );
+      return AFFINITY2.toolAgent;
     case "tool_agent_parallel":
       if (terminalToolSignal) {
-        return terminalSafetySensitive ? Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["claude-opus-4.8"], 0.9),
-          match(["gpt-5.3-codex"], 0.86)
-        ) : Math.max(
-          base4,
-          match(["gpt-5-mini"], 1),
-          match(["gpt-5.3-codex"], 0.98),
-          match(["claude-sonnet-5"], 0.92),
-          match(["gemini-3.5-flash"], 0.88)
-        );
+        return terminalSafety ? AFFINITY2.parallelTerminalSafety : AFFINITY2.parallelTerminal;
       }
-      if (agentDomain === "web_research") {
-        return deepWebResearch ? Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.84),
-          match(["claude-opus-5"], 0.8),
-          match(["claude-opus-4.8"], 0.78)
-        ) : Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.88),
-          match(["gemini-3.5-flash"], 0.86),
-          match(["claude-opus-5"], 0.84),
-          match(["claude-opus-4.8"], 0.82)
-        );
-      }
+      if (agentDomain === "web_research") return deepWebResearch ? WEB_RESEARCH_DEEP2 : WEB_RESEARCH2;
       if (agentDomain === "retail") {
-        if (agentRisk === "policy_exception") {
-          return Math.max(
-            base4,
-            match(["gpt-4.1"], 1),
-            match(["claude-sonnet-5"], 0.9),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-5-mini"], 0.8),
-            match(["gpt-4o-mini"], 0.76)
-          );
-        }
-        if (agentRisk === "policy_exception_simple") {
-          return Math.max(
-            base4,
-            match(["gpt-5-mini"], 1),
-            match(["gpt-4.1"], 0.86),
-            match(["deepseek-v4-pro"], 0.82),
-            match(["gpt-4o-mini"], 0.8)
-          );
-        }
-        return Math.max(
-          base4,
-          match(["deepseek-v4-pro"], 1),
-          match(["claude-sonnet-5"], 0.88),
-          match(["claude-opus-4.8"], 0.84),
-          match(["gpt-5-mini"], 0.78),
-          match(["gemini-3.5-flash"], 0.76)
-        );
+        if (agentRisk === "policy_exception") return RETAIL_POLICY_EXCEPTION2;
+        if (agentRisk === "policy_exception_simple") return RETAIL_POLICY_EXCEPTION_SIMPLE2;
+        return AFFINITY2.parallelRetail;
       }
       if (agentDomain === "airline") {
-        return agentRisk === "complex_high" ? Math.max(
-          base4,
-          match(["claude-sonnet-5"], 1),
-          match(["gpt-5-mini"], 0.78),
-          match(["claude-opus-4.8"], 0.76),
-          match(["gemini-3.5-flash"], 0.74)
-        ) : Math.max(
-          base4,
-          match(["gpt-5-mini"], 1),
-          match(["claude-sonnet-5"], 0.9),
-          match(["gemini-3.5-flash"], 0.8)
-        );
+        return agentRisk === "complex_high" ? AFFINITY2.parallelAirlineComplex : AFFINITY2.parallelAirline;
       }
-      return Math.max(
-        base4,
-        match(["claude-opus-4.8"], 1),
-        match(["claude-sonnet-5"], 0.84),
-        match(["grok-4.5"], 0.82),
-        match(["gemini-3.5-flash"], 0.8),
-        match(["deepseek-v4-pro"], 0.78)
-      );
+      return AFFINITY2.parallel;
     case "code_edit":
     case "debug":
-      return Math.max(
-        base4,
-        match(["gpt-5.3-codex"], 1),
-        match(["claude-sonnet-4.6"], 0.94),
-        match(["glm-5.2"], 0.9),
-        match(["deepseek-v4-pro"], 0.86)
-      );
+      return AFFINITY2.codeEdit;
     case "reasoning":
-      return Math.max(
-        base4,
-        match(["claude-sonnet-5", "claude-sonnet-4.6"], 0.98),
-        match(["deepseek-v4-pro"], 0.95),
-        match(["grok-4.5"], 0.94),
-        match(["gemini-3.1-pro", "gemini-3.5-flash"], 0.92)
-      );
+      return AFFINITY2.reasoning;
     case "reasoning_mcq":
-      return Math.max(
-        base4,
-        match(["gemini-3-flash-preview"], 1),
-        match(["gemini-3.5-flash"], 0.91),
-        match(["grok-4.5"], 0.9),
-        match(["claude-sonnet-5"], 0.88),
-        match(["deepseek-v4-pro"], 0.84)
-      );
+      return AFFINITY2.reasoningMcq;
     case "reasoning_math":
-      return Math.max(
-        base4,
-        match(["gemini-3.5-flash"], 1),
-        match(["grok-4.5"], 0.93),
-        match(["claude-sonnet-5", "deepseek-v4-pro", "kimi-k3"], 0.9)
-      );
+      return AFFINITY2.reasoningMath;
     case "vision":
-      return Math.max(
-        base4,
-        match(["gemini-3.1-pro"], 0.96),
-        match(["qwen3.7-max", "claude-sonnet-4.6", "kimi-k3", "grok-4.3"], 0.9)
-      );
+      return AFFINITY2.vision;
     case "long_context":
-      return Math.max(
-        base4,
-        match(["gemini-3.1-pro"], 1),
-        match(["qwen3.7-max", "glm-5.2"], 0.89),
-        match(["gemini-3.5-flash"], 0.88),
-        match(["deepseek-v4-pro"], 0.85)
-      );
-    case "extraction": {
-      const kimiExtractionAffinity = language === "zh" ? 1 : 0.9;
-      const otherExtractionAffinity = language === "zh" ? 0.88 : 0.9;
-      return Math.max(
-        base4,
-        match(["gemini-3.5-flash", "gemini-2.5-flash", "gpt-4o-mini"], otherExtractionAffinity),
-        match(["claude-sonnet-5", "claude-sonnet-4.6"], otherExtractionAffinity),
-        match(["kimi-k3"], kimiExtractionAffinity)
-      );
-    }
-    default:
-      return Math.max(
-        base4,
-        match(["gemini-3.5-flash", "gemini-2.5-flash", "kimi-k3"], 0.86)
-      );
+      return AFFINITY2.longContext;
+    case "extraction":
+      return features.language === "zh" ? AFFINITY2.extractionZh : AFFINITY2.extraction;
+    case "chat":
+      return AFFINITY2.chat;
   }
+}
+function affinityIn2(band, modelId) {
+  const name = modelId.toLowerCase().slice(modelId.indexOf("/") + 1);
+  return Math.max(NEUTRAL_AFFINITY2, band[name] ?? 0);
 }
 function evidenceCandidates2(task) {
   if (task === "code_agent") {
@@ -110656,7 +110561,7 @@ function isEligible2(modelId, features, maxOutputTokens, options) {
   return model.contextWindow >= (features.estimatedInputTokens + maxOutputTokens) * 1.1;
 }
 function estimatedCost2(modelId, options, inputTokens, outputTokens) {
-  const price2 = options.modelPricing.get(modelId);
+  const price2 = usablePricing2(options.modelPricing.get(modelId));
   if (!price2) return Number.POSITIVE_INFINITY;
   if (price2.flatPrice !== void 0) return price2.flatPrice;
   return (inputTokens * price2.inputPrice + outputTokens * price2.outputPrice) / 1e6;
@@ -110666,6 +110571,10 @@ function profileScore2(modelId, options, now2) {
   if (!profile) return void 0;
   const measuredAt = Date.parse(profile.measuredAt);
   if (!Number.isFinite(measuredAt)) return void 0;
+  const finite = (value, optional2) => value === void 0 ? optional2 : Number.isFinite(value) && value >= 0;
+  if (!finite(profile.latencyMs, false) || !finite(profile.outputTokensPerSecond, false) || !finite(profile.p95LatencyMs, true) || !finite(profile.intelligenceIndex, true) || !finite(profile.errorRate, true) || !finite(profile.samples, true)) {
+    return void 0;
+  }
   const ageDays = Math.max(0, (now2.getTime() - measuredAt) / 864e5);
   const sampleConfidence = profile.samples === void 0 ? 1 : Math.min(1, Math.max(0, profile.samples) / 10);
   const freshness = Math.pow(0.5, ageDays / 30) * sampleConfidence;
@@ -110849,6 +110758,13 @@ async function loadSplToken(what) {
     throw missing("@solana/spl-token", what, err);
   }
 }
+function unwrapBs58(mod5) {
+  const m = mod5;
+  if (typeof m?.encode === "function") return m;
+  const inner = m?.default;
+  if (typeof inner?.encode === "function") return inner;
+  throw new Error("bs58: no encode() on the module or its default export");
+}
 function evmNetwork(network) {
   const net3 = EVM_NETWORKS[network];
   if (!net3) {
@@ -110889,6 +110805,15 @@ async function getBlockhashEntry(connection, rpcUrl, forceRefresh) {
   blockhashCache.set(rpcUrl, entry);
   trimOldest(blockhashCache, MAX_TRACKED_ENDPOINTS);
   return entry;
+}
+function quotedBlockhash(extra) {
+  const value = extra?.recentBlockhash;
+  if (typeof value !== "string" || value.length === 0) return null;
+  try {
+    return bs58.decode(value).length === 32 ? value : null;
+  } catch {
+    return null;
+  }
 }
 function createNonce2() {
   const bytes = new Uint8Array(32);
@@ -111015,7 +110940,8 @@ async function createSolanaPaymentPayload(secretKey, fromAddress, recipient, amo
     }
     return null;
   };
-  let entry = await getBlockhashEntry(connection, rpcUrl, options.forceFreshBlockhash ?? false);
+  const quoted = quotedBlockhash(options.extra);
+  let entry = quoted ? { blockhash: quoted, fetchedAt: Date.now() } : await getBlockhashEntry(connection, rpcUrl, options.forceFreshBlockhash ?? false);
   let serializedTx = findDistinctTx(entry);
   if (serializedTx === null) {
     entry = await getBlockhashEntry(connection, rpcUrl, true);
@@ -111071,9 +110997,15 @@ function parsePaymentRequired(headerValue) {
   }
 }
 function extractPaymentDetails(paymentRequired, preferredNetwork) {
-  const accepts = paymentRequired.accepts || [];
-  if (accepts.length === 0) {
+  const offered = paymentRequired.accepts || [];
+  if (offered.length === 0) {
     throw new Error("No payment options in payment required response");
+  }
+  const accepts = offered.filter((opt) => !opt.scheme || opt.scheme === "exact");
+  if (accepts.length === 0) {
+    throw new Error(
+      `This client signs the exact scheme, but the 402 only offers ${offered.map((opt) => JSON.stringify(opt.scheme)).join(", ")}`
+    );
   }
   let option = null;
   if (preferredNetwork) {
@@ -111481,11 +111413,11 @@ Check my balance: ${links.basescan}`;
 }
 async function createSolanaWallet() {
   const { Keypair } = await loadSolanaWeb3("Solana wallet operations");
-  const bs583 = await Promise.resolve().then(() => (init_esm7(), esm_exports));
+  const bs582 = await Promise.resolve().then(() => (init_esm7(), esm_exports));
   const keypair = Keypair.generate();
   return {
     address: keypair.publicKey.toBase58(),
-    privateKey: (bs583.default ?? bs583).encode(keypair.secretKey)
+    privateKey: (bs582.default ?? bs582).encode(keypair.secretKey)
   };
 }
 async function solanaKeyToBytes(privateKey) {
@@ -111523,8 +111455,8 @@ async function solanaKeyToBytes(privateKey) {
     return bytes;
   }
   try {
-    const bs583 = await Promise.resolve().then(() => (init_esm7(), esm_exports));
-    const bytes = (bs583.default ?? bs583).decode(key3);
+    const bs582 = await Promise.resolve().then(() => (init_esm7(), esm_exports));
+    const bytes = (bs582.default ?? bs582).decode(key3);
     if (bytes.length !== 64) {
       throw new Error(`Invalid Solana key length: expected 64 bytes, got ${bytes.length}`);
     }
@@ -111727,10 +111659,102 @@ function signPollOwnership(secretKey, kind, jobId, nowMs = Date.now()) {
   const timestampS = Math.floor(nowMs / 1e3);
   const signature3 = ed25519Sign(null, Buffer.from(pollAuthMessage(kind, jobId, timestampS), "utf8"), privateKey);
   return {
-    [POLL_AUTH_HEADERS.wallet]: esm_default2.encode(publicKey),
+    [POLL_AUTH_HEADERS.wallet]: bs58.encode(publicKey),
     [POLL_AUTH_HEADERS.timestamp]: String(timestampS),
-    [POLL_AUTH_HEADERS.signature]: esm_default2.encode(signature3)
+    [POLL_AUTH_HEADERS.signature]: bs58.encode(signature3)
   };
+}
+function isReceiptBlock(block) {
+  return block.split(/\r?\n/).some((line) => line.trim() === `event: ${RECEIPT_EVENT}` || line.trim() === `event:${RECEIPT_EVENT}`);
+}
+function parseReceiptBlock(block) {
+  const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).replace(/^ /, "")).join("\n");
+  try {
+    const parsed = JSON.parse(data);
+    if (typeof parsed?.status !== "string") return void 0;
+    return { status: parsed.status, ...typeof parsed.payment_response === "string" ? { paymentResponse: parsed.payment_response } : {} };
+  } catch {
+    return void 0;
+  }
+}
+function withoutReceiptEvent(body) {
+  const decoder3 = new TextDecoder();
+  const encoder6 = new TextEncoder();
+  let pending = "";
+  return body.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        pending += decoder3.decode(chunk, { stream: true });
+        let out = "";
+        for (let match = EVENT_END.exec(pending); match; match = EVENT_END.exec(pending)) {
+          const end = match.index + match[0].length;
+          const block = pending.slice(0, end);
+          pending = pending.slice(end);
+          if (!isReceiptBlock(block)) out += block;
+        }
+        if (out) controller.enqueue(encoder6.encode(out));
+      },
+      flush(controller) {
+        const rest = pending + decoder3.decode();
+        if (rest && !isReceiptBlock(rest)) controller.enqueue(encoder6.encode(rest));
+      }
+    })
+  );
+}
+async function readReceiptEvent(body) {
+  const reader = body.getReader();
+  const decoder3 = new TextDecoder();
+  let pending = "";
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) return void 0;
+      pending += decoder3.decode(value, { stream: true });
+      for (let match = EVENT_END.exec(pending); match; match = EVENT_END.exec(pending)) {
+        const end = match.index + match[0].length;
+        const block = pending.slice(0, end);
+        pending = pending.slice(end);
+        if (isReceiptBlock(block)) {
+          void reader.cancel().catch(() => void 0);
+          return parseReceiptBlock(block);
+        }
+      }
+    }
+  } catch {
+    return void 0;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+    }
+  }
+}
+async function lookupReceipt(apiUrl, paymentHeader, opts = {}) {
+  const doFetch = opts.fetch ?? fetch;
+  const attempts = opts.attempts ?? 8;
+  const delayMs = opts.delayMs ?? 2e3;
+  const sleep42 = opts.sleep ?? ((ms) => new Promise((resolve22) => setTimeout(resolve22, ms)));
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await sleep42(Math.min(delayMs * 2 ** (attempt - 1), 15e3));
+    let answer;
+    try {
+      const res = await doFetch(`${apiUrl}/v1/batch/receipt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentHeader })
+      });
+      if (res.status >= 500) continue;
+      if (!res.ok) return void 0;
+      answer = await res.json();
+    } catch {
+      continue;
+    }
+    if (answer?.status !== "pending") return answer;
+  }
+  return void 0;
+}
+function isEventStream(response) {
+  return (response.headers.get("content-type") ?? "").includes("text/event-stream");
 }
 async function load(pkg2, importer) {
   try {
@@ -111943,7 +111967,7 @@ function decodeChannelAccount(owner, data) {
     return void 0;
   }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const key3 = (offset) => esm_default2.encode(data.subarray(offset, offset + 32));
+  const key3 = (offset) => bs58.encode(data.subarray(offset, offset + 32));
   return {
     deposit: view.getBigUint64(CHANNEL.deposit, true),
     settled: view.getBigUint64(CHANNEL.settled, true),
@@ -112438,18 +112462,23 @@ async function readPaymentFailureBody(response) {
   }
 }
 async function isSafeStaleBlockhashResponse(response) {
+  const body = await readPaymentFailure(response);
+  return body !== null && isSafeStaleBlockhashBody(body);
+}
+async function readPaymentFailure(response) {
   const length = Number(response.headers.get("content-length") || "0");
-  if (Number.isFinite(length) && length > MAX_PAYMENT_FAILURE_BYTES) return false;
+  if (Number.isFinite(length) && length > MAX_PAYMENT_FAILURE_BYTES) return null;
   const text = await readPaymentFailureBody(response);
-  if (text === null) return false;
-  let body;
+  if (text === null) return null;
   try {
     const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
-    body = parsed;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed;
   } catch {
-    return false;
+    return null;
   }
+}
+function isSafeStaleBlockhashBody(body) {
   const nested = body.error && typeof body.error === "object" && !Array.isArray(body.error) ? body.error : void 0;
   const errorLabel = typeof body.error === "string" ? body.error : "";
   const code = normalizePaymentSignal(body.code ?? nested?.code);
@@ -112734,28 +112763,27 @@ async function setupAgentClient(options = {}) {
   chain3 ??= !loadSolanaWallet() && loadWallet() ? "base" : "solana";
   return chain3 === "solana" ? setupAgentSolanaWallet(options) : setupAgentWallet(options);
 }
-var RETRY_DISPOSITION, BlockrunError, RetiredEndpointError, PaymentError, APIError, LOCALHOST_DOMAINS, KNOWN_PROVIDERS, TRANSIENT_STATUS, TRANSIENT_RETRIES, TRANSIENT_BACKOFF_MS, API_KEY_URL, PORTAL_URL2, ApiKeyAuth, NOT_A_SKIP, UNSEGMENTED_SCRIPT2, WORD_CHAR2, ASCII_PHRASE2, SEGMENTED_WORD_CHAR2, BOUNDARY_BEFORE2, BOUNDARY_AFTER2, BOUNDED_LAST_WORD_LENGTH2, SHORT_SUFFIXES2, SIBILANT_PLURAL2, MID_SUFFIXES2, DROPPED_E_SUFFIXES2, DOUBLED_CONSONANT_SUFFIXES2, matcherCache2, BASELINE_MODEL_ID2, BASELINE_INPUT_PRICE2, BASELINE_OUTPUT_PRICE2, SERVER_MARGIN_PERCENT2, MIN_PAYMENT_USD2, CJK_CHARS2, RulesStrategy2, registry3, DEFAULT_MODEL_CAPABILITIES2, model_profiles_generated_default2, LIVE_MODEL_PROFILES2, HISTORICAL_MODEL_PROFILES2, DEFAULT_PORTFOLIO_WEIGHTS2, VERIFIED_TOOL_FALLBACKS2, PortfolioStrategy2, DEFAULT_ROUTING_CONFIG2, AUTO_ROUTING_PROFILES, BASE_MINIMUM_PAYMENT_USD, SOLANA_MINIMUM_PAYMENT_USD, searchModelsByCatalog, INSTALL_HINT, BASE_CHAIN_ID, USDC_BASE2, ARC_CHAIN_ID, USDC_ARC, EVM_NETWORKS, SOLANA_NETWORK, USDC_SOLANA, SOLANA_USDC_DECIMALS, DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS2, DEFAULT_COMPUTE_UNIT_LIMIT2, BLOCKHASH_TTL_MS, MAX_FEE_NONCE_STEPS, MAX_TRACKED_BLOCKHASHES, MAX_TRACKED_ENDPOINTS, blockhashCache, issuedByBlockhash, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, BLOCKRUN_DIR, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_API_URL, DEFAULT_MAX_TOKENS2, DEFAULT_TIMEOUT, LLMClient, client_default, DEFAULT_API_URL2, DEFAULT_MODEL, DEFAULT_SIZE, DEFAULT_TIMEOUT2, POLL_INTERVAL_MS, POLL_MAX_DURATION_MS, ImageClient, DEFAULT_API_URL3, DEFAULT_MODEL2, DEFAULT_TIMEOUT3, MusicClient, DEFAULT_API_URL4, DEFAULT_MODEL3, DEFAULT_SOUNDFX_MODEL, DEFAULT_TIMEOUT4, SpeechClient, DEFAULT_API_URL5, DEFAULT_MODEL4, DEFAULT_TIMEOUT5, POLL_INTERVAL_MS2, DEFAULT_GENERATE_BUDGET_MS, MAX_TIMEOUT_SECONDS, MAX_POLL_RESIGNS, VideoClient, DEFAULT_API_URL6, DEFAULT_TIMEOUT6, CALL_PRICE_USD, VALID_MODELS, VoiceClient, DEFAULT_API_URL7, DEFAULT_TIMEOUT7, PHONE_PRICES, PhoneClient, DEFAULT_API_URL8, DEFAULT_TIMEOUT8, PORTRAIT_ENROLLMENT_PRICE_USD, PortraitClient, DEFAULT_API_URL9, DEFAULT_TIMEOUT9, SearchClient, DEFAULT_API_URL10, DEFAULT_TIMEOUT10, PriceClient, DEFAULT_API_URL11, DEFAULT_TIMEOUT11, SURF_PREFIX, warnedRetired, SurfClient, DEFAULT_API_URL12, DEFAULT_TIMEOUT12, RPC_PRICE_USD, SUPPORTED_NETWORKS, NETWORK_ALIASES, RpcClient, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, USDC_BASE_CONTRACT, BASE_CHAIN_ID2, WALLET_FILE_PATH, WALLET_DIR_PATH, WALLET_DIR3, SOLANA_WALLET_FILE, POLL_AUTH_HEADERS, ED25519_PKCS8_PREFIX, BATCH_SCHEME, BLOCKRUN_SOL_OPERATOR, DEFAULT_BATCH_RATE_LIMIT, DEFAULT_BATCH_IN_DOUBT, DEFAULT_BATCH_LOCK_WAIT_MS, LOCK_POLL_MS, BatchPaymentUnresolvedError, BatchCloseDeferredError, BatchChannelLockedError, INSTALL_HINT2, FileChannelStorage, MemoryChannelStorage, FileIntentJournal, MemoryIntentJournal, BATCH_REGISTRY, registryHost, registry22, lockIds, ChannelResyncRequiredError, ChannelBook, PAYMENT_CHANNELS_PROGRAM_ID2, CHANNEL, ChannelUnreadableError, ChannelLayoutError, layoutChecked, LANDING_MARGIN_BLOCKS, ResyncError, DEPOSIT_BLOCKHASH_TTL_MS, MAX_DEPOSIT_BLOCKHASH_ENDPOINTS, depositBlockhashes, PAYMENT_IDENTIFIER, IN_DOUBT_MIN_WAIT_MS, IN_DOUBT_MAX_WAIT_MS, BATCH_REFUSALS, PRE_REQUEST_REFUSALS, MAX_RETRY_AFTER_MS, NOT_BROADCAST_REFUSALS, CONFIG_REFUSALS, REFUSAL_COOLDOWN_MS, CONFIG_REFUSAL_COOLDOWN_MS, REFUSAL_COOLDOWN_MAX_MS, realSleep, sleep2, warnedNoSizer, payScope, RPC_SCOPE_STORE, RPC_HEADER_HOOK, sharedGlobal, rpcScope, SolanaBatchPayer, SOLANA_API_URL, DEFAULT_MAX_TOKENS22, STALE_BLOCKHASH_RETRY_BACKOFFS_MS, MAX_PAYMENT_FAILURE_BYTES, DEFAULT_VIDEO_MODEL, DEFAULT_MUSIC_MODEL, DEFAULT_VIDEO_BUDGET_MS, DEFAULT_MUSIC_BUDGET_MS, VIDEO_POLL_INTERVAL_MS, MAX_PAID_POLL_REFUSALS, MAX_RETRY_AFTER_MS2, MEDIA_SUBMIT_TIMEOUT_MS, SafeStaleBlockhashError, DEFAULT_SOLANA_RPC_URL, SolanaLLMClient, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL, StreamingResponse, ChatCompletions, Chat, OpenAI, AnthropicClient;
+var RETRY_DISPOSITION, BlockrunError, RetiredEndpointError, PaymentError, PAYMENT_REPLAY, PaymentReplayError, APIError, LOCALHOST_DOMAINS, KNOWN_PROVIDERS, PAYMENT_FACT_FIELDS, REPLAY_FIELDS, TRANSIENT_STATUS, TRANSIENT_RETRIES, TRANSIENT_BACKOFF_MS, API_KEY_URL, PORTAL_URL2, ApiKeyAuth, NOT_A_SKIP, DECISIONS_DEFAULT_MODEL, QUESTION_TYPES, GEMINI_DECISIONS_MODEL, UNSEGMENTED_SCRIPT2, WORD_CHAR2, ASCII_PHRASE2, SEGMENTED_WORD_CHAR2, BOUNDARY_BEFORE2, BOUNDARY_AFTER2, BOUNDED_LAST_WORD_LENGTH2, SHORT_SUFFIXES2, SIBILANT_PLURAL2, MID_SUFFIXES2, DROPPED_E_SUFFIXES2, DOUBLED_CONSONANT_SUFFIXES2, matcherCache2, BASELINE_MODEL_ID2, BASELINE_INPUT_PRICE2, BASELINE_OUTPUT_PRICE2, SERVER_MARGIN_PERCENT2, MIN_PAYMENT_USD2, CJK_CHARS2, MAX_SCAN_CHARS2, RulesStrategy2, registry3, DEFAULT_ROUTING_CONFIG2, DEFAULT_MODEL_CAPABILITIES2, model_profiles_generated_default2, LIVE_MODEL_PROFILES2, HISTORICAL_MODEL_PROFILES2, DEFAULT_PORTFOLIO_WEIGHTS2, NEUTRAL_AFFINITY2, TERMINAL_COMPLEX_HIGH2, WEB_RESEARCH_DEEP2, WEB_RESEARCH2, RETAIL_POLICY_EXCEPTION2, RETAIL_POLICY_EXCEPTION_SIMPLE2, AFFINITY2, VERIFIED_TOOL_FALLBACKS2, PortfolioStrategy2, AUTO_ROUTING_PROFILES, BASE_MINIMUM_PAYMENT_USD, SOLANA_MINIMUM_PAYMENT_USD, searchModelsByCatalog, INSTALL_HINT, bs58, BASE_CHAIN_ID, USDC_BASE2, ARC_CHAIN_ID, USDC_ARC, EVM_NETWORKS, SOLANA_NETWORK, USDC_SOLANA, SOLANA_USDC_DECIMALS, DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS2, DEFAULT_COMPUTE_UNIT_LIMIT2, BLOCKHASH_TTL_MS, MAX_FEE_NONCE_STEPS, MAX_TRACKED_BLOCKHASHES, MAX_TRACKED_ENDPOINTS, blockhashCache, issuedByBlockhash, TRANSFER_TYPES, BLOCKRUN_SERVICE_CODE2, BLOCKRUN_DIR, COST_LOG_FILE, SDK_VERSION, USER_AGENT2, DEFAULT_API_URL, DEFAULT_MAX_TOKENS2, DEFAULT_TIMEOUT, LLMClient, client_default, DEFAULT_API_URL2, DEFAULT_MODEL, DEFAULT_SIZE, DEFAULT_TIMEOUT2, POLL_INTERVAL_MS, POLL_MAX_DURATION_MS, ImageClient, DEFAULT_API_URL3, DEFAULT_MODEL2, DEFAULT_TIMEOUT3, POLL_INTERVAL_MS2, POLL_MAX_DURATION_MS2, TRANSIENT_POLL_STATUSES, MusicClient, DEFAULT_API_URL4, DEFAULT_MODEL3, DEFAULT_SOUNDFX_MODEL, DEFAULT_TIMEOUT4, SpeechClient, DEFAULT_API_URL5, DEFAULT_MODEL4, DEFAULT_TIMEOUT5, POLL_INTERVAL_MS3, DEFAULT_GENERATE_BUDGET_MS, MAX_TIMEOUT_SECONDS, MAX_POLL_RESIGNS, VideoClient, DEFAULT_API_URL6, DEFAULT_TIMEOUT6, CALL_PRICE_USD, VALID_MODELS, VoiceClient, DEFAULT_API_URL7, DEFAULT_TIMEOUT7, PHONE_PRICES, PhoneClient, DEFAULT_API_URL8, DEFAULT_TIMEOUT8, PORTRAIT_ENROLLMENT_PRICE_USD, PortraitClient, DEFAULT_API_URL9, DEFAULT_TIMEOUT9, SearchClient, DEFAULT_API_URL10, DEFAULT_TIMEOUT10, PriceClient, DEFAULT_API_URL11, DEFAULT_TIMEOUT11, SURF_PREFIX, warnedRetired, SurfClient, DEFAULT_API_URL12, DEFAULT_TIMEOUT12, RPC_PRICE_USD, SUPPORTED_NETWORKS, NETWORK_ALIASES, RpcClient, DEFAULT_API_URL13, DEFAULT_TIMEOUT13, DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_BUDGET_MS, MAX_SIGNED_AUTH_SECONDS, BlockrunClient, USDC_BASE_CONTRACT, BASE_CHAIN_ID2, WALLET_FILE_PATH, WALLET_DIR_PATH, WALLET_DIR3, SOLANA_WALLET_FILE, POLL_AUTH_HEADERS, ED25519_PKCS8_PREFIX, STREAM_RECEIPT_HEADER, RECEIPT_EVENT, EVENT_END, BATCH_SCHEME, BLOCKRUN_SOL_OPERATOR, DEFAULT_BATCH_RATE_LIMIT, DEFAULT_BATCH_IN_DOUBT, DEFAULT_BATCH_LOCK_WAIT_MS, LOCK_POLL_MS, DEFAULT_BATCH_BUSY_WAIT_MS, BUSY_POLL_MS, BatchPaymentUnresolvedError, BatchCloseDeferredError, BatchChannelLockedError, BatchChannelBusyError, INSTALL_HINT2, FileChannelStorage, MemoryChannelStorage, FileIntentJournal, MemoryIntentJournal, BATCH_REGISTRY, registryHost, registry22, lockIds, ChannelResyncRequiredError, ChannelBook, PAYMENT_CHANNELS_PROGRAM_ID2, CHANNEL, ChannelUnreadableError, ChannelLayoutError, layoutChecked, LANDING_MARGIN_BLOCKS, ResyncError, DEPOSIT_BLOCKHASH_TTL_MS, MAX_DEPOSIT_BLOCKHASH_ENDPOINTS, depositBlockhashes, PAYMENT_IDENTIFIER, IN_DOUBT_MIN_WAIT_MS, IN_DOUBT_MAX_WAIT_MS, BATCH_REFUSALS, PRE_REQUEST_REFUSALS, MAX_RETRY_AFTER_MS, NOT_BROADCAST_REFUSALS, CONFIG_REFUSALS, REFUSAL_COOLDOWN_MS, CONFIG_REFUSAL_COOLDOWN_MS, REFUSAL_COOLDOWN_MAX_MS, realSleep, sleep2, warnedNoSizer, payScope, RPC_SCOPE_STORE, RPC_HEADER_HOOK, sharedGlobal, rpcScope, SolanaBatchPayer, SOLANA_API_URL, DEFAULT_MAX_TOKENS22, STALE_BLOCKHASH_RETRY_BACKOFFS_MS, MAX_PAYMENT_FAILURE_BYTES, DEFAULT_VIDEO_MODEL, DEFAULT_MUSIC_MODEL, DEFAULT_VIDEO_BUDGET_MS, DEFAULT_MUSIC_BUDGET_MS, VIDEO_POLL_INTERVAL_MS, MAX_PAID_POLL_REFUSALS, MAX_RETRY_AFTER_MS2, MEDIA_SUBMIT_TIMEOUT_MS, SafeStaleBlockhashError, DEFAULT_SOLANA_RPC_URL, SolanaLLMClient, CACHE_DIR, DATA_DIR, COST_LOG_FILE2, DEFAULT_TTL, StreamingResponse, ChatCompletions, Chat, Decisions, OpenAI, AnthropicClient;
 var init_dist2 = __esm({
   "node_modules/@blockrun/llm/dist/index.js"() {
     "use strict";
     init_accounts();
     init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
-    init_accounts();
     init_esm7();
-    init_esm7();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
+    init_accounts();
     init_accounts();
     RETRY_DISPOSITION = /* @__PURE__ */ Symbol.for("@blockrun/llm/retry-disposition/v1");
     BlockrunError = class extends Error {
@@ -112771,9 +112799,42 @@ var init_dist2 = __esm({
       }
     };
     PaymentError = class extends BlockrunError {
-      constructor(message) {
+      /** HTTP status of the refusal, when it came from the gateway. */
+      statusCode;
+      /** The gateway's refusal body, sanitized; recovery fields kept verbatim. */
+      response;
+      constructor(message, options) {
         super(message);
         this.name = "PaymentError";
+        if (options?.statusCode !== void 0) this.statusCode = options.statusCode;
+        if (options?.response !== void 0) this.response = options.response;
+      }
+    };
+    PAYMENT_REPLAY = "PAYMENT_REPLAY";
+    PaymentReplayError = class extends PaymentError {
+      code = PAYMENT_REPLAY;
+      serverMessage;
+      details;
+      pollUrl;
+      jobId;
+      recoverable;
+      walletAuth;
+      payer;
+      constructor(message, options) {
+        super(message, options);
+        this.name = "PaymentReplayError";
+        const body = options?.response ?? {};
+        const str = (v) => typeof v === "string" && v ? v : void 0;
+        this.serverMessage = str(body.message);
+        this.details = str(body.details);
+        this.pollUrl = str(body.poll_url);
+        this.jobId = str(body.job_id) ?? str(body.id);
+        if (typeof body.recoverable === "boolean") this.recoverable = body.recoverable;
+        const walletAuth = body.wallet_auth;
+        if (walletAuth && typeof walletAuth === "object" && !Array.isArray(walletAuth)) {
+          this.walletAuth = walletAuth;
+        }
+        this.payer = str(body.payer);
       }
     };
     APIError = class extends BlockrunError {
@@ -112803,6 +112864,20 @@ var init_dist2 = __esm({
       "minimax",
       "zai"
     ]);
+    PAYMENT_FACT_FIELDS = ["payment_status", "tx_hash", "payment_note"];
+    REPLAY_FIELDS = [
+      "error",
+      "message",
+      "details",
+      "code",
+      "payer",
+      "id",
+      "job_id",
+      "poll_url",
+      "recoverable",
+      "wallet_auth",
+      "status"
+    ];
     TRANSIENT_STATUS = /* @__PURE__ */ new Set([502, 503, 504, 522, 524]);
     TRANSIENT_RETRIES = 2;
     TRANSIENT_BACKOFF_MS = 1e3;
@@ -112903,6 +112978,9 @@ var init_dist2 = __esm({
       }
     };
     NOT_A_SKIP = /^(false|0|no|none)$/i;
+    DECISIONS_DEFAULT_MODEL = "gpt-6-luna";
+    QUESTION_TYPES = /* @__PURE__ */ new Set(["predicate", "choice", "score"]);
+    GEMINI_DECISIONS_MODEL = "gemini-decision-1";
     UNSEGMENTED_SCRIPT2 = /[؀-ۿ　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/;
     WORD_CHAR2 = /[\p{L}\p{N}]/u;
     ASCII_PHRASE2 = /^[a-z0-9' -]+$/;
@@ -112922,6 +113000,7 @@ var init_dist2 = __esm({
     SERVER_MARGIN_PERCENT2 = 5;
     MIN_PAYMENT_USD2 = 1e-3;
     CJK_CHARS2 = /[　-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/g;
+    MAX_SCAN_CHARS2 = 8e3;
     RulesStrategy2 = class {
       name = "rules";
       route(prompt, systemPrompt, maxOutputTokens, options) {
@@ -113023,1344 +113102,6 @@ var init_dist2 = __esm({
     };
     registry3 = /* @__PURE__ */ new Map();
     registry3.set("rules", new RulesStrategy2());
-    DEFAULT_MODEL_CAPABILITIES2 = Object.freeze({
-      "anthropic/claude-fable-5": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-fable-5.1": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-haiku-4.5": {
-        // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
-        contextWindow: 2e5,
-        maxOutputTokens: 64e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-opus-4.5": {
-        contextWindow: 2e5,
-        maxOutputTokens: 64e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-opus-4.7": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-opus-4.8": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-opus-5": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-opus-5.5": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-sonnet-4.5": {
-        contextWindow: 2e5,
-        maxOutputTokens: 64e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-sonnet-4.6": {
-        // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-sonnet-5": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "anthropic/claude-sonnet-5.5": {
-        contextWindow: 1e6,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "cohere/north-mini-code": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 256e3,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "deepseek/deepseek-chat": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "deepseek/deepseek-reasoner": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "deepseek/deepseek-v4-flash-vision-exp": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "deepseek/deepseek-v4-pro": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "deepseek/deepseek-v4.1-flash": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "google/gemini-2.5-flash": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-2.5-flash-lite": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "google/gemini-2.5-pro": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-3-flash-preview": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-3.1-flash-lite": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "google/gemini-3.1-pro": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-3.5-flash": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-3.5-flash-lite": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "google/gemini-3.6-flash": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-3.8-flash": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "google/gemini-4-argon": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "minimax/minimax-m2.7": {
-        contextWindow: 204800,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "minimax/minimax-m3": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "mistral/mistral-large-4": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 524288,
-        maxOutputTokens: 262144,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "moonshot/kimi-k3": {
-        contextWindow: 1048576,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "nvidia/llama-3.2-11b-vision": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 128e3,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "nvidia/muse-glimmer-30b": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
-        // override: The catalog tags this model "vision", but a correctly sized probe does not hold up (ClawRouter, 2026-08-31): a 64x64 solid-red PNG was named correctly 1 of 4 times on Base, and on Solana the image was silently dropped and a text model answered "white". An HTTP 200 with a confident wrong answer gives the caller nothing to branch on, so image turns must not be routed here. It is ecoTiers.SIMPLE.fallback[0] since nemotron-3-nano-30b was delisted (2026-09-08); remove once a probe of this size comes back right on both chains.
-        contextWindow: 256e3,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "nvidia/nemotron-3-ultra-550b": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1e6,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "nvidia/nemotron-3.5-lightning": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1e6,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "openai/chat-latest": {
-        contextWindow: 128e3,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-4.1": {
-        contextWindow: 128e3,
-        maxOutputTokens: 32768,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-4.1-mini": {
-        contextWindow: 128e3,
-        maxOutputTokens: 32768,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/gpt-4.1-nano": {
-        contextWindow: 128e3,
-        maxOutputTokens: 32768,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/gpt-4o": {
-        contextWindow: 128e3,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-4o-mini": {
-        contextWindow: 128e3,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/gpt-5-mini": {
-        contextWindow: 2e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/gpt-5.1": {
-        contextWindow: 4e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.2": {
-        contextWindow: 4e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.2-pro": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 4e5,
-        maxOutputTokens: 128e3,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "openai/gpt-5.3-codex": {
-        // supportsTools: gateway unavailable at probe time — fails closed; override: 2026-08-29 probe: every request (6 plain + 3 tool attempts) returned a gateway 500, so the probe measured an incident, not the model. Codex's function calling is established by the 2026-07 Terminal-Bench / tau2 calibration trajectories in portfolio.ts. Hosts observing the 500s should drop it with RouterOptions.unavailableModels rather than this snapshot claiming the model cannot call tools.
-        contextWindow: 4e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/gpt-5.4": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.4-mini": {
-        contextWindow: 4e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.4-nano": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/gpt-5.4-pro": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "openai/gpt-5.5": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.5-pro": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "openai/gpt-5.6-luna": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.6-luna-pro": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "openai/gpt-5.6-sol": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.6-sol-pro": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.6-terra": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-5.6-terra-pro": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-6-astra": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-6-luna": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-6-sol": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/gpt-6.1-sol": {
-        contextWindow: 105e4,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "openai/o1": {
-        contextWindow: 2e5,
-        maxOutputTokens: 1e5,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/o3": {
-        contextWindow: 2e5,
-        maxOutputTokens: 1e5,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/o3-mini": {
-        contextWindow: 128e3,
-        maxOutputTokens: 1e5,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "openai/o4-mini": {
-        contextWindow: 128e3,
-        maxOutputTokens: 1e5,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "poolside/laguna-s-2.1": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1048576,
-        maxOutputTokens: 131072,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "poolside/laguna-xs-2.1": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 131072,
-        maxOutputTokens: 16384,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "qwen/qwen3.7-flash": {
-        contextWindow: 1e6,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "qwen/qwen3.7-max": {
-        contextWindow: 1e6,
-        maxOutputTokens: 65536,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "qwen/qwen3.7-plus": {
-        contextWindow: 1e6,
-        maxOutputTokens: 131072,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "qwen/qwen3.8-flash": {
-        contextWindow: 1e6,
-        maxOutputTokens: 131072,
-        supportsTools: false,
-        supportsVision: true
-      },
-      "qwen/qwen3.8-max": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1e6,
-        maxOutputTokens: 131072,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "tencent/hy4-preview": {
-        // supportsTools: not probed — fails closed
-        contextWindow: 1048576,
-        maxOutputTokens: 64e3,
-        supportsTools: false,
-        supportsVision: false
-      },
-      "xai/grok-4.3": {
-        contextWindow: 1e6,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "xai/grok-4.5": {
-        contextWindow: 5e5,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "xai/grok-4.6": {
-        contextWindow: 5e5,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "xai/grok-4.7": {
-        contextWindow: 5e5,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "xai/grok-build-0.1": {
-        contextWindow: 256e3,
-        maxOutputTokens: 16384,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "xiaomi/mimo-v2.5": {
-        contextWindow: 1048576,
-        maxOutputTokens: 131072,
-        supportsTools: true,
-        supportsVision: true
-      },
-      "xiaomi/mimo-v2.5-pro": {
-        contextWindow: 1048576,
-        maxOutputTokens: 131072,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "zai/glm-5": {
-        contextWindow: 2e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "zai/glm-5-turbo": {
-        contextWindow: 2e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "zai/glm-5.1": {
-        contextWindow: 2e5,
-        maxOutputTokens: 128e3,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "zai/glm-5.2": {
-        contextWindow: 1e6,
-        maxOutputTokens: 131072,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "zai/glm-5.3": {
-        contextWindow: 1e6,
-        maxOutputTokens: 131072,
-        supportsTools: true,
-        supportsVision: false
-      },
-      "zai/glm-5.3-flash": {
-        contextWindow: 1e6,
-        maxOutputTokens: 131072,
-        supportsTools: true,
-        supportsVision: true
-      }
-    });
-    model_profiles_generated_default2 = {
-      "anthropic/claude-fable-5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 9298.5,
-        p95LatencyMs: 9873.4,
-        outputTokensPerSecond: 55.17,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-haiku-4.5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3157.4,
-        p95LatencyMs: 3170.7,
-        outputTokensPerSecond: 162.16,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-opus-4.5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6497.7,
-        p95LatencyMs: 6953.7,
-        outputTokensPerSecond: 78.99,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-opus-4.7": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5316.5,
-        p95LatencyMs: 6121.5,
-        outputTokensPerSecond: 97.34,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-opus-4.8": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6216.1,
-        p95LatencyMs: 6847.7,
-        outputTokensPerSecond: 82.81,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-opus-5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 7309,
-        p95LatencyMs: 7745.2,
-        outputTokensPerSecond: 70.17,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-sonnet-4.5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6330.4,
-        p95LatencyMs: 6631.6,
-        outputTokensPerSecond: 81.03,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-sonnet-4.6": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6508,
-        p95LatencyMs: 6698.3,
-        outputTokensPerSecond: 78.6,
-        errorRate: 0,
-        samples: 3
-      },
-      "anthropic/claude-sonnet-5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6165.4,
-        p95LatencyMs: 6582.9,
-        outputTokensPerSecond: 83.62,
-        errorRate: 0,
-        samples: 3
-      },
-      "deepseek/deepseek-chat": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4351.4,
-        p95LatencyMs: 4543.7,
-        outputTokensPerSecond: 117.78,
-        errorRate: 0,
-        samples: 3
-      },
-      "deepseek/deepseek-reasoner": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5201.2,
-        p95LatencyMs: 6079.6,
-        outputTokensPerSecond: 99.77,
-        errorRate: 0,
-        samples: 3
-      },
-      "deepseek/deepseek-v4-pro": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 8781.2,
-        p95LatencyMs: 9881.1,
-        outputTokensPerSecond: 58.98,
-        errorRate: 0,
-        samples: 3
-      },
-      "deepseek/deepseek-v4.1-flash": {
-        measuredAt: "2026-10-20T18:12:51Z",
-        latencyMs: 2383.5,
-        p95LatencyMs: 2547.8,
-        outputTokensPerSecond: 216.53,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-2.5-flash": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5416.4,
-        p95LatencyMs: 6442.8,
-        outputTokensPerSecond: 213.07,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-2.5-flash-lite": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5002.6,
-        p95LatencyMs: 5780.3,
-        outputTokensPerSecond: 408.43,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-2.5-pro": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 28169.5,
-        p95LatencyMs: 29491.4,
-        outputTokensPerSecond: 147.3,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-3-flash-preview": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4717.1,
-        p95LatencyMs: 5037.1,
-        outputTokensPerSecond: 198.71,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-3.1-flash-lite": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 2855.8,
-        p95LatencyMs: 3172.7,
-        outputTokensPerSecond: 286.91,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-3.1-pro": {
-        measuredAt: "2026-08-29T16:59:54Z",
-        latencyMs: 24194.1,
-        p95LatencyMs: 27269.6,
-        outputTokensPerSecond: 109.47,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-3.5-flash": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5320.6,
-        p95LatencyMs: 5429.8,
-        outputTokensPerSecond: 226.21,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-3.5-flash-lite": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3515.8,
-        p95LatencyMs: 4363.4,
-        outputTokensPerSecond: 248.9,
-        errorRate: 0,
-        samples: 3
-      },
-      "google/gemini-3.6-flash": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 13020,
-        p95LatencyMs: 15383.1,
-        outputTokensPerSecond: 187.87,
-        errorRate: 0,
-        samples: 3
-      },
-      "minimax/minimax-m2.7": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 8761.1,
-        p95LatencyMs: 10199.3,
-        outputTokensPerSecond: 59.18,
-        errorRate: 0,
-        samples: 3
-      },
-      "minimax/minimax-m3": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 11101.9,
-        p95LatencyMs: 26087.1,
-        outputTokensPerSecond: 101.12,
-        errorRate: 0,
-        samples: 3
-      },
-      "moonshot/kimi-k3": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 24498.9,
-        p95LatencyMs: 40365.3,
-        outputTokensPerSecond: 25.11,
-        errorRate: 0,
-        samples: 3
-      },
-      "nvidia/mistral-nemotron": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 7349.6,
-        p95LatencyMs: 9932.3,
-        outputTokensPerSecond: 79.48,
-        errorRate: 0.3333,
-        samples: 3
-      },
-      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
-        measuredAt: "2026-08-29T16:59:54Z",
-        latencyMs: 9324.6,
-        p95LatencyMs: 12992,
-        outputTokensPerSecond: 64.96,
-        errorRate: 0.3333,
-        samples: 3
-      },
-      "nvidia/nemotron-nano-12b-v2-vl": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5846.9,
-        p95LatencyMs: 5846.9,
-        outputTokensPerSecond: 87.57,
-        errorRate: 0.6667,
-        samples: 3
-      },
-      "nvidia/nemotron-nano-9b-v2": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5282.5,
-        p95LatencyMs: 5282.5,
-        outputTokensPerSecond: 96.92,
-        errorRate: 0.6667,
-        samples: 3
-      },
-      "nvidia/step-3.7-flash": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4617.4,
-        p95LatencyMs: 5237.4,
-        outputTokensPerSecond: 112.92,
-        errorRate: 0.3333,
-        samples: 3
-      },
-      "openai/chat-latest": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3690.9,
-        p95LatencyMs: 4344,
-        outputTokensPerSecond: 111.85,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-4.1": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3527.9,
-        p95LatencyMs: 3831.7,
-        outputTokensPerSecond: 141.27,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-4.1-mini": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4268.2,
-        p95LatencyMs: 5101.5,
-        outputTokensPerSecond: 103.42,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-4.1-nano": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3088.3,
-        p95LatencyMs: 3369.2,
-        outputTokensPerSecond: 150.31,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-4o": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 2995.2,
-        p95LatencyMs: 3174.2,
-        outputTokensPerSecond: 171.32,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-4o-mini": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4751.5,
-        p95LatencyMs: 4930.4,
-        outputTokensPerSecond: 107.84,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5-mini": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4558.1,
-        p95LatencyMs: 5081.9,
-        outputTokensPerSecond: 113.25,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.2": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5436.6,
-        p95LatencyMs: 5928.8,
-        outputTokensPerSecond: 95.47,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.3-codex": {
-        measuredAt: "2026-08-29T16:59:54Z",
-        latencyMs: 15290.4,
-        p95LatencyMs: 15290.4,
-        outputTokensPerSecond: 33.49,
-        errorRate: 0.6667,
-        samples: 3
-      },
-      "openai/gpt-5.4": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5596,
-        p95LatencyMs: 5919.4,
-        outputTokensPerSecond: 91.67,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.4-mini": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3377.8,
-        p95LatencyMs: 3646.8,
-        outputTokensPerSecond: 138.08,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.4-nano": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4040.4,
-        p95LatencyMs: 4205.9,
-        outputTokensPerSecond: 118.52,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6367.8,
-        p95LatencyMs: 7330.7,
-        outputTokensPerSecond: 81.29,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.6-luna": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6064.5,
-        p95LatencyMs: 7347.3,
-        outputTokensPerSecond: 87.93,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.6-luna-pro": {
-        measuredAt: "2026-08-29T16:59:54Z",
-        latencyMs: 13914.9,
-        p95LatencyMs: 13914.9,
-        outputTokensPerSecond: 36.79,
-        errorRate: 0.6667,
-        samples: 3
-      },
-      "openai/gpt-5.6-sol": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 7720.2,
-        p95LatencyMs: 9108.2,
-        outputTokensPerSecond: 67.47,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.6-sol-pro": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 11442.7,
-        p95LatencyMs: 13363.1,
-        outputTokensPerSecond: 148.75,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.6-terra": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4941,
-        p95LatencyMs: 5095.3,
-        outputTokensPerSecond: 103.69,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-5.6-terra-pro": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3574.1,
-        p95LatencyMs: 4126.3,
-        outputTokensPerSecond: 133.59,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/gpt-6.1-sol": {
-        measuredAt: "2026-10-20T18:12:51Z",
-        latencyMs: 11324,
-        p95LatencyMs: 12747.6,
-        outputTokensPerSecond: 45.11,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/o1": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4324.9,
-        p95LatencyMs: 5838.1,
-        outputTokensPerSecond: 125.86,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/o3": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 5463.4,
-        p95LatencyMs: 5613.1,
-        outputTokensPerSecond: 93.8,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/o3-mini": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 2912.7,
-        p95LatencyMs: 3092.1,
-        outputTokensPerSecond: 176.49,
-        errorRate: 0,
-        samples: 3
-      },
-      "openai/o4-mini": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 4958.7,
-        p95LatencyMs: 5313,
-        outputTokensPerSecond: 103.81,
-        errorRate: 0,
-        samples: 3
-      },
-      "qwen/qwen3.7-flash": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 3385.5,
-        p95LatencyMs: 4042.7,
-        outputTokensPerSecond: 153.94,
-        errorRate: 0,
-        samples: 3
-      },
-      "qwen/qwen3.7-max": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 9387.1,
-        p95LatencyMs: 10490.2,
-        outputTokensPerSecond: 54.92,
-        errorRate: 0,
-        samples: 3
-      },
-      "qwen/qwen3.7-plus": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 9766.6,
-        p95LatencyMs: 9798.2,
-        outputTokensPerSecond: 52.42,
-        errorRate: 0,
-        samples: 3
-      },
-      "tencent/hy3": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6062.3,
-        p95LatencyMs: 7070.2,
-        outputTokensPerSecond: 87.3,
-        errorRate: 0,
-        samples: 3
-      },
-      "xai/grok-4.3": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 9467.7,
-        p95LatencyMs: 10087.9,
-        outputTokensPerSecond: 48.36,
-        errorRate: 0,
-        samples: 3
-      },
-      "xai/grok-4.5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 13564.8,
-        p95LatencyMs: 17351.9,
-        outputTokensPerSecond: 60.71,
-        errorRate: 0,
-        samples: 3
-      },
-      "xai/grok-build-0.1": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 16394.8,
-        p95LatencyMs: 18035.4,
-        outputTokensPerSecond: 96.86,
-        errorRate: 0,
-        samples: 3
-      },
-      "xiaomi/mimo-v2.5-pro": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 12070.7,
-        p95LatencyMs: 12386.8,
-        outputTokensPerSecond: 42.44,
-        errorRate: 0,
-        samples: 3
-      },
-      "zai/glm-5": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 6839.7,
-        p95LatencyMs: 7261.4,
-        outputTokensPerSecond: 75.16,
-        errorRate: 0,
-        samples: 3
-      },
-      "zai/glm-5-turbo": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 55348.5,
-        p95LatencyMs: 114086.6,
-        outputTokensPerSecond: 14.64,
-        errorRate: 0,
-        samples: 3
-      },
-      "zai/glm-5.1": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 15658.4,
-        p95LatencyMs: 17307.1,
-        outputTokensPerSecond: 32.9,
-        errorRate: 0,
-        samples: 3
-      },
-      "zai/glm-5.2": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 10308.5,
-        p95LatencyMs: 15127.6,
-        outputTokensPerSecond: 54.87,
-        errorRate: 0,
-        samples: 3
-      },
-      "zai/glm-5.3": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 7272.4,
-        p95LatencyMs: 7998.1,
-        outputTokensPerSecond: 71.09,
-        errorRate: 0,
-        samples: 3
-      },
-      "zai/glm-5.3-flash": {
-        measuredAt: "2026-08-29T16:51:33Z",
-        latencyMs: 10545.3,
-        p95LatencyMs: 11672.4,
-        outputTokensPerSecond: 49.01,
-        errorRate: 0,
-        samples: 3
-      }
-    };
-    LIVE_MODEL_PROFILES2 = Object.freeze(
-      model_profiles_generated_default2
-    );
-    HISTORICAL_MODEL_PROFILES2 = Object.freeze({
-      "anthropic/claude-haiku-4.5": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 2305,
-        outputTokensPerSecond: 140.6
-      },
-      "anthropic/claude-sonnet-4.6": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 2110,
-        outputTokensPerSecond: 121.3
-      },
-      "deepseek/deepseek-chat": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1431,
-        outputTokensPerSecond: 179.2,
-        intelligenceIndex: 32
-      },
-      "google/gemini-2.5-flash": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1238,
-        outputTokensPerSecond: 207.6,
-        intelligenceIndex: 20
-      },
-      "google/gemini-2.5-flash-lite": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1353,
-        outputTokensPerSecond: 192.5,
-        intelligenceIndex: 20
-      },
-      "google/gemini-2.5-pro": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1294,
-        outputTokensPerSecond: 197.8
-      },
-      "google/gemini-3.1-pro": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 1609,
-        outputTokensPerSecond: 167.2
-      },
-      "openai/gpt-4o-mini": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 2764,
-        outputTokensPerSecond: 92.8
-      },
-      "openai/gpt-5.3-codex": {
-        measuredAt: "2026-03-16T13:50:48Z",
-        latencyMs: 7935,
-        outputTokensPerSecond: 32.3
-      }
-    });
-    DEFAULT_PORTFOLIO_WEIGHTS2 = {
-      auto: {
-        quality: 0.47,
-        capability: 0.2,
-        cost: 0.18,
-        speed: 0.07,
-        reliability: 0.03,
-        legacy: 0.05
-      },
-      eco: { quality: 0.36, capability: 0.2, cost: 0.28, speed: 0.1, reliability: 0.04, legacy: 0.02 },
-      premium: {
-        quality: 0.58,
-        capability: 0.2,
-        cost: 0.08,
-        speed: 0.06,
-        reliability: 0.06,
-        legacy: 0.02
-      },
-      highStakesBoost: { quality: 0.08, reliability: 0.05 },
-      latencySensitiveSpeedBoost: 0.08,
-      affinityFloorGap: { auto: 0.1, eco: 0.22, premium: 0.05 }
-    };
-    VERIFIED_TOOL_FALLBACKS2 = [
-      "anthropic/claude-fable-5.1",
-      "anthropic/claude-opus-5.5",
-      "anthropic/claude-sonnet-5.5",
-      "deepseek/deepseek-v4.1-flash",
-      "google/gemini-3.8-flash",
-      "openai/gpt-5.1",
-      "openai/gpt-6-astra",
-      "openai/gpt-6-luna",
-      "openai/gpt-6-sol",
-      "openai/gpt-6.1-sol",
-      "xai/grok-4.6",
-      "xai/grok-4.7",
-      "xiaomi/mimo-v2.5"
-    ];
-    PortfolioStrategy2 = class {
-      name = "portfolio";
-      // Rules set the capability tier; the strategy is stateless, so one instance serves every request.
-      rules = new RulesStrategy2();
-      route(prompt, systemPrompt, maxOutputTokens, options) {
-        const features = classifyTask2(prompt, systemPrompt, options);
-        const base4 = this.rules.route(prompt, systemPrompt, maxOutputTokens, {
-          ...options,
-          requiresTools: features.needsTools
-        });
-        const tierConfigs = base4.tierConfigs;
-        if (!tierConfigs) return base4;
-        const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base4.tier === "SIMPLE" || base4.tier === "MEDIUM") ? "REASONING" : (features.taskType === "debug" || features.taskType === "code_edit") && features.codeArtifact && base4.tier === "SIMPLE" ? "MEDIUM" : base4.tier;
-        const tierConfig = tierConfigs[targetTier];
-        const configuredCandidates = tierConfig ? getFallbackChain2(targetTier, tierConfigs) : [];
-        const unavailable = new Set(options.unavailableModels ?? []);
-        const verifiedToolFallbacks = features.needsTools ? VERIFIED_TOOL_FALLBACKS2.filter((model2) => options.modelPricing.has(model2)) : [];
-        if (options.routingProfile !== "premium") {
-          const fallbackCost = (model2) => estimatedCost2(model2, options, features.estimatedInputTokens, maxOutputTokens);
-          verifiedToolFallbacks.sort((a, b) => fallbackCost(a) - fallbackCost(b));
-        }
-        const chain3 = [
-          .../* @__PURE__ */ new Set([
-            ...configuredCandidates,
-            ...evidenceCandidates2(features.taskType),
-            ...verifiedToolFallbacks
-          ])
-        ].filter(
-          (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
-        );
-        const eligible = new Set(
-          chain3.filter((model2) => isEligible2(model2, features, maxOutputTokens, options))
-        );
-        const eligibleCandidates = eligible.size > 0 ? [...eligible] : chain3;
-        if (eligibleCandidates.length === 0) return base4;
-        const profileName = options.routingProfile === "eco" ? "eco" : options.routingProfile === "premium" ? "premium" : "auto";
-        const portfolio = options.config.portfolio ?? DEFAULT_PORTFOLIO_WEIGHTS2;
-        const getAffinity = (model2) => affinity(
-          model2,
-          features.taskType,
-          features.language,
-          features.agentDomain,
-          features.deepWebResearch,
-          features.agentRisk,
-          features.terminalToolSignal,
-          features.terminalSafetySensitive
-        );
-        const bestAffinity = Math.max(...eligibleCandidates.map(getAffinity));
-        const specificAffinity = eligibleCandidates.filter((model2) => getAffinity(model2) > 0.68);
-        const affinityPool = specificAffinity.length > 0 ? specificAffinity : [eligibleCandidates[0]];
-        const affinityFloorGap = features.terminalToolSignal ? Math.max(
-          portfolio.affinityFloorGap[profileName],
-          features.terminalSafetySensitive ? 0.15 : 0.12
-        ) : portfolio.affinityFloorGap[profileName];
-        const candidates = affinityPool.filter(
-          (model2) => getAffinity(model2) >= bestAffinity - affinityFloorGap
-        );
-        const costs = candidates.map(
-          (model2) => estimatedCost2(model2, options, features.estimatedInputTokens, maxOutputTokens)
-        );
-        const finiteCosts = costs.filter(Number.isFinite);
-        const minCost = finiteCosts.length > 0 ? Math.min(...finiteCosts) : 0;
-        const maxCost = finiteCosts.length > 0 ? Math.max(...finiteCosts) : 1;
-        const now2 = options.now ?? /* @__PURE__ */ new Date();
-        const profileWeights = portfolio[profileName];
-        const rankedEntries = candidates.map((model2, index2) => {
-          const cost = estimatedCost2(model2, options, features.estimatedInputTokens, maxOutputTokens);
-          const costScore = Number.isFinite(cost) && maxCost > minCost ? 1 - (cost - minCost) / (maxCost - minCost) : 0.5;
-          const capabilityScore = eligible.has(model2) ? 1 : 0;
-          const profile = profileScore2(model2, options, now2);
-          const observedQuality = profile?.quality === void 0 ? getAffinity(model2) : getAffinity(model2) * (1 - profile.freshness) + profile.quality * profile.freshness;
-          const observedSpeed = profile ? profile.speed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
-          const observedTailSpeed = profile ? profile.tailSpeed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
-          const observedReliability = profile ? profile.reliability * profile.freshness + (1 - profile.freshness) : 1;
-          const legacyScore = 1 - index2 / Math.max(1, candidates.length - 1);
-          const qualityWeight = profileWeights.quality + (features.highStakes ? portfolio.highStakesBoost.quality : 0);
-          const speedScore = features.latencySensitive ? observedTailSpeed : observedSpeed;
-          const speedWeight = profileWeights.speed + (features.latencySensitive ? portfolio.latencySensitiveSpeedBoost : 0);
-          const reliabilityWeight = profileWeights.reliability + (features.highStakes ? portfolio.highStakesBoost.reliability : 0);
-          const score = observedQuality * qualityWeight + capabilityScore * profileWeights.capability + costScore * profileWeights.cost + speedScore * speedWeight + observedReliability * reliabilityWeight + legacyScore * profileWeights.legacy;
-          return {
-            model: model2,
-            score,
-            quality: observedQuality,
-            cost: costScore,
-            speed: speedScore,
-            reliability: observedReliability
-          };
-        }).sort((a, b) => b.score - a.score);
-        const scoredModels = rankedEntries.map((item) => item.model);
-        const webResearchFallbackOrder = [
-          "anthropic/claude-sonnet-5",
-          "openai/gpt-5-mini",
-          "google/gemini-3.5-flash",
-          "anthropic/claude-opus-5",
-          "anthropic/claude-opus-4.8",
-          "openai/gpt-5.3-codex"
-        ];
-        const ranked = features.agentDomain === "web_research" ? [
-          ...scoredModels,
-          ...webResearchFallbackOrder.filter(
-            (model2) => eligibleCandidates.includes(model2) && !scoredModels.includes(model2)
-          ),
-          ...eligibleCandidates.filter(
-            (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
-          )
-        ] : [...scoredModels, ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))];
-        const model = ranked[0] ?? base4.model;
-        const selectedTierConfigs = {
-          ...tierConfigs,
-          [targetTier]: { primary: model, fallback: ranked.slice(1) }
-        };
-        const decision = selectModel2(
-          targetTier,
-          base4.confidence,
-          "portfolio",
-          `${base4.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
-          selectedTierConfigs,
-          options.modelPricing,
-          features.estimatedInputTokens,
-          maxOutputTokens,
-          options.routingProfile,
-          base4.agenticScore
-        );
-        return {
-          ...decision,
-          tierConfigs: selectedTierConfigs,
-          profile: base4.profile,
-          candidates: ranked,
-          candidateScores: rankedEntries.map(({ model: model2, score, quality, cost, speed, reliability }) => ({
-            model: model2,
-            score,
-            quality,
-            cost,
-            speed,
-            reliability
-          })),
-          taskType: features.taskType,
-          routerVersion: "v3-portfolio"
-        };
-      }
-    };
     DEFAULT_ROUTING_CONFIG2 = {
       version: "3.5",
       strategy: "portfolio",
@@ -115847,6 +114588,1598 @@ var init_dist2 = __esm({
         // Set to `true` to force agentic tiers; `false` to disable them entirely.
       }
     };
+    DEFAULT_MODEL_CAPABILITIES2 = Object.freeze({
+      "anthropic/claude-fable-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-fable-5.1": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-haiku-4.5": {
+        // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
+        contextWindow: 2e5,
+        maxOutputTokens: 64e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-4.5": {
+        contextWindow: 2e5,
+        maxOutputTokens: 64e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-4.7": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-4.8": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-opus-5.5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-4.5": {
+        contextWindow: 2e5,
+        maxOutputTokens: 64e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-4.6": {
+        // override: The public catalog's `categories` omit "vision" for this Anthropic model even though the gateway accepts image input for it (the prior hand-maintained snapshot had it, and Anthropic's model card lists it). Without this the vision filter would silently drop it — reported against the catalog; remove once the categories carry vision.
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "anthropic/claude-sonnet-5.5": {
+        contextWindow: 1e6,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "cohere/north-mini-code": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 256e3,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "deepseek/deepseek-chat": {
+        // override: The 2026-11-08 catalog began tagging deepseek/deepseek-chat "vision" (it was text-only through 2026-10-20), and DeepSeek still ships image input as a separate experimental id (deepseek/deepseek-v4-flash-vision-exp). No image probe has confirmed the tag. Routing an image turn to a model that silently drops the image returns a confident 200 the caller cannot branch on, so this fails closed until a correctly sized image probe passes on both chains; then remove this entry.
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "deepseek/deepseek-reasoner": {
+        // override: The 2026-11-08 catalog began tagging deepseek/deepseek-reasoner "vision" (it was text-only through 2026-10-20), and DeepSeek still ships image input as a separate experimental id (deepseek/deepseek-v4-flash-vision-exp). No image probe has confirmed the tag. Routing an image turn to a model that silently drops the image returns a confident 200 the caller cannot branch on, so this fails closed until a correctly sized image probe passes on both chains; then remove this entry.
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "deepseek/deepseek-v4-flash-vision-exp": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "deepseek/deepseek-v4-pro": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "deepseek/deepseek-v4.1-flash": {
+        // override: The 2026-11-08 catalog began tagging deepseek/deepseek-v4.1-flash "vision" (it was text-only through 2026-10-20), and DeepSeek still ships image input as a separate experimental id (deepseek/deepseek-v4-flash-vision-exp). No image probe has confirmed the tag. Routing an image turn to a model that silently drops the image returns a confident 200 the caller cannot branch on, so this fails closed until a correctly sized image probe passes on both chains; then remove this entry.
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-2.5-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-2.5-flash-lite": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-2.5-pro": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3-flash-preview": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3.1-flash-lite": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-3.1-pro": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3.5-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3.5-flash-lite": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "google/gemini-3.6-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-3.8-flash": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "google/gemini-4-argon": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "minimax/minimax-m2.7": {
+        contextWindow: 204800,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "minimax/minimax-m3": {
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "mistral/mistral-large-4": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 524288,
+        maxOutputTokens: 262144,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "moonshot/kimi-k3": {
+        // absent from the 2026-11-08 listing but still routed — previous entry retained; probe before removing
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "moonshot/kimi-k3.1-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 65536,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "nvidia/minimax-m3.1-flash": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "nvidia/muse-glimmer-30b": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+        // override: The catalog tags this model "vision", but a correctly sized probe does not hold up (ClawRouter, 2026-08-31): a 64x64 solid-red PNG was named correctly 1 of 4 times on Base, and on Solana the image was silently dropped and a text model answered "white". An HTTP 200 with a confident wrong answer gives the caller nothing to branch on, so image turns must not be routed here. It is ecoTiers.SIMPLE.fallback[0] since nemotron-3-nano-30b was delisted (2026-09-08); remove once a probe of this size comes back right on both chains.
+        contextWindow: 256e3,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "nvidia/nemotron-3-super-120b": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "nvidia/nemotron-3-ultra-550b": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1e6,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "nvidia/nemotron-3.5-bolt": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "nvidia/nemotron-3.5-lightning": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1e6,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "openai/chat-latest": {
+        contextWindow: 128e3,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-4.1": {
+        contextWindow: 128e3,
+        maxOutputTokens: 32768,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-4.1-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 32768,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-4o": {
+        contextWindow: 128e3,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-4o-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5-mini": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5.1": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.2": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.2-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.3-codex": {
+        // supportsTools: gateway unavailable at probe time — fails closed; override: 2026-08-29 probe: every request (6 plain + 3 tool attempts) returned a gateway 500, so the probe measured an incident, not the model. Codex's function calling is established by the 2026-07 Terminal-Bench / tau2 calibration trajectories in portfolio.ts. Hosts observing the 500s should drop it with RouterOptions.unavailableModels rather than this snapshot claiming the model cannot call tools.
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5.4": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.4-mini": {
+        contextWindow: 4e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.4-nano": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/gpt-5.4-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.5": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.5-pro": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-luna": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-luna-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-sol": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-sol-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-terra": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-5.6-terra-pro": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-6-astra": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-6-luna": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-6-sol": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/gpt-6.1-sol": {
+        contextWindow: 105e4,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "openai/o1": {
+        contextWindow: 2e5,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/o3": {
+        contextWindow: 2e5,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/o3-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "openai/o4-mini": {
+        contextWindow: 128e3,
+        maxOutputTokens: 1e5,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "poolside/laguna-s-2.1": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 131072,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "poolside/laguna-xs-2.1": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 131072,
+        maxOutputTokens: 16384,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "qwen/qwen3.7-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "qwen/qwen3.7-max": {
+        contextWindow: 1e6,
+        maxOutputTokens: 65536,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "qwen/qwen3.7-plus": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "qwen/qwen3.8-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: false,
+        supportsVision: true
+      },
+      "qwen/qwen3.8-max": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "tencent/hy4-preview": {
+        // supportsTools: not probed — fails closed
+        contextWindow: 1048576,
+        maxOutputTokens: 64e3,
+        supportsTools: false,
+        supportsVision: false
+      },
+      "xai/grok-4.3": {
+        contextWindow: 1e6,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "xai/grok-4.5": {
+        contextWindow: 5e5,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "xai/grok-4.6": {
+        contextWindow: 5e5,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "xai/grok-4.7": {
+        contextWindow: 5e5,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "xai/grok-build-0.1": {
+        contextWindow: 256e3,
+        maxOutputTokens: 16384,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "xiaomi/mimo-v2.5": {
+        contextWindow: 1048576,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: true
+      },
+      "xiaomi/mimo-v2.5-pro": {
+        contextWindow: 1048576,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5-turbo": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5.1": {
+        contextWindow: 2e5,
+        maxOutputTokens: 128e3,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5.2": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5.3": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: false
+      },
+      "zai/glm-5.3-flash": {
+        contextWindow: 1e6,
+        maxOutputTokens: 131072,
+        supportsTools: true,
+        supportsVision: true
+      }
+    });
+    model_profiles_generated_default2 = {
+      "anthropic/claude-fable-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9298.5,
+        p95LatencyMs: 9873.4,
+        outputTokensPerSecond: 55.17,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-haiku-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3157.4,
+        p95LatencyMs: 3170.7,
+        outputTokensPerSecond: 162.16,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-opus-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6497.7,
+        p95LatencyMs: 6953.7,
+        outputTokensPerSecond: 78.99,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-opus-4.7": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5316.5,
+        p95LatencyMs: 6121.5,
+        outputTokensPerSecond: 97.34,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-opus-4.8": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6216.1,
+        p95LatencyMs: 6847.7,
+        outputTokensPerSecond: 82.81,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-opus-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7309,
+        p95LatencyMs: 7745.2,
+        outputTokensPerSecond: 70.17,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-sonnet-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6330.4,
+        p95LatencyMs: 6631.6,
+        outputTokensPerSecond: 81.03,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-sonnet-4.6": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6508,
+        p95LatencyMs: 6698.3,
+        outputTokensPerSecond: 78.6,
+        errorRate: 0,
+        samples: 3
+      },
+      "anthropic/claude-sonnet-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6165.4,
+        p95LatencyMs: 6582.9,
+        outputTokensPerSecond: 83.62,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-chat": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4351.4,
+        p95LatencyMs: 4543.7,
+        outputTokensPerSecond: 117.78,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-reasoner": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5201.2,
+        p95LatencyMs: 6079.6,
+        outputTokensPerSecond: 99.77,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-v4-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 8781.2,
+        p95LatencyMs: 9881.1,
+        outputTokensPerSecond: 58.98,
+        errorRate: 0,
+        samples: 3
+      },
+      "deepseek/deepseek-v4.1-flash": {
+        measuredAt: "2026-10-20T18:12:51Z",
+        latencyMs: 2383.5,
+        p95LatencyMs: 2547.8,
+        outputTokensPerSecond: 216.53,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-2.5-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5416.4,
+        p95LatencyMs: 6442.8,
+        outputTokensPerSecond: 213.07,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-2.5-flash-lite": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5002.6,
+        p95LatencyMs: 5780.3,
+        outputTokensPerSecond: 408.43,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-2.5-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 28169.5,
+        p95LatencyMs: 29491.4,
+        outputTokensPerSecond: 147.3,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3-flash-preview": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4717.1,
+        p95LatencyMs: 5037.1,
+        outputTokensPerSecond: 198.71,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.1-flash-lite": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 2855.8,
+        p95LatencyMs: 3172.7,
+        outputTokensPerSecond: 286.91,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.1-pro": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 24194.1,
+        p95LatencyMs: 27269.6,
+        outputTokensPerSecond: 109.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.5-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5320.6,
+        p95LatencyMs: 5429.8,
+        outputTokensPerSecond: 226.21,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.5-flash-lite": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3515.8,
+        p95LatencyMs: 4363.4,
+        outputTokensPerSecond: 248.9,
+        errorRate: 0,
+        samples: 3
+      },
+      "google/gemini-3.6-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 13020,
+        p95LatencyMs: 15383.1,
+        outputTokensPerSecond: 187.87,
+        errorRate: 0,
+        samples: 3
+      },
+      "minimax/minimax-m2.7": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 8761.1,
+        p95LatencyMs: 10199.3,
+        outputTokensPerSecond: 59.18,
+        errorRate: 0,
+        samples: 3
+      },
+      "minimax/minimax-m3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 11101.9,
+        p95LatencyMs: 26087.1,
+        outputTokensPerSecond: 101.12,
+        errorRate: 0,
+        samples: 3
+      },
+      "moonshot/kimi-k3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 24498.9,
+        p95LatencyMs: 40365.3,
+        outputTokensPerSecond: 25.11,
+        errorRate: 0,
+        samples: 3
+      },
+      "nvidia/mistral-nemotron": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7349.6,
+        p95LatencyMs: 9932.3,
+        outputTokensPerSecond: 79.48,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 9324.6,
+        p95LatencyMs: 12992,
+        outputTokensPerSecond: 64.96,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "nvidia/nemotron-nano-12b-v2-vl": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5846.9,
+        p95LatencyMs: 5846.9,
+        outputTokensPerSecond: 87.57,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "nvidia/nemotron-nano-9b-v2": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5282.5,
+        p95LatencyMs: 5282.5,
+        outputTokensPerSecond: 96.92,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "nvidia/step-3.7-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4617.4,
+        p95LatencyMs: 5237.4,
+        outputTokensPerSecond: 112.92,
+        errorRate: 0.3333,
+        samples: 3
+      },
+      "openai/chat-latest": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3690.9,
+        p95LatencyMs: 4344,
+        outputTokensPerSecond: 111.85,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4.1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3527.9,
+        p95LatencyMs: 3831.7,
+        outputTokensPerSecond: 141.27,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4.1-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4268.2,
+        p95LatencyMs: 5101.5,
+        outputTokensPerSecond: 103.42,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4.1-nano": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3088.3,
+        p95LatencyMs: 3369.2,
+        outputTokensPerSecond: 150.31,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4o": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 2995.2,
+        p95LatencyMs: 3174.2,
+        outputTokensPerSecond: 171.32,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-4o-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4751.5,
+        p95LatencyMs: 4930.4,
+        outputTokensPerSecond: 107.84,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4558.1,
+        p95LatencyMs: 5081.9,
+        outputTokensPerSecond: 113.25,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.2": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5436.6,
+        p95LatencyMs: 5928.8,
+        outputTokensPerSecond: 95.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.3-codex": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 15290.4,
+        p95LatencyMs: 15290.4,
+        outputTokensPerSecond: 33.49,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "openai/gpt-5.4": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5596,
+        p95LatencyMs: 5919.4,
+        outputTokensPerSecond: 91.67,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.4-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3377.8,
+        p95LatencyMs: 3646.8,
+        outputTokensPerSecond: 138.08,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.4-nano": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4040.4,
+        p95LatencyMs: 4205.9,
+        outputTokensPerSecond: 118.52,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6367.8,
+        p95LatencyMs: 7330.7,
+        outputTokensPerSecond: 81.29,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-luna": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6064.5,
+        p95LatencyMs: 7347.3,
+        outputTokensPerSecond: 87.93,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-luna-pro": {
+        measuredAt: "2026-08-29T16:59:54Z",
+        latencyMs: 13914.9,
+        p95LatencyMs: 13914.9,
+        outputTokensPerSecond: 36.79,
+        errorRate: 0.6667,
+        samples: 3
+      },
+      "openai/gpt-5.6-sol": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7720.2,
+        p95LatencyMs: 9108.2,
+        outputTokensPerSecond: 67.47,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-sol-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 11442.7,
+        p95LatencyMs: 13363.1,
+        outputTokensPerSecond: 148.75,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-terra": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4941,
+        p95LatencyMs: 5095.3,
+        outputTokensPerSecond: 103.69,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-5.6-terra-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3574.1,
+        p95LatencyMs: 4126.3,
+        outputTokensPerSecond: 133.59,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/gpt-6.1-sol": {
+        measuredAt: "2026-10-20T18:12:51Z",
+        latencyMs: 11324,
+        p95LatencyMs: 12747.6,
+        outputTokensPerSecond: 45.11,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4324.9,
+        p95LatencyMs: 5838.1,
+        outputTokensPerSecond: 125.86,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 5463.4,
+        p95LatencyMs: 5613.1,
+        outputTokensPerSecond: 93.8,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o3-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 2912.7,
+        p95LatencyMs: 3092.1,
+        outputTokensPerSecond: 176.49,
+        errorRate: 0,
+        samples: 3
+      },
+      "openai/o4-mini": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 4958.7,
+        p95LatencyMs: 5313,
+        outputTokensPerSecond: 103.81,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 3385.5,
+        p95LatencyMs: 4042.7,
+        outputTokensPerSecond: 153.94,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-max": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9387.1,
+        p95LatencyMs: 10490.2,
+        outputTokensPerSecond: 54.92,
+        errorRate: 0,
+        samples: 3
+      },
+      "qwen/qwen3.7-plus": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9766.6,
+        p95LatencyMs: 9798.2,
+        outputTokensPerSecond: 52.42,
+        errorRate: 0,
+        samples: 3
+      },
+      "tencent/hy3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6062.3,
+        p95LatencyMs: 7070.2,
+        outputTokensPerSecond: 87.3,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-4.3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 9467.7,
+        p95LatencyMs: 10087.9,
+        outputTokensPerSecond: 48.36,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-4.5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 13564.8,
+        p95LatencyMs: 17351.9,
+        outputTokensPerSecond: 60.71,
+        errorRate: 0,
+        samples: 3
+      },
+      "xai/grok-build-0.1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 16394.8,
+        p95LatencyMs: 18035.4,
+        outputTokensPerSecond: 96.86,
+        errorRate: 0,
+        samples: 3
+      },
+      "xiaomi/mimo-v2.5-pro": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 12070.7,
+        p95LatencyMs: 12386.8,
+        outputTokensPerSecond: 42.44,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 6839.7,
+        p95LatencyMs: 7261.4,
+        outputTokensPerSecond: 75.16,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5-turbo": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 55348.5,
+        p95LatencyMs: 114086.6,
+        outputTokensPerSecond: 14.64,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.1": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 15658.4,
+        p95LatencyMs: 17307.1,
+        outputTokensPerSecond: 32.9,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.2": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 10308.5,
+        p95LatencyMs: 15127.6,
+        outputTokensPerSecond: 54.87,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.3": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 7272.4,
+        p95LatencyMs: 7998.1,
+        outputTokensPerSecond: 71.09,
+        errorRate: 0,
+        samples: 3
+      },
+      "zai/glm-5.3-flash": {
+        measuredAt: "2026-08-29T16:51:33Z",
+        latencyMs: 10545.3,
+        p95LatencyMs: 11672.4,
+        outputTokensPerSecond: 49.01,
+        errorRate: 0,
+        samples: 3
+      }
+    };
+    LIVE_MODEL_PROFILES2 = Object.freeze(
+      model_profiles_generated_default2
+    );
+    HISTORICAL_MODEL_PROFILES2 = Object.freeze({
+      "anthropic/claude-haiku-4.5": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2305,
+        outputTokensPerSecond: 140.6
+      },
+      "anthropic/claude-sonnet-4.6": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2110,
+        outputTokensPerSecond: 121.3
+      },
+      "deepseek/deepseek-chat": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1431,
+        outputTokensPerSecond: 179.2,
+        intelligenceIndex: 32
+      },
+      "google/gemini-2.5-flash": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1238,
+        outputTokensPerSecond: 207.6,
+        intelligenceIndex: 20
+      },
+      "google/gemini-2.5-flash-lite": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1353,
+        outputTokensPerSecond: 192.5,
+        intelligenceIndex: 20
+      },
+      "google/gemini-2.5-pro": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1294,
+        outputTokensPerSecond: 197.8
+      },
+      "google/gemini-3.1-pro": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 1609,
+        outputTokensPerSecond: 167.2
+      },
+      "openai/gpt-4o-mini": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 2764,
+        outputTokensPerSecond: 92.8
+      },
+      "openai/gpt-5.3-codex": {
+        measuredAt: "2026-03-16T13:50:48Z",
+        latencyMs: 7935,
+        outputTokensPerSecond: 32.3
+      }
+    });
+    DEFAULT_PORTFOLIO_WEIGHTS2 = DEFAULT_ROUTING_CONFIG2.portfolio;
+    NEUTRAL_AFFINITY2 = 0.68;
+    TERMINAL_COMPLEX_HIGH2 = {
+      "claude-sonnet-5": 1,
+      "gpt-5.3-codex": 0.87,
+      "gpt-5-mini": 0.78,
+      "gemini-3.5-flash": 0.76
+    };
+    WEB_RESEARCH_DEEP2 = {
+      "claude-sonnet-5": 1,
+      "gpt-5-mini": 0.88,
+      "gemini-3.5-flash": 0.84,
+      "claude-opus-5": 0.8,
+      "claude-opus-4.8": 0.78
+    };
+    WEB_RESEARCH2 = {
+      "claude-sonnet-5": 1,
+      "gpt-5-mini": 0.88,
+      "gemini-3.5-flash": 0.86,
+      "claude-opus-5": 0.84,
+      "claude-opus-4.8": 0.82
+    };
+    RETAIL_POLICY_EXCEPTION2 = {
+      "gpt-4.1": 1,
+      "claude-sonnet-5": 0.9,
+      "deepseek-v4-pro": 0.82,
+      "gpt-5-mini": 0.8,
+      "gpt-4o-mini": 0.76
+    };
+    RETAIL_POLICY_EXCEPTION_SIMPLE2 = {
+      "gpt-5-mini": 1,
+      "gpt-4.1": 0.86,
+      "deepseek-v4-pro": 0.82,
+      "gpt-4o-mini": 0.8
+    };
+    AFFINITY2 = {
+      // Seven valid full agent + official Terminal-Bench trajectories (2026-07-28)
+      // gave GPT-5 Mini 4/7 resolved tasks versus 1/7 for the prior dynamic
+      // code-agent choice. Its token-normalized total cost was higher in this small
+      // calibration, so Codex and Sonnet keep quality priors above it; admitting
+      // Mini to the scoring band lets the normal quality/cost profile choose it
+      // without erasing stronger fallbacks. DeepSeek V4 Pro is kept below the
+      // primary band after two consecutive mid-trajectory provider timeouts
+      // contaminated its calibration runs.
+      codeAgent: {
+        "gpt-5.3-codex": 1,
+        "claude-sonnet-5": 0.98,
+        "gpt-5-mini": 0.96,
+        "gemini-3.5-flash": 0.92,
+        "kimi-k3": 0.9,
+        "deepseek-v4-pro": 0.88,
+        "glm-5.2": 0.88
+      },
+      // Seven official Terminal-Bench calibration trajectories favoured GPT-5 Mini
+      // over the prior dynamic choice. Codex/Sonnet are close fallbacks; actual
+      // request cost breaks the tie.
+      terminalTool: {
+        "gpt-5-mini": 1,
+        "gpt-5.3-codex": 0.98,
+        "claude-sonnet-5": 0.9,
+        "gemini-3.5-flash": 0.89
+      },
+      // Two complete agent observations on the public Terminal-Bench
+      // new-encrypt-command task ended in Codex repeating the same TerminalExec
+      // input until the loop guard fired. Codex stays an availability fallback,
+      // below the safety-band affinity floor, until its Responses function-output
+      // path is verified on both gateways.
+      terminalToolSafety: {
+        "claude-sonnet-5": 1,
+        "claude-opus-4.8": 0.9,
+        "gpt-5.3-codex": 0.84
+      },
+      // Full-session calibration: GPT-5 Mini completed two local/single retail
+      // workflows at a fraction of Sonnet's token cost. It stays ineligible for
+      // promotion when the prompt asks for multiple actions, cross-record
+      // discovery or a global optimum; those trajectories exposed unstable write
+      // arguments. DeepSeek V4 Pro completed all three high-risk retail calibration
+      // trajectories (global-choice, cross-record, multi-write); Sonnet one.
+      retailStandard: {
+        "gpt-5-mini": 1,
+        "claude-sonnet-5": 0.88,
+        "gemini-3.5-flash": 0.82,
+        "gpt-5.3-codex": 0.81,
+        "kimi-k3": 0.78,
+        "deepseek-v4-pro": 0.76
+      },
+      retailHigh: {
+        "deepseek-v4-pro": 1,
+        "claude-sonnet-5": 0.88,
+        "gemini-3.5-flash": 0.82,
+        "gpt-5.3-codex": 0.81,
+        "kimi-k3": 0.78,
+        "gpt-5-mini": 0.76
+      },
+      // Standard airline workflows stay on GPT-5 Mini: six full-session
+      // development trajectories gave it the same 5/6 success as Sonnet at roughly
+      // one order of magnitude lower normalized token cost. A held-out high-risk
+      // cabin/date negotiation then produced a persistent empty assistant turn on
+      // Mini even after a semantic retry, while Sonnet 5 completed the identical
+      // official tau2 trajectory with reward 1.0. Only global optimization /
+      // conditional-global work is promoted. A known batch of reservations is
+      // operationally high-risk but still a structured tool workflow: current Tau
+      // evidence has Mini and Sonnet at equal task reward there, while Sonnet costs
+      // roughly two orders of magnitude more on the long-tail case.
+      airlineComplex: {
+        "claude-sonnet-5": 1,
+        "gpt-5-mini": 0.78,
+        "gemini-3.5-flash": 0.76,
+        "deepseek-v4-pro": 0.74
+      },
+      airlineStandard: {
+        "gpt-5-mini": 1,
+        "claude-sonnet-5": 0.9,
+        "gemini-3.5-flash": 0.8,
+        "deepseek-v4-pro": 0.76
+      },
+      // Full-trajectory tau2 calibration (2026-07-28, official gpt-4.1 simulator):
+      // Sonnet 5 completed both an airline policy task and a retail multi-write
+      // task with reward 1.0. Gemini 3.5 Flash emitted function calls as plain text
+      // after the first structured calls and looped to the 100-step ceiling on the
+      // airline task.
+      toolAgent: {
+        "claude-sonnet-5": 1,
+        "gemini-3.5-flash": 0.88,
+        "gpt-5.3-codex": 0.87,
+        "kimi-k3": 0.85,
+        "gpt-5-mini": 0.84,
+        "deepseek-v4-pro": 0.82
+      },
+      // Multi-file Terminal work is not equivalent to a one-turn parallel
+      // function-call benchmark. Sonnet is the strongest trajectory-tested
+      // cost-controlled default; Opus remains a close safety fallback.
+      parallelTerminalSafety: {
+        "claude-sonnet-5": 1,
+        "claude-opus-4.8": 0.9,
+        "gpt-5.3-codex": 0.86
+      },
+      parallelTerminal: {
+        "gpt-5-mini": 1,
+        "gpt-5.3-codex": 0.98,
+        "claude-sonnet-5": 0.92,
+        "gemini-3.5-flash": 0.88
+      },
+      parallelRetail: {
+        "deepseek-v4-pro": 1,
+        "claude-sonnet-5": 0.88,
+        "claude-opus-4.8": 0.84,
+        "gpt-5-mini": 0.78,
+        "gemini-3.5-flash": 0.76
+      },
+      parallelAirlineComplex: {
+        "claude-sonnet-5": 1,
+        "gpt-5-mini": 0.78,
+        "claude-opus-4.8": 0.76,
+        "gemini-3.5-flash": 0.74
+      },
+      parallelAirline: {
+        "gpt-5-mini": 1,
+        "claude-sonnet-5": 0.9,
+        "gemini-3.5-flash": 0.8
+      },
+      // RouterBench calibration, 2026-07-26: Opus 4.8 produced complete multi-call
+      // payloads on 2/3 multilingual BFCL parallel cases. Gemini 3.5 Flash, Sonnet
+      // 5, DeepSeek V4 Pro and Grok 4.5 were 0/3. This narrow prior only applies
+      // after the conservative prompt feature in likelyNeedsParallelToolCalls.
+      parallel: {
+        "claude-opus-4.8": 1,
+        "claude-sonnet-5": 0.84,
+        "grok-4.5": 0.82,
+        "gemini-3.5-flash": 0.8,
+        "deepseek-v4-pro": 0.78
+      },
+      codeEdit: {
+        "gpt-5.3-codex": 1,
+        "claude-sonnet-4.6": 0.94,
+        "glm-5.2": 0.9,
+        "deepseek-v4-pro": 0.86
+      },
+      reasoning: {
+        "claude-sonnet-5": 0.98,
+        "claude-sonnet-4.6": 0.98,
+        "deepseek-v4-pro": 0.95,
+        "grok-4.5": 0.94,
+        "gemini-3.1-pro": 0.92,
+        "gemini-3.5-flash": 0.92
+      },
+      // RouterBench calibration (2026-07-28, six stratified GPQA Diamond tasks,
+      // identical agent adapter and 512-token budget): Gemini 3 Flash Preview
+      // scored 5/6, Gemini 3.5 Flash 4/6, and Gemini 3.1 Pro 3/6 while costing
+      // ~170x more than Flash. The measured winner is the narrow default; version
+      // recency alone is not a quality signal. Unused host tools must not change
+      // this reasoning-only model choice.
+      reasoningMcq: {
+        "gemini-3-flash-preview": 1,
+        "gemini-3.5-flash": 0.91,
+        "grok-4.5": 0.9,
+        "claude-sonnet-5": 0.88,
+        "deepseek-v4-pro": 0.84
+      },
+      // Same calibration, five multilingual MGSM tasks: Gemini 3.5 Flash was 5/5
+      // with the lowest cost and latency; four current flagships were 4/5 and Kimi
+      // K2.7 was 3/5.
+      reasoningMath: {
+        "gemini-3.5-flash": 1,
+        "grok-4.5": 0.93,
+        "claude-sonnet-5": 0.9,
+        "deepseek-v4-pro": 0.9,
+        "kimi-k3": 0.9
+      },
+      vision: {
+        "gemini-3.1-pro": 0.96,
+        "qwen3.7-max": 0.9,
+        "claude-sonnet-4.6": 0.9,
+        "kimi-k3": 0.9,
+        "grok-4.3": 0.9
+      },
+      // Long-context eligibility is necessary but not sufficient: a provider can
+      // advertise a 1M window yet return an empty completion near that boundary.
+      // The proven long-context flagship leads, and less-established alternatives
+      // sit in a separate band so price alone cannot displace it.
+      longContext: {
+        "gemini-3.1-pro": 1,
+        "qwen3.7-max": 0.89,
+        "glm-5.2": 0.89,
+        "gemini-3.5-flash": 0.88,
+        "deepseek-v4-pro": 0.85
+      },
+      // A structured extraction must preserve both the output contract and the
+      // source-language fields. For Mandarin input the language-native Kimi
+      // candidate gets a distinct band — a candidate-pool decision, not a post-hoc
+      // override, so it still falls back normally when Kimi is unavailable. Kimi
+      // K3 costs ~5x its retired sibling K2.7, so the band must be wider than the
+      // auto affinityFloorGap (0.10) or price alone re-selects a non-native model
+      // for Mandarin input; 0.12 keeps K3 alone in the primary band for zh and
+      // leaves every other language untouched.
+      extractionZh: {
+        "kimi-k3": 1,
+        "gemini-3.5-flash": 0.88,
+        "gemini-2.5-flash": 0.88,
+        "gpt-4o-mini": 0.88,
+        "claude-sonnet-5": 0.88,
+        "claude-sonnet-4.6": 0.88
+      },
+      extraction: {
+        "kimi-k3": 0.9,
+        "gemini-3.5-flash": 0.9,
+        "gemini-2.5-flash": 0.9,
+        "gpt-4o-mini": 0.9,
+        "claude-sonnet-5": 0.9,
+        "claude-sonnet-4.6": 0.9
+      },
+      chat: {
+        "gemini-3.5-flash": 0.86,
+        "gemini-2.5-flash": 0.86,
+        "kimi-k3": 0.86
+      }
+    };
+    VERIFIED_TOOL_FALLBACKS2 = [
+      "anthropic/claude-fable-5.1",
+      "anthropic/claude-opus-5.5",
+      "anthropic/claude-sonnet-5.5",
+      "deepseek/deepseek-v4.1-flash",
+      "google/gemini-3.8-flash",
+      "openai/gpt-5.1",
+      "openai/gpt-6-astra",
+      "openai/gpt-6-luna",
+      "openai/gpt-6-sol",
+      "openai/gpt-6.1-sol",
+      "xai/grok-4.6",
+      "xai/grok-4.7",
+      "xiaomi/mimo-v2.5"
+    ];
+    PortfolioStrategy2 = class {
+      name = "portfolio";
+      // Rules set the capability tier; the strategy is stateless, so one instance serves every request.
+      rules = new RulesStrategy2();
+      route(prompt, systemPrompt, maxOutputTokens, options) {
+        const features = classifyTask2(prompt, systemPrompt, options);
+        const base4 = this.rules.route(prompt, systemPrompt, maxOutputTokens, {
+          ...options,
+          requiresTools: features.needsTools
+        });
+        const tierConfigs = base4.tierConfigs;
+        if (!tierConfigs) return base4;
+        const targetTier = (features.taskType === "reasoning_mcq" || features.taskType === "reasoning_math") && (base4.tier === "SIMPLE" || base4.tier === "MEDIUM") ? "REASONING" : (features.taskType === "debug" || features.taskType === "code_edit") && features.codeArtifact && base4.tier === "SIMPLE" ? "MEDIUM" : base4.tier;
+        const tierConfig = tierConfigs[targetTier];
+        const configuredCandidates = tierConfig ? getFallbackChain2(targetTier, tierConfigs) : [];
+        const unavailable = new Set(options.unavailableModels ?? []);
+        const verifiedToolFallbacks = features.needsTools ? VERIFIED_TOOL_FALLBACKS2.filter((model2) => options.modelPricing.has(model2)) : [];
+        if (options.routingProfile !== "premium") {
+          const fallbackCost = (model2) => estimatedCost2(model2, options, features.estimatedInputTokens, maxOutputTokens);
+          verifiedToolFallbacks.sort((a, b) => fallbackCost(a) - fallbackCost(b));
+        }
+        const chain3 = [
+          .../* @__PURE__ */ new Set([
+            ...configuredCandidates,
+            ...evidenceCandidates2(features.taskType),
+            ...verifiedToolFallbacks
+          ])
+        ].filter(
+          (model2) => typeof model2 === "string" && model2.length > 0 && !unavailable.has(model2)
+        );
+        const eligible = new Set(
+          chain3.filter((model2) => isEligible2(model2, features, maxOutputTokens, options))
+        );
+        const eligibleCandidates = eligible.size > 0 ? [...eligible] : chain3;
+        if (eligibleCandidates.length === 0) return base4;
+        const profileName = options.routingProfile === "eco" ? "eco" : options.routingProfile === "premium" ? "premium" : "auto";
+        const portfolio = options.config.portfolio ?? DEFAULT_PORTFOLIO_WEIGHTS2;
+        const band = affinityBand2(features);
+        const affinityCache = /* @__PURE__ */ new Map();
+        const getAffinity = (model2) => {
+          let value = affinityCache.get(model2);
+          if (value === void 0) {
+            value = affinityIn2(band, model2);
+            affinityCache.set(model2, value);
+          }
+          return value;
+        };
+        const bestAffinity = Math.max(...eligibleCandidates.map(getAffinity));
+        const specificAffinity = eligibleCandidates.filter((model2) => getAffinity(model2) > NEUTRAL_AFFINITY2);
+        const affinityPool = specificAffinity.length > 0 ? specificAffinity : [eligibleCandidates[0]];
+        const affinityFloorGap = features.terminalToolSignal ? Math.max(
+          portfolio.affinityFloorGap[profileName],
+          features.terminalSafetySensitive ? 0.15 : 0.12
+        ) : portfolio.affinityFloorGap[profileName];
+        const candidates = affinityPool.filter(
+          (model2) => getAffinity(model2) >= bestAffinity - affinityFloorGap
+        );
+        const costs = candidates.map(
+          (model2) => estimatedCost2(model2, options, features.estimatedInputTokens, maxOutputTokens)
+        );
+        const finiteCosts = costs.filter(Number.isFinite);
+        const minCost = finiteCosts.length > 0 ? Math.min(...finiteCosts) : 0;
+        const maxCost = finiteCosts.length > 0 ? Math.max(...finiteCosts) : 1;
+        const now2 = options.now ?? /* @__PURE__ */ new Date();
+        const profileWeights = portfolio[profileName];
+        const rankedEntries = candidates.map((model2, index2) => {
+          const cost = costs[index2];
+          const costScore = !Number.isFinite(cost) ? 0 : maxCost > minCost ? 1 - (cost - minCost) / (maxCost - minCost) : 0.5;
+          const capabilityScore = eligible.has(model2) ? 1 : 0;
+          const profile = profileScore2(model2, options, now2);
+          const observedQuality = profile?.quality === void 0 ? getAffinity(model2) : getAffinity(model2) * (1 - profile.freshness) + profile.quality * profile.freshness;
+          const observedSpeed = profile ? profile.speed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
+          const observedTailSpeed = profile ? profile.tailSpeed * profile.freshness + 0.5 * (1 - profile.freshness) : 0.5;
+          const observedReliability = profile ? profile.reliability * profile.freshness + (1 - profile.freshness) : 1;
+          const legacyScore = 1 - index2 / Math.max(1, candidates.length - 1);
+          const qualityWeight = profileWeights.quality + (features.highStakes ? portfolio.highStakesBoost.quality : 0);
+          const speedScore = features.latencySensitive ? observedTailSpeed : observedSpeed;
+          const speedWeight = profileWeights.speed + (features.latencySensitive ? portfolio.latencySensitiveSpeedBoost : 0);
+          const reliabilityWeight = profileWeights.reliability + (features.highStakes ? portfolio.highStakesBoost.reliability : 0);
+          const score = observedQuality * qualityWeight + capabilityScore * profileWeights.capability + costScore * profileWeights.cost + speedScore * speedWeight + observedReliability * reliabilityWeight + legacyScore * profileWeights.legacy;
+          return {
+            model: model2,
+            score,
+            quality: observedQuality,
+            cost: costScore,
+            speed: speedScore,
+            reliability: observedReliability
+          };
+        }).sort((a, b) => b.score - a.score);
+        const scoredModels = rankedEntries.map((item) => item.model);
+        const webResearchFallbackOrder = [
+          "anthropic/claude-sonnet-5",
+          "openai/gpt-5-mini",
+          "google/gemini-3.5-flash",
+          "anthropic/claude-opus-5",
+          "anthropic/claude-opus-4.8",
+          "openai/gpt-5.3-codex"
+        ];
+        const ranked = features.agentDomain === "web_research" ? [
+          ...scoredModels,
+          ...webResearchFallbackOrder.filter(
+            (model2) => eligibleCandidates.includes(model2) && !scoredModels.includes(model2)
+          ),
+          ...eligibleCandidates.filter(
+            (model2) => !scoredModels.includes(model2) && !webResearchFallbackOrder.includes(model2)
+          )
+        ] : [...scoredModels, ...eligibleCandidates.filter((model2) => !scoredModels.includes(model2))];
+        const model = ranked[0] ?? base4.model;
+        const selectedTierConfigs = {
+          ...tierConfigs,
+          [targetTier]: { primary: model, fallback: ranked.slice(1) }
+        };
+        const decision = selectModel2(
+          targetTier,
+          base4.confidence,
+          "portfolio",
+          `${base4.reasoning} | v3 task=${features.taskType} agentRisk=${features.agentRisk} deepWebResearch=${features.deepWebResearch} terminalCode=${features.implicitTerminalCode} terminalSafety=${features.terminalSafetySensitive} candidates=${ranked.length}`,
+          selectedTierConfigs,
+          options.modelPricing,
+          features.estimatedInputTokens,
+          maxOutputTokens,
+          options.routingProfile,
+          base4.agenticScore
+        );
+        return {
+          ...decision,
+          tierConfigs: selectedTierConfigs,
+          profile: base4.profile,
+          candidates: ranked,
+          candidateScores: rankedEntries.map(({ model: model2, score, quality, cost, speed, reliability }) => ({
+            model: model2,
+            score,
+            quality,
+            cost,
+            speed,
+            reliability
+          })),
+          taskType: features.taskType,
+          routerVersion: "v3-portfolio"
+        };
+      }
+    };
     registerStrategy2(new PortfolioStrategy2());
     AUTO_ROUTING_PROFILES = {
       "blockrun/auto": "auto",
@@ -115857,6 +116190,7 @@ var init_dist2 = __esm({
     SOLANA_MINIMUM_PAYMENT_USD = 1e-3;
     searchModelsByCatalog = /* @__PURE__ */ new WeakMap();
     INSTALL_HINT = "npm install @solana/web3.js @solana/spl-token   (or pnpm add / yarn add)";
+    bs58 = unwrapBs58(esm_default2);
     BASE_CHAIN_ID = 8453;
     USDC_BASE2 = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
     ARC_CHAIN_ID = 5042;
@@ -115910,7 +116244,7 @@ var init_dist2 = __esm({
     BLOCKRUN_SERVICE_CODE2 = "blockrun";
     BLOCKRUN_DIR = path2.join(os.homedir(), ".blockrun");
     COST_LOG_FILE = path2.join(BLOCKRUN_DIR, "cost_log.jsonl");
-    SDK_VERSION = "3.25.0";
+    SDK_VERSION = "4.3.1";
     USER_AGENT2 = `blockrun-ts/${SDK_VERSION}`;
     DEFAULT_API_URL = "https://blockrun.ai/api";
     DEFAULT_MAX_TOKENS2 = 1024;
@@ -115998,6 +116332,7 @@ var init_dist2 = __esm({
           searchParameters: options?.searchParameters,
           responseFormat: options?.responseFormat,
           stop: options?.stop,
+          reasoningEffort: options?.reasoningEffort,
           fallbackModels: options?.fallbackModels
         });
         return result.choices[0].message.content || "";
@@ -116070,6 +116405,7 @@ var init_dist2 = __esm({
           searchParameters: options?.searchParameters,
           responseFormat: options?.responseFormat,
           stop: options?.stop,
+          reasoningEffort: options?.reasoningEffort,
           // An explicit caller-supplied chain wins over the routed one.
           fallbackModels: options?.fallbackModels ?? decision.fallbacks
         });
@@ -116107,6 +116443,7 @@ var init_dist2 = __esm({
           toolChoice: options.toolChoice,
           responseFormat: options.responseFormat,
           stop: options.stop,
+          reasoningEffort: options.reasoningEffort,
           timeout: options.timeout,
           // An explicit caller-supplied chain wins over the routed one.
           fallbackModels: options.fallbackModels ?? decision.fallbacks
@@ -116193,6 +116530,7 @@ var init_dist2 = __esm({
           if (options?.toolChoice !== void 0) body.tool_choice = options.toolChoice;
           if (options?.responseFormat !== void 0) body.response_format = options.responseFormat;
           if (options?.stop !== void 0) body.stop = options.stop;
+          if (options?.reasoningEffort !== void 0) body.reasoning_effort = options.reasoningEffort;
           return body;
         };
         const chain3 = [model, ...options?.fallbackModels ?? []];
@@ -116433,7 +116771,7 @@ var init_dist2 = __esm({
             body: JSON.stringify(body)
           }, timeoutMs);
           if (retryResp2.status !== 502 && retryResp2.status !== 503) {
-            if (retryResp2.status === 402) throw new PaymentError("Payment was rejected. Check your wallet balance.");
+            if (retryResp2.status === 402) throw await buildPaymentRejectedError(retryResp2, { replay: namesEarlierResult });
             if (!retryResp2.ok) {
               let errorBody;
               try {
@@ -116447,7 +116785,7 @@ var init_dist2 = __esm({
           }
         }
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse, { replay: namesEarlierResult });
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -116566,6 +116904,7 @@ var init_dist2 = __esm({
         if (options?.toolChoice !== void 0) body.tool_choice = options.toolChoice;
         if (options?.responseFormat !== void 0) body.response_format = options.responseFormat;
         if (options?.stop !== void 0) body.stop = options.stop;
+        if (options?.reasoningEffort !== void 0) body.reasoning_effort = options.reasoningEffort;
         const cacheKey22 = `/v1/chat/completions:${requestModel}`;
         const requestBody = JSON.stringify(body);
         const cached2 = this.preAuthCache.get(cacheKey22);
@@ -116652,7 +116991,7 @@ var init_dist2 = __esm({
           },
           body: JSON.stringify(body)
         });
-        if (streamResp.status === 402) throw new PaymentError("Payment was rejected. Check your wallet balance.");
+        if (streamResp.status === 402) throw await buildPaymentRejectedError(streamResp, { replay: namesEarlierResult });
         if (!streamResp.ok) {
           let errorBody;
           try {
@@ -116779,7 +117118,7 @@ var init_dist2 = __esm({
             body: JSON.stringify(body)
           });
           if (retryResp2.status !== 502 && retryResp2.status !== 503) {
-            if (retryResp2.status === 402) throw new PaymentError("Payment was rejected. Check your wallet balance.");
+            if (retryResp2.status === 402) throw await buildPaymentRejectedError(retryResp2, { replay: namesEarlierResult });
             if (!retryResp2.ok) {
               let errorBody;
               try {
@@ -116794,7 +117133,7 @@ var init_dist2 = __esm({
           }
         }
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse, { replay: namesEarlierResult });
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -116919,7 +117258,7 @@ var init_dist2 = __esm({
             }
           });
           if (retryResp2.status !== 502 && retryResp2.status !== 503) {
-            if (retryResp2.status === 402) throw new PaymentError("Payment was rejected. Check your wallet balance.");
+            if (retryResp2.status === 402) throw await buildPaymentRejectedError(retryResp2, { replay: namesEarlierResult });
             if (!retryResp2.ok) {
               let errorBody;
               try {
@@ -116934,7 +117273,7 @@ var init_dist2 = __esm({
           }
         }
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse, { replay: namesEarlierResult });
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -117083,6 +117422,36 @@ var init_dist2 = __esm({
         if (options?.toDate !== void 0) body.to_date = options.toDate;
         const data = await this.requestWithPaymentRaw("/v1/search", body);
         return data;
+      }
+      /**
+       * Typed judgments (OpenAI Decisions-compatible, `gpt-6-luna`): send
+       * evidence and questions with a fixed answer space, get one typed answer
+       * per question instead of text.
+       *
+       * Priced on input tokens only. With a wallet the 402 quotes an upper-bound
+       * estimate of them plus the $0.001 transaction fee, and that quote settles;
+       * with an API key the account is billed on the tokens the provider reports.
+       * A request over the gateway's limits is refused with a 400 before payment.
+       *
+       * A `choice` always picks one of your values, so give it a `none` value for
+       * inputs that fit nothing.
+       *
+       * @example
+       * const { answers } = await client.decisions({
+       *   input: 'My card was charged twice for one order.',
+       *   questions: [
+       *     { type: 'predicate', name: 'urgent', instructions: 'Does this need a reply today?' },
+       *     { type: 'choice', name: 'team', instructions: 'Which team owns this?',
+       *       choices: [{ value: 'billing', description: 'payments and refunds' },
+       *                 { value: 'shipping', description: 'delivery' },
+       *                 { value: 'none', description: 'fits no team' }] },
+       *   ],
+       * });
+       */
+      async decisions(request2) {
+        const body = buildDecisionsBody(request2);
+        const response = await this.requestWithPayment("/v1/decisions", body);
+        return response;
       }
       /**
        * Generic Exa endpoint proxy (POST). Useful when you need an Exa API
@@ -117696,9 +118065,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retryResponse.status === 402) {
-          throw new PaymentError(
-            "Payment was rejected. Check your wallet balance."
-          );
+          throw await buildPaymentRejectedError(retryResponse);
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -117751,6 +118118,7 @@ var init_dist2 = __esm({
             continue;
           }
           const pollBody = await pollResp.json().catch(() => ({}));
+          if (pollResp.status === 402) throw paymentRejectedErrorFromBody(pollBody, 402);
           if (!pollResp.ok) {
             throw new APIError(
               `API error during poll: ${pollResp.status}`,
@@ -117814,6 +118182,9 @@ var init_dist2 = __esm({
     DEFAULT_API_URL3 = "https://blockrun.ai/api";
     DEFAULT_MODEL2 = "minimax/music-2.5+";
     DEFAULT_TIMEOUT3 = 21e4;
+    POLL_INTERVAL_MS2 = 5e3;
+    POLL_MAX_DURATION_MS2 = 3e5;
+    TRANSIENT_POLL_STATUSES = /* @__PURE__ */ new Set([502, 503, 504]);
     MusicClient = class {
       _account;
       get account() {
@@ -117944,7 +118315,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse);
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -117955,14 +118326,79 @@ var init_dist2 = __esm({
           }
           throw new APIError(`API error after payment: ${retryResponse.status}`, retryResponse.status, sanitizeErrorResponse(errorBody));
         }
+        const costUsd = Number(details.amount) / 1e6;
         const data = await retryResponse.json();
-        if (!settlementSkipped(retryResponse)) {
-          this.sessionCalls++;
-          this.sessionTotalUsd += 0.1575;
+        if (retryResponse.status === 202 || data.status === "queued" || data.status === "in_progress") {
+          if (!data.poll_url) {
+            throw new APIError(
+              `Server returned ${retryResponse.status} but no poll_url to follow.`,
+              retryResponse.status,
+              sanitizeErrorResponse(data)
+            );
+          }
+          return this.pollMusicJob(data.poll_url, paymentPayload, costUsd);
         }
-        const txHash = retryResponse.headers.get("x-payment-receipt") || retryResponse.headers.get("X-Payment-Receipt");
+        return this.finishPaidResponse(retryResponse, data, costUsd);
+      }
+      finishPaidResponse(response, data, costUsd) {
+        if (!settlementSkipped(response)) {
+          this.sessionCalls++;
+          this.sessionTotalUsd += costUsd;
+        }
+        const txHash = response.headers.get("x-payment-receipt");
         if (txHash) data.txHash = txHash;
         return data;
+      }
+      /**
+       * Poll a slow track until it completes, sending the SAME payment header each
+       * time: the server binds the payer to the job and settles on the first poll
+       * that sees it completed.
+       *
+       * Network errors and 502/503/504 keep polling. A response lost on the settling
+       * poll would otherwise drop a track that was paid for, and polling again returns
+       * it as already settled, with no second charge.
+       */
+      async pollMusicJob(pollPath, paymentHeader, costUsd) {
+        const pollUrl = pollPath.startsWith("/api/") ? `${this.apiUrl.replace(/\/api$/, "")}${pollPath}` : `${this.apiUrl}${pollPath.startsWith("/") ? "" : "/"}${pollPath}`;
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < POLL_MAX_DURATION_MS2) {
+          await new Promise((resolve22) => setTimeout(resolve22, POLL_INTERVAL_MS2));
+          let pollResp;
+          try {
+            pollResp = await this.fetchWithTimeout(pollUrl, {
+              method: "GET",
+              headers: { "PAYMENT-SIGNATURE": paymentHeader }
+            });
+          } catch {
+            continue;
+          }
+          if (pollResp.status === 202 || TRANSIENT_POLL_STATUSES.has(pollResp.status)) continue;
+          const pollBody = await pollResp.json().catch(() => ({}));
+          if (pollResp.status === 402) throw paymentRejectedErrorFromBody(pollBody, 402);
+          if (!pollResp.ok) {
+            throw new APIError(
+              `API error during poll of ${pollPath}: ${pollResp.status}`,
+              pollResp.status,
+              sanitizeErrorResponse(pollBody)
+            );
+          }
+          if (pollBody.status === "failed") {
+            throw new APIError(
+              pollBody.error || "Upstream music generation failed",
+              200,
+              sanitizeErrorResponse(pollBody)
+            );
+          }
+          if (pollBody.data) {
+            if (!pollBody.txHash && pollBody.payment?.tx_hash) pollBody.txHash = pollBody.payment.tx_hash;
+            return this.finishPaidResponse(pollResp, pollBody, costUsd);
+          }
+        }
+        throw new APIError(
+          `Music generation did not finish within ${POLL_MAX_DURATION_MS2 / 1e3}s. The job may still complete: poll poll_url with the same payment header before paying again.`,
+          504,
+          { error: "poll_timeout", poll_url: pollPath }
+        );
       }
       async fetchWithTimeout(url3, options) {
         const controller = new AbortController();
@@ -118156,7 +118592,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse);
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -118197,7 +118633,7 @@ var init_dist2 = __esm({
     DEFAULT_API_URL5 = "https://blockrun.ai/api";
     DEFAULT_MODEL4 = "xai/grok-imagine-video";
     DEFAULT_TIMEOUT5 = 12e4;
-    POLL_INTERVAL_MS2 = 5e3;
+    POLL_INTERVAL_MS3 = 5e3;
     DEFAULT_GENERATE_BUDGET_MS = 9e5;
     MAX_TIMEOUT_SECONDS = 600;
     MAX_POLL_RESIGNS = 2;
@@ -118408,7 +118844,7 @@ var init_dist2 = __esm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body)
         });
-        if (this.apiAuth) return this.apiAuth.poll(resp402, budgetMs, POLL_INTERVAL_MS2);
+        if (this.apiAuth) return this.apiAuth.poll(resp402, budgetMs, POLL_INTERVAL_MS3);
         if (resp402.status !== 402) {
           await this.throwApiError(resp402, "Expected 402 on first POST");
         }
@@ -118425,7 +118861,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (submitResp.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(submitResp);
         }
         if (submitResp.status !== 200 && submitResp.status !== 202) {
           await this.throwApiError(submitResp, "Submit failed");
@@ -118443,7 +118879,7 @@ var init_dist2 = __esm({
         let lastStatus = submitData.status || "queued";
         let resignsLeft = MAX_POLL_RESIGNS;
         while (Date.now() < deadline) {
-          await new Promise((r2) => setTimeout(r2, POLL_INTERVAL_MS2));
+          await new Promise((r2) => setTimeout(r2, POLL_INTERVAL_MS3));
           const pollResp = await this.fetchWithTimeout(pollUrl, {
             method: "GET",
             headers: { "PAYMENT-SIGNATURE": paymentPayload }
@@ -118475,6 +118911,9 @@ var init_dist2 = __esm({
             return data;
           }
           if (pollResp.status === 402) {
+            if (isPaymentReplay(pollData)) {
+              throw paymentRejectedErrorFromBody(pollData, pollResp.status, { replay: true });
+            }
             if (resignsLeft > 0) {
               resignsLeft--;
               const challenge2 = await this.fetchWithTimeout(pollUrl, { method: "GET" });
@@ -118486,9 +118925,7 @@ var init_dist2 = __esm({
                 continue;
               }
             }
-            throw new PaymentError(
-              "Payment verification failed mid-poll (not a signature-expiry). Check the wallet balance and that you poll from the wallet that submitted the job."
-            );
+            throw paymentRejectedErrorFromBody(pollData, pollResp.status);
           }
           if (pollResp.status !== 200 && pollResp.status !== 202 && pollResp.status !== 504) {
             await this.throwApiError(pollResp, "Poll failed");
@@ -118749,7 +119186,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse);
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -118966,7 +119403,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retry.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retry);
         }
         const data = await this.unwrap(retry, true);
         if (!settlementSkipped(retry)) {
@@ -119131,7 +119568,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retry.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retry);
         }
         const data = await this.unwrap(retry, true);
         if (!settlementSkipped(retry)) {
@@ -119290,7 +119727,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retry.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retry);
         }
         if (!retry.ok) {
           let errorBody;
@@ -119367,7 +119804,9 @@ var init_dist2 = __esm({
           assetType: data.assetType,
           category: data.category,
           source: data.source,
-          free: data.free
+          free: data.free,
+          realtime: data.realtime,
+          note: data.note
         };
       }
       async history(category, symbol2, options) {
@@ -119478,7 +119917,7 @@ var init_dist2 = __esm({
           headers: { "PAYMENT-SIGNATURE": paymentPayload }
         });
         if (retry.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retry);
         }
         if (!retry.ok) {
           let errorBody;
@@ -119645,7 +120084,7 @@ var init_dist2 = __esm({
         }
         const retry = await this.fetchWithTimeout(url3, retryInit);
         if (retry.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retry);
         }
         if (!retry.ok) {
           await this.throwApiError(retry, `Surf request failed after payment (${method} ${url3})`);
@@ -119910,7 +120349,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body)
         });
         if (retryResponse.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(retryResponse);
         }
         if (!retryResponse.ok) {
           let errorBody;
@@ -120053,7 +120492,7 @@ var init_dist2 = __esm({
           body: JSON.stringify(body ?? {})
         });
         if (submitResp.status === 402) {
-          throw new PaymentError("Payment was rejected. Check your wallet balance.");
+          throw await buildPaymentRejectedError(submitResp);
         }
         if (submitResp.status !== 200 && submitResp.status !== 202) {
           await this.throwApiError(submitResp, `poll submit failed (${submitUrl})`);
@@ -120090,7 +120529,7 @@ var init_dist2 = __esm({
           }
           if (lastStatus === "failed") {
             throw new APIError(
-              `Upstream job failed: ${pollData.error || "unknown"}`,
+              `Upstream job failed: ${pollData.error || "unknown"}${paymentFactsNote(pollData)}`,
               pollResp.status,
               sanitizeErrorResponse(pollData)
             );
@@ -120149,9 +120588,7 @@ var init_dist2 = __esm({
             body: requestBody
           });
           if (streamResp.status === 402) {
-            throw new PaymentError(
-              "Payment was rejected. Check your wallet balance."
-            );
+            throw await buildPaymentRejectedError(streamResp);
           }
           if (!streamResp.ok) {
             await this.throwApiError(streamResp, `stream failed after payment (${url3})`);
@@ -120228,9 +120665,7 @@ var init_dist2 = __esm({
         }
         const retry = await this.fetchWithTimeout(url3, retryInit);
         if (retry.status === 402) {
-          throw new PaymentError(
-            "Payment was rejected. Check your wallet balance."
-          );
+          throw await buildPaymentRejectedError(retry);
         }
         if (!retry.ok) {
           await this.throwApiError(retry, `${method} ${url3} failed after payment`);
@@ -120339,12 +120774,17 @@ var init_dist2 = __esm({
       signature: "x-poll-signature"
     };
     ED25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
+    STREAM_RECEIPT_HEADER = "X-BlockRun-Stream-Receipt";
+    RECEIPT_EVENT = "payment-response";
+    EVENT_END = /\r?\n\r?\n/;
     BATCH_SCHEME = "batch-settlement";
     BLOCKRUN_SOL_OPERATOR = "5YKPQUFjw5WQqhSUkEGKNNfYYVqnRRNbpYyL71qQ1vm3";
     DEFAULT_BATCH_RATE_LIMIT = { maxAttempts: 3, maxWaitMs: 6e4 };
     DEFAULT_BATCH_IN_DOUBT = { maxWaitMs: 3e5 };
     DEFAULT_BATCH_LOCK_WAIT_MS = 6e4;
     LOCK_POLL_MS = 500;
+    DEFAULT_BATCH_BUSY_WAIT_MS = 6e4;
+    BUSY_POLL_MS = 100;
     BatchPaymentUnresolvedError = class extends PaymentError {
       /** The {@link SolanaBatchEvent.reason} of the `unresolved` event reported with it. */
       reason;
@@ -120406,7 +120846,22 @@ var init_dist2 = __esm({
         withDisposition(this, "unpaid");
       }
     };
-    INSTALL_HINT2 = "npm install @x402/core@~2.28.0 @x402/svm@~2.28.0 @solana/kit";
+    BatchChannelBusyError = class extends BlockrunError {
+      /** The paying wallet's address. */
+      wallet;
+      /** How long this call waited for the wallet, in ms (0 unless `onBusy` is `"wait"`). */
+      waitedMs;
+      constructor(init2) {
+        super(
+          `batch-settlement busy for wallet ${init2.wallet}: another batch call is in flight` + (init2.waitedMs > 0 ? ` (waited ${init2.waitedMs} ms)` : "")
+        );
+        this.name = "BatchChannelBusyError";
+        this.wallet = init2.wallet;
+        this.waitedMs = init2.waitedMs;
+        withDisposition(this, "unpaid");
+      }
+    };
+    INSTALL_HINT2 = "npm install @x402/core@~2.30.0 @x402/svm@~2.30.0 @solana/kit@^8";
     FileChannelStorage = class {
       constructor(file2) {
         this.file = file2;
@@ -120539,20 +120994,20 @@ var init_dist2 = __esm({
           if (err.code === "ENOENT") return {};
           throw err;
         }
-        const invalid = (why) => new Error(`deposit-intent journal ${this.file} is not valid (${why})`);
+        const invalid2 = (why) => new Error(`deposit-intent journal ${this.file} is not valid (${why})`);
         let parsed;
         try {
           parsed = JSON.parse(text);
         } catch (err) {
-          throw invalid(err instanceof Error ? err.message : String(err));
+          throw invalid2(err instanceof Error ? err.message : String(err));
         }
-        if (!isPlainObject3(parsed)) throw invalid("not a JSON object");
-        if (parsed.version !== 1) throw invalid(`unsupported version ${JSON.stringify(parsed.version)}`);
+        if (!isPlainObject3(parsed)) throw invalid2("not a JSON object");
+        if (parsed.version !== 1) throw invalid2(`unsupported version ${JSON.stringify(parsed.version)}`);
         const { intents } = parsed;
-        if (!isPlainObject3(intents)) throw invalid("intents is not an object");
+        if (!isPlainObject3(intents)) throw invalid2("intents is not an object");
         for (const [key3, intent] of Object.entries(intents)) {
           const why = intentProblem(key3, intent);
-          if (why) throw invalid(`intent ${JSON.stringify(key3)}: ${why}`);
+          if (why) throw invalid2(`intent ${JSON.stringify(key3)}: ${why}`);
         }
         return intents;
       }
@@ -120821,6 +121276,14 @@ var init_dist2 = __esm({
         if (!Number.isFinite(this.lockWaitMs) || this.lockWaitMs < 0) {
           throw new Error("batch.lockWaitMs must be a finite number of ms >= 0");
         }
+        this.onBusy = init2.options.onBusy ?? "exact";
+        if (this.onBusy !== "exact" && this.onBusy !== "wait" && this.onBusy !== "throw") {
+          throw new Error('batch.onBusy must be "exact", "wait" or "throw"');
+        }
+        this.busyWaitMs = init2.options.busyWaitMs ?? DEFAULT_BATCH_BUSY_WAIT_MS;
+        if (!Number.isFinite(this.busyWaitMs) || this.busyWaitMs < 0) {
+          throw new Error("batch.busyWaitMs must be a finite number of ms >= 0");
+        }
       }
       init;
       state;
@@ -120829,6 +121292,8 @@ var init_dist2 = __esm({
       inDoubtMaxWaitMs;
       onLocked;
       lockWaitMs;
+      onBusy;
+      busyWaitMs;
       counters = {
         fallbacks: 0,
         fallbacksByReason: {},
@@ -121291,6 +121756,22 @@ var init_dist2 = __esm({
         return { kind: "failed", error: error62 };
       }
       /**
+       * `onBusy: "wait"`: look at the wallet every {@link BUSY_POLL_MS} until no
+       * batch call holds it or `deadline` passes. True when it is free.
+       */
+      async waitWhileBusy(wallet, deadline) {
+        while (wallet.busy) {
+          const left = deadline - Date.now();
+          if (left <= 0) return false;
+          await sleep2(Math.min(BUSY_POLL_MS, left));
+        }
+        return true;
+      }
+      /** `onBusy` other than `"exact"`: the call's `"unpaid"` error, nothing signed. */
+      async busyOut(waitedMs) {
+        return { kind: "failed", error: new BatchChannelBusyError({ wallet: await this.init.address(), waitedMs }) };
+      }
+      /**
        * The close fence for a call about to send its first request: how many
        * closes this wallet has completed so far, to hand to {@link pay}.
        * `close()` refuses while a call is inside `pay()`, but a call still
@@ -121315,6 +121796,8 @@ var init_dist2 = __esm({
         const budget = { attempt: 1, waited: 0 };
         let waitedUntil = 0;
         let backedOff;
+        let busySince;
+        let rechallengeAfterBusy = false;
         let holding = false;
         let sent;
         const release = () => {
@@ -121350,7 +121833,8 @@ var init_dist2 = __esm({
               await sleep2(wait2);
               continue;
             }
-            if (budget.attempt > 1 || budget.waited > 0) {
+            if (budget.attempt > 1 || budget.waited > 0 || rechallengeAfterBusy) {
+              rechallengeAfterBusy = false;
               let fresh;
               try {
                 fresh = await rechallenge();
@@ -121378,7 +121862,28 @@ var init_dist2 = __esm({
                 detail: "closeBatchChannel() closed this wallet's channel after this call started; it opens no channel"
               });
             }
-            if (wallet.busy) return fallback2({ reason: "channel_busy", attempt: budget.attempt });
+            if (wallet.busy) {
+              if (this.onBusy === "exact") return fallback2({ reason: "channel_busy", attempt: budget.attempt });
+              const waited = busySince === void 0 ? 0 : Date.now() - busySince;
+              if (this.onBusy === "throw") return this.busyOut(waited);
+              if (busySince === void 0) {
+                busySince = Date.now();
+                if (this.busyWaitMs > 0) {
+                  await this.report({
+                    type: "backoff",
+                    reason: "channel_busy",
+                    retryAfterMs: this.busyWaitMs,
+                    attempt: budget.attempt,
+                    detail: 'another batch call for this wallet is in flight; waiting for it (onBusy: "wait")'
+                  });
+                }
+              }
+              if (!await this.waitWhileBusy(wallet, busySince + this.busyWaitMs)) {
+                return this.busyOut(Date.now() - busySince);
+              }
+              rechallengeAfterBusy = true;
+              continue;
+            }
             if (wallet.file && !holdsChannelFile(wallet.file)) {
               const detail = `this process no longer holds the lock on ${wallet.file}; another owner may be paying into its channels`;
               if (this.onLocked !== "exact") return this.lockedOut(detail, void 0, 0);
@@ -122417,6 +122922,7 @@ var init_dist2 = __esm({
           searchParameters: options?.searchParameters,
           responseFormat: options?.responseFormat,
           stop: options?.stop,
+          reasoningEffort: options?.reasoningEffort,
           fallbackModels: options?.fallbackModels
         });
         return result.choices[0].message.content || "";
@@ -122445,6 +122951,7 @@ var init_dist2 = __esm({
           if (options?.toolChoice !== void 0) body.tool_choice = options.toolChoice;
           if (options?.responseFormat !== void 0) body.response_format = options.responseFormat;
           if (options?.stop !== void 0) body.stop = options.stop;
+          if (options?.reasoningEffort !== void 0) body.reasoning_effort = options.reasoningEffort;
           return body;
         };
         const chain3 = [model, ...options?.fallbackModels ?? []];
@@ -122549,6 +123056,7 @@ var init_dist2 = __esm({
           toolChoice: options.toolChoice,
           responseFormat: options.responseFormat,
           stop: options.stop,
+          reasoningEffort: options.reasoningEffort,
           timeout: options.timeout,
           // An explicit caller-supplied chain wins over the routed one.
           fallbackModels: options.fallbackModels ?? decision.fallbacks
@@ -122617,6 +123125,7 @@ var init_dist2 = __esm({
        * @returns a response whose body has not been read.
        */
       async openPaidStream(url3, requestBody) {
+        const closesAtStart = await this.batchPayer?.closeFence();
         for (let staleRetries = 0; ; ) {
           const response = await this.fetchWithTimeout(url3, {
             method: "POST",
@@ -122634,11 +123143,15 @@ var init_dist2 = __esm({
             throw new APIError(`API error: ${response.status}`, response.status, sanitizeErrorResponse(errorBody));
           }
           try {
-            const { paymentPayload, costUsd } = await this.signPaymentFrom402(
-              url3,
-              response,
-              staleRetries > 0
-            );
+            let exactPayment;
+            if (this.batchPayer && staleRetries === 0) {
+              const batch = await this.openBatchStream(url3, requestBody, await this.readPaymentRequired(response), closesAtStart);
+              if (batch.kind === "stream") return batch.response;
+              exactPayment = await this.signExactPayment(url3, batch.paymentRequired, false);
+            } else {
+              exactPayment = await this.signPaymentFrom402(url3, response, staleRetries > 0);
+            }
+            const { paymentPayload, costUsd } = exactPayment;
             const paid = await this.fetchWithTimeout(url3, {
               method: "POST",
               headers: {
@@ -122657,6 +123170,82 @@ var init_dist2 = __esm({
             continue;
           }
         }
+      }
+      /**
+       * Pay a stream with batch-settlement, when the gateway offers it.
+       *
+       * A stream's charge is committed after its headers are sent, so its receipt
+       * cannot be the `PAYMENT-RESPONSE` header the batch payer reconciles a
+       * buffered call with. The request asks for it as a final SSE event instead
+       * ({@link STREAM_RECEIPT_HEADER}). The body is split in two: the caller gets
+       * its branch at once, live, with the receipt event taken out; the payer reads
+       * the other branch to that event and is handed the answer with the receipt
+       * restored as its header, so the channel advances exactly as it does for a
+       * buffered call. A stream that ends without the event (cut, failed upstream,
+       * an older gateway) is looked up at `POST /v1/batch/receipt`.
+       *
+       * The payer's branch reads to the receipt even when the caller stops early,
+       * so the connection stays open: the gateway charges for what the model
+       * generates either way, and only an open stream brings its receipt back.
+       *
+       * @returns the caller's stream, or the requirements to pay `exact` against
+       *   when batch is unavailable for this call.
+       */
+      async openBatchStream(url3, requestBody, paymentRequired, closesAtStart) {
+        const headers = { "Content-Type": "application/json", "User-Agent": USER_AGENT2, [STREAM_RECEIPT_HEADER]: "1" };
+        let handOff;
+        const handedOff = new Promise((resolve22) => {
+          handOff = resolve22;
+        });
+        const attempt = this.batchPayer.pay(
+          paymentRequired,
+          async (paymentHeaders) => {
+            const answer = await this.fetchWithTimeout(url3, { method: "POST", headers: { ...headers, ...paymentHeaders }, body: requestBody });
+            if (!answer.ok || !answer.body || !isEventStream(answer)) return answer;
+            const [forCaller, forPayer] = answer.body.tee();
+            handOff(new Response(withoutReceiptEvent(forCaller), { status: answer.status, statusText: answer.statusText, headers: answer.headers }));
+            let receipt = (await readReceiptEvent(forPayer))?.paymentResponse;
+            const signed2 = paymentHeaders["PAYMENT-SIGNATURE"];
+            if (receipt === void 0 && signed2) receipt = (await lookupReceipt(this.apiUrl, signed2))?.payment_response;
+            const settled2 = new Headers(answer.headers);
+            if (receipt) settled2.set("PAYMENT-RESPONSE", receipt);
+            return new Response(null, { status: answer.status, statusText: answer.statusText, headers: settled2 });
+          },
+          // A fresh, unpaid challenge after a 429 wait, as chatCompletion sends.
+          async () => {
+            const challenge2 = await this.sendUnpaid(url3, { method: "POST", headers, body: requestBody });
+            if (challenge2.status === 402) {
+              try {
+                return { kind: "challenge", paymentRequired: await this.readPaymentRequired(challenge2) };
+              } catch (error62) {
+                throw withDisposition(error62, "unpaid");
+              }
+            }
+            if (challenge2.ok) return { kind: "served", response: challenge2 };
+            throw await unpaidApiError(challenge2);
+          },
+          closesAtStart
+        );
+        const settled = attempt.then(
+          (outcome2) => ({ outcome: outcome2 }),
+          (error62) => ({ error: error62 })
+        );
+        const first = await Promise.race([handedOff.then((response) => ({ response })), settled]);
+        if ("response" in first) {
+          void settled.then((result) => {
+            if ("outcome" in result && result.outcome.kind === "paid") this.recordSettlement(result.outcome.chargedUsd, result.outcome.response);
+          });
+          return { kind: "stream", response: first.response };
+        }
+        if ("error" in first) throw first.error;
+        const outcome = first.outcome;
+        if (outcome.kind === "paid") {
+          this.recordSettlement(outcome.chargedUsd, outcome.response);
+          return { kind: "stream", response: outcome.response };
+        }
+        if (outcome.kind === "served") return { kind: "stream", response: outcome.response };
+        if (outcome.kind === "failed") throw outcome.error;
+        return { kind: "exact", paymentRequired: outcome.paymentRequired ?? paymentRequired };
       }
       /**
        * Resolve an endpoint path against this client's API root.
@@ -122747,7 +123336,8 @@ var init_dist2 = __esm({
        *
        * The POST is verified, not charged. The job is then polled with a wallet
        * signature (no payment) until it finishes, and ONE payment is signed for
-       * the finished video; a failed job is never charged. If the gateway does not
+       * the finished video; a job that fails before completing is not charged. A paid
+       * job can still fail, and its APIError then carries `payment_status`. If the gateway does not
        * accept poll signatures for the job, it is polled with a payment per poll
        * instead, which is likewise only charged on completion.
        *
@@ -122798,6 +123388,22 @@ var init_dist2 = __esm({
         if (options?.toDate !== void 0) body.to_date = options.toDate;
         const data = await this.requestWithPaymentRaw("/v1/search", body);
         return data;
+      }
+      /**
+       * Typed judgments (OpenAI Decisions-compatible, `gpt-6-luna`), paid on
+       * Solana: one typed answer per question instead of text. See
+       * {@link LLMClient.decisions} for the request shape.
+       *
+       * Under `exact` the 402's quote settles (an upper-bound estimate of the
+       * input tokens plus the $0.001 fee). With the `batch` option the call pays
+       * with a channel voucher and is charged the input tokens the provider
+       * reports, with no per-call fee; `costUsd` is that metered charge. It shares
+       * the wallet's channel with chat, one batch call at a time.
+       */
+      async decisions(request2) {
+        const body = buildDecisionsBody(request2);
+        const response = await this.requestWithPayment("/v1/decisions", body);
+        return response;
       }
       // ── Prediction Markets (Powered by Predexon) ────────────────────────────
       async pm(path72, params) {
@@ -123115,7 +123721,8 @@ var init_dist2 = __esm({
        *   cost at POST; this loop only fetches the result and never signs a payment.
        *   A batch-billed image job still answers its proof poll with 402: that job
        *   falls back to the per-poll payment below.
-       * - video: settles on completion, and a failed job is never charged. A
+       * - video: settles on completion. A job that fails before completing is not
+       *   charged; one that fails after payment says so in `payment_status`. A
        *   finished, unpaid job answers the proof poll with 402 `{status:"completed"}`
        *   and a normal x402 challenge; ONE payment is signed from that challenge and
        *   the same poll is re-sent with it. The cost is recorded here, on delivery.
@@ -123162,7 +123769,7 @@ var init_dist2 = __esm({
         const failIfFailed = (data, status2) => {
           if (lastStatus === "failed") {
             throw new APIError(
-              `Upstream job failed: ${data.error || "unknown"}`,
+              `Upstream job failed: ${data.error || "unknown"}${paymentFactsNote(data)}`,
               status2,
               sanitizeErrorResponse(data)
             );
@@ -123253,6 +123860,9 @@ var init_dist2 = __esm({
           lastStatus = data.status || lastStatus;
           failIfFailed(data, paid.status);
           if (paid.status === 200 && lastStatus === "completed") return deliver(data, paid);
+          if (paid.status === 402 && isPaymentReplay(data)) {
+            throw withDisposition(paymentRejectedErrorFromBody(data, 402, { replay: true }), "paid-or-in-doubt");
+          }
           if (paid.status === 402 && kind === "video") {
             if (data.error === "Payment verification failed" && !await isSafeStaleBlockhashResponse(new Response(JSON.stringify(data), { status: 402 }))) {
               throw new PaymentError(
@@ -123527,10 +124137,11 @@ var init_dist2 = __esm({
        */
       async assertPaid(response) {
         if (response.status === 402) {
-          if (await isSafeStaleBlockhashResponse(response)) {
+          const body = await readPaymentFailure(response);
+          if (body !== null && isSafeStaleBlockhashBody(body)) {
             throw withDisposition(new SafeStaleBlockhashError(), "unpaid");
           }
-          throw withDisposition(new PaymentError("Payment was rejected. Check your Solana USDC balance."), "paid-or-in-doubt");
+          throw withDisposition(paymentRejectedErrorFromBody(body ?? {}, 402), "paid-or-in-doubt");
         }
         if (!response.ok) {
           let errorBody;
@@ -123661,7 +124272,8 @@ var init_dist2 = __esm({
             tools: params.tools,
             toolChoice: params.tool_choice,
             responseFormat: params.response_format,
-            stop: params.stop
+            stop: params.stop,
+            reasoningEffort: params.reasoning_effort
           }
         );
         return this.transformResponse(response);
@@ -123677,7 +124289,8 @@ var init_dist2 = __esm({
             tools: params.tools,
             toolChoice: params.tool_choice,
             responseFormat: params.response_format,
-            stop: params.stop
+            stop: params.stop,
+            reasoningEffort: params.reasoning_effort
           }
         );
         return new StreamingResponse(response, params.model);
@@ -123708,8 +124321,19 @@ var init_dist2 = __esm({
         this.completions = new ChatCompletions(client, apiUrl, timeout);
       }
     };
+    Decisions = class {
+      constructor(client) {
+        this.client = client;
+      }
+      client;
+      /** Same as {@link LLMClient.decisions}. */
+      async create(params) {
+        return this.client.decisions(params);
+      }
+    };
     OpenAI = class {
       chat;
+      decisions;
       get authMode() {
         return this.client.authMode;
       }
@@ -123726,6 +124350,7 @@ var init_dist2 = __esm({
           timeout
         });
         this.chat = new Chat(this.client, apiUrl, timeout);
+        this.decisions = new Decisions(this.client);
       }
       /**
        * Get the wallet address being used for payments.
@@ -123838,9 +124463,7 @@ var init_dist2 = __esm({
               signal: controller.signal
             });
             if (response.status === 402) {
-              throw new Error(
-                "Payment was rejected. Check your wallet balance."
-              );
+              throw await buildPaymentRejectedError(response);
             }
           }
           return response;
@@ -124386,6 +125009,7 @@ var require_symbols = __commonJS({
       kMaxResponseSize: /* @__PURE__ */ Symbol("max response size"),
       kHTTP2Session: /* @__PURE__ */ Symbol("http2Session"),
       kHTTP2Options: /* @__PURE__ */ Symbol("http2 options"),
+      kQueuedAbort: /* @__PURE__ */ Symbol("queued abort"),
       kHTTP2SessionState: /* @__PURE__ */ Symbol("http2Session state"),
       kRetryHandlerDefaultRetry: /* @__PURE__ */ Symbol("retry agent default retry"),
       kConstruct: /* @__PURE__ */ Symbol("constructable"),
@@ -124403,7 +125027,8 @@ var require_symbols = __commonJS({
       kNoProxyAgent: /* @__PURE__ */ Symbol("no proxy agent"),
       kHttpProxyAgent: /* @__PURE__ */ Symbol("http proxy agent"),
       kHttpsProxyAgent: /* @__PURE__ */ Symbol("https proxy agent"),
-      kSocks5ProxyAgent: /* @__PURE__ */ Symbol("socks5 proxy agent")
+      kSocks5ProxyAgent: /* @__PURE__ */ Symbol("socks5 proxy agent"),
+      kInterceptorKind: /* @__PURE__ */ Symbol("interceptor kind")
     };
   }
 });
@@ -127993,7 +128618,7 @@ var require_util2 = __commonJS({
       }
       return url3;
     }
-    var isPotentialleTrustworthyIPv4 = RegExp.prototype.test.bind(/^127\.(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)\.){2}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)$/);
+    var isPotentiallyTrustworthyIPv4 = RegExp.prototype.test.bind(/^127\.(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)\.){2}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)$/);
     var isPotentiallyTrustworthyIPv6 = RegExp.prototype.test.bind(/^(?:(?:0{1,4}:){7}|(?:0{1,4}:){1,6}:|::)0{0,3}1$/);
     function isOriginIPPotentiallyTrustworthy(origin2) {
       if (origin2.includes(":")) {
@@ -128002,7 +128627,7 @@ var require_util2 = __commonJS({
         }
         return isPotentiallyTrustworthyIPv6(origin2);
       }
-      return isPotentialleTrustworthyIPv4(origin2);
+      return isPotentiallyTrustworthyIPv4(origin2);
     }
     function isOriginPotentiallyTrustworthy(origin2) {
       if (origin2 == null || origin2 === "null") {
@@ -128771,6 +129396,8 @@ var require_request = __commonJS({
     var kHandler = /* @__PURE__ */ Symbol("handler");
     var kController = /* @__PURE__ */ Symbol("controller");
     var kResume = /* @__PURE__ */ Symbol("resume");
+    function noop2() {
+    }
     var RequestController = class {
       #paused = false;
       #reason = null;
@@ -129094,11 +129721,23 @@ var require_request = __commonJS({
           this.endHandler = null;
         }
       }
+      // Fails a request that was aborted before it reached a connection. The
+      // handler gets an aborted controller, so wrappers such as RetryHandler can
+      // tell a caller abort apart from a retryable connection failure.
+      onQueuedAbort(reason) {
+        this[kController] = createAbortedController(reason);
+        return this.onResponseError(reason);
+      }
       addHeader(key3, value) {
         processHeader(this, key3, value);
         return this;
       }
     };
+    function createAbortedController(reason) {
+      const controller = new RequestController(noop2);
+      controller.abort(reason);
+      return controller;
+    }
     function processHeader(request2, key3, val) {
       if (val && (typeof val === "object" && !Array.isArray(val))) {
         throw new InvalidArgumentError(`invalid ${key3} header`);
@@ -129195,6 +129834,7 @@ var require_request = __commonJS({
       return isFormData2(body);
     }
     module.exports = Request2;
+    module.exports.createAbortedController = createAbortedController;
   }
 });
 
@@ -129203,7 +129843,8 @@ var require_dispatcher = __commonJS({
   "node_modules/undici/lib/dispatcher/dispatcher.js"(exports, module) {
     "use strict";
     var EventEmitter2 = __require("events");
-    var { kOriginless, kUrl } = require_symbols();
+    var { InvalidArgumentError } = require_errors();
+    var { kOriginless, kUrl, kInterceptorKind } = require_symbols();
     var Dispatcher = class extends EventEmitter2 {
       dispatch() {
         throw new Error("not implemented");
@@ -129218,6 +129859,7 @@ var require_dispatcher = __commonJS({
         const interceptors = Array.isArray(args[0]) ? args[0] : args;
         const interceptorOrigin = this[kOriginless] === true ? null : this[kUrl]?.origin;
         let dispatch = this.dispatch.bind(this);
+        const orderSensitiveKinds = [];
         for (const interceptor of interceptors) {
           if (interceptor == null) {
             continue;
@@ -129225,10 +129867,18 @@ var require_dispatcher = __commonJS({
           if (typeof interceptor !== "function") {
             throw new TypeError(`invalid interceptor, expected function received ${typeof interceptor}`);
           }
+          if (interceptor[kInterceptorKind] != null) {
+            orderSensitiveKinds.push(interceptor[kInterceptorKind]);
+          }
           dispatch = interceptor(dispatch, interceptorOrigin);
           if (dispatch == null || typeof dispatch !== "function" || dispatch.length !== 2) {
             throw new TypeError("invalid interceptor");
           }
+        }
+        const cacheIndex = orderSensitiveKinds.indexOf("cache");
+        const redirectIndex = orderSensitiveKinds.indexOf("redirect");
+        if (cacheIndex !== -1 && redirectIndex !== -1 && cacheIndex < redirectIndex) {
+          throw new InvalidArgumentError("the cache interceptor must be composed after the redirect interceptor; composing the cache before the redirect disables the cache's cross-origin and credential redirect guards (GHSA-75VM-9G8F-99J4, GHSA-MQG3-3V4R-CM32, GHSA-4W7W-5XRC-9H26, GHSA-7XG3-FPHP-28HG)");
         }
         const originalDispatch = dispatch;
         const self2 = this;
@@ -129403,7 +130053,7 @@ var require_dispatcher_base = __commonJS({
             throw err;
           }
           handler.onResponseError(null, err);
-          return false;
+          return true;
         }
       }
     };
@@ -132123,7 +132773,7 @@ var require_parser_h1 = __commonJS({
     var EVENT_RANGE_SIZE = 9;
     var EVENT_HEADERS_SIZE = 19;
     var miloPackage;
-    var useWasmSIMD = process.arch !== "ppc64";
+    var useWasmSIMD = process.arch !== "riscv64" && process.arch !== "ppc64";
     if (process.env.UNDICI_NO_WASM_SIMD === "1") {
       useWasmSIMD = false;
     } else if (process.env.UNDICI_NO_WASM_SIMD === "0") {
@@ -133401,14 +134051,35 @@ Content-Type: ${value.type || "application/octet-stream"}\r
             "Response body object should not be disturbed or locked"
           );
         }
-        stream4 = webidl.is.ReadableStream(object2) ? object2 : ReadableStream.from(object2).pipeThrough(new TransformStream({
-          transform(chunk, controller) {
-            const bytes = isUint8Array(chunk) ? chunk : Buffer.from(chunk);
-            if (bytes.byteLength) {
-              controller.enqueue(bytes);
+        if (webidl.is.ReadableStream(object2)) {
+          stream4 = object2;
+        } else {
+          const reader = ReadableStream.from(object2).getReader();
+          let cancelled = false;
+          stream4 = new ReadableStream({
+            async pull(controller) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (cancelled) {
+                  return;
+                }
+                if (done) {
+                  controller.close();
+                  return;
+                }
+                const bytes = isUint8Array(value) ? value : Buffer.from(value);
+                if (bytes.byteLength) {
+                  controller.enqueue(bytes);
+                  return;
+                }
+              }
+            },
+            cancel(reason) {
+              cancelled = true;
+              return reader.cancel(reason);
             }
-          }
-        }));
+          }, { highWaterMark: 0 });
+        }
       }
       if (typeof source === "string" || isUint8Array(source)) {
         action = () => source;
@@ -133631,6 +134302,7 @@ var require_client_h1 = __commonJS({
     var kIdleSocketValidation = /* @__PURE__ */ Symbol("kIdleSocketValidation");
     var kIdleSocketValidationTimeout = /* @__PURE__ */ Symbol("kIdleSocketValidationTimeout");
     var kSocketUsed = /* @__PURE__ */ Symbol("kSocketUsed");
+    var kIdleSince = /* @__PURE__ */ Symbol("kIdleSince");
     var kTypeOfService = /* @__PURE__ */ Symbol("kTypeOfService");
     var extractBody;
     function lazyllhttp() {
@@ -133640,7 +134312,9 @@ var require_client_h1 = __commonJS({
       const llhttpWasmData = process.env.JEST_WORKER_ID ? require_llhttp_wasm() : void 0;
       let mod5;
       let useWasmSIMD = true;
-      if (process.arch === "ppc64") {
+      if (process.arch === "riscv64") {
+        useWasmSIMD = false;
+      } else if (process.arch === "ppc64") {
         const [major, minor] = process.versions.node.split(".").map((n) => parseInt(n, 10));
         if (major < 24 || major === 24 && minor < 12) {
           useWasmSIMD = false;
@@ -134400,6 +135074,10 @@ var require_client_h1 = __commonJS({
         }
       });
     }
+    function isIdleSocketExpired(socket) {
+      const parser = socket[kParser];
+      return parser.timeoutType === TIMEOUT_KEEP_ALIVE && parser.timeoutValue > 0 && performance.now() - socket[kIdleSince] >= parser.timeoutValue;
+    }
     function resumeH1(client) {
       const socket = client[kSocket];
       if (socket && !socket.destroyed) {
@@ -134411,6 +135089,10 @@ var require_client_h1 = __commonJS({
         } else if (socket[kNoRef] && socket.ref) {
           socket.ref();
           socket[kNoRef] = false;
+        }
+        if (client[kRunning] === 0 && client[kPending] > 0 && isIdleSocketExpired(socket)) {
+          util4.destroy(socket, new InformationalError("socket idle timeout"));
+          return;
         }
         if (client[kRunning] === 0 && client[kPending] > 0 && socket[kSocketUsed]) {
           if (socket[kIdleSocketValidation] === 0) {
@@ -134437,6 +135119,7 @@ var require_client_h1 = __commonJS({
         }
         if (client[kSize] === 0) {
           if (socket[kParser].timeoutType !== TIMEOUT_KEEP_ALIVE) {
+            socket[kIdleSince] = performance.now();
             socket[kParser].setTimeout(client[kKeepAliveTimeoutValue], TIMEOUT_KEEP_ALIVE);
           }
         } else if (client[kRunning] > 0 && socket[kParser].statusCode < 200) {
@@ -134961,7 +135644,6 @@ var require_client_h2 = __commonJS({
     } = require_symbols();
     var { channels } = require_diagnostics();
     var kOpenStreams = /* @__PURE__ */ Symbol("open streams");
-    var kRequestStreamId = /* @__PURE__ */ Symbol("request stream id");
     var kRequestStream = /* @__PURE__ */ Symbol("request stream");
     var kRequestStreamCleanup = /* @__PURE__ */ Symbol("request stream cleanup");
     var kRequestStreamState = /* @__PURE__ */ Symbol("request stream state");
@@ -134969,6 +135651,7 @@ var require_client_h2 = __commonJS({
     var kGoAwayReplayAttempts = /* @__PURE__ */ Symbol("goaway replay attempts");
     var kRefusedStreamRetry = /* @__PURE__ */ Symbol("refused stream retry");
     var MAX_GOAWAY_REPLAY_ATTEMPTS = 1;
+    var HTTP2_FRAME_TYPE_HEADERS = 1;
     var MIN_PROBE_TIMEOUT = 1e3;
     var extractBody;
     var http23;
@@ -134988,6 +135671,7 @@ var require_client_h2 = __commonJS({
         HTTP2_HEADER_STATUS,
         HTTP2_HEADER_PROTOCOL,
         NGHTTP2_NO_ERROR,
+        NGHTTP2_PROTOCOL_ERROR,
         NGHTTP2_REFUSED_STREAM
       }
     } = http23;
@@ -135020,14 +135704,14 @@ var require_client_h2 = __commonJS({
         if (request2 == null) {
           continue;
         }
-        if (typeof request2[kRequestStreamId] !== "number" || request2[kRequestStreamId] > maxAcceptedStreamID) {
+        const streamId = request2[kRequestStream]?.id;
+        if (typeof streamId !== "number" || streamId > maxAcceptedStreamID) {
           return i;
         }
       }
       return client[kPendingIdx];
     }
     function detachRequestFromStream(request2) {
-      request2[kRequestStreamId] = null;
       request2[kRequestStream] = null;
       request2[kRequestStreamCleanup] = null;
     }
@@ -135036,7 +135720,6 @@ var require_client_h2 = __commonJS({
       const previousStream = request2[kRequestStream];
       detachRequestFromStream(request2);
       previousCleanup?.(previousStream);
-      request2[kRequestStreamId] = stream4.id;
       request2[kRequestStream] = stream4;
       request2[kRequestStreamCleanup] = cleanup;
     }
@@ -135105,7 +135788,8 @@ var require_client_h2 = __commonJS({
         closeStreamSession(stream4);
       }
       if (!stream4.destroyed && !stream4.closed) {
-        stream4.once("error", noop2);
+        stream4.off("error", noop2);
+        stream4.on("error", noop2);
       }
     }
     function connectH2(client, socket) {
@@ -135440,14 +136124,12 @@ var require_client_h2 = __commonJS({
           }
         }
       }
-      for (let i = 0; i < streamsToClose.length; i++) {
-        closeStream(streamsToClose[i]);
-      }
       if (pendingIdx !== previousPendingIdx) {
         const remainingPendingRequests = client[kQueue].slice(previousPendingIdx);
         client[kQueue].length = pendingIdx;
         client[kQueue].push(...retriableRequests, ...remainingPendingRequests);
       }
+      client[kPendingIdx] = pendingIdx;
       if (client[kHTTP2Session] === this) {
         client[kSocket] = null;
         client[kHTTPContext] = null;
@@ -135459,10 +136141,12 @@ var require_client_h2 = __commonJS({
       clearHttp2IdleTimeout(this);
       clearNoStreamsTimeout(this);
       clearHttp2ProbeTimeout(this);
+      for (let i = 0; i < streamsToClose.length; i++) {
+        closeStream(streamsToClose[i]);
+      }
       if (!this.closed && !this.destroyed) {
         this.close();
       }
-      client[kPendingIdx] = pendingIdx;
       client.emit("disconnect", client[kUrl], [client], err);
       client[kResume]();
     }
@@ -135538,7 +136222,6 @@ var require_client_h2 = __commonJS({
       }
     }
     function onUpgradeStreamClose() {
-      this.off("error", noop2);
       const state = this[kRequestStreamState];
       this[kRequestStreamState] = null;
       failUpgradeStream(state, new InformationalError("HTTP/2: stream closed before response headers"));
@@ -135611,7 +136294,7 @@ var require_client_h2 = __commonJS({
       }
       removeUpgradeStreamListeners(stream4);
       if (!stream4.destroyed && !stream4.closed) {
-        stream4.once("error", noop2);
+        stream4.on("error", noop2);
       }
     }
     function failUpgradeStream(state, err) {
@@ -135905,7 +136588,7 @@ var require_client_h2 = __commonJS({
       }
       if (!stream4.destroyed && !stream4.closed) {
         removeRequestStreamListeners(stream4);
-        stream4.once("error", noop2);
+        stream4.on("error", noop2);
       }
     }
     function onData(chunk) {
@@ -136018,13 +136701,25 @@ var require_client_h2 = __commonJS({
         return false;
       }
       request2[kRefusedStreamRetry] = true;
+      requeueStreamRequest(client, state);
+      return true;
+    }
+    function retryUnsentStream(state) {
+      const { client, request: request2, session } = state;
+      if (!session[kReceivedGoAway] || state.responseReceived || request2.aborted || request2.completed || !canReplayRequest(request2) || !registerGoAwayRefusal(request2)) {
+        return false;
+      }
+      requeueStreamRequest(client, state);
+      return true;
+    }
+    function requeueStreamRequest(client, state) {
+      const { request: request2 } = state;
       detachRequestStreamForClose(request2);
       state.stream = null;
       state.requestFinalized = true;
       completeRequest(client, request2);
       client[kQueue].splice(client[kPendingIdx], 0, request2);
       client[kResume]();
-      return true;
     }
     function onError(err) {
       const stream4 = this;
@@ -136033,8 +136728,11 @@ var require_client_h2 = __commonJS({
         return;
       }
       stream4.off("error", onError);
-      if (state.responseContentLength != null && state.bytesRead !== state.responseContentLength) {
-        err = new ResponseContentLengthMismatchError();
+      stream4.on("error", noop2);
+      if ((err.code === "ERR_HTTP2_ERROR" || err.code === "ERR_HTTP2_STREAM_ERROR" && stream4.rstCode === NGHTTP2_PROTOCOL_ERROR) && state.responseContentLength != null && state.bytesRead !== state.responseContentLength) {
+        const mismatch = new ResponseContentLengthMismatchError();
+        mismatch.cause = err;
+        err = mismatch;
       }
       if (typeof stream4.rstCode === "number" && stream4.rstCode !== NGHTTP2_NO_ERROR) {
         err.http2ErrorCode = stream4.rstCode;
@@ -136051,6 +136749,9 @@ var require_client_h2 = __commonJS({
         return;
       }
       stream4.off("frameError", onFrameError);
+      if (type === HTTP2_FRAME_TYPE_HEADERS && retryUnsentStream(state)) {
+        return;
+      }
       state.abort(new InformationalError(`HTTP/2: "frameError" received - type ${type}, code ${code}`));
     }
     function onAborted() {
@@ -136327,11 +137028,13 @@ var require_client = __commonJS({
       kHostAuthority,
       kResume,
       kHTTP2Options,
-      kUseMilo
+      kUseMilo,
+      kQueuedAbort
     } = require_symbols();
     var connectH1 = require_client_h1();
     var connectH2 = require_client_h2();
     var kClosedResolve = /* @__PURE__ */ Symbol("kClosedResolve");
+    var kCancelConnect = /* @__PURE__ */ Symbol("kCancelConnect");
     var getDefaultNodeMaxHeaderSize = http5 && http5.maxHeaderSize && Number.isInteger(http5.maxHeaderSize) && http5.maxHeaderSize > 0 ? () => http5.maxHeaderSize : () => {
       throw new InvalidArgumentError("http module not available or http.maxHeaderSize invalid");
     };
@@ -136539,6 +137242,7 @@ var require_client = __commonJS({
         this[kClosedResolve] = null;
         this[kMaxResponseSize] = maxResponseSize > -1 ? maxResponseSize : -1;
         this[kHTTPContext] = null;
+        this[kCancelConnect] = null;
         this[kHTTP2Options] = {
           pingInterval: h2Options?.pingInterval ?? pingInterval ?? 6e4,
           connectionWindowSize: h2Options?.connectionWindowSize ?? connectionWindowSize ?? 524288,
@@ -136591,6 +137295,7 @@ var require_client = __commonJS({
       }
       [kConnect](cb) {
         connect3(this);
+        this[kCancelConnect] = null;
         this.once("connect", cb);
       }
       [kDispatch](opts, handler) {
@@ -136602,6 +137307,12 @@ var require_client = __commonJS({
           queueMicrotask(() => resume2(this));
         } else {
           this[kResume](true);
+        }
+        if (request2.abort === null && !request2.aborted) {
+          const onQueued = opts[kQueuedAbort];
+          if (onQueued !== void 0) {
+            onQueued((reason) => abortPendingRequest(this, request2, reason));
+          }
         }
         if (this[kResuming] && this[kNeedDrain] !== 2 && this[kBusy]) {
           this[kNeedDrain] = 2;
@@ -136643,6 +137354,39 @@ var require_client = __commonJS({
         });
       }
     };
+    function failQueuedRequest(client, request2, reason) {
+      try {
+        request2.onQueuedAbort(reason);
+        assert11(request2.aborted);
+      } catch (err) {
+        client.emit("error", err);
+      }
+    }
+    function abortPendingRequest(client, request2, reason) {
+      if (request2.aborted || request2.abort !== null) {
+        return;
+      }
+      const queue = client[kQueue];
+      const idx = queue.indexOf(request2, client[kPendingIdx]);
+      if (idx === -1) {
+        return;
+      }
+      if (idx === client[kPendingIdx] && client[kResuming] === 2) {
+        return;
+      }
+      queue.splice(idx, 1);
+      failQueuedRequest(client, request2, reason);
+      client[kResume](true);
+      if (client[kCancelConnect] !== null && client[kSize] === 0) {
+        queueMicrotask(() => cancelUnusedConnect(client));
+      }
+    }
+    function cancelUnusedConnect(client) {
+      const cancel = client[kCancelConnect];
+      if (cancel !== null && client[kSize] === 0) {
+        cancel(new InformationalError("no request waits for this connection"));
+      }
+    }
     function onError(client, err) {
       if (client[kRunning] === 0 && err.code !== "UND_ERR_INFO" && err.code !== "UND_ERR_SOCKET") {
         assert11(client[kPendingIdx] === client[kRunningIdx]);
@@ -136668,6 +137412,8 @@ var require_client = __commonJS({
         hostname3 = ip;
       }
       client[kConnecting] = true;
+      let calledBack = false;
+      let cancelled = false;
       if (channels.beforeConnect.hasSubscribers) {
         channels.beforeConnect.publish({
           connectParams: {
@@ -136683,7 +137429,7 @@ var require_client = __commonJS({
         });
       }
       try {
-        client[kConnector]({
+        const connecting = client[kConnector]({
           host,
           hostname: hostname3,
           protocol,
@@ -136691,6 +137437,14 @@ var require_client = __commonJS({
           servername: client[kServerName],
           localAddress: client[kLocalAddress]
         }, (err, socket) => {
+          calledBack = true;
+          if (cancelled) {
+            if (socket) {
+              util4.destroy(socket.on("error", noop2));
+            }
+            return;
+          }
+          client[kCancelConnect] = null;
           if (err) {
             handleConnectError(client, err, { host, hostname: hostname3, protocol, port });
             client[kResume]();
@@ -136733,6 +137487,29 @@ var require_client = __commonJS({
           client.emit("connect", client[kUrl], [client]);
           client[kResume]();
         });
+        if (!calledBack && util4.isStream(connecting)) {
+          client[kCancelConnect] = (err) => {
+            cancelled = true;
+            client[kCancelConnect] = null;
+            client[kConnecting] = false;
+            if (channels.connectError.hasSubscribers) {
+              channels.connectError.publish({
+                connectParams: {
+                  host,
+                  hostname: hostname3,
+                  protocol,
+                  port,
+                  version: client[kHTTPContext]?.version,
+                  servername: client[kServerName],
+                  localAddress: client[kLocalAddress]
+                },
+                connector: client[kConnector],
+                error: err
+              });
+            }
+            util4.destroy(connecting.on("error", noop2), err);
+          };
+        }
       } catch (err) {
         handleConnectError(client, err, { host, hostname: hostname3, protocol, port });
         client[kResume]();
@@ -136943,7 +137720,8 @@ var require_pool_base = __commonJS({
     var { PoolStats } = require_stats();
     var DispatcherBase = require_dispatcher_base();
     var FixedQueue = require_fixed_queue();
-    var { kConnected, kSize, kRunning, kPending, kQueued, kBusy, kFree, kUrl, kClose, kDestroy, kDispatch } = require_symbols();
+    var { kConnected, kSize, kRunning, kPending, kQueued, kBusy, kFree, kUrl, kClose, kDestroy, kDispatch, kQueuedAbort } = require_symbols();
+    var { createAbortedController } = require_request();
     var kClients = /* @__PURE__ */ Symbol("clients");
     var kNeedDrain = /* @__PURE__ */ Symbol("needDrain");
     var kQueue = /* @__PURE__ */ Symbol("queue");
@@ -136961,11 +137739,14 @@ var require_pool_base = __commonJS({
     var kRemoveClient = /* @__PURE__ */ Symbol("remove client");
     var kRetireClient = /* @__PURE__ */ Symbol("retire client");
     var kRetiring = /* @__PURE__ */ Symbol("retiring clients");
+    var kShiftQueue = /* @__PURE__ */ Symbol("shift queue");
+    var kAbortQueued = /* @__PURE__ */ Symbol("abort queued");
     var QueuedRequest = class extends AsyncResource {
       constructor(opts, handler) {
         super("UNDICI_POOL_QUEUED_REQUEST");
         this.opts = opts;
         this.handler = handler;
+        this.queued = true;
       }
       dispatch(dispatcher) {
         return this.runInAsyncScope(dispatcher.dispatch, dispatcher, this.opts, this.handler);
@@ -136996,21 +137777,19 @@ var require_pool_base = __commonJS({
         if (client.closed || client.destroyed) {
           return;
         }
-        const queue = this[kQueue];
         let needDrain = false;
         this[kOnClientDrain](client);
         while (!needDrain) {
-          const item = queue.shift();
+          const item = this[kShiftQueue]();
           if (!item) {
             break;
           }
-          this[kQueued]--;
           needDrain = !item.dispatch(client);
         }
         client[kNeedDrain] = needDrain;
         if (needDrain) {
           this[kOnClientBusy](client);
-          if (!queue.isEmpty()) {
+          if (this[kQueued] > 0) {
             return this[kDrainQueue](origin2, targets);
           }
         }
@@ -137018,7 +137797,7 @@ var require_pool_base = __commonJS({
           this[kNeedDrain] = false;
           this.emit("drain", origin2, [this, ...targets]);
         }
-        if (this[kClosedResolve] && queue.isEmpty()) {
+        if (this[kClosedResolve] && this[kQueued] === 0) {
           return closeClients(this).then(this[kClosedResolve]);
         }
       }
@@ -137027,20 +137806,26 @@ var require_pool_base = __commonJS({
       [kOnClientDrain]() {
       }
       [kDrainQueue](origin2, targets) {
-        const queue = this[kQueue];
         let hasDispatcher = true;
-        while (!queue.isEmpty()) {
-          const dispatcher = this[kGetDispatcher]();
+        while (this[kQueued] > 0) {
+          let dispatcher;
+          try {
+            dispatcher = this[kGetDispatcher]();
+          } catch (err) {
+            const item2 = this[kShiftQueue]();
+            item2.runInAsyncScope(item2.handler.onResponseError, item2.handler, null, err);
+            hasDispatcher = !this.destroyed && this[kHasDispatcher](false);
+            continue;
+          }
           if (!dispatcher) {
             hasDispatcher = false;
             break;
           }
-          const item = queue.shift();
-          this[kQueued]--;
+          const item = this[kShiftQueue]();
           if (!item.dispatch(dispatcher)) {
             dispatcher[kNeedDrain] = true;
             this[kOnClientBusy](dispatcher);
-            hasDispatcher = this[kHasDispatcher]();
+            hasDispatcher = this[kHasDispatcher](false);
             if (!hasDispatcher) {
               break;
             }
@@ -137050,8 +137835,38 @@ var require_pool_base = __commonJS({
           this[kNeedDrain] = false;
           this.emit("drain", origin2, [this, ...targets]);
         }
-        if (this[kClosedResolve] && queue.isEmpty()) {
+        if (this[kClosedResolve] && this[kQueued] === 0) {
           return closeClients(this).then(this[kClosedResolve]);
+        }
+      }
+      // Aborted requests stay in the queue as tombstones (queued === false) and
+      // are skipped here; kQueued only counts the live ones.
+      [kShiftQueue]() {
+        const queue = this[kQueue];
+        let item = queue.shift();
+        while (item !== null && item.queued === false) {
+          item = queue.shift();
+        }
+        if (item !== null) {
+          this[kQueued]--;
+          item.queued = false;
+        }
+        return item;
+      }
+      // Called through the handler's kQueuedAbort hook when a queued request is
+      // aborted.
+      [kAbortQueued](item, reason) {
+        if (!item.queued) {
+          return;
+        }
+        const { handler } = item;
+        item.queued = false;
+        item.opts = null;
+        item.handler = null;
+        this[kQueued]--;
+        item.runInAsyncScope(handler.onResponseError, handler, createAbortedController(reason), reason);
+        if (this[kClosedResolve] && this[kQueued] === 0) {
+          closeClients(this).then(this[kClosedResolve]);
         }
       }
       [kOnConnect] = (origin2, targets) => {
@@ -137105,7 +137920,7 @@ var require_pool_base = __commonJS({
         return new PoolStats(this);
       }
       [kClose]() {
-        if (this[kQueue].isEmpty()) {
+        if (this[kQueued] === 0) {
           return closeClients(this);
         } else {
           return new Promise((resolve3) => {
@@ -137115,7 +137930,7 @@ var require_pool_base = __commonJS({
       }
       [kDestroy](err) {
         while (true) {
-          const item = this[kQueue].shift();
+          const item = this[kShiftQueue]();
           if (!item) {
             break;
           }
@@ -137133,9 +137948,14 @@ var require_pool_base = __commonJS({
       [kDispatch](opts, handler) {
         const dispatcher = this[kGetDispatcher]();
         if (!dispatcher) {
+          const item = new QueuedRequest(opts, handler);
           this[kNeedDrain] = true;
-          this[kQueue].push(new QueuedRequest(opts, handler));
+          this[kQueue].push(item);
           this[kQueued]++;
+          const onQueued = opts[kQueuedAbort];
+          if (onQueued !== void 0) {
+            onQueued((reason) => this[kAbortQueued](item, reason));
+          }
         } else if (!dispatcher.dispatch(opts, handler)) {
           dispatcher[kNeedDrain] = true;
           this[kOnClientBusy](dispatcher);
@@ -137233,7 +138053,7 @@ var require_pool = __commonJS({
       InvalidArgumentError
     } = require_errors();
     var util4 = require_util();
-    var { kConnecting, kHTTPContext, kUrl, kQueued } = require_symbols();
+    var { kConnecting, kHTTPContext, kHTTP2Session, kRemoteSettings, kUrl, kQueued } = require_symbols();
     var buildConnector = require_connect();
     var kOptions = /* @__PURE__ */ Symbol("options");
     var kConnections = /* @__PURE__ */ Symbol("connections");
@@ -137309,9 +138129,19 @@ var require_pool = __commonJS({
             this[kProtocol] = client[kHTTPContext]?.version;
           }
           if (client === this[kProtocolProbe]) {
-            if (this[kProtocol] !== "h2") {
-              this[kProtocolProbe] = null;
-              this[kDrainQueue](origin3, targets.slice(1));
+            const releaseProbe = () => {
+              if (client === this[kProtocolProbe]) {
+                this[kProtocolProbe] = null;
+                if (!this.destroyed && (this[kQueued] > 0 || !this.closed && this[kHasDispatcher](false))) {
+                  this[kDrainQueue](origin3, targets.slice(1));
+                }
+              }
+            };
+            const session = client[kHTTP2Session];
+            if (this[kProtocol] !== "h2" || session[kRemoteSettings]) {
+              releaseProbe();
+            } else {
+              session.once("remoteSettings", releaseProbe);
             }
           }
         });
@@ -137365,7 +138195,7 @@ var require_pool = __commonJS({
           return createClient3(this);
         }
       }
-      [kHasDispatcher]() {
+      [kHasDispatcher](create3 = true) {
         const clientTtlOption = this[kOptions].clientTtl;
         for (let i = 0; i < this[kClients].length; i++) {
           const client = this[kClients][i];
@@ -137380,7 +138210,7 @@ var require_pool = __commonJS({
           return false;
         }
         if (!this[kConnections] || this[kClients].length < this[kConnections]) {
-          createClient3(this);
+          if (create3) createClient3(this);
           return true;
         }
         return false;
@@ -139151,7 +139981,7 @@ var require_retry_handler = __commonJS({
   "node_modules/undici/lib/handler/retry-handler.js"(exports, module) {
     "use strict";
     var assert11 = __require("assert");
-    var { kRetryHandlerDefaultRetry } = require_symbols();
+    var { kRetryHandlerDefaultRetry, kQueuedAbort } = require_symbols();
     var { RequestRetryError, RequestAbortedError } = require_errors();
     var {
       hasSafeIterator,
@@ -139235,6 +140065,10 @@ var require_retry_handler = __commonJS({
       }
     };
     var RetryHandler = class _RetryHandler {
+      // Takes the retry that waits for a connection out of its queue.
+      #queuedCancel = null;
+      // Whether retries are dispatched with a hook that sets #queuedCancel.
+      #tracksQueuedRetry = false;
       constructor(opts, { dispatch, handler }) {
         const { retryOptions, ...dispatchOpts } = opts;
         const {
@@ -139575,6 +140409,14 @@ var require_retry_handler = __commonJS({
             headers: buildResumeHeaders(this.opts.headers, `bytes=${this.start}-${this.end ?? ""}`, this.etag)
           };
         }
+        if (!this.#tracksQueuedRetry) {
+          this.#tracksQueuedRetry = true;
+          const onQueued = this.opts[kQueuedAbort];
+          this.opts[kQueuedAbort] = (cancel) => {
+            this.#queuedCancel = cancel;
+            onQueued?.(cancel);
+          };
+        }
         try {
           this.retryCountCheckpoint = this.retryCount;
           this.dispatch(this.opts, this);
@@ -139618,6 +140460,11 @@ var require_retry_handler = __commonJS({
         ) ?? null;
       }
       #onAbort(reason) {
+        const cancel = this.#queuedCancel;
+        if (cancel !== null) {
+          this.#queuedCancel = null;
+          cancel(reason ?? new RequestAbortedError());
+        }
         if (!this.retryPending) {
           return;
         }
@@ -140174,6 +141021,89 @@ var require_readable = __commonJS({
   }
 });
 
+// node_modules/undici/lib/api/abort-signal.js
+var require_abort_signal = __commonJS({
+  "node_modules/undici/lib/api/abort-signal.js"(exports, module) {
+    "use strict";
+    var { addAbortListener } = require_util();
+    var { RequestAbortedError } = require_errors();
+    var { kQueuedAbort } = require_symbols();
+    var kListener = /* @__PURE__ */ Symbol("kListener");
+    var kSignal = /* @__PURE__ */ Symbol("kSignal");
+    function abort(self2) {
+      self2.reason = self2[kSignal]?.reason ?? new RequestAbortedError();
+      if (self2.abort) {
+        self2.abort(self2.reason);
+      }
+      removeSignal(self2);
+    }
+    function addSignal(self2, signal) {
+      self2.reason = null;
+      self2[kSignal] = null;
+      self2[kListener] = null;
+      if (!signal) {
+        return;
+      }
+      if (signal.aborted) {
+        self2.reason = signal.reason ?? new RequestAbortedError();
+        return;
+      }
+      self2[kSignal] = signal;
+      self2[kListener] = () => {
+        abort(self2);
+      };
+      addAbortListener(self2[kSignal], self2[kListener]);
+    }
+    function removeSignal(self2) {
+      if (!self2[kSignal]) {
+        return;
+      }
+      if ("removeEventListener" in self2[kSignal]) {
+        self2[kSignal].removeEventListener("abort", self2[kListener]);
+      } else {
+        self2[kSignal].removeListener("abort", self2[kListener]);
+      }
+      self2[kSignal] = null;
+      self2[kListener] = null;
+    }
+    function queuedAbortHook(handler) {
+      let started = null;
+      let installed = null;
+      return (cancel) => {
+        if (handler.reason) {
+          cancel(handler.reason);
+          return;
+        }
+        if (handler.abort !== installed) {
+          started = handler.abort;
+        }
+        if (started === null) {
+          installed = cancel;
+        } else {
+          const abortStarted = started;
+          installed = (reason) => {
+            abortStarted(reason);
+            cancel(reason);
+          };
+        }
+        handler.abort = installed;
+      };
+    }
+    function dispatchWithSignal(dispatcher, opts, handler) {
+      if (handler.reason) {
+        handler.onResponseError(null, handler.reason);
+        return;
+      }
+      dispatcher.dispatch({ ...opts, [kQueuedAbort]: queuedAbortHook(handler) }, handler);
+    }
+    module.exports = {
+      addSignal,
+      removeSignal,
+      dispatchWithSignal
+    };
+  }
+});
+
 // node_modules/undici/lib/api/api-request.js
 var require_api_request = __commonJS({
   "node_modules/undici/lib/api/api-request.js"(exports, module) {
@@ -140183,6 +141113,7 @@ var require_api_request = __commonJS({
     var { Readable: Readable4 } = require_readable();
     var { InvalidArgumentError, RequestAbortedError } = require_errors();
     var util4 = require_util();
+    var { dispatchWithSignal } = require_abort_signal();
     function noop2() {
     }
     var RequestHandler = class extends AsyncResource {
@@ -140207,6 +141138,9 @@ var require_api_request = __commonJS({
           if (onInfo && typeof onInfo !== "function") {
             throw new InvalidArgumentError("invalid onInfo callback");
           }
+          if (signal?.aborted) {
+            throw signal.reason ?? new RequestAbortedError();
+          }
           super("UNDICI_REQUEST");
         } catch (err) {
           if (util4.isStream(body)) {
@@ -140228,9 +141162,7 @@ var require_api_request = __commonJS({
         this.highWaterMark = highWaterMark;
         this.reason = null;
         this.removeAbortListener = null;
-        if (signal?.aborted) {
-          this.reason = signal.reason ?? new RequestAbortedError();
-        } else if (signal) {
+        if (signal) {
           this.removeAbortListener = util4.addAbortListener(signal, () => {
             this.reason = signal.reason ?? new RequestAbortedError();
             if (this.res) {
@@ -140361,7 +141293,11 @@ var require_api_request = __commonJS({
       }
       try {
         const handler = new RequestHandler(opts, callback);
-        this.dispatch(opts, handler);
+        if (opts.signal == null) {
+          this.dispatch(opts, handler);
+        } else {
+          dispatchWithSignal(this, opts, handler);
+        }
       } catch (err) {
         if (typeof callback !== "function") {
           throw err;
@@ -140375,58 +141311,6 @@ var require_api_request = __commonJS({
   }
 });
 
-// node_modules/undici/lib/api/abort-signal.js
-var require_abort_signal = __commonJS({
-  "node_modules/undici/lib/api/abort-signal.js"(exports, module) {
-    "use strict";
-    var { addAbortListener } = require_util();
-    var { RequestAbortedError } = require_errors();
-    var kListener = /* @__PURE__ */ Symbol("kListener");
-    var kSignal = /* @__PURE__ */ Symbol("kSignal");
-    function abort(self2) {
-      if (self2.abort) {
-        self2.abort(self2[kSignal]?.reason);
-      } else {
-        self2.reason = self2[kSignal]?.reason ?? new RequestAbortedError();
-      }
-      removeSignal(self2);
-    }
-    function addSignal(self2, signal) {
-      self2.reason = null;
-      self2[kSignal] = null;
-      self2[kListener] = null;
-      if (!signal) {
-        return;
-      }
-      if (signal.aborted) {
-        abort(self2);
-        return;
-      }
-      self2[kSignal] = signal;
-      self2[kListener] = () => {
-        abort(self2);
-      };
-      addAbortListener(self2[kSignal], self2[kListener]);
-    }
-    function removeSignal(self2) {
-      if (!self2[kSignal]) {
-        return;
-      }
-      if ("removeEventListener" in self2[kSignal]) {
-        self2[kSignal].removeEventListener("abort", self2[kListener]);
-      } else {
-        self2[kSignal].removeListener("abort", self2[kListener]);
-      }
-      self2[kSignal] = null;
-      self2[kListener] = null;
-    }
-    module.exports = {
-      addSignal,
-      removeSignal
-    };
-  }
-});
-
 // node_modules/undici/lib/api/api-stream.js
 var require_api_stream = __commonJS({
   "node_modules/undici/lib/api/api-stream.js"(exports, module) {
@@ -140435,7 +141319,7 @@ var require_api_stream = __commonJS({
     var { AsyncResource } = __require("async_hooks");
     var { InvalidArgumentError, InvalidReturnValueError } = require_errors();
     var util4 = require_util();
-    var { addSignal, removeSignal } = require_abort_signal();
+    var { addSignal, removeSignal, dispatchWithSignal } = require_abort_signal();
     function noop2() {
     }
     function getWritableError(stream5) {
@@ -140624,7 +141508,11 @@ var require_api_stream = __commonJS({
       }
       try {
         const handler = new StreamHandler(opts, factory2, callback);
-        this.dispatch(opts, handler);
+        if (opts.signal == null) {
+          this.dispatch(opts, handler);
+        } else {
+          dispatchWithSignal(this, opts, handler);
+        }
       } catch (err) {
         if (typeof callback !== "function") {
           throw err;
@@ -140655,7 +141543,7 @@ var require_api_pipeline = __commonJS({
     } = require_errors();
     var util4 = require_util();
     var { kBodyUsed } = require_symbols();
-    var { addSignal, removeSignal } = require_abort_signal();
+    var { addSignal, removeSignal, dispatchWithSignal } = require_abort_signal();
     function noop2() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
@@ -140834,7 +141722,12 @@ var require_api_pipeline = __commonJS({
     function pipeline2(opts, handler) {
       try {
         const pipelineHandler = new PipelineHandler(opts, handler);
-        this.dispatch({ ...opts, body: pipelineHandler.req }, pipelineHandler);
+        const pipelineOpts = { ...opts, body: pipelineHandler.req };
+        if (opts.signal == null) {
+          this.dispatch(pipelineOpts, pipelineHandler);
+        } else {
+          dispatchWithSignal(this, pipelineOpts, pipelineHandler);
+        }
         return pipelineHandler.ret;
       } catch (err) {
         return new PassThrough().destroy(err);
@@ -140853,7 +141746,7 @@ var require_api_upgrade = __commonJS({
     var assert11 = __require("assert");
     var util4 = require_util();
     var { kHTTP2Stream } = require_symbols();
-    var { addSignal, removeSignal } = require_abort_signal();
+    var { addSignal, removeSignal, dispatchWithSignal } = require_abort_signal();
     var UpgradeHandler = class extends AsyncResource {
       constructor(opts, callback) {
         if (!opts || typeof opts !== "object") {
@@ -140931,7 +141824,11 @@ var require_api_upgrade = __commonJS({
           method: opts.method || "GET",
           upgrade: opts.protocol || "Websocket"
         };
-        this.dispatch(upgradeOpts, upgradeHandler);
+        if (opts.signal == null) {
+          this.dispatch(upgradeOpts, upgradeHandler);
+        } else {
+          dispatchWithSignal(this, upgradeOpts, upgradeHandler);
+        }
       } catch (err) {
         if (typeof callback !== "function") {
           throw err;
@@ -140952,7 +141849,7 @@ var require_api_connect = __commonJS({
     var { AsyncResource } = __require("async_hooks");
     var { InvalidArgumentError, SocketError } = require_errors();
     var util4 = require_util();
-    var { addSignal, removeSignal } = require_abort_signal();
+    var { addSignal, removeSignal, dispatchWithSignal } = require_abort_signal();
     var ConnectHandler = class extends AsyncResource {
       constructor(opts, callback) {
         if (!opts || typeof opts !== "object") {
@@ -141023,7 +141920,11 @@ var require_api_connect = __commonJS({
       try {
         const connectHandler = new ConnectHandler(opts, callback);
         const connectOptions = { ...opts, method: "CONNECT" };
-        this.dispatch(connectOptions, connectHandler);
+        if (opts.signal == null) {
+          this.dispatch(connectOptions, connectHandler);
+        } else {
+          dispatchWithSignal(this, connectOptions, connectHandler);
+        }
       } catch (err) {
         if (typeof callback !== "function") {
           throw err;
@@ -141303,13 +142204,18 @@ var require_mock_utils = __commonJS({
       if (typeof path8 !== "string") {
         return path8;
       }
+      const queryIndex = path8.indexOf("?");
+      const search = queryIndex === -1 ? "" : path8.slice(queryIndex);
+      if (queryIndex !== -1) {
+        path8 = path8.slice(0, queryIndex);
+      }
       while (path8.endsWith("/")) {
         path8 = path8.slice(0, -1);
       }
       if (path8.length === 0) {
         path8 = "/";
       }
-      return path8;
+      return path8 + search;
     }
     function buildKey(opts) {
       const { path: path8, method, body, headers, query } = opts;
@@ -141396,6 +142302,9 @@ var require_mock_utils = __commonJS({
         paused: false,
         rawHeaders: null,
         rawTrailers: null,
+        get aborted() {
+          return aborted2;
+        },
         pause() {
           this.paused = true;
         },
@@ -143277,8 +144186,11 @@ var require_decorator_handler = __commonJS({
       onResponseStart(...args) {
         assert11(!this.#onCompleteCalled);
         assert11(!this.#onErrorCalled);
-        assert11(!this.#onResponseStartCalled);
-        this.#onResponseStartCalled = true;
+        const statusCode = args[1];
+        if (statusCode >= 200) {
+          assert11(!this.#onResponseStartCalled);
+          this.#onResponseStartCalled = true;
+        }
         return this.#handler.onResponseStart?.(...args);
       }
       onResponseData(...args) {
@@ -143398,7 +144310,11 @@ var require_redirect_handler = __commonJS({
           this.handler.onResponseStart?.(controller, statusCode, headers, statusMessage);
           return;
         }
-        this.history[kRedirectCacheControl].push(headers["cache-control"]);
+        this.history[kRedirectCacheControl].push({
+          statusCode,
+          headers: { ...headers },
+          receivedAt: Date.now()
+        });
         const baseUrl = requestOrigin ? new URL(this.opts.path, requestOrigin) : void 0;
         const { origin: origin2, pathname, search } = util4.parseURL(new URL(this.location, baseUrl));
         const path8 = search ? `${pathname}${search}` : pathname;
@@ -143466,9 +144382,17 @@ var require_redirect_handler = __commonJS({
     function cleanRequestHeaders(headers, removeContent, unknownOrigin, stripHeaders, stripHeadersOnCrossOrigin) {
       const ret = [];
       if (Array.isArray(headers)) {
-        for (let i = 0; i < headers.length; i += 2) {
-          if (!shouldRemoveHeader(headers[i], removeContent, unknownOrigin, stripHeaders, stripHeadersOnCrossOrigin)) {
-            ret.push(headers[i], headers[i + 1]);
+        if (headers.length > 0 && Array.isArray(headers[0])) {
+          for (const [key3, value] of headers) {
+            if (!shouldRemoveHeader(key3, removeContent, unknownOrigin, stripHeaders, stripHeadersOnCrossOrigin)) {
+              ret.push(key3, value);
+            }
+          }
+        } else {
+          for (let i = 0; i < headers.length; i += 2) {
+            if (!shouldRemoveHeader(headers[i], removeContent, unknownOrigin, stripHeaders, stripHeadersOnCrossOrigin)) {
+              ret.push(headers[i], headers[i + 1]);
+            }
           }
         }
       } else if (headers && typeof headers === "object") {
@@ -143492,8 +144416,9 @@ var require_redirect = __commonJS({
   "node_modules/undici/lib/interceptor/redirect.js"(exports, module) {
     "use strict";
     var RedirectHandler = require_redirect_handler();
+    var { kInterceptorKind } = require_symbols();
     function createRedirectInterceptor({ maxRedirections: defaultMaxRedirections, throwOnMaxRedirect: defaultThrowOnMaxRedirect, stripHeadersOnRedirect: defaultStripHeadersOnRedirect, stripHeadersOnCrossOriginRedirect: defaultStripHeadersOnCrossOriginRedirect } = {}) {
-      return (dispatch) => {
+      const interceptor = (dispatch) => {
         return function Intercept(opts, handler) {
           const { maxRedirections = defaultMaxRedirections, throwOnMaxRedirect = defaultThrowOnMaxRedirect, stripHeadersOnRedirect = defaultStripHeadersOnRedirect, stripHeadersOnCrossOriginRedirect = defaultStripHeadersOnCrossOriginRedirect, ...rest } = opts;
           if (maxRedirections == null || maxRedirections === 0) {
@@ -143504,6 +144429,8 @@ var require_redirect = __commonJS({
           return dispatch(dispatchOpts, redirectHandler);
         };
       };
+      interceptor[kInterceptorKind] = "redirect";
+      return interceptor;
     }
     module.exports = createRedirectInterceptor;
   }
@@ -143947,27 +144874,27 @@ var require_dns = __commonJS({
           }
         );
       }
-      #defaultPick(origin2, hostnameRecords, affinity2) {
+      #defaultPick(origin2, hostnameRecords, affinity) {
         let ip = null;
         const { records, offset } = hostnameRecords;
         let family;
         if (this.dualStack) {
-          if (affinity2 == null) {
+          if (affinity == null) {
             if (offset == null || offset === maxInt) {
               hostnameRecords.offset = 0;
-              affinity2 = 4;
+              affinity = 4;
             } else {
               hostnameRecords.offset++;
-              affinity2 = (hostnameRecords.offset & 1) === 1 ? 6 : 4;
+              affinity = (hostnameRecords.offset & 1) === 1 ? 6 : 4;
             }
           }
-          if (records[affinity2] != null && records[affinity2].ips.length > 0) {
-            family = records[affinity2];
+          if (records[affinity] != null && records[affinity].ips.length > 0) {
+            family = records[affinity];
           } else {
-            family = records[affinity2 === 4 ? 6 : 4];
+            family = records[affinity === 4 ? 6 : 4];
           }
         } else {
-          family = records[affinity2];
+          family = records[affinity];
         }
         if (family == null || family.ips.length === 0) {
           return ip;
@@ -143984,7 +144911,7 @@ var require_dns = __commonJS({
         }
         if (Date.now() - ip.timestamp > ip.ttl) {
           family.ips.splice(position, 1);
-          return this.pick(origin2, hostnameRecords, affinity2);
+          return this.pick(origin2, hostnameRecords, affinity);
         }
         return ip;
       }
@@ -144125,11 +145052,11 @@ var require_dns = __commonJS({
         throw new InvalidArgumentError("Invalid storage. Must be a object with methods: { get, set, full, delete }");
       }
       const dualStack = interceptorOpts?.dualStack ?? true;
-      let affinity2;
+      let affinity;
       if (dualStack) {
-        affinity2 = interceptorOpts?.affinity ?? null;
+        affinity = interceptorOpts?.affinity ?? null;
       } else {
-        affinity2 = interceptorOpts?.affinity ?? 4;
+        affinity = interceptorOpts?.affinity ?? 4;
       }
       const opts = {
         maxTTL: interceptorOpts?.maxTTL ?? 1e4,
@@ -144137,7 +145064,7 @@ var require_dns = __commonJS({
         lookup: interceptorOpts?.lookup ?? null,
         pick: interceptorOpts?.pick ?? null,
         dualStack,
-        affinity: affinity2,
+        affinity,
         maxItems: interceptorOpts?.maxItems ?? Infinity,
         storage: interceptorOpts?.storage
       };
@@ -145332,6 +146259,15 @@ var require_cache_handler = __commonJS({
       }
       return false;
     }
+    function appendVaryValues(target, varyValue) {
+      if (Array.isArray(varyValue)) {
+        for (let i = 0; i < varyValue.length; i++) {
+          target.push(varyValue[i]);
+        }
+      } else if (varyValue != null) {
+        target.push(varyValue);
+      }
+    }
     function appendConnectionHeaderTokens(headersToRemove, connectionHeader) {
       const values = Array.isArray(connectionHeader) ? connectionHeader : [connectionHeader];
       for (let i = 0; i < values.length; i++) {
@@ -145393,6 +146329,9 @@ var require_cache_handler = __commonJS({
       deleteLocationTargets(store, cacheKey3, resHeaders.location);
       deleteLocationTargets(store, cacheKey3, resHeaders["content-location"]);
     }
+    function requestCarriesCredentials(headers) {
+      return headers != null && (Object.hasOwn(headers, "authorization") || Object.hasOwn(headers, "cookie") || Object.hasOwn(headers, "proxy-authorization"));
+    }
     var CacheHandler = class {
       /**
        * @type {import('../../types/cache-interceptor.d.ts').default.CacheKey}
@@ -145425,7 +146364,7 @@ var require_cache_handler = __commonJS({
       /**
        * The URLs visited while following redirects, shared by reference from the
        * redirect handler through the request context. Carries the suppressed hops'
-       * cache-control under {@link kRedirectCacheControl}.
+       * status/headers under {@link kRedirectCacheControl}.
        * @type {URL[] | undefined}
        */
       #history;
@@ -145475,20 +146414,28 @@ var require_cache_handler = __commonJS({
           invalidateUnsafeRequest(this.#store, this.#cacheKey, resHeaders);
           return downstreamOnHeaders();
         }
-        if (this.#history && this.#history.length > 0) {
-          const finalUrl = this.#history[this.#history.length - 1];
-          if (!sameOrigin(finalUrl.origin, this.#cacheKey.origin)) {
-            return downstreamOnHeaders();
-          }
+        if (this.#history && this.#history.length > 1 && requestCarriesCredentials(this.#cacheKey.headers)) {
+          return downstreamOnHeaders();
         }
-        const redirectCacheControl = this.#history?.[kRedirectCacheControl];
-        if (redirectCacheControl) {
-          for (const hopCacheControl of redirectCacheControl) {
-            const hopDirectives = hopCacheControl ? parseCacheControlHeader(hopCacheControl) : {};
-            if (hopDirectives["no-store"] === true || this.#cacheType === "shared" && hopDirectives.private === true) {
+        if (this.#history && this.#history.length > 0) {
+          for (const hopUrl of this.#history) {
+            if (!sameOrigin(hopUrl.origin, this.#cacheKey.origin)) {
               return downstreamOnHeaders();
             }
           }
+        }
+        const now2 = Date.now();
+        const redirectHopInfo = this.#history?.[kRedirectCacheControl];
+        const redirectPolicy = redirectHopInfo?.length > 0 ? getRedirectPolicy(
+          this.#cacheType,
+          this.#cacheKey.method,
+          redirectHopInfo,
+          this.#cacheKey.headers,
+          this.#cacheByDefault,
+          now2
+        ) : void 0;
+        if (redirectHopInfo?.length > 0 && redirectPolicy === void 0) {
+          return downstreamOnHeaders();
         }
         const cacheControlHeader = resHeaders["cache-control"];
         const cacheControlDirectives = cacheControlHeader ? parseCacheControlHeader(cacheControlHeader) : {};
@@ -145509,7 +146456,6 @@ var require_cache_handler = __commonJS({
           }
           return downstreamOnHeaders();
         }
-        const now2 = Date.now();
         const resAge = Object.hasOwn(resHeaders, "age") ? getAge(resHeaders.age) : void 0;
         if (resAge !== void 0 && resAge >= MAX_RESPONSE_AGE) {
           deleteCachedValueIfNotModified(statusCode, this.#store, this.#cacheKey);
@@ -145532,27 +146478,53 @@ var require_cache_handler = __commonJS({
           return downstreamOnHeaders();
         }
         const baseTime = now2 - currentAge;
-        const absoluteStaleAt = staleAt + baseTime;
+        let absoluteStaleAt = staleAt + baseTime;
+        if (redirectPolicy !== void 0) {
+          absoluteStaleAt = Math.min(absoluteStaleAt, redirectPolicy.staleAt);
+        }
         if (now2 >= absoluteStaleAt && !revalidationOnly) {
           deleteCachedValueIfNotModified(statusCode, this.#store, this.#cacheKey);
           return downstreamOnHeaders();
         }
         let varyDirectives;
-        if (this.#cacheKey.headers && resHeaders.vary) {
-          varyDirectives = parseVaryHeader(resHeaders.vary, this.#cacheKey.headers);
-          if (!varyDirectives) {
-            return downstreamOnHeaders();
+        const combinedVary = [];
+        if (redirectHopInfo) {
+          for (const hop of redirectHopInfo) {
+            appendVaryValues(combinedVary, hop?.headers?.vary);
+          }
+        }
+        appendVaryValues(combinedVary, resHeaders.vary);
+        if (combinedVary.length > 0) {
+          for (const varyHeader of combinedVary) {
+            if (hasVaryStar(varyHeader)) {
+              return downstreamOnHeaders();
+            }
+          }
+          if (this.#cacheKey.headers) {
+            varyDirectives = parseVaryHeader(combinedVary, this.#cacheKey.headers);
+            if (!varyDirectives) {
+              return downstreamOnHeaders();
+            }
+          }
+        }
+        let effectiveCacheControlDirectives = cacheControlDirectives;
+        if (redirectPolicy !== void 0) {
+          effectiveCacheControlDirectives = { ...cacheControlDirectives };
+          delete effectiveCacheControlDirectives["stale-while-revalidate"];
+          delete effectiveCacheControlDirectives["stale-if-error"];
+          if (redirectPolicy.requiresRevalidation === true) {
+            effectiveCacheControlDirectives["proxy-revalidate"] = true;
           }
         }
         const cachedAt = baseTime;
-        const deleteAt = determineDeleteAt(baseTime, now2, cacheControlDirectives, absoluteStaleAt);
+        const deleteAt = determineDeleteAt(baseTime, now2, effectiveCacheControlDirectives, absoluteStaleAt);
         const strippedHeaders = stripNecessaryHeaders(resHeaders, cacheControlDirectives);
         const value = {
           statusCode,
           statusMessage,
           headers: strippedHeaders,
           vary: varyDirectives,
-          cacheControlDirectives,
+          cacheControlDirectives: effectiveCacheControlDirectives,
           cachedAt,
           staleAt: absoluteStaleAt,
           deleteAt
@@ -145565,6 +146537,13 @@ var require_cache_handler = __commonJS({
             }
             done = true;
             this.#downstreamController.release();
+          };
+          const failReplay = (err) => {
+            if (done) {
+              return;
+            }
+            done = true;
+            controller.abort(err);
           };
           const handle304 = (cachedValue) => {
             if (!cachedValue) {
@@ -145589,14 +146568,18 @@ var require_cache_handler = __commonJS({
                 if (done) {
                   return;
                 }
-                for (const chunk of bodyIterator) {
-                  const full = this.#writeStream?.write(chunk) === false;
-                  this.#handler.onResponseData?.(this.#downstreamController, chunk);
-                  if (full) {
-                    return;
+                try {
+                  for (const chunk of bodyIterator) {
+                    const full = this.#writeStream?.write(chunk) === false;
+                    this.#handler.onResponseData?.(this.#downstreamController, chunk);
+                    if (full) {
+                      return;
+                    }
                   }
+                  finish304();
+                } catch (err) {
+                  failReplay(err);
                 }
-                finish304();
               };
               this.#writeStream.on("error", function() {
                 handler.#writeStream = void 0;
@@ -145613,8 +146596,13 @@ var require_cache_handler = __commonJS({
               streamCachedBody();
             } else if (typeof cachedValue.body.on === "function") {
               cachedValue.body.on("data", (chunk) => {
-                this.#writeStream?.write(chunk);
-                this.#handler.onResponseData?.(this.#downstreamController, chunk);
+                try {
+                  this.#writeStream?.write(chunk);
+                  this.#handler.onResponseData?.(this.#downstreamController, chunk);
+                } catch (err) {
+                  cachedValue.body.destroy();
+                  failReplay(err);
+                }
               }).on("end", () => {
                 this.#writeStream?.end();
                 finish304();
@@ -145730,6 +146718,74 @@ var require_cache_handler = __commonJS({
         }
       }
       return true;
+    }
+    function getRedirectPolicy(cacheType, method, redirectHops, reqHeaders, cacheByDefault, now2) {
+      let staleAt = Infinity;
+      let requiresRevalidation = false;
+      for (const hop of redirectHops) {
+        const hopPolicy = getRedirectHopPolicy(cacheType, method, hop, reqHeaders, cacheByDefault);
+        if (hopPolicy === void 0 || hopPolicy.staleAt <= now2) {
+          return void 0;
+        }
+        staleAt = Math.min(staleAt, hopPolicy.staleAt);
+        requiresRevalidation ||= hopPolicy.requiresRevalidation;
+      }
+      return { staleAt, requiresRevalidation };
+    }
+    function getRedirectHopPolicy(cacheType, method, hop, reqHeaders, cacheByDefault) {
+      if (!Number.isInteger(hop?.statusCode) || !Number.isFinite(hop?.receivedAt)) {
+        return void 0;
+      }
+      const hopHeaders = hop.headers ?? {};
+      const cacheControlHeader = hopHeaders["cache-control"];
+      const hopCacheControl = cacheControlHeader ? parseCacheControlHeader(cacheControlHeader) : {};
+      if (hopHeaders.vary && hasVaryStar(hopHeaders.vary)) {
+        return void 0;
+      }
+      if (hopCacheControl["no-store"] === true) {
+        return void 0;
+      }
+      if (cacheType === "shared" && Object.hasOwn(hopCacheControl, "private")) {
+        return void 0;
+      }
+      if (Object.hasOwn(hopCacheControl, "no-cache") || hopCacheControl["must-revalidate"] === true || cacheType === "shared" && hopCacheControl["proxy-revalidate"] === true) {
+        return void 0;
+      }
+      const heuristicallyCacheable = hopHeaders["last-modified"] && arrayIncludes(HEURISTICALLY_CACHEABLE_STATUS_CODES, hop.statusCode);
+      if (!cacheControlHeader && !hopHeaders.expires && !heuristicallyCacheable && !cacheByDefault) {
+        return void 0;
+      }
+      if (!canCacheResponse(cacheType, method, hop.statusCode, hopHeaders, hopCacheControl, reqHeaders)) {
+        return void 0;
+      }
+      const age = Object.hasOwn(hopHeaders, "age") ? getAge(hopHeaders.age) : void 0;
+      if (age !== void 0 && age >= MAX_RESPONSE_AGE) {
+        return void 0;
+      }
+      const responseDate = Object.hasOwn(hopHeaders, "date") ? getDate(hopHeaders.date) : void 0;
+      if (responseDate === null) {
+        return void 0;
+      }
+      const apparentAge = responseDate ? Math.max(0, hop.receivedAt - responseDate.getTime()) : 0;
+      const currentAge = Math.max(apparentAge, age ?? 0);
+      const hasValidator = typeof hopHeaders.etag === "string" && isEtagUsable(hopHeaders.etag) || typeof hopHeaders["last-modified"] === "string";
+      const freshnessLifetime = determineStaleAt(
+        cacheType,
+        hop.receivedAt,
+        age,
+        hopHeaders,
+        responseDate,
+        hopCacheControl,
+        hasValidator
+      ) ?? cacheByDefault;
+      if (freshnessLifetime === void 0) {
+        return void 0;
+      }
+      return {
+        staleAt: hop.receivedAt - currentAge + freshnessLifetime,
+        // RFC 9111 §5.2.2.10: s-maxage implies proxy-revalidate for shared caches.
+        requiresRevalidation: cacheType === "shared" && Object.hasOwn(hopCacheControl, "s-maxage")
+      };
     }
     function getDate(dateHeader) {
       let dateValue = dateHeader;
@@ -146232,10 +147288,13 @@ var require_cache2 = __commonJS({
       normalizeHeaders: normalizeHeaders3,
       parseCacheControlHeader,
       isInvalidOrWildcardVaryHeader,
-      parseVaryHeader
+      parseVaryHeader,
+      isEtagUsable
     } = require_cache();
     var { AbortError } = require_errors();
+    var { kQueuedAbort } = require_symbols();
     var { parseHttpDate } = require_date();
+    var { kInterceptorKind } = require_symbols();
     function assertCacheOrigins(origins, name) {
       if (origins === void 0) return;
       if (!Array.isArray(origins)) {
@@ -146352,6 +147411,34 @@ var require_cache2 = __commonJS({
       }
       return headers;
     }
+    function revalidationTargetMatchesCacheKey(cacheKey3, context) {
+      const history = context?.history;
+      if (!Array.isArray(history) || history.length === 0) {
+        return true;
+      }
+      try {
+        const cachedUrl = new URL(cacheKey3.path, cacheKey3.origin);
+        const responseUrl = history[history.length - 1];
+        return responseUrl.origin === cachedUrl.origin && responseUrl.pathname === cachedUrl.pathname && responseUrl.search === cachedUrl.search;
+      } catch {
+        return false;
+      }
+    }
+    function revalidationEtagMatchesCachedValue(result, headers) {
+      if (!Object.hasOwn(headers, "etag")) {
+        return true;
+      }
+      const responseEtag = headers.etag;
+      const cachedEtag = result.etag;
+      if (typeof responseEtag !== "string" || typeof cachedEtag !== "string" || !isEtagUsable(responseEtag) || !isEtagUsable(cachedEtag)) {
+        return false;
+      }
+      if (!responseEtag.startsWith("W/")) {
+        return responseEtag === cachedEtag;
+      }
+      const cachedOpaqueTag = cachedEtag.startsWith("W/") ? cachedEtag.slice(2) : cachedEtag;
+      return responseEtag.slice(2) === cachedOpaqueTag;
+    }
     function isStale(result, cacheControlDirectives, cacheType) {
       const now2 = Date.now();
       if (now2 > result.staleAt || result.staleAt <= result.cachedAt) {
@@ -146449,18 +147536,23 @@ var require_cache2 = __commonJS({
       };
       stream4.on("error", function(err) {
         if (!this.readableEnded) {
-          if (typeof handler.onResponseError === "function") {
-            handler.onResponseError(controller, err);
-          } else {
-            throw err;
-          }
+          handler.onResponseError?.(controller, err);
         }
       }).on("close", function() {
         if (!this.errored) {
-          handler.onResponseEnd?.(controller, {});
+          try {
+            handler.onResponseEnd?.(controller, {});
+          } catch (err) {
+            handler.onResponseError?.(controller, err);
+          }
         }
       });
-      handler.onRequestStart?.(controller, context);
+      try {
+        handler.onRequestStart?.(controller, context);
+      } catch (err) {
+        stream4.destroy(err);
+        return;
+      }
       if (stream4.destroyed) {
         return;
       }
@@ -146469,12 +147561,21 @@ var require_cache2 = __commonJS({
         headers.warning = '110 - "response is stale"';
       }
       controller.rawHeaders = util4.toRawHeaders(headers);
-      handler.onResponseStart?.(controller, result.statusCode, headers, result.statusMessage);
+      try {
+        handler.onResponseStart?.(controller, result.statusCode, headers, result.statusMessage);
+      } catch (err) {
+        stream4.destroy(err);
+        return;
+      }
       if (opts.method === "HEAD") {
         stream4.destroy();
       } else {
         stream4.on("data", function(chunk) {
-          handler.onResponseData?.(controller, chunk);
+          try {
+            handler.onResponseData?.(controller, chunk);
+          } catch (err) {
+            stream4.destroy(err);
+          }
         });
       }
     }
@@ -146508,7 +147609,10 @@ var require_cache2 = __commonJS({
             dispatch(
               {
                 ...opts,
-                headers: headers2
+                headers: headers2,
+                // The revalidation is not the caller's request: aborting the
+                // caller must not cancel it while it waits for a connection.
+                [kQueuedAbort]: void 0
               },
               new CacheHandler(globalOpts, cacheKey3, {
                 // Silent handler that just updates the cache
@@ -146537,6 +147641,13 @@ var require_cache2 = __commonJS({
           }
         }
         const headers = makeRevalidationHeaders(opts, result);
+        const refetch = () => {
+          if (util4.isStream(result.body)) {
+            result.body.on("error", nop).destroy();
+          }
+          deleteCachedValue(globalOpts.store, cacheKey3);
+          return dispatch(opts, new CacheHandler(globalOpts, cacheKey3, handler));
+        };
         return dispatch(
           {
             ...opts,
@@ -146546,21 +147657,13 @@ var require_cache2 = __commonJS({
             (success2, context, statusCode, headers2) => {
               if (success2) {
                 if (statusCode === 304) {
-                  if (revalidationResponseDisallowsCachedReuse(globalOpts.type, headers2)) {
-                    if (util4.isStream(result.body)) {
-                      result.body.on("error", nop).destroy();
-                    }
-                    deleteCachedValue(globalOpts.store, cacheKey3);
-                    return dispatch(opts, new CacheHandler(globalOpts, cacheKey3, handler));
+                  if (!revalidationTargetMatchesCacheKey(cacheKey3, context) || !revalidationEtagMatchesCachedValue(result, headers2) || revalidationResponseDisallowsCachedReuse(globalOpts.type, headers2)) {
+                    return refetch();
                   }
                   if (revalidationResponseUpdatesCacheControl(headers2)) {
                     deleteCachedValue(globalOpts.store, cacheKey3);
                   } else if (revalidationResponseAddsVary(result, headers2.vary ? parseVaryHeader(headers2.vary, opts.headers) : void 0)) {
-                    if (util4.isStream(result.body)) {
-                      result.body.on("error", nop).destroy();
-                    }
-                    deleteCachedValue(globalOpts.store, cacheKey3);
-                    return dispatch(opts, new CacheHandler(globalOpts, cacheKey3, handler));
+                    return refetch();
                   }
                 }
                 sendCachedValue(handler, opts, result, age, context, stale);
@@ -146611,7 +147714,7 @@ var require_cache2 = __commonJS({
           safeMethodsToNotCache.push(method);
         }
       }
-      return (dispatch, interceptorOrigin) => {
+      const interceptor = (dispatch, interceptorOrigin) => {
         return (opts2, handler) => {
           const requestOrigin = getInterceptorOrigin(opts2, interceptorOrigin);
           if (!requestOrigin || arrayIncludes(safeMethodsToNotCache, opts2.method)) {
@@ -146658,7 +147761,31 @@ var require_cache2 = __commonJS({
               opts2,
               reqCacheControl,
               result2
-            ));
+            )).catch((err) => {
+              if (typeof handler.onResponseError === "function") {
+                handler.onResponseError({
+                  rawHeaders: [],
+                  rawTrailers: [],
+                  pause() {
+                  },
+                  resume() {
+                  },
+                  get paused() {
+                    return false;
+                  },
+                  get aborted() {
+                    return false;
+                  },
+                  get reason() {
+                    return null;
+                  },
+                  abort() {
+                  }
+                }, err);
+              } else {
+                throw err;
+              }
+            });
           } else {
             return handleResult(
               dispatch,
@@ -146672,6 +147799,8 @@ var require_cache2 = __commonJS({
           }
         };
       };
+      interceptor[kInterceptorKind] = "cache";
+      return interceptor;
     };
   }
 });
@@ -146769,10 +147898,6 @@ var require_decompress = __commonJS({
         }
       });
     }
-    var warningEmitted = (
-      /** @type {boolean} */
-      false
-    );
     var DecompressHandler = class extends DecoratorHandler {
       /** @type {Transform[]} */
       #decompressors = [];
@@ -147134,13 +148259,6 @@ var require_decompress = __commonJS({
       }
     };
     function createDecompressInterceptor(options = {}) {
-      if (!warningEmitted) {
-        process.emitWarning(
-          "DecompressInterceptor is experimental and subject to change",
-          "ExperimentalWarning"
-        );
-        warningEmitted = true;
-      }
       return (dispatch) => {
         return (opts, handler) => {
           if (opts.method === "HEAD") {
@@ -147580,6 +148698,7 @@ var require_deduplicate = __commonJS({
     var util4 = require_util();
     var DeduplicationHandler = require_deduplication_handler();
     var { getInterceptorOrigin, normalizeHeaders: normalizeHeaders3, makeCacheKey, makeDeduplicationKey } = require_cache();
+    var { kInterceptorKind } = require_symbols();
     var pendingRequestsChannel = diagnosticsChannel.channel("undici:request:pending-requests");
     module.exports = (opts = {}) => {
       const {
@@ -147611,7 +148730,7 @@ var require_deduplicate = __commonJS({
       const skipHeaderNamesSet = new Set(skipHeaderNames.map((name) => name.toLowerCase()));
       const excludeHeaderNamesSet = new Set(excludeHeaderNames.map((name) => name.toLowerCase()));
       const pendingRequests = /* @__PURE__ */ new Map();
-      return (dispatch, interceptorOrigin) => {
+      const interceptor = (dispatch, interceptorOrigin) => {
         return (opts2, handler) => {
           const requestOrigin = getInterceptorOrigin(opts2, interceptorOrigin);
           if (!requestOrigin || opts2.upgrade || methods.includes(opts2.method) === false) {
@@ -147654,6 +148773,8 @@ var require_deduplicate = __commonJS({
           return dispatch(opts2, deduplicationHandler);
         };
       };
+      interceptor[kInterceptorKind] = "deduplicate";
+      return interceptor;
     };
   }
 });
@@ -147666,10 +148787,15 @@ var require_sqlite_cache_store = __commonJS({
     var { assertCacheKey, assertCacheValue } = require_cache();
     var { zstdCompressSync, zstdDecompressSync } = __require("zlib");
     var DatabaseSync;
-    var VERSION4 = 4;
+    var VERSION4 = 5;
     var MAX_ENTRY_SIZE = 2 * 1e3 * 1e3 * 1e3;
     var COMPRESS_THRESHOLD = 1024 * 1024;
     var hasZstd = typeof zstdCompressSync === "function" && typeof zstdDecompressSync === "function";
+    var SQLITE_BUSY = 5;
+    var SQLITE_LOCKED = 6;
+    function isLockedError(err) {
+      return err?.errcode === SQLITE_BUSY || err?.errcode === SQLITE_LOCKED;
+    }
     module.exports = class SqliteCacheStore {
       #maxEntrySize = MAX_ENTRY_SIZE;
       #maxCount = Infinity;
@@ -147852,7 +148978,7 @@ var require_sqlite_cache_store = __commonJS({
        */
       get(key3) {
         assertCacheKey(key3);
-        const value = this.#findValue(key3);
+        const value = this.#lockSafe(() => this.#findValue(key3));
         return value ? {
           body: value.body ? value.compressed === "zstd" ? zstdDecompressSync(Buffer.from(value.body.buffer, value.body.byteOffset, value.body.byteLength)) : Buffer.from(value.body.buffer, value.body.byteOffset, value.body.byteLength) : void 0,
           statusCode: value.statusCode,
@@ -147887,9 +149013,9 @@ var require_sqlite_cache_store = __commonJS({
             compressed = "zstd";
           }
         }
-        const existingValue = this.#findValue(key3, true);
+        const existingValue = this.#lockSafe(() => this.#findValue(key3, true));
         if (existingValue) {
-          this.#updateValueQuery.run(
+          this.#lockSafe(() => this.#updateValueQuery.run(
             storedBody,
             compressed,
             value.deleteAt,
@@ -147902,9 +149028,9 @@ var require_sqlite_cache_store = __commonJS({
             value.cachedAt,
             value.staleAt,
             existingValue.id
-          );
+          ));
         } else {
-          this.#insertValueQuery.run(
+          this.#lockSafe(() => this.#insertValueQuery.run(
             url3,
             key3.method,
             storedBody,
@@ -147918,7 +149044,7 @@ var require_sqlite_cache_store = __commonJS({
             value.vary ? JSON.stringify(value.vary) : null,
             value.cachedAt,
             value.staleAt
-          );
+          ));
           this.#prune();
         }
       }
@@ -147957,20 +149083,46 @@ var require_sqlite_cache_store = __commonJS({
         if (typeof key3 !== "object") {
           throw new TypeError(`expected key to be object, got ${typeof key3}`);
         }
-        this.#deleteByUrlQuery.run(this.#makeValueUrl(key3));
+        this.#lockSafe(() => this.#deleteByUrlQuery.run(this.#makeValueUrl(key3)));
+      }
+      /**
+       * Runs a database operation, skipping it when another connection holds the
+       * database lock.
+       *
+       * The cache store is meant to be shared between processes, and SQLite reports
+       * a concurrent writer as SQLITE_BUSY/SQLITE_LOCKED. Those errors are
+       * transient, and caching is best effort: the entry is skipped and the next
+       * request retries, rather than failing the request that triggered the write.
+       *
+       * @template T
+       * @param {() => T} fn
+       * @returns {T | undefined}
+       */
+      #lockSafe(fn) {
+        try {
+          return fn();
+        } catch (err) {
+          if (!isLockedError(err)) {
+            throw err;
+          }
+          return void 0;
+        }
       }
       #prune() {
-        if (Number.isFinite(this.#maxCount) && this.size <= this.#maxCount) {
-          return 0;
+        if (Number.isFinite(this.#maxCount)) {
+          const size5 = this.#lockSafe(() => this.size);
+          if (size5 === void 0 || size5 <= this.#maxCount) {
+            return 0;
+          }
         }
         {
-          const removed = this.#deleteExpiredValuesQuery.run(Date.now()).changes;
+          const removed = this.#lockSafe(() => this.#deleteExpiredValuesQuery.run(Date.now()).changes);
           if (removed) {
             return removed;
           }
         }
         {
-          const removed = this.#deleteOldValuesQuery?.run(Math.max(Math.floor(this.#maxCount * 0.1), 1)).changes;
+          const removed = this.#lockSafe(() => this.#deleteOldValuesQuery?.run(Math.max(Math.floor(this.#maxCount * 0.1), 1)).changes);
           if (removed) {
             return removed;
           }
@@ -148959,41 +150111,64 @@ var require_request2 = __commonJS({
     var { URLSerializer } = require_data_url();
     var { kConstruct } = require_symbols();
     var assert11 = __require("assert");
-    var { getMaxListeners, setMaxListeners: setMaxListeners7, defaultMaxListeners } = __require("events");
-    var kAbortController = /* @__PURE__ */ Symbol("abortController");
-    var requestFinalizer = new FinalizationRegistry(({ signal, abort }) => {
-      signal.removeEventListener("abort", abort);
+    var requestFinalizer = new FinalizationRegistry(({ signal, reference }) => {
+      removeSignalFollower(signal, reference);
     });
-    var dependentControllerMap = /* @__PURE__ */ new WeakMap();
-    var abortSignalHasEventHandlerLeakWarning;
-    try {
-      abortSignalHasEventHandlerLeakWarning = getMaxListeners(new AbortController().signal) > 0;
-    } catch {
-      abortSignalHasEventHandlerLeakWarning = false;
-    }
-    function buildAbort(acRef) {
-      return abort;
-      function abort() {
-        const ac = acRef.deref();
-        if (ac !== void 0) {
-          requestFinalizer.unregister(abort);
-          this.removeEventListener("abort", abort);
-          ac.abort(this.reason);
-          const controllerList = dependentControllerMap.get(ac.signal);
-          if (controllerList !== void 0) {
-            if (controllerList.size !== 0) {
-              for (const ref of controllerList) {
-                const ctrl = ref.deref();
-                if (ctrl !== void 0) {
-                  ctrl.abort(this.reason);
-                }
-              }
-              controllerList.clear();
-            }
-            dependentControllerMap.delete(ac.signal);
-          }
-        }
+    var requestSignals = /* @__PURE__ */ new WeakMap();
+    var signalFollowers = /* @__PURE__ */ new WeakMap();
+    function removeSignalFollower(signal, reference) {
+      const followers = signalFollowers.get(signal);
+      if (followers instanceof Set) {
+        followers.delete(reference);
+        if (followers.size !== 0) return;
       }
+      signal.removeEventListener("abort", abortSignalFollowers);
+      signalFollowers.delete(signal);
+    }
+    function abortSignalFollower(reference, reason) {
+      requestFinalizer.unregister(reference);
+      const ac = reference.deref();
+      if (ac !== void 0) {
+        requestSignals.delete(ac.signal);
+        ac.abort(reason);
+      }
+    }
+    function abortSignalFollowers() {
+      this.removeEventListener("abort", abortSignalFollowers);
+      const followers = signalFollowers.get(this);
+      if (followers instanceof Set) {
+        for (const reference of followers) {
+          abortSignalFollower(reference, this.reason);
+        }
+        followers.clear();
+      } else {
+        abortSignalFollower(followers, this.reason);
+      }
+      signalFollowers.delete(this);
+    }
+    function createDependentSignal(signal) {
+      const ac = new AbortController();
+      if (signal == null) return ac.signal;
+      if (signal.aborted) {
+        ac.abort(signal.reason);
+        return ac.signal;
+      }
+      const reference = new WeakRef(ac);
+      const followers = signalFollowers.get(signal);
+      if (followers === void 0) {
+        util4.addAbortListener(signal, abortSignalFollowers);
+        signalFollowers.set(signal, reference);
+      } else if (followers instanceof WeakRef) {
+        const controllers = /* @__PURE__ */ new Set();
+        controllers.add(followers);
+        controllers.add(reference);
+        signalFollowers.set(signal, controllers);
+      } else {
+        followers.add(reference);
+      }
+      requestFinalizer.register(ac, { signal, reference }, reference);
+      requestSignals.set(ac.signal, { controller: ac, source: signal, reference });
+      return ac.signal;
     }
     var patchMethodWarning = false;
     var setRequestSignal;
@@ -149011,12 +150186,6 @@ var require_request2 = __commonJS({
       /** @type {Headers} */
       #headers;
       #state;
-      /**
-       * Removes the `abort` listener that makes this request's signal follow the
-       * passed signal. `null` when no such listener was registered.
-       * @type {(() => void) | null}
-       */
-      #abortCleanup = null;
       // https://fetch.spec.whatwg.org/#dom-request
       constructor(input2, init2 = void 0) {
         webidl.util.markAsUncloneable(this);
@@ -149202,27 +150371,7 @@ var require_request2 = __commonJS({
           signal = init2.signal;
         }
         this.#state = request2;
-        const ac = new AbortController();
-        this.#signal = ac.signal;
-        if (signal != null) {
-          if (signal.aborted) {
-            ac.abort(signal.reason);
-          } else {
-            this[kAbortController] = ac;
-            const acRef = new WeakRef(ac);
-            const abort = buildAbort(acRef);
-            if (abortSignalHasEventHandlerLeakWarning && getMaxListeners(signal) === defaultMaxListeners) {
-              setMaxListeners7(1500, signal);
-            }
-            const removeAbortListener = util4.addAbortListener(signal, abort);
-            requestFinalizer.register(ac, { signal, abort }, abort);
-            this.#abortCleanup = () => {
-              requestFinalizer.unregister(abort);
-              removeAbortListener();
-              this.#abortCleanup = null;
-            };
-          }
-        }
+        this.#signal = createDependentSignal(signal);
         this.#headers = new Headers2(kConstruct);
         setHeadersList(this.#headers, request2.headersList);
         setHeadersGuard(this.#headers, "request");
@@ -149416,23 +150565,8 @@ var require_request2 = __commonJS({
           throw new TypeError("unusable");
         }
         const clonedRequest = cloneRequest(this.#state);
-        const ac = new AbortController();
-        if (this.signal.aborted) {
-          ac.abort(this.signal.reason);
-        } else {
-          let list = dependentControllerMap.get(this.signal);
-          if (list === void 0) {
-            list = /* @__PURE__ */ new Set();
-            dependentControllerMap.set(this.signal, list);
-          }
-          const acRef = new WeakRef(ac);
-          list.add(acRef);
-          util4.addAbortListener(
-            ac.signal,
-            buildAbort(acRef)
-          );
-        }
-        return fromInnerRequest(clonedRequest, this.#dispatcher, ac.signal, getHeadersGuard(this.#headers));
+        const signal = createDependentSignal(this.#signal);
+        return fromInnerRequest(clonedRequest, this.#dispatcher, signal, getHeadersGuard(this.#headers));
       }
       [nodeUtil.inspect.custom](depth, options) {
         if (options.depth === null) {
@@ -149478,7 +150612,12 @@ var require_request2 = __commonJS({
           request2.#state = newState;
         };
         removeRequestAbortListener = (request2) => {
-          request2.#abortCleanup?.();
+          const state = requestSignals.get(request2.#signal);
+          if (state !== void 0) {
+            requestSignals.delete(request2.#signal);
+            requestFinalizer.unregister(state.reference);
+            removeSignalFollower(state.source, state.reference);
+          }
         };
         webidl.is.Request = (arg) => {
           return arg != null && typeof arg === "object" && #state in arg;
@@ -149760,7 +150899,7 @@ var require_subresource_integrity = __commonJS({
     }
     function parseMetadata(metadata) {
       const result = [];
-      for (const item of metadata.split(" ")) {
+      for (const item of metadata.split(/[\t\n\f\r ]+/)) {
         const expressionAndOptions = item.split("?", 1);
         const algorithmExpression = expressionAndOptions[0];
         let base64Value = "";
@@ -149882,7 +151021,7 @@ var require_fetch = __commonJS({
     var EE = __require("events");
     var { Readable: Readable4, pipeline: pipeline2, finished: finished2, isErrored, isReadable } = __require("stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
-    var { SocketError } = require_errors();
+    var { SocketError, InformationalError } = require_errors();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
     var { webidl } = require_webidl();
@@ -150011,11 +151150,8 @@ var require_fetch = __commonJS({
           cleanupAbortListeners();
         },
         processResponse,
-        dispatcher: getRequestDispatcher(requestObject),
+        dispatcher: getRequestDispatcher(requestObject)
         // undici
-        // Keep requestObject alive to prevent its AbortController from being GC'd
-        // See https://github.com/nodejs/undici/issues/4627
-        requestObject
       });
       return p.promise;
     }
@@ -150083,10 +151219,8 @@ var require_fetch = __commonJS({
       processResponseEndOfBody,
       processResponseConsumeBody,
       useParallelQueue = false,
-      dispatcher = getGlobalDispatcher(),
+      dispatcher = getGlobalDispatcher()
       // undici
-      requestObject = null
-      // Keep alive to prevent AbortController GC, see #4627
     }) {
       assert11(dispatcher);
       let taskDestination = null;
@@ -150109,9 +151243,7 @@ var require_fetch = __commonJS({
         processResponseConsumeBody,
         processResponseEndOfBody,
         taskDestination,
-        crossOriginIsolatedCapability,
-        // Keep requestObject alive to prevent its AbortController from being GC'd
-        requestObject
+        crossOriginIsolatedCapability
       };
       assert11(!request2.body || request2.body.stream);
       if (request2.window === "client") {
@@ -150910,6 +152042,7 @@ var require_fetch = __commonJS({
                     }
                   }
                 }
+                this.nullBodyStatus = nullBodyStatus.includes(status2);
                 this.body = new Readable4({ read: () => controller.resume() });
                 const onError = (err) => this.onResponseError(controller, err);
                 resolve3({
@@ -150924,6 +152057,10 @@ var require_fetch = __commonJS({
                 });
               },
               onResponseData(controller, chunk) {
+                if (this.nullBodyStatus) {
+                  controller.abort(new InformationalError("response with null body status has content"));
+                  return;
+                }
                 if (fetchParams.controller.dump) {
                   return;
                 }
@@ -150943,6 +152080,10 @@ var require_fetch = __commonJS({
               onResponseError(controller, error62) {
                 if (this.abort) {
                   fetchParams.controller.off("terminated", this.abort);
+                }
+                if (this.nullBodyStatus) {
+                  this.body?.destroy();
+                  return;
                 }
                 if (request2.mode === "websocket" && allowH2 !== false && error62?.code === "UND_ERR_INFO" && error62?.message === "HTTP/2: Extended CONNECT protocol not supported by server") {
                   resolve3(dispatchWithProtocolPreference(body2, false));
@@ -163868,12 +165009,13 @@ var init_web_search_provider = __esm({
 });
 
 // node_modules/@polymarket/clob-client-v2/dist/errors.js
-var L1_AUTH_UNAVAILABLE_ERROR, L2_AUTH_NOT_AVAILABLE, ApiError;
+var L1_AUTH_UNAVAILABLE_ERROR, L2_AUTH_NOT_AVAILABLE, isApiErrorResponse, ApiError;
 var init_errors7 = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/errors.js"() {
     "use strict";
     L1_AUTH_UNAVAILABLE_ERROR = /* @__PURE__ */ new Error("Signer is needed to interact with this endpoint!");
     L2_AUTH_NOT_AVAILABLE = /* @__PURE__ */ new Error("API Credentials are needed to interact with this endpoint!");
+    isApiErrorResponse = (result) => typeof result === "object" && result !== null && !Array.isArray(result) && "error" in result;
     ApiError = class extends Error {
       status;
       data;
@@ -180499,7 +181641,7 @@ var init_estimateDataURLDecodedBytes = __esm({
       const len = body.length;
       let significant = 0;
       let padding3 = 0;
-      let invalid = false;
+      let invalid2 = false;
       for (let i = 0; i < len; i++) {
         let code = body.charCodeAt(i);
         if (code === 37 && isPercentEncodedByte(body, i, len)) {
@@ -180514,12 +181656,12 @@ var init_estimateDataURLDecodedBytes = __esm({
           continue;
         }
         if (!isBase64Char(code) || padding3 > 0) {
-          invalid = true;
+          invalid2 = true;
           continue;
         }
         significant++;
       }
-      if (invalid || padding3 > 2 || padding3 > 0 && (significant + padding3) % 4 !== 0 || significant % 4 === 1) {
+      if (invalid2 || padding3 > 2 || padding3 > 0 && (significant + padding3) % 4 !== 0 || significant % 4 === 1) {
         return estimateBase64BufferAllocation(body);
       }
       return base64Bytes(significant);
@@ -184112,7 +185254,7 @@ var init_calculateSellMarketPrice = __esm({
 });
 
 // node_modules/@polymarket/clob-client-v2/dist/client.js
-var RESOLVE_TRADES_TIMEOUT_MS, RESOLVE_TRADES_POLL_INTERVAL_MS, FAILED_TRADE_STATUS, sleep5, isTradeResolved, ClobClient;
+var RESOLVE_TRADES_TIMEOUT_MS, RESOLVE_TRADES_POLL_INTERVAL_MS, FAILED_TRADE_STATUS, sleep5, isTradeResolved, toApiError, pageItems, requireFields, ClobClient;
 var init_client5 = __esm({
   "node_modules/@polymarket/clob-client-v2/dist/client.js"() {
     "use strict";
@@ -184139,6 +185281,20 @@ var init_client5 = __esm({
     FAILED_TRADE_STATUS = "FAILED";
     sleep5 = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
     isTradeResolved = (trade) => trade.status.toUpperCase() === FAILED_TRADE_STATUS || Boolean(trade.transaction_hash && trade.transaction_hash.length > 0);
+    toApiError = (result) => {
+      return new ApiError(typeof result.error === "string" ? result.error : JSON.stringify(result.error), result.status, result);
+    };
+    pageItems = (page, endpoint) => {
+      if (Array.isArray(page?.data)) return page.data;
+      if (isApiErrorResponse(page)) throw toApiError(page);
+      throw new ApiError(`unexpected response from ${endpoint}: expected a page with a data array`, void 0, page);
+    };
+    requireFields = (result, endpoint, ...fields) => {
+      if (isApiErrorResponse(result)) throw toApiError(result);
+      const missing2 = fields.filter((field) => result?.[field] === void 0 || result[field] === null);
+      if (missing2.length > 0) throw new ApiError(`unexpected response from ${endpoint}: missing ${missing2.join(", ")}`, void 0, result);
+      return result;
+    };
     ClobClient = class {
       host;
       chainId;
@@ -184255,7 +185411,8 @@ var init_client5 = __esm({
       }
       async fetchClobMarketInfo(conditionID) {
         const result = await this.get(`${this.host}${GET_CLOB_MARKET}${conditionID}`);
-        if (!result?.t) throw new Error(`failed to fetch market info for condition id ${conditionID}`);
+        if (isApiErrorResponse(result)) throw toApiError(result);
+        if (!result?.t) throw new ApiError(`failed to fetch market info for condition id ${conditionID}`, void 0, result);
         for (const token of result.t) {
           if (!token) continue;
           const tokenId = token.t;
@@ -184281,7 +185438,7 @@ var init_client5 = __esm({
           await this.getClobMarketInfo(this.tokenConditionMap[tokenID]);
           return this.tickSizes[tokenID];
         }
-        const result = await this.get(`${this.host}${GET_TICK_SIZE}`, { params: { token_id: tokenID } });
+        const result = requireFields(await this.get(`${this.host}${GET_TICK_SIZE}`, { params: { token_id: tokenID } }), GET_TICK_SIZE, "minimum_tick_size");
         this.tickSizes[tokenID] = result.minimum_tick_size.toString();
         return this.tickSizes[tokenID];
       }
@@ -184291,13 +185448,13 @@ var init_client5 = __esm({
           await this.getClobMarketInfo(this.tokenConditionMap[tokenID]);
           return this.negRisk[tokenID];
         }
-        const result = await this.get(`${this.host}${GET_NEG_RISK}`, { params: { token_id: tokenID } });
+        const result = requireFields(await this.get(`${this.host}${GET_NEG_RISK}`, { params: { token_id: tokenID } }), GET_NEG_RISK, "neg_risk");
         this.negRisk[tokenID] = result.neg_risk;
         return this.negRisk[tokenID];
       }
       async getFeeRateBps(tokenID) {
         if (tokenID in this.feeRates) return this.feeRates[tokenID];
-        const result = await this.get(`${this.host}${GET_FEE_RATE}`, { params: { token_id: tokenID } });
+        const result = requireFields(await this.get(`${this.host}${GET_FEE_RATE}`, { params: { token_id: tokenID } }), GET_FEE_RATE, "base_fee");
         this.feeRates[tokenID] = result.base_fee;
         return this.feeRates[tokenID];
       }
@@ -184468,21 +185625,10 @@ var init_client5 = __esm({
           requestPath: endpoint
         };
         const headers = await createL2Headers(this.signer, this.creds, headerArgs, this.useServerTime ? await this.getServerTime() : void 0);
-        let results = [];
-        next_cursor = next_cursor || INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR && (next_cursor === INITIAL_CURSOR || !only_first_page)) {
-          const _params = {
-            ...params,
-            next_cursor
-          };
-          const response = await this.get(`${this.host}${endpoint}`, {
-            headers,
-            params: _params
-          });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+        return this.getAllPages(endpoint, {
+          headers,
+          params
+        }, next_cursor, only_first_page);
       }
       async getTradesPaginated(params, next_cursor) {
         this.canL2Auth();
@@ -184651,21 +185797,10 @@ var init_client5 = __esm({
           requestPath: endpoint
         };
         const headers = await createL2Headers(this.signer, this.creds, l2HeaderArgs, this.useServerTime ? await this.getServerTime() : void 0);
-        let results = [];
-        next_cursor = next_cursor || INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR && (next_cursor === INITIAL_CURSOR || !only_first_page)) {
-          const _params = {
-            ...params,
-            next_cursor
-          };
-          const response = await this.get(`${this.host}${endpoint}`, {
-            headers,
-            params: _params
-          });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+        return this.getAllPages(endpoint, {
+          headers,
+          params
+        }, next_cursor, only_first_page);
       }
       async getPreMigrationOrders(only_first_page = false, next_cursor) {
         this.canL2Auth();
@@ -184675,18 +185810,7 @@ var init_client5 = __esm({
           requestPath: endpoint
         };
         const headers = await createL2Headers(this.signer, this.creds, l2HeaderArgs, this.useServerTime ? await this.getServerTime() : void 0);
-        let results = [];
-        next_cursor = next_cursor || INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR && (next_cursor === INITIAL_CURSOR || !only_first_page)) {
-          const _params = { next_cursor };
-          const response = await this.get(`${this.host}${endpoint}`, {
-            headers,
-            params: _params
-          });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+        return this.getAllPages(endpoint, { headers }, next_cursor, only_first_page);
       }
       /**
       * Posts an order to the CLOB.
@@ -184854,22 +185978,13 @@ var init_client5 = __esm({
           requestPath: endpoint
         };
         const headers = await createL2Headers(this.signer, this.creds, headerArgs, this.useServerTime ? await this.getServerTime() : void 0);
-        let results = [];
-        let next_cursor = INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR) {
-          const params = {
+        return this.getAllPages(endpoint, {
+          headers,
+          params: {
             date: date5,
-            signature_type: this.orderBuilder.signatureType,
-            next_cursor
-          };
-          const response = await this.get(`${this.host}${endpoint}`, {
-            headers,
-            params
-          });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+            signature_type: this.orderBuilder.signatureType
+          }
+        });
       }
       async getTotalEarningsForUserForDay(date5) {
         this.canL2Auth();
@@ -184896,25 +186011,16 @@ var init_client5 = __esm({
           requestPath: endpoint
         };
         const headers = await createL2Headers(this.signer, this.creds, headerArgs, this.useServerTime ? await this.getServerTime() : void 0);
-        let results = [];
-        let next_cursor = INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR) {
-          const params = {
+        return this.getAllPages(endpoint, {
+          headers,
+          params: {
             date: date5,
             signature_type: this.orderBuilder.signatureType,
-            next_cursor,
             order_by,
             position,
             no_competition
-          };
-          const response = await this.get(`${this.host}${endpoint}`, {
-            headers,
-            params
-          });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+          }
+        });
       }
       async getRewardPercentages() {
         this.canL2Auth();
@@ -184931,27 +186037,14 @@ var init_client5 = __esm({
         });
       }
       async getCurrentRewards() {
-        let results = [];
-        let next_cursor = INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR) {
-          const response = await this.get(`${this.host}${GET_REWARDS_MARKETS_CURRENT}`, { params: { next_cursor } });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+        return this.getAllPages(GET_REWARDS_MARKETS_CURRENT);
       }
       async getRawRewardsForMarket(conditionId) {
-        let results = [];
-        let next_cursor = INITIAL_CURSOR;
-        while (next_cursor !== END_CURSOR) {
-          const response = await this.get(`${this.host}${GET_REWARDS_MARKETS}${conditionId}`, { params: { next_cursor } });
-          next_cursor = response.next_cursor;
-          results = [...results, ...response.data];
-        }
-        return results;
+        return this.getAllPages(`${GET_REWARDS_MARKETS}${conditionId}`);
       }
       async calculateMarketPrice(tokenID, side, amount, orderType = OrderType.FOK) {
         const book = await this.getOrderBook(tokenID);
+        if (isApiErrorResponse(book)) throw toApiError(book);
         if (!book) throw new Error("no orderbook");
         if (side === Side.BUY) {
           if (!book.asks) throw new Error("no match");
@@ -185018,7 +186111,8 @@ var init_client5 = __esm({
         if (tokenID in this.feeInfos) return;
         if (!(tokenID in this.tokenConditionMap)) {
           const result = await this.get(`${this.host}${GET_MARKET_BY_TOKEN}${tokenID}`);
-          if (!result?.condition_id) throw new Error(`failed to resolve condition id for token ${tokenID}`);
+          if (isApiErrorResponse(result)) throw toApiError(result);
+          if (!result?.condition_id) throw new ApiError(`failed to resolve condition id for token ${tokenID}`, void 0, result);
           this.tokenConditionMap[tokenID] = result.condition_id;
         }
         if (tokenID in this.feeInfos) return;
@@ -185027,14 +186121,19 @@ var init_client5 = __esm({
       async ensureBuilderFeeRateCached(builderCode) {
         if (!builderCode || builderCode === bytes32Zero) return;
         if (builderCode in this.builderFeeRates) return;
-        const result = await this.get(`${this.host}${GET_BUILDER_FEES}${builderCode}`);
+        const endpoint = `${GET_BUILDER_FEES}${builderCode}`;
+        const result = requireFields(await this.get(`${this.host}${endpoint}`), endpoint, "builder_maker_fee_rate_bps", "builder_taker_fee_rate_bps");
         this.builderFeeRates[builderCode] = {
           maker: result.builder_maker_fee_rate_bps / BUILDER_FEES_BPS,
           taker: result.builder_taker_fee_rate_bps / BUILDER_FEES_BPS
         };
       }
       async _resolveTickSize(tokenID, tickSize) {
-        const minTickSize = await this.getTickSize(tokenID);
+        let minTickSize = await this.getTickSize(tokenID);
+        if (tickSize && isTickSizeSmaller(tickSize, minTickSize)) {
+          delete this.tickSizes[tokenID];
+          minTickSize = await this.getTickSize(tokenID);
+        }
         if (tickSize) {
           if (isTickSizeSmaller(tickSize, minTickSize)) throw new Error(`invalid tick size (${tickSize}), minimum for the market is ${minTickSize}`);
         } else tickSize = minTickSize;
@@ -185066,8 +186165,32 @@ var init_client5 = __esm({
         return (typeof error62 === "string" ? error62 : JSON.stringify(error62)).includes(ORDER_VERSION_MISMATCH_ERROR);
       }
       throwIfError(result) {
-        if (this.throwOnError && result && typeof result === "object" && "error" in result) throw new ApiError(typeof result.error === "string" ? result.error : JSON.stringify(result.error), result.status, result);
+        if (this.throwOnError && isApiErrorResponse(result)) throw toApiError(result);
         return result;
+      }
+      /**
+      * Collects the items of a cursor-paginated GET endpoint, starting at `cursor` and
+      * following `next_cursor` until the server returns END_CURSOR. With `onlyFirstPage`
+      * it fetches the page at `cursor` alone. A failed page rejects with ApiError whatever
+      * `throwOnError` is, since a partial list cannot be told apart from a complete one.
+      */
+      async getAllPages(endpoint, options = {}, cursor, onlyFirstPage = false) {
+        const items = [];
+        let nextCursor = cursor || INITIAL_CURSOR;
+        while (nextCursor !== END_CURSOR) {
+          const page = await this.get(`${this.host}${endpoint}`, {
+            ...options,
+            params: {
+              ...options.params,
+              next_cursor: nextCursor
+            }
+          });
+          items.push(...pageItems(page, endpoint));
+          if (onlyFirstPage) break;
+          if (typeof page.next_cursor !== "string" || page.next_cursor.length === 0) throw new ApiError(`unexpected response from ${endpoint}: expected a non-empty next_cursor string`, void 0, page);
+          nextCursor = page.next_cursor;
+        }
+        return items;
       }
       async get(endpoint, options, skipThrow = false) {
         const result = await get(endpoint, options);
@@ -306019,7 +307142,7 @@ var require_axios = __commonJS({
       const len = body.length;
       let significant = 0;
       let padding3 = 0;
-      let invalid = false;
+      let invalid2 = false;
       for (let i = 0; i < len; i++) {
         let code = body.charCodeAt(i);
         if (code === 37 && isPercentEncodedByte2(body, i, len)) {
@@ -306034,12 +307157,12 @@ var require_axios = __commonJS({
           continue;
         }
         if (!isBase64Char2(code) || padding3 > 0) {
-          invalid = true;
+          invalid2 = true;
           continue;
         }
         significant++;
       }
-      if (invalid || padding3 > 2 || padding3 > 0 && (significant + padding3) % 4 !== 0 || significant % 4 === 1) {
+      if (invalid2 || padding3 > 2 || padding3 > 0 && (significant + padding3) % 4 !== 0 || significant % 4 === 1) {
         return estimateBase64BufferAllocation2(body);
       }
       return base64Bytes2(significant);
