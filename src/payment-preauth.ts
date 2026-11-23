@@ -138,6 +138,17 @@ export function createPayFetchWithPreAuth(
 
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
+    // Every request below is `request` or a clone of it, and Node's fetch ties a
+    // Request's signal to the caller's only through a weak reference: once the
+    // Request built here is garbage-collected, an abort of the caller's signal
+    // no longer reaches the fetch in flight. The proxy's global deadline and
+    // client-disconnect abort then do nothing, and a hung upstream holds the
+    // call until the socket times out (a batch payment in flight sat through a
+    // 1.5s deadline for 30s+ once GC ran mid-request). Passing the caller's
+    // own signal to each fetch keeps the link strong.
+    const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const send: FetchFn = (req, extra) =>
+      baseFetch(req, callerSignal ? { ...extra, signal: callerSignal } : extra);
     const urlPath = new URL(request.url).pathname;
 
     // Extract model + size from the request body. Model gives a per-model cache
@@ -250,7 +261,7 @@ export function createPayFetchWithPreAuth(
           preAuthRequest.headers.set(key, value);
         }
         paymentInFlight = true;
-        const response = await baseFetch(preAuthRequest);
+        const response = await send(preAuthRequest);
         if (response.status !== 402) {
           notifyAcceptedPayment(response, payload);
           return response; // Pre-auth worked — saved ~200ms
@@ -292,7 +303,7 @@ export function createPayFetchWithPreAuth(
     const closesAtStart = batch ? await batch.payer.closeFence() : undefined;
     const batchTemplate = batch ? request.clone() : undefined;
     const clonedRequest = request.clone();
-    const response = await baseFetch(request);
+    const response = await send(request);
     if (response.status !== 402) {
       return response;
     }
@@ -330,7 +341,7 @@ export function createPayFetchWithPreAuth(
         batchTemplate,
         paymentRequired,
         closesAtStart,
-        baseFetch,
+        send,
         httpClient,
       );
       if (outcome.kind === "done") {
@@ -358,7 +369,7 @@ export function createPayFetchWithPreAuth(
     for (const [key, value] of Object.entries(paymentHeaders)) {
       clonedRequest.headers.set(key, value);
     }
-    const paidResponse = await baseFetch(clonedRequest);
+    const paidResponse = await send(clonedRequest);
     if (paidResponse.status === 402) notifyDeclinedPayment();
     notifyAcceptedPayment(paidResponse, payload);
     return paidResponse;
