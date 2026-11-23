@@ -88,7 +88,7 @@
     "url": "git+https://github.com/BlockRunAI/ClawRouter.git"
   },
   "dependencies": {
-    "@blockrun/llm": "^3.23.1",
+    "@blockrun/llm": "^4.3.1",
     "@noble/hashes": "^2.2.0",
     "@polymarket/builder-relayer-client": "^0.0.10",
     "@polymarket/builder-signing-sdk": "0.0.8",
