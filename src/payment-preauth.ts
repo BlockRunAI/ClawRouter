@@ -145,8 +145,15 @@ export function createPayFetchWithPreAuth(
     // client-disconnect abort then do nothing, and a hung upstream holds the
     // call until the socket times out (a batch payment in flight sat through a
     // 1.5s deadline for 30s+ once GC ran mid-request). Passing the caller's
-    // own signal to each fetch keeps the link strong.
-    const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    // own signal to each fetch keeps the link strong. An explicit
+    // `signal: null` detaches the input Request's signal, so only an absent
+    // one inherits it.
+    const callerSignal =
+      init?.signal !== undefined
+        ? init.signal
+        : input instanceof Request
+          ? input.signal
+          : undefined;
     const send: FetchFn = (req, extra) =>
       baseFetch(req, callerSignal ? { ...extra, signal: callerSignal } : extra);
     const urlPath = new URL(request.url).pathname;

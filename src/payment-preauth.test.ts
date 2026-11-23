@@ -330,6 +330,31 @@ describe("payment pre-auth — per-request pricing safety", () => {
     for (const signal of signals) expect(signal).toBe(caller.signal);
   });
 
+  it("honours an explicit signal: null that detaches an aborted input Request", async () => {
+    const gw = fakeGateway();
+    // Like real fetch: a send whose effective signal is already aborted rejects.
+    const honouringAbort = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const signal =
+        init?.signal !== undefined
+          ? init.signal
+          : input instanceof Request
+            ? input.signal
+            : undefined;
+      if (signal?.aborted) throw new DOMException("This operation was aborted", "AbortError");
+      return gw.fn(input, init);
+    }) as typeof fetch;
+    const pay = createPayFetchWithPreAuth(honouringAbort, testClient(), undefined, {
+      estimateAmount: () => "1000",
+    });
+    const aborted = new AbortController();
+    aborted.abort();
+    const input = new Request(URL, { method: "POST", body: body(), signal: aborted.signal });
+
+    const res = await pay(input, { signal: null });
+    expect(res.status).toBe(200);
+    expect(gw.calls.map((c) => c.paid)).toEqual([false, true]);
+  });
+
   it("disables pre-auth entirely when no estimator is provided (never underpays)", async () => {
     const gw = fakeGateway();
     const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {}); // no estimateAmount
