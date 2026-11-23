@@ -4,6 +4,31 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.320 — November 23, 2026
+
+### Kimi K3.1 Pro's math routing score is measured, not copied
+
+`@blockrun/router-core` is pinned to 3b2904a (router-core#15). On the same 50
+pinned MGSM problems, Kimi K3.1 Pro answered 41 and Kimi K3 44; every one of
+K3's extra wins was K3.1 Pro hitting the 512-token budget, and at 2,048 tokens
+both reached 46. Its reasoning-math affinity moves from 0.90 (carried over
+from K3) to 0.88, so for math prompts Kimi now sits among the fallbacks rather
+than the scored candidates. The primary model does not change for any prompt
+in the decision snapshot. Kimi's other affinity values are still carried over
+from K3.
+
+### Dependencies
+
+`@polymarket/clob-client-v2` 1.3.1, `undici` 8.13.0 and other Dependabot
+updates (#639).
+
+### Smaller package
+
+viem is bundled once instead of twice and `dist/` is minified (identifiers
+kept): the npm tarball drops from 4.66MB to 3.38MB packed. (#640)
+
+---
+
 ## v0.12.319 — November 23, 2026
 
 ### The Kimi slot routes to Kimi K3.1 Pro
