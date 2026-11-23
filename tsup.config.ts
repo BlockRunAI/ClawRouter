@@ -1,6 +1,42 @@
 import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "tsup";
+import type { Plugin } from "esbuild";
+
+/**
+ * Packages that publish both a CommonJS and an ES build and must be bundled once,
+ * as ES modules.
+ *
+ * Our source imports viem as ESM, but the Polymarket SDKs are CommonJS and
+ * `require("viem")` / `require("viem/chains")`. esbuild resolves a require() through
+ * the package's "require" export condition, so it inlined viem's `_cjs` build
+ * (and ox's and abitype's beneath it) beside the `_esm` one: 2.8MB of second copy,
+ * none of it tree-shakeable, every chain definition included. Two copies are also
+ * two module identities (two `BaseError` classes, two chain objects) on the path
+ * that signs Polymarket orders.
+ *
+ * Re-resolving those require() calls with the "import" condition points them at
+ * the ESM build we already bundle; esbuild wraps it for require(). Verified
+ * byte-identical on the SDK paths we use (Safe/proxy derivation, multisend and
+ * proxy encoding, message and EIP-712 signatures). smoke-dist fails the build if a
+ * `_cjs` file of these packages comes back.
+ */
+const ESM_ONLY = /^(viem|ox|abitype)(\/.*)?$/;
+const esmOnlyDualPackages: Plugin = {
+  name: "esm-only-dual-packages",
+  setup(build) {
+    build.onResolve({ filter: ESM_ONLY }, async (args) => {
+      if (args.kind !== "require-call" || args.pluginData === "esm-only") return undefined;
+      const resolved = await build.resolve(args.path, {
+        kind: "import-statement",
+        resolveDir: args.resolveDir,
+        importer: args.importer,
+        pluginData: "esm-only",
+      });
+      return resolved.errors.length > 0 ? undefined : { path: resolved.path };
+    });
+  },
+};
 
 export default defineConfig({
   entry: ["src/index.ts", "src/cli.ts", "src/router/index.ts"],
@@ -10,6 +46,17 @@ export default defineConfig({
   sourcemap: true,
   target: "node22",
   splitting: false,
+  // Whitespace and syntax only: identifiers stay intact, so a stack trace a user
+  // pastes still names our functions (the .map files are not published). Cuts the
+  // bundle ~30%. Full `minify` would save another ~1.7MB but mangle every name.
+  minifyWhitespace: true,
+  minifySyntax: true,
+  // dist/metafile-esm.json lists every input file per output. smoke-dist reads it to
+  // find duplicate packages; minified output no longer carries esbuild's
+  // `// node_modules/...` comments, and the sourcemap maps viem's _cjs and _esm
+  // builds back to the same src/ files. Not published (see package.json "files").
+  metafile: true,
+  esbuildPlugins: [esmOnlyDualPackages],
   noExternal: [/.*/],
   external: [...builtinModules.flatMap((m) => [m, `node:${m}`])],
   esbuildOptions(options) {
