@@ -305,6 +305,56 @@ describe("payment pre-auth — per-request pricing safety", () => {
     spy.mockRestore();
   });
 
+  it("hands every send the caller's own signal, so an abort survives GC of the Request", async () => {
+    // Node's fetch follows a Request's signal only through a weak reference:
+    // once the Request this module builds is collected, aborting the caller's
+    // signal no longer reaches a fetch in flight (repro: a cloned Request on a
+    // hung socket, gc(), abort — the fetch never settles). The fix passes the
+    // caller's signal to each send; pin that it is the SAME object, not a
+    // follower, on the unpaid probe, the paid retry and a pre-auth send.
+    const gw = fakeGateway();
+    const signals: Array<AbortSignal | null | undefined> = [];
+    const recording = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      signals.push(init?.signal);
+      return gw.fn(input, init);
+    }) as typeof fetch;
+    const pay = createPayFetchWithPreAuth(recording, testClient(), undefined, {
+      estimateAmount: () => "1000",
+    });
+    const caller = new AbortController();
+
+    await pay(URL, { method: "POST", body: body(), signal: caller.signal }); // probe + paid retry
+    await pay(URL, { method: "POST", body: body(), signal: caller.signal }); // pre-auth
+    expect(gw.calls.map((c) => c.paid)).toEqual([false, true, true]);
+    expect(signals).toHaveLength(3);
+    for (const signal of signals) expect(signal).toBe(caller.signal);
+  });
+
+  it("honours an explicit signal: null that detaches an aborted input Request", async () => {
+    const gw = fakeGateway();
+    // Like real fetch: a send whose effective signal is already aborted rejects.
+    const honouringAbort = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const signal =
+        init?.signal !== undefined
+          ? init.signal
+          : input instanceof Request
+            ? input.signal
+            : undefined;
+      if (signal?.aborted) throw new DOMException("This operation was aborted", "AbortError");
+      return gw.fn(input, init);
+    }) as typeof fetch;
+    const pay = createPayFetchWithPreAuth(honouringAbort, testClient(), undefined, {
+      estimateAmount: () => "1000",
+    });
+    const aborted = new AbortController();
+    aborted.abort();
+    const input = new Request(URL, { method: "POST", body: body(), signal: aborted.signal });
+
+    const res = await pay(input, { signal: null });
+    expect(res.status).toBe(200);
+    expect(gw.calls.map((c) => c.paid)).toEqual([false, true]);
+  });
+
   it("disables pre-auth entirely when no estimator is provided (never underpays)", async () => {
     const gw = fakeGateway();
     const pay = createPayFetchWithPreAuth(gw.fn, testClient(), undefined, {}); // no estimateAmount
