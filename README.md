@@ -557,7 +557,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | openai/gpt-5.5              | 1M      | reasoning, vision, agentic, tools                      |
 | openai/gpt-6-astra          | 1M      | reasoning, vision, agentic, tools (GPT-6 flagship)     |
 | anthropic/claude-fable-5.1  | 1M      | reasoning, vision, agentic, tools (always-on thinking) |
-| moonshot/kimi-k3            | 1M      | reasoning, vision, agentic, tools                      |
+| moonshot/kimi-k3.1-pro      | 1M      | reasoning, vision, agentic, tools                      |
 | openai/chat-latest          | 128K    | vision, tools                                          |
 | openai/o1                   | 200K    | reasoning, tools                                       |
 | openai/gpt-5.2-pro          | 400K    | reasoning, tools                                       |
