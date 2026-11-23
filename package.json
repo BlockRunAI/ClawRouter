@@ -116,7 +116,7 @@
   },
   "devDependencies": {
     "@blockrun/model-catalog": "https://codeload.github.com/BlockRunAI/model-catalog/tar.gz/fbe63065c111020f7868d3b444480501423b4fbd",
-    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/273c2af0a9abe70212efbad7117b72eb3038cffc",
+    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/02136fb6debedead5747f618b3381894331f9330",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.2.0",
     "openclaw": "^2026.7.2-beta.7",
