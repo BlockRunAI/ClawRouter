@@ -30,6 +30,7 @@
   "files": [
     "dist",
     "!dist/**/*.map",
+    "!dist/metafile-*.json",
     "docs/*.md",
     "docs/*.png",
     "scripts",

@@ -29,10 +29,40 @@ const failures = [];
 // The identifier rename cures the SyntaxError but NOT this; only the alias does, and a
 // loadable bundle would hide it. Assert the copy is absent, not merely harmless.
 // Deliberately generous: a canary for a whole extra copy of something (v0.12.220 hit
-// ~10MB that way), not a size budget. viem/ox/undici plus the Polymarket SDKs put the
-// honest floor near 7.5MB. If this trips, find the duplicate — only raise it once you
-// have confirmed the growth is real.
-const MAX_BUNDLE_BYTES = 12 * 1024 * 1024;
+// ~10MB that way), not a size budget. Since the bundle is whitespace/syntax-minified
+// and viem is bundled once (tsup.config.ts), index.js sits near 6.9MB; any second copy
+// of ClawRouter or of viem lands well above this. If it trips, find the duplicate —
+// only raise it once you have confirmed the growth is real.
+const MAX_BUNDLE_BYTES = 9 * 1024 * 1024;
+
+// The bundle is minified, so esbuild's `// node_modules/...` module comments are gone,
+// and the sourcemap is no substitute: it follows each package's own maps back to its
+// src/, so viem's _cjs and _esm builds both read as `viem/src/...`. tsup's metafile
+// lists the real input files of every output; every duplicate check below reads it.
+const METAFILE = resolve(root, "dist", "metafile-esm.json");
+let metafile = null;
+try {
+  metafile = JSON.parse(readFileSync(METAFILE, "utf8"));
+} catch (err) {
+  failures.push(
+    `dist/metafile-esm.json is unreadable (${err.message}) — tsup.config.ts must keep ` +
+      `\`metafile: true\`; without it none of the duplicate checks can run.`,
+  );
+}
+
+/** The bundled input files (\`node_modules/...\` or \`src/...\`) of one dist entry. */
+function bundledInputs(entry) {
+  const output = metafile?.outputs?.[`dist/${entry}`];
+  return output ? Object.keys(output.inputs) : null;
+}
+
+/**
+ * Packages that ship CommonJS and ES builds side by side and must be bundled only as
+ * ESM. The Polymarket SDKs require() viem; without the esm-only plugin in
+ * tsup.config.ts that pulled viem's whole _cjs build (and ox's, abitype's) in beside
+ * the _esm one — +2.8MB and two module identities on the order-signing path.
+ */
+const DUAL_FORMAT_CJS = /^(?:.*\/)?node_modules\/(viem|ox|abitype)\/_cjs\//;
 
 /**
  * The @solana/* packages that must never appear twice in a bundle.
@@ -56,17 +86,16 @@ const SINGLE_COPY_SOLANA_PACKAGES = [
 /**
  * How many distinct installed copies of each guarded package esbuild inlined.
  *
- * Counting marker lines is wrong twice over: one copy emits a marker per dist
+ * Counting input files is wrong twice over: one copy contributes a file per dist
  * entry it pulls in, and "@solana/signers/node_modules/@solana/errors/..." is a
- * copy of errors, not of signers. Both are counted by resolving each marker to the
+ * copy of errors, not of signers. Both are counted by resolving each input to the
  * package it actually names — everything after the LAST node_modules/ segment —
- * and then counting distinct install paths, not lines.
+ * and then counting distinct install paths, not files.
  */
-function countSolanaCopies(source) {
+function countSolanaCopies(inputs) {
   const paths = new Map();
-  for (const line of source.split("\n")) {
-    if (!line.startsWith("// node_modules/")) continue;
-    const marker = line.slice("// ".length).trim();
+  for (const marker of inputs) {
+    if (!marker.startsWith("node_modules/")) continue;
     const owner = marker.slice(marker.lastIndexOf("node_modules/") + "node_modules/".length);
     const pkg = owner.match(/^@solana\/[^/]+/)?.[0];
     if (!pkg) continue;
@@ -86,11 +115,11 @@ function countSolanaCopies(source) {
 // and a different package nested underneath this one.
 {
   const probe = [
-    "// node_modules/@solana/signers/dist/index.node.mjs",
-    "// node_modules/@solana/signers/dist/program-client-core.node.mjs",
-    "// node_modules/@solana/signers/node_modules/@solana/errors/dist/index.node.mjs",
-    "// node_modules/@x402/svm/node_modules/@solana/signers/dist/index.node.mjs",
-  ].join("\n");
+    "node_modules/@solana/signers/dist/index.node.mjs",
+    "node_modules/@solana/signers/dist/program-client-core.node.mjs",
+    "node_modules/@solana/signers/node_modules/@solana/errors/dist/index.node.mjs",
+    "node_modules/@x402/svm/node_modules/@solana/signers/dist/index.node.mjs",
+  ];
   const seen = new Map(countSolanaCopies(probe));
   if (seen.get("@solana/signers") !== 2) {
     failures.push(
@@ -99,6 +128,15 @@ function countSolanaCopies(source) {
         `exactly 2. Fix countSolanaCopies — until then this check proves nothing.`,
     );
   }
+}
+
+// Same for the dual-format matcher: it must catch the _cjs build and pass the _esm one.
+if (
+  DUAL_FORMAT_CJS.exec("node_modules/viem/_cjs/chains/index.js")?.[1] !== "viem" ||
+  DUAL_FORMAT_CJS.test("node_modules/viem/_esm/chains/index.js") ||
+  DUAL_FORMAT_CJS.test("node_modules/@x402/viem-adapter/_cjs/index.js")
+) {
+  failures.push("smoke-dist's dual-format matcher (DUAL_FORMAT_CJS) is broken.");
 }
 
 for (const entry of ["index.js", "cli.js", "router/index.js"]) {
@@ -110,11 +148,25 @@ for (const entry of ["index.js", "cli.js", "router/index.js"]) {
     failures.push(`dist/${entry} is unreadable: ${err.message}`);
     continue;
   }
-  if (source.includes("// node_modules/@blockrun/clawrouter/")) {
+  const inputs = bundledInputs(entry);
+  if (metafile && !inputs) {
+    failures.push(`dist/metafile-esm.json has no output for dist/${entry}`);
+  }
+  if (inputs?.some((p) => p.includes("node_modules/@blockrun/clawrouter/"))) {
     failures.push(
-      `dist/${entry} has a stale published ClawRouter inlined into it (esbuild module ` +
-        `marker "// node_modules/@blockrun/clawrouter/" is present) — the tsup alias for ` +
+      `dist/${entry} has a stale published ClawRouter inlined into it (an input under ` +
+        `"node_modules/@blockrun/clawrouter/" is bundled) — the tsup alias for ` +
         `the @blockrun/llm back-import is missing or broken.`,
+    );
+  }
+  const cjsCopies = [
+    ...new Set((inputs ?? []).map((p) => p.match(DUAL_FORMAT_CJS)?.[1]).filter(Boolean)),
+  ];
+  if (cjsCopies.length > 0) {
+    failures.push(
+      `dist/${entry} bundles the CommonJS build of ${cjsCopies.join(", ")} beside the ESM ` +
+        `one — a second, untree-shaken copy. The esm-only plugin in tsup.config.ts is ` +
+        `missing, or a new require() path escapes it.`,
     );
   }
   if (source.length > MAX_BUNDLE_BYTES) {
@@ -123,7 +175,7 @@ for (const entry of ["index.js", "cli.js", "router/index.js"]) {
         `${MAX_BUNDLE_BYTES / 1024 / 1024}MB ceiling — likely a dependency inlined twice.`,
     );
   }
-  const copies = countSolanaCopies(source);
+  const copies = countSolanaCopies(inputs ?? []);
   // Harmless to signing, not to size: npm nests a private copy of every stateless
   // @solana/* package under each dependent when an `overrides` entry touches the
   // tree, and at kit 8 that was 20 copies of errors and +2.1MB (8.0→10.1MB) —
