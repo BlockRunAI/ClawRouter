@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.324 — November 24, 2026
+
+### Routing moves off the models retiring in December
+
+`@blockrun/router-core` is pinned to d57f021 (router-core#17 and #18), so the
+routing chains follow the same successors as the shorthands in v0.12.323:
+
+- Gemini 2.5 Flash → Gemini 3.5 Flash-Lite, which is now the AUTO SIMPLE
+  primary at the same price.
+- Gemini 2.5 Pro → Gemini 3.8 Flash.
+- `gpt-5-mini` → `gpt-5.6-luna` as the AGENTIC MEDIUM primary, which is cheaper.
+- `o3` rungs are dropped; `gpt-5.4-mini` already held the next rung.
+
+Each successor's task-affinity values are carried over from the model it
+replaces, not re-measured. `gpt-5-nano` was never in a routing chain.
+
+---
+
 ## v0.12.323 — November 24, 2026
 
 ### Shorthands for models retiring in December point at their successors

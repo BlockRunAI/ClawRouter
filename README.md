@@ -292,12 +292,12 @@ Request → 15-dimension scorer → tier + task shape
 3. **Rank** — survivors are scored on task quality, capability, estimated cost, speed and reliability, with per-profile weights (`eco` leans on cost, `premium` on quality and reliability).
 4. **Recover** — the whole ranked list rides along as the fallback chain, so a provider timeout or 5xx costs a retry, not the task.
 
-| Tier      | ECO Model                         | AUTO Model        | PREMIUM Model    | AGENTIC Model ‡ |
-| --------- | --------------------------------- | ----------------- | ---------------- | --------------- |
-| SIMPLE    | nemotron-3.5-lightning (**FREE**) | gemini-2.5-flash  | gemini-3.6-flash | gpt-4o-mini     |
-| MEDIUM    | glm-5.3-flash                     | gemini-3.6-flash  | gpt-5.3-codex    | gpt-5-mini      |
-| COMPLEX   | glm-5.3-flash                     | gemini-3.1-pro    | claude-fable-5   | claude-sonnet-5 |
-| REASONING | deepseek-reasoner                 | deepseek-reasoner | claude-sonnet-5  | claude-sonnet-5 |
+| Tier      | ECO Model                         | AUTO Model            | PREMIUM Model    | AGENTIC Model ‡ |
+| --------- | --------------------------------- | --------------------- | ---------------- | --------------- |
+| SIMPLE    | nemotron-3.5-lightning (**FREE**) | gemini-3.5-flash-lite | gemini-3.6-flash | gpt-4o-mini     |
+| MEDIUM    | glm-5.3-flash                     | gemini-3.6-flash      | gpt-5.3-codex    | gpt-5.6-luna    |
+| COMPLEX   | glm-5.3-flash                     | gemini-3.1-pro        | claude-fable-5   | claude-sonnet-5 |
+| REASONING | deepseek-reasoner                 | deepseek-reasoner     | claude-sonnet-5  | claude-sonnet-5 |
 
 † Withheld from `/v1/models` — since Router Core V3.5 no chain names such a model: every primary and every fallback rung above is a model you can find on the public pricing page. [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) prices the published savings claim on the same visible models.
 ‡ Auto-selected in any profile when the turn actually needs its attached tools; prefers models that keep going instead of stopping to ask.
