@@ -294,8 +294,8 @@ Request → 15-dimension scorer → tier + task shape
 
 | Tier      | ECO Model                         | AUTO Model        | PREMIUM Model    | AGENTIC Model ‡ |
 | --------- | --------------------------------- | ----------------- | ---------------- | --------------- |
-| SIMPLE    | nemotron-3.5-lightning (**FREE**) | gemini-2.5-flash  | gemini-3.5-flash | gpt-4o-mini     |
-| MEDIUM    | glm-5.3-flash                     | gemini-3.5-flash  | gpt-5.3-codex    | gpt-5-mini      |
+| SIMPLE    | nemotron-3.5-lightning (**FREE**) | gemini-2.5-flash  | gemini-3.6-flash | gpt-4o-mini     |
+| MEDIUM    | glm-5.3-flash                     | gemini-3.6-flash  | gpt-5.3-codex    | gpt-5-mini      |
 | COMPLEX   | glm-5.3-flash                     | gemini-3.1-pro    | claude-fable-5   | claude-sonnet-5 |
 | REASONING | deepseek-reasoner                 | deepseek-reasoner | claude-sonnet-5  | claude-sonnet-5 |
 
