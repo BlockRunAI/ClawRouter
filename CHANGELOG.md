@@ -4,6 +4,22 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.323 — November 24, 2026
+
+### Shorthands for models retiring in December point at their successors
+
+Google retires Gemini 2.5 Flash and 2.5 Pro on December 1, and OpenAI shuts
+`o3` and `gpt-5-mini` on December 11. The shorthands now resolve to the models
+the gateways will redirect them to, all of which are live today:
+
+- `gemini` → `gemini-3.8-flash`, and `flash` → `gemini-3.5-flash-lite` (#647)
+- `o3` → `gpt-5.4-mini`, and `gpt-5-mini` → `gpt-5.6-luna` (#648)
+
+`gpt-5-nano` keeps resolving to itself. It costs less than any successor, and
+the gateways keep serving it until February 9, 2027.
+
+---
+
 ## v0.12.322 — November 24, 2026
 
 ### Retired provider models resolve to their successors
