@@ -568,6 +568,9 @@ describe("2026-11-24 retirements", () => {
     "openai/o4-mini": "openai/gpt-5.4-mini",
     "google/gemini-3.5-flash": "google/gemini-3.6-flash",
     "free/north-mini-code": "free/laguna-xs-2.1",
+    // 2026-12-01: Google retires Gemini 2.5.
+    "google/gemini-2.5-pro": "google/gemini-3.8-flash",
+    "google/gemini-2.5-flash": "google/gemini-3.5-flash-lite",
   };
 
   it("marks each retired id with the gateway's redirect target and drops it from the picker", () => {
@@ -577,7 +580,10 @@ describe("2026-11-24 retirements", () => {
         id,
       ).toMatchObject({ deprecated: true, fallbackModel });
       expect(TOP_MODELS, id).not.toContain(id);
-      expect(VISIBLE_OPENCLAW_MODELS.map((m) => m.id), id).not.toContain(id);
+      expect(
+        VISIBLE_OPENCLAW_MODELS.map((m) => m.id),
+        id,
+      ).not.toContain(id);
       // The target is a live, listed model.
       const target = BLOCKRUN_MODELS.find((m) => m.id === fallbackModel);
       expect(target?.deprecated, fallbackModel).toBeUndefined();
@@ -594,6 +600,8 @@ describe("2026-11-24 retirements", () => {
       "coder-free": "free/laguna-xs-2.1",
       "north-mini": "free/laguna-xs-2.1",
       "north-mini-code": "free/laguna-xs-2.1",
+      gemini: "google/gemini-3.8-flash",
+      flash: "google/gemini-3.5-flash-lite",
     };
     for (const [alias, target] of Object.entries(pins)) {
       expect(resolveModelAlias(alias), alias).toBe(target);

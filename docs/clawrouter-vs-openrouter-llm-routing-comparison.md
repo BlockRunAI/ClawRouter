@@ -77,13 +77,13 @@ OpenRouter uses nested model IDs: `openrouter/deepseek/deepseek-v3.2`. OpenClaw'
 
 ### How ClawRouter Solves This
 
-ClawRouter uses clean aliases. You say `sonnet` and get `anthropic/claude-sonnet-4.6`. You say `flash` and get `google/gemini-2.5-flash`. No nested prefixes. No double-prefix bugs.
+ClawRouter uses clean aliases. You say `sonnet` and get `anthropic/claude-sonnet-4.6`. You say `flash` and get `google/gemini-3.5-flash-lite`. No nested prefixes. No double-prefix bugs.
 
 ```typescript
 // resolveModelAlias() handles all normalization
 "sonnet"     → "anthropic/claude-sonnet-4.6"
 "opus"       → "anthropic/claude-opus-5"
-"flash"      → "google/gemini-2.5-flash"
+"flash"      → "google/gemini-3.5-flash-lite"
 "grok"       → "xai/grok-4.5"
 "deepseek"   → "deepseek/deepseek-v4.1-flash"
 ```

@@ -270,8 +270,13 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gemini-pro": "google/gemini-3.1-pro",
   "gemini-3-pro": "google/gemini-3.1-pro",
   "gemini-3.1-pro": "google/gemini-3.1-pro",
-  gemini: "google/gemini-2.5-pro",
-  flash: "google/gemini-2.5-flash",
+  // Google retired Gemini 2.5 on 2026-12-01 and the gateways redirect
+  // gemini-2.5-pro -> gemini-3.8-flash ($1.25/$10 -> $0.75/$3.75) and
+  // gemini-2.5-flash -> gemini-3.5-flash-lite (same $0.30/$2.50). The bare
+  // shorthands follow the redirect. `flash` loses image input with it: 3.5
+  // Flash-Lite is text-only. Pin gemini-3.6-flash for a vision Flash.
+  gemini: "google/gemini-3.8-flash",
+  flash: "google/gemini-3.5-flash-lite",
   "gemini-3.1-pro-preview": "google/gemini-3.1-pro",
   "google/gemini-3.1-pro-preview": "google/gemini-3.1-pro",
   "gemini-3.6-flash": "google/gemini-3.6-flash",
@@ -1574,6 +1579,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
     vision: true,
     toolCalling: true,
+    // RETIRED 2026-12-01 by Google. The gateways redirect it to
+    // gemini-3.8-flash ($0.75/$3.75) before pricing. Entry kept so explicit
+    // pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "google/gemini-3.8-flash",
   },
   {
     id: "google/gemini-2.5-flash",
@@ -1585,6 +1595,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 65536,
     vision: true,
     toolCalling: true,
+    // RETIRED 2026-12-01 by Google. The gateways redirect it to
+    // gemini-3.5-flash-lite (same $0.30/$2.50, no image input) before pricing.
+    // Entry kept so explicit pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "google/gemini-3.5-flash-lite",
   },
   {
     // vision LIVE-VERIFIED 2026-08-31: 3 of 3 proxy probes with a 64x64 solid-red
