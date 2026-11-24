@@ -496,7 +496,6 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | zai/glm-5-turbo                             | 200K    | tools                                               |
 | minimax/minimax-m3                          | 1M      | reasoning, agentic, tools                           |
 | minimax/minimax-m2.7                        | 205K    | reasoning, agentic, tools                           |
-| google/gemini-2.5-flash                     | 1M      | vision, tools                                       |
 | google/gemini-3.5-flash-lite                | 1M      | reasoning, tools (thinking built-in)                |
 | openai/gpt-4.1-mini                         | 128K    | tools                                               |
 | google/gemini-3-flash-preview               | 1M      | vision                                              |
@@ -512,7 +511,6 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | mistral/mistral-large-4     | 512K    | reasoning, vision, tools                    |
 | tencent/hy4-preview         | 1M      | reasoning (Tencent Hy4, 770B MoE)           |
 | openai/gpt-5.6-terra-pro    | 1M      | reasoning, vision, agentic, tools           |
-| google/gemini-2.5-pro       | 1M      | reasoning, vision, tools                    |
 | zai/glm-5.2                 | 1M      | reasoning, coding, tools (flagship)         |
 | zai/glm-5.1                 | 200K    | reasoning, tools (promo ended 2026-06-05)   |
 | deepseek/deepseek-v4-pro    | 1M      | reasoning, agentic, tools (V4 flagship)     |
