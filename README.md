@@ -479,6 +479,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | free/muse-glimmer-30b                       | 131K    | reasoning (Meta Muse, text only)                    |
 | qwen/qwen3.7-flash                          | 1M      | reasoning, tools (fastest Qwen tier)                |
 | poolside/laguna-s-2.1                       | 1M      | coding (paid sibling of laguna-xs)                  |
+| openai/gpt-5-nano                           | 128K    | tools                                               |
 | openai/gpt-5.6-luna-pro                     | 1M      | reasoning, vision, agentic, tools                   |
 | openai/gpt-4.1-nano                         | 128K    | tools                                               |
 | google/gemini-2.5-flash-lite                | 1M      | tools                                               |

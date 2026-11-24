@@ -571,10 +571,10 @@ describe("2026-11-24 retirements", () => {
     // 2026-12-01: Google retires Gemini 2.5.
     "google/gemini-2.5-pro": "google/gemini-3.8-flash",
     "google/gemini-2.5-flash": "google/gemini-3.5-flash-lite",
-    // 2026-12-11: OpenAI shuts down o3, gpt-5-mini and gpt-5-nano.
+    // 2026-12-11: OpenAI shuts down o3 and gpt-5-mini. (gpt-5-nano too, but
+    // the gateways keep serving it from Azure until 2027-02-09; see below.)
     "openai/o3": "openai/gpt-5.4-mini",
     "openai/gpt-5-mini": "openai/gpt-5.6-luna",
-    "openai/gpt-5-nano": "openai/gpt-6-luna",
   };
 
   it("marks each retired id with the gateway's redirect target and drops it from the picker", () => {
@@ -607,7 +607,6 @@ describe("2026-11-24 retirements", () => {
       gemini: "google/gemini-3.8-flash",
       flash: "google/gemini-3.5-flash-lite",
       o3: "openai/gpt-5.4-mini",
-      "gpt-5-nano": "openai/gpt-6-luna",
     };
     for (const [alias, target] of Object.entries(pins)) {
       expect(resolveModelAlias(alias), alias).toBe(target);
@@ -621,6 +620,20 @@ describe("2026-11-24 retirements", () => {
     expect(stale).toEqual([]);
   });
 
+  it("keeps the gpt-5-nano shorthand on gpt-5-nano, the cheapest live answer, until 2027-02-09", () => {
+    // Owner decision 2026-11-24: the gateways do NOT redirect gpt-5-nano on
+    // 2026-12-11. Azure serves it at $0.05/$0.40 until 2027-02-09, and every
+    // live OpenAI model is dearer on input (gpt-6-luna is $0.10/$0.50).
+    expect(resolveModelAlias("gpt-5-nano")).toBe("openai/gpt-5-nano");
+    const nano = BLOCKRUN_MODELS.find((m) => m.id === "openai/gpt-5-nano")!;
+    expect([nano.inputPrice, nano.outputPrice]).toEqual([0.05, 0.4]);
+    for (const alt of ["openai/gpt-6-luna", "openai/gpt-5.4-nano"]) {
+      const m = BLOCKRUN_MODELS.find((x) => x.id === alt)!;
+      expect(m.inputPrice, alt).toBeGreaterThan(nano.inputPrice);
+      expect(m.outputPrice, alt).toBeGreaterThan(nano.outputPrice);
+    }
+  });
+
   it("keeps the redirected successors priced no higher than what callers signed up for", () => {
     // A redirect that raises the bill is a product decision, not a retirement.
     const price = (id: string) => BLOCKRUN_MODELS.find((m) => m.id === id)!;
@@ -628,14 +641,6 @@ describe("2026-11-24 retirements", () => {
       if (id === "openai/o3-mini" || id === "openai/o4-mini" || id === "openai/o1-mini") {
         // $1.10/$4.40 -> $0.75/$4.50: the gateway's chosen nearest-price
         // successor costs more per output token, less per input token.
-        continue;
-      }
-      if (id === "openai/gpt-5-nano") {
-        // $0.05/$0.40 -> $0.10/$0.50: no live OpenAI model is as cheap, and
-        // gpt-6-luna is OpenAI's named replacement. Dearer on both axes, so it
-        // waits on the owner's decision at the gateways (the alternative is
-        // Azure, which serves gpt-5-nano until 2027-02-09).
-        expect([price(target).inputPrice, price(target).outputPrice]).toEqual([0.1, 0.5]);
         continue;
       }
       expect(price(target).inputPrice, id).toBeLessThanOrEqual(price(id).inputPrice);

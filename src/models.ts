@@ -144,11 +144,13 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-5.4-pro": "openai/gpt-5.4-pro",
   "gpt-5.4-nano": "openai/gpt-5.4-nano",
   nano: "openai/gpt-5.4-nano",
-  // gpt-5-nano: OpenAI shuts it down on 2026-12-11 and the gateways redirect
-  // it to gpt-6-luna ($0.10/$0.50), OpenAI's named replacement. The shorthand
-  // used to skip to gpt-5.4-nano ($0.20/$1.25), which costs more on both axes
-  // and is itself shut down on 2027-04-01; it now follows the gateway.
-  "gpt-5-nano": "openai/gpt-6-luna",
+  // gpt-5-nano: OpenAI shuts it down on 2026-12-11, but the gateways keep
+  // serving it at its own $0.05/$0.40 from Azure until 2027-02-09 (owner
+  // decision 2026-11-24: every live OpenAI model is dearer on input). So the
+  // shorthand names it: the cheapest live answer. It used to skip to
+  // gpt-5.4-nano ($0.20/$1.25), dearer on both axes. Move it with the
+  // gateways' 2027-02-09 retirement.
+  "gpt-5-nano": "openai/gpt-5-nano",
   codex: "openai/gpt-5.3-codex",
   mini: "openai/gpt-4o-mini",
   // OpenAI shut down o1, o3-mini and o4-mini on 2026-10-23 (Azure's o-series
@@ -782,11 +784,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 128000,
     maxOutput: 128000,
     toolCalling: true,
-    // RETIRED 2026-12-11 at OpenAI. The gateways redirect it to gpt-6-luna
-    // ($0.10/$0.50), OpenAI's named replacement, before pricing. Was
-    // gpt-5.4-nano, which is dearer still and itself retires 2027-04-01.
+    // Off the picker (hidden at the gateways). OpenAI shuts it down on
+    // 2026-12-11, but the gateways serve it from Azure at this price until
+    // 2027-02-09, not redirected (owner decision 2026-11-24).
     deprecated: true,
-    fallbackModel: "openai/gpt-6-luna",
+    fallbackModel: "openai/gpt-5.4-nano",
   },
   {
     id: "openai/gpt-5.2-pro",
