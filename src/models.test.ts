@@ -571,6 +571,10 @@ describe("2026-11-24 retirements", () => {
     // 2026-12-01: Google retires Gemini 2.5.
     "google/gemini-2.5-pro": "google/gemini-3.8-flash",
     "google/gemini-2.5-flash": "google/gemini-3.5-flash-lite",
+    // 2026-12-11: OpenAI shuts down o3 and gpt-5-mini. (gpt-5-nano too, but
+    // the gateways keep serving it from Azure until 2027-02-09; see below.)
+    "openai/o3": "openai/gpt-5.4-mini",
+    "openai/gpt-5-mini": "openai/gpt-5.6-luna",
   };
 
   it("marks each retired id with the gateway's redirect target and drops it from the picker", () => {
@@ -602,6 +606,7 @@ describe("2026-11-24 retirements", () => {
       "north-mini-code": "free/laguna-xs-2.1",
       gemini: "google/gemini-3.8-flash",
       flash: "google/gemini-3.5-flash-lite",
+      o3: "openai/gpt-5.4-mini",
     };
     for (const [alias, target] of Object.entries(pins)) {
       expect(resolveModelAlias(alias), alias).toBe(target);
@@ -613,6 +618,20 @@ describe("2026-11-24 retirements", () => {
       ([alias, target]) => !alias.includes("/") && target in retired,
     );
     expect(stale).toEqual([]);
+  });
+
+  it("keeps the gpt-5-nano shorthand on gpt-5-nano, the cheapest live answer, until 2027-02-09", () => {
+    // Owner decision 2026-11-24: the gateways do NOT redirect gpt-5-nano on
+    // 2026-12-11. Azure serves it at $0.05/$0.40 until 2027-02-09, and every
+    // live OpenAI model is dearer on input (gpt-6-luna is $0.10/$0.50).
+    expect(resolveModelAlias("gpt-5-nano")).toBe("openai/gpt-5-nano");
+    const nano = BLOCKRUN_MODELS.find((m) => m.id === "openai/gpt-5-nano")!;
+    expect([nano.inputPrice, nano.outputPrice]).toEqual([0.05, 0.4]);
+    for (const alt of ["openai/gpt-6-luna", "openai/gpt-5.4-nano"]) {
+      const m = BLOCKRUN_MODELS.find((x) => x.id === alt)!;
+      expect(m.inputPrice, alt).toBeGreaterThan(nano.inputPrice);
+      expect(m.outputPrice, alt).toBeGreaterThan(nano.outputPrice);
+    }
   });
 
   it("keeps the redirected successors priced no higher than what callers signed up for", () => {

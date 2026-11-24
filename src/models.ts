@@ -144,7 +144,13 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-5.4-pro": "openai/gpt-5.4-pro",
   "gpt-5.4-nano": "openai/gpt-5.4-nano",
   nano: "openai/gpt-5.4-nano",
-  "gpt-5-nano": "openai/gpt-5.4-nano",
+  // gpt-5-nano: OpenAI shuts it down on 2026-12-11, but the gateways keep
+  // serving it at its own $0.05/$0.40 from Azure until 2027-02-09 (owner
+  // decision 2026-11-24: every live OpenAI model is dearer on input). So the
+  // shorthand names it: the cheapest live answer. It used to skip to
+  // gpt-5.4-nano ($0.20/$1.25), dearer on both axes. Move it with the
+  // gateways' 2027-02-09 retirement.
+  "gpt-5-nano": "openai/gpt-5-nano",
   codex: "openai/gpt-5.3-codex",
   mini: "openai/gpt-4o-mini",
   // OpenAI shut down o1, o3-mini and o4-mini on 2026-10-23 (Azure's o-series
@@ -155,7 +161,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   o1: "openai/gpt-5.4-mini",
   "openai/o1-mini": "openai/gpt-5.4-mini",
   "o1-mini": "openai/gpt-5.4-mini",
-  o3: "openai/o3",
+  // OpenAI shuts o3 down on 2026-12-11 (Azure's o3 retired 2026-11-19). The
+  // gateways redirect it to gpt-5.4-mini at $0.75/$4.50, like the rest of the
+  // o-series above; the shorthand follows.
+  o3: "openai/gpt-5.4-mini",
   // OpenAI Codex prefix aliases (OpenClaw v2026.4.5 openai-codex/ model ID format)
   "openai-codex/gpt-5.4-mini": "openai/gpt-5.4-mini",
   "gpt-5.4-mini": "openai/gpt-5.4-mini",
@@ -760,6 +769,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 128000,
     toolCalling: true,
+    // RETIRED 2026-12-11 at OpenAI. The gateways redirect it to gpt-5.6-luna
+    // ($0.20/$1.20) before pricing. Entry kept so explicit pins stay priced;
+    // off the picker.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.6-luna",
   },
   {
     id: "openai/gpt-5-nano",
@@ -770,6 +784,9 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 128000,
     maxOutput: 128000,
     toolCalling: true,
+    // Off the picker (hidden at the gateways). OpenAI shuts it down on
+    // 2026-12-11, but the gateways serve it from Azure at this price until
+    // 2027-02-09, not redirected (owner decision 2026-11-24).
     deprecated: true,
     fallbackModel: "openai/gpt-5.4-nano",
   },
@@ -1184,6 +1201,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 100000,
     reasoning: true,
     toolCalling: true,
+    // RETIRED 2026-12-11 at OpenAI (Azure 2026-11-19). The gateways redirect
+    // it to gpt-5.4-mini ($0.75/$4.50) before pricing. Entry kept so explicit
+    // pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-mini",
   },
   {
     id: "openai/o3-mini",

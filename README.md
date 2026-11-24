@@ -487,7 +487,6 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | openai/gpt-6-luna                           | 1M      | reasoning, vision, agentic, tools (GPT-6 fast tier) |
 | openai/gpt-5.6-luna                         | 1M      | vision, agentic, tools                              |
 | xai/grok-4-1-fast                           | 131K    | tools                                               |
-| openai/gpt-5-mini                           | 200K    | tools                                               |
 | qwen/qwen3.7-plus                           | 1M      | reasoning, agentic, tools (balanced Qwen)           |
 | deepseek/deepseek-v4.1-flash                | 1M      | tools (V4.1 Flash, non-thinking)                    |
 | deepseek/deepseek-chat                      | 1M      | tools (V4.1 Flash chat)                             |
@@ -560,7 +559,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 > **Free tier:** <!-- br:models.free -->8<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other five as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model lightning` for 1M-context reasoning, `/model laguna` for fast coding).
 >
 > **One free model reads images: `free/nemotron-3.5-bolt`.** It got 8 of 8 right on 64×64 solid-colour PNGs across Base and Solana on 2026-11-05, answered by Bolt itself. The rest of the free tier isn't flagged for vision: `nemotron-3-nano-omni` was right 1 of 4 times on Base in August, and only 2 of 8 probes of `nemotron-3-super-120b` reached that model. These failures can arrive as an HTTP 200 with a wrong answer and no error to branch on. Pin `/model vision-free` for free images; otherwise requests carrying an `image_url` route to a paid vision model.
-> **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
+> **Best value:** `gemini-2.5-flash-lite` delivers strong results at ~$0.0003/request.
 
 ---
 
