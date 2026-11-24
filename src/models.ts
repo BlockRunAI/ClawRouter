@@ -147,10 +147,14 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-5-nano": "openai/gpt-5.4-nano",
   codex: "openai/gpt-5.3-codex",
   mini: "openai/gpt-4o-mini",
-  o1: "openai/o1",
-  // o1-mini delisted by OpenAI 2026-06-06 — mirror the gateway redirect.
-  "openai/o1-mini": "openai/o4-mini",
-  "o1-mini": "openai/o4-mini",
+  // OpenAI shut down o1, o3-mini and o4-mini on 2026-10-23 (Azure's o-series
+  // versions followed 2026-11-19). The gateways redirect all of them, and
+  // o1-mini (delisted 2026-06-06, which used to redirect onto o4-mini), to
+  // gpt-5.4-mini at $0.75/$4.50. The shorthands follow the redirect instead of
+  // chaining through it; the catalog entries below carry `deprecated`.
+  o1: "openai/gpt-5.4-mini",
+  "openai/o1-mini": "openai/gpt-5.4-mini",
+  "o1-mini": "openai/gpt-5.4-mini",
   o3: "openai/o3",
   // OpenAI Codex prefix aliases (OpenClaw v2026.4.5 openai-codex/ model ID format)
   "openai-codex/gpt-5.4-mini": "openai/gpt-5.4-mini",
@@ -272,7 +276,9 @@ export const MODEL_ALIASES: Record<string, string> = {
   "google/gemini-3.1-pro-preview": "google/gemini-3.1-pro",
   "gemini-3.6-flash": "google/gemini-3.6-flash",
   "gemini-3.6": "google/gemini-3.6-flash",
-  "gemini-3.5-flash": "google/gemini-3.5-flash",
+  // Google has answered gemini-3.5-flash with 3.6 Flash since ~2026-10-10 and
+  // the gateways redirect it there (2026-11-24); the shorthand follows.
+  "gemini-3.5-flash": "google/gemini-3.6-flash",
   "gemini-3.5-flash-lite": "google/gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite": "google/gemini-3.1-flash-lite",
   "gemini-2.5-flash-lite": "google/gemini-2.5-flash-lite",
@@ -421,9 +427,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // seed-oss pins name the model itself — kept routable, the gateway redirects them.
   "seed-oss": "free/seed-oss-36b",
   "seed-oss-36b": "free/seed-oss-36b",
-  // A free coder exists again — two of them, both sub-second. north-mini-code is
-  // the faster (607ms median) and 256K ctx against laguna's 131K.
-  "coder-free": "free/north-mini-code",
+  // A free coder exists again. north-mini-code was the faster of two, until
+  // its only upstream pool (OpenRouter) retired it in November 2026; the
+  // gateways now redirect it to laguna-xs-2.1, so the shorthand points there.
+  "coder-free": "free/laguna-xs-2.1",
   "mistral-nemotron": "free/mistral-nemotron",
   "step-flash": "free/step-3.7-flash",
   "step-3.7-flash": "free/step-3.7-flash",
@@ -482,8 +489,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   "minimax-m3.1-flash": "free/minimax-m3.1-flash",
   "llama-vision": "free/llama-3.2-11b-vision",
   "llama-3.2-vision": "free/llama-3.2-11b-vision",
-  "north-mini": "free/north-mini-code",
-  "north-mini-code": "free/north-mini-code",
+  // Retired 2026-11 (see coder-free above): follow the gateway's redirect.
+  // The full ids (cohere/north-mini-code, free/north-mini-code) stay pinnable.
+  "north-mini": "free/laguna-xs-2.1",
+  "north-mini-code": "free/laguna-xs-2.1",
   laguna: "free/laguna-xs-2.1",
   "laguna-xs": "free/laguna-xs-2.1",
   // Laguna S 2.1 is the PAID, much larger sibling ($0.09/$0.18, 1M ctx). Bare
@@ -1139,6 +1148,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 100000,
     reasoning: true,
     toolCalling: true,
+    // RETIRED 2026-10-23 at OpenAI (Azure 2026-11-19). The gateways redirect
+    // it to gpt-5.4-mini ($0.75/$4.50) before pricing (2026-11-24). Entry kept
+    // so explicit pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-mini",
   },
   {
     id: "openai/o1-mini",
@@ -1150,6 +1164,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 65536,
     reasoning: true,
     toolCalling: true,
+    // RETIRED 2026-06-06 (OpenAI 404). Shadowed by the "openai/o1-mini" alias,
+    // which follows the gateway redirect to gpt-5.4-mini.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-mini",
   },
   {
     id: "openai/o3",
@@ -1172,6 +1190,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 100000,
     reasoning: true,
     toolCalling: true,
+    // RETIRED 2026-10-23 at OpenAI (Azure 2026-11-19). The gateways redirect
+    // it to gpt-5.4-mini ($0.75/$4.50) before pricing (2026-11-24). Entry kept
+    // so explicit pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-mini",
   },
   {
     id: "openai/o4-mini",
@@ -1183,6 +1206,11 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 100000,
     reasoning: true,
     toolCalling: true,
+    // RETIRED 2026-10-23 at OpenAI (Azure 2026-11-19). The gateways redirect
+    // it to gpt-5.4-mini ($0.75/$4.50) before pricing (2026-11-24). Entry kept
+    // so explicit pins stay priced; off the picker.
+    deprecated: true,
+    fallbackModel: "openai/gpt-5.4-mini",
   },
 
   // Anthropic - all Claude models excel at agentic workflows
@@ -1505,6 +1533,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
     vision: true,
     toolCalling: true,
+    // RETIRED 2026-11-24: Google has served 3.6 Flash under this name since
+    // ~2026-10-10, and the gateways now redirect it to gemini-3.6-flash
+    // ($0.75/$3.75) before pricing. Entry kept so explicit pins stay priced;
+    // off the picker.
+    deprecated: true,
+    fallbackModel: "google/gemini-3.6-flash",
   },
   {
     // Ultra-fast lightweight tier with thinking mode (blockrun #329).
@@ -2442,6 +2476,13 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 256000,
     maxOutput: 16384,
     reasoning: true,
+    // RETIRED 2026-11: OpenRouter, its only pool, answers 404 "no provider
+    // serves this model anymore" (gateway free-model-dead alerts daily since
+    // 2026-11-20). The gateways redirect it to poolside/laguna-xs-2.1, also
+    // $0. Off the picker and out of the FREE_MODELS cascade; a pin still
+    // resolves upstream and is redirected.
+    deprecated: true,
+    fallbackModel: "free/laguna-xs-2.1",
   },
   {
     // Poolside Laguna XS 2.1 on OUR NVIDIA key (~161 tok/s). Deliberately not

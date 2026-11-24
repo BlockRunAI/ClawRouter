@@ -277,7 +277,10 @@ const ROUTING_PROFILES = new Set([
 //   2/3. laguna + north-mini — both sub-second coders, and deliberately adjacent
 //                   because they sit on DIFFERENT capacity pools (our NVIDIA key
 //                   vs OpenRouter's $0 pool), so one pool's outage does not take
-//                   both rungs.
+//                   both rungs. (2026-11-24: north-mini left the cascade — its
+//                   OpenRouter pool retired it, and the gateways redirect it to
+//                   laguna, the rung before it. Keeping it would retry one
+//                   backend under two names.)
 //   4. nano-omni  — the only vision-capable free model left.
 //   5. ultra-550b — 1M ctx and the largest we list, but 16.8s and blockrun
 //                   measured 3 of 15 calls returning an HTTP 200 that carried an
@@ -293,7 +296,6 @@ const ROUTING_PROFILES = new Set([
 const FREE_MODELS = new Set([
   "free/nemotron-3.5-lightning", // free-tier default — 1M ctx, thinking mode
   "free/laguna-xs-2.1", // coding, ~161 tok/s — on our NVIDIA key
-  "free/north-mini-code", // coding, 607ms median — OpenRouter $0 pool
   "free/nemotron-3.5-bolt", // about a second, reads images
   "free/nemotron-3-nano-omni-30b-a3b-reasoning", // 256K ctx, reasoning
   "free/nemotron-3-super-120b", // reasoning; rescued often when capacity is short

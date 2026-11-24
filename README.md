@@ -472,7 +472,6 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | ------------------------------------------- | ------- | --------------------------------------------------- |
 | free/nemotron-3.5-lightning                 | 1M      | reasoning (thinking mode) — the free default        |
 | free/laguna-xs-2.1                          | 131K    | coding (Poolside, ~161 tok/s)                       |
-| free/north-mini-code                        | 256K    | coding (Cohere, sub-second)                         |
 | free/nemotron-3-nano-omni-30b-a3b-reasoning | 256K    | reasoning (text only — see note)                    |
 | free/nemotron-3-ultra-550b                  | 1M      | largest free model (550B/55B MoE)                   |
 | free/nemotron-3.5-bolt                      | 131K    | vision, about a second to answer                    |
@@ -513,8 +512,6 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | mistral/mistral-large-4     | 512K    | reasoning, vision, tools                    |
 | tencent/hy4-preview         | 1M      | reasoning (Tencent Hy4, 770B MoE)           |
 | openai/gpt-5.6-terra-pro    | 1M      | reasoning, vision, agentic, tools           |
-| openai/o3-mini              | 128K    | reasoning, tools                            |
-| openai/o4-mini              | 128K    | reasoning, tools                            |
 | google/gemini-2.5-pro       | 1M      | reasoning, vision, tools                    |
 | zai/glm-5.2                 | 1M      | reasoning, coding, tools (flagship)         |
 | zai/glm-5.1                 | 200K    | reasoning, tools (promo ended 2026-06-05)   |
@@ -525,7 +522,6 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | google/gemini-4-argon       | 1M      | reasoning, vision, tools (Google frontier)  |
 | google/gemini-3.8-flash     | 1M      | reasoning, vision, tools (newest Flash)     |
 | google/gemini-3.6-flash     | 1M      | reasoning, vision, tools (thinking mode)    |
-| google/gemini-3.5-flash     | 1M      | reasoning, vision, tools (thinking)         |
 | xai/grok-4.5                | 500K    | reasoning, vision, agentic, tools           |
 | xai/grok-4.7                | 500K    | reasoning, vision, agentic, tools           |
 | xai/grok-4.6                | 500K    | reasoning, vision, agentic, tools           |
@@ -559,12 +555,11 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | anthropic/claude-fable-5.1  | 1M      | reasoning, vision, agentic, tools (always-on thinking) |
 | moonshot/kimi-k3.1-pro      | 1M      | reasoning, vision, agentic, tools                      |
 | openai/chat-latest          | 128K    | vision, tools                                          |
-| openai/o1                   | 200K    | reasoning, tools                                       |
 | openai/gpt-5.2-pro          | 400K    | reasoning, tools                                       |
 | openai/gpt-5.4-pro          | 1M      | reasoning, tools                                       |
 | openai/gpt-5.5-pro          | 1M      | reasoning, vision, tools                               |
 
-> **Free tier:** <!-- br:models.free -->8<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other five as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model lightning` for 1M-context reasoning, `/model north-mini` or `/model laguna` for fast coding).
+> **Free tier:** <!-- br:models.free -->8<!-- /br:models.free --> open-weight models cost nothing — `/model free` pins the free default (`nemotron-3.5-lightning`, with the other five as fallbacks), `/model eco` opens on it, or pick one directly (e.g., `/model lightning` for 1M-context reasoning, `/model laguna` for fast coding).
 >
 > **One free model reads images: `free/nemotron-3.5-bolt`.** It got 8 of 8 right on 64×64 solid-colour PNGs across Base and Solana on 2026-11-05, answered by Bolt itself. The rest of the free tier isn't flagged for vision: `nemotron-3-nano-omni` was right 1 of 4 times on Base in August, and only 2 of 8 probes of `nemotron-3-super-120b` reached that model. These failures can arrive as an HTTP 200 with a wrong answer and no error to branch on. Pin `/model vision-free` for free images; otherwise requests carrying an `image_url` route to a paid vision model.
 > **Best value:** `gpt-5-nano` and `gemini-2.5-flash-lite` deliver strong results at ~$0.0003/request.
@@ -1000,7 +995,7 @@ wallet, no key, no signup. See [Paying with a credit card](#paying-with-a-credit
 
 ### Is ClawRouter free?
 
-ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several open-weight models (`nemotron-3.5-lightning`, `laguna-xs-2.1`, `north-mini-code`, `nemotron-3.5-bolt`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3-super-120b`, `nemotron-3-ultra-550b`, `muse-glimmer-30b`) are completely free, and Bolt also reads images. Use `/model free` for the free default, or pick any by name.
+ClawRouter itself is free and MIT licensed. You pay only for the LLM API calls routed through it — and several open-weight models (`nemotron-3.5-lightning`, `laguna-xs-2.1`, `nemotron-3.5-bolt`, `nemotron-3-nano-omni-30b-a3b-reasoning`, `nemotron-3-super-120b`, `nemotron-3-ultra-550b`, `muse-glimmer-30b`) are completely free, and Bolt also reads images. Use `/model free` for the free default, or pick any by name.
 
 ## Thanks
 
