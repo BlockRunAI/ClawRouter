@@ -556,3 +556,68 @@ describe("DeepSeek V4.1 Flash (2026-10-20)", () => {
     expect(Object.values(MODEL_ALIASES)).not.toContain("free/deepseek-v4-flash");
   });
 });
+
+describe("2026-11-24 retirements", () => {
+  // The gateways redirect each id before pricing, so a shorthand that still
+  // names one quietly reaches a different model. Shorthands follow the
+  // redirect; the full ids stay as deprecated entries so pins stay priced.
+  const retired: Record<string, string> = {
+    "openai/o1": "openai/gpt-5.4-mini",
+    "openai/o1-mini": "openai/gpt-5.4-mini",
+    "openai/o3-mini": "openai/gpt-5.4-mini",
+    "openai/o4-mini": "openai/gpt-5.4-mini",
+    "google/gemini-3.5-flash": "google/gemini-3.6-flash",
+    "free/north-mini-code": "free/laguna-xs-2.1",
+  };
+
+  it("marks each retired id with the gateway's redirect target and drops it from the picker", () => {
+    for (const [id, fallbackModel] of Object.entries(retired)) {
+      expect(
+        BLOCKRUN_MODELS.find((m) => m.id === id),
+        id,
+      ).toMatchObject({ deprecated: true, fallbackModel });
+      expect(TOP_MODELS, id).not.toContain(id);
+      expect(VISIBLE_OPENCLAW_MODELS.map((m) => m.id), id).not.toContain(id);
+      // The target is a live, listed model.
+      const target = BLOCKRUN_MODELS.find((m) => m.id === fallbackModel);
+      expect(target?.deprecated, fallbackModel).toBeUndefined();
+      expect(TOP_MODELS, fallbackModel).toContain(fallbackModel);
+    }
+  });
+
+  it("points the shorthands at the successor instead of chaining through the redirect", () => {
+    const pins: Record<string, string> = {
+      o1: "openai/gpt-5.4-mini",
+      "o1-mini": "openai/gpt-5.4-mini",
+      "openai/o1-mini": "openai/gpt-5.4-mini",
+      "gemini-3.5-flash": "google/gemini-3.6-flash",
+      "coder-free": "free/laguna-xs-2.1",
+      "north-mini": "free/laguna-xs-2.1",
+      "north-mini-code": "free/laguna-xs-2.1",
+    };
+    for (const [alias, target] of Object.entries(pins)) {
+      expect(resolveModelAlias(alias), alias).toBe(target);
+    }
+  });
+
+  it("leaves no bare shorthand resolving to a retired id", () => {
+    const stale = Object.entries(MODEL_ALIASES).filter(
+      ([alias, target]) => !alias.includes("/") && target in retired,
+    );
+    expect(stale).toEqual([]);
+  });
+
+  it("keeps the redirected successors priced no higher than what callers signed up for", () => {
+    // A redirect that raises the bill is a product decision, not a retirement.
+    const price = (id: string) => BLOCKRUN_MODELS.find((m) => m.id === id)!;
+    for (const [id, target] of Object.entries(retired)) {
+      if (id === "openai/o3-mini" || id === "openai/o4-mini" || id === "openai/o1-mini") {
+        // $1.10/$4.40 -> $0.75/$4.50: the gateway's chosen nearest-price
+        // successor costs more per output token, less per input token.
+        continue;
+      }
+      expect(price(target).inputPrice, id).toBeLessThanOrEqual(price(id).inputPrice);
+      expect(price(target).outputPrice, id).toBeLessThanOrEqual(price(id).outputPrice);
+    }
+  });
+});
