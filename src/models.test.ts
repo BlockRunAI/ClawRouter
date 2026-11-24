@@ -571,6 +571,10 @@ describe("2026-11-24 retirements", () => {
     // 2026-12-01: Google retires Gemini 2.5.
     "google/gemini-2.5-pro": "google/gemini-3.8-flash",
     "google/gemini-2.5-flash": "google/gemini-3.5-flash-lite",
+    // 2026-12-11: OpenAI shuts down o3, gpt-5-mini and gpt-5-nano.
+    "openai/o3": "openai/gpt-5.4-mini",
+    "openai/gpt-5-mini": "openai/gpt-5.6-luna",
+    "openai/gpt-5-nano": "openai/gpt-6-luna",
   };
 
   it("marks each retired id with the gateway's redirect target and drops it from the picker", () => {
@@ -602,6 +606,8 @@ describe("2026-11-24 retirements", () => {
       "north-mini-code": "free/laguna-xs-2.1",
       gemini: "google/gemini-3.8-flash",
       flash: "google/gemini-3.5-flash-lite",
+      o3: "openai/gpt-5.4-mini",
+      "gpt-5-nano": "openai/gpt-6-luna",
     };
     for (const [alias, target] of Object.entries(pins)) {
       expect(resolveModelAlias(alias), alias).toBe(target);
@@ -622,6 +628,14 @@ describe("2026-11-24 retirements", () => {
       if (id === "openai/o3-mini" || id === "openai/o4-mini" || id === "openai/o1-mini") {
         // $1.10/$4.40 -> $0.75/$4.50: the gateway's chosen nearest-price
         // successor costs more per output token, less per input token.
+        continue;
+      }
+      if (id === "openai/gpt-5-nano") {
+        // $0.05/$0.40 -> $0.10/$0.50: no live OpenAI model is as cheap, and
+        // gpt-6-luna is OpenAI's named replacement. Dearer on both axes, so it
+        // waits on the owner's decision at the gateways (the alternative is
+        // Azure, which serves gpt-5-nano until 2027-02-09).
+        expect([price(target).inputPrice, price(target).outputPrice]).toEqual([0.1, 0.5]);
         continue;
       }
       expect(price(target).inputPrice, id).toBeLessThanOrEqual(price(id).inputPrice);
