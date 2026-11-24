@@ -4,6 +4,24 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.322 — November 24, 2026
+
+### Retired provider models resolve to their successors
+
+OpenAI retired `o1`, `o1-mini`, `o3-mini` and `o4-mini`, Google serves Gemini
+3.6 Flash under the `gemini-3.5-flash` name, and `north-mini-code` has no
+provider left. The gateways now redirect each of these. ClawRouter's aliases
+follow the same redirects (`o1` and `o1-mini` to `gpt-5.4-mini`,
+`gemini-3.5-flash` to `gemini-3.6-flash`, `north-mini` and `coder-free` to
+`free/laguna-xs-2.1`), and the retired entries leave the model picker. (#646)
+
+`@blockrun/router-core` is pinned to 6b3461d (router-core#16): every routing
+chain that named Gemini 3.5 Flash now names 3.6 Flash, which costs less, and
+`o4-mini` is replaced by `gpt-5.4-mini` in the reasoning chains. 3.6 Flash's
+task-affinity values are carried over from 3.5, not re-measured.
+
+---
+
 ## v0.12.321 — November 23, 2026
 
 ### Request deadlines and client disconnects reach a paid call in flight again
