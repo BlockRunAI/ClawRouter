@@ -22,7 +22,10 @@ export async function upsertCodexConfig(
     `${escapeRegExp(ROOT_START)}[\\s\\S]*?${escapeRegExp(ROOT_END)}\\n?`,
     "g",
   );
-  const clean = original.replace(managedPattern, "").replace(rootPattern, "").trim();
+  const unmanaged = original.replace(managedPattern, "").replace(rootPattern, "");
+  // The managed root block sets `model_provider` and `model`. TOML rejects a
+  // repeated key, so an existing root assignment of either must go first.
+  const clean = (setDefault ? withoutRootModelKeys(unmanaged) : unmanaged).trim();
   const rootDefaults = setDefault
     ? `${ROOT_START}\nmodel_provider = "clawrouter"\nmodel = "${tomlString(model)}"\n${ROOT_END}\n\n`
     : "";
@@ -255,6 +258,53 @@ function tomlString(value: string): string {
     .replaceAll("\n", "\\n")
     .replaceAll("\f", "\\f")
     .replaceAll("\r", "\\r");
+}
+
+/**
+ * Drop root-level `model` and `model_provider` lines: everything before the first table header.
+ * Lines inside a multi-line string or array belong to a value, so they are never read as keys or headers.
+ */
+function withoutRootModelKeys(toml: string): string {
+  let inRoot = true;
+  let dropping = false;
+  let multiline = ""; // the open `"""` or `'''`
+  let depth = 0; // open `[` and `{` of a value that spans lines
+  const kept: string[] = [];
+  for (const line of toml.split("\n")) {
+    if (!multiline && depth === 0) {
+      if (/^\s*\[\[?(?:[^\]"']|"[^"]*"|'[^']*')+\]\]?\s*(#.*)?\r?$/.test(line)) inRoot = false;
+      dropping = inRoot && /^\s*["']?(?:model|model_provider)["']?\s*=/.test(line);
+    }
+    for (let i = 0; i < line.length;) {
+      if (multiline) {
+        if (multiline === '"""' && line[i] === "\\") {
+          i += 2;
+        } else if (line.startsWith(multiline, i)) {
+          for (i += 3; line[i] === multiline[0]; i++);
+          multiline = "";
+        } else {
+          i++;
+        }
+      } else if (line[i] === "#") {
+        break;
+      } else if (line.startsWith('"""', i) || line.startsWith("'''", i)) {
+        multiline = line.slice(i, i + 3);
+        i += 3;
+      } else if (line[i] === '"') {
+        for (i++; i < line.length && line[i] !== '"'; i += line[i] === "\\" ? 2 : 1);
+        i++;
+      } else if (line[i] === "'") {
+        const end = line.indexOf("'", i + 1);
+        i = end < 0 ? line.length : end + 1;
+      } else {
+        if (line[i] === "[" || line[i] === "{") depth++;
+        if (line[i] === "]" || line[i] === "}") depth = Math.max(0, depth - 1);
+        i++;
+      }
+    }
+    if (!dropping) kept.push(line);
+  }
+  return kept.join("\n");
 }
 
 function escapeRegExp(value: string): string {
