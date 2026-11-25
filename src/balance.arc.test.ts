@@ -85,4 +85,78 @@ describe("BalanceMonitor on Arc", () => {
     expect(monitor.getChain()).toBe("base");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("coalesces concurrent checkBalance calls into a single RPC read", async () => {
+    let resolveFetch!: (res: Response) => void;
+    const fetchImpl = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const monitor = new BalanceMonitor(ADDRESS, "arc", fetchImpl as typeof fetch);
+
+    const p1 = monitor.checkBalance();
+    const p2 = monitor.checkBalance();
+    const p3 = monitor.checkSufficient(1_000_000n);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    resolveFetch(jsonResponse({ balance: "2500000" }));
+
+    const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+    expect(r1.balance).toBe(2_500_000n);
+    expect(r2.balance).toBe(2_500_000n);
+    expect(r3.sufficient).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers after a failed concurrent read so the next check retries", async () => {
+    let attempt = 0;
+    const fetchImpl = vi.fn(async () => {
+      attempt++;
+      if (attempt === 1) throw new TypeError("fetch failed");
+      return jsonResponse({ balance: "1500000" });
+    });
+    const monitor = new BalanceMonitor(ADDRESS, "arc", fetchImpl as typeof fetch);
+
+    const [a, b] = await Promise.allSettled([monitor.checkBalance(), monitor.checkBalance()]);
+    expect(a.status).toBe("rejected");
+    expect(b.status).toBe("rejected");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    const info = await monitor.checkBalance();
+    expect(info.balance).toBe(1_500_000n);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let a pre-invalidation in-flight read poison the cache", async () => {
+    const resolvers: Array<(res: Response) => void> = [];
+    const fetchImpl = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    const monitor = new BalanceMonitor(ADDRESS, "arc", fetchImpl as typeof fetch);
+
+    const staleCall = monitor.checkBalance();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    // Payment failed mid-flight: invalidate and start a fresh check.
+    monitor.invalidate();
+    const freshCall = monitor.checkBalance();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    // Resolve the fresh read first with the new lower balance, then the stale one.
+    resolvers[1]!(jsonResponse({ balance: "400000" }));
+    expect((await freshCall).balance).toBe(400_000n);
+
+    resolvers[0]!(jsonResponse({ balance: "9000000" }));
+    await staleCall;
+
+    // Cache must retain the post-invalidation balance, not the stale 9000000.
+    const cached = await monitor.checkBalance();
+    expect(cached.balance).toBe(400_000n);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
 });
