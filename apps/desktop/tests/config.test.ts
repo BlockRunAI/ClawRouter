@@ -86,6 +86,35 @@ describe("agent configuration writers", () => {
     expect(result).toContain('model = "o3"');
   });
 
+  it("reads a quoted table header that holds an escaped quote", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    const user = '[profiles."a\\"b"]\nmodel = "o3"\nmodel_provider = "openai"';
+    await writeFile(path, `model = "gpt-5-codex"\n\n${user}\n`);
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).toContain(user);
+    expect(result).not.toContain("gpt-5-codex");
+  });
+
+  it("decodes escapes in a quoted root key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(
+      path,
+      '"mod\\u0065l" = "gpt-5-codex"\n"model_provider" = "openai"\n"my\\u0020model" = "keep"\n',
+    );
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).not.toContain("gpt-5-codex");
+    expect(result).not.toContain('"openai"');
+    expect(result).toContain('"my\\u0020model" = "keep"');
+  });
+
   it("drops a root model value that spans several lines", async () => {
     const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
     const path = join(root, "config.toml");

@@ -272,8 +272,10 @@ function withoutRootModelKeys(toml: string): string {
   const kept: string[] = [];
   for (const line of toml.split("\n")) {
     if (!multiline && depth === 0) {
-      if (/^\s*\[\[?(?:[^\]"']|"[^"]*"|'[^']*')+\]\]?\s*(#.*)?\r?$/.test(line)) inRoot = false;
-      dropping = inRoot && /^\s*["']?(?:model|model_provider)["']?\s*=/.test(line);
+      if (/^\s*\[\[?(?:[^\]"']|"(?:[^"\\]|\\.)*"|'[^']*')+\]\]?\s*(#.*)?\r?$/.test(line))
+        inRoot = false;
+      const key = /^\s*("(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+)\s*=/.exec(line);
+      dropping = inRoot && !!key && ["model", "model_provider"].includes(tomlKey(key[1]));
     }
     for (let i = 0; i < line.length;) {
       if (multiline) {
@@ -305,6 +307,28 @@ function withoutRootModelKeys(toml: string): string {
     if (!dropping) kept.push(line);
   }
   return kept.join("\n");
+}
+
+/** The name a TOML key spells. A quoted key has its escapes decoded, so "mod\u0065l" is model. */
+function tomlKey(raw: string): string {
+  if (raw.startsWith("'")) return raw.slice(1, -1);
+  if (!raw.startsWith('"')) return raw;
+  const simple: Record<string, string> = {
+    b: "\b",
+    t: "\t",
+    n: "\n",
+    f: "\f",
+    r: "\r",
+    '"': '"',
+    "\\": "\\",
+  };
+  return raw.slice(1, -1).replace(/\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)/g, (all, e: string) => {
+    if (e.length > 1) {
+      const code = parseInt(e.slice(1), 16);
+      return code <= 0x10ffff ? String.fromCodePoint(code) : all;
+    }
+    return simple[e] ?? all;
+  });
 }
 
 function escapeRegExp(value: string): string {
