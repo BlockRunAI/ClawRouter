@@ -342,7 +342,10 @@ function applyTelegramText(text: string): string {
         continue;
       }
     }
-    let j = i;
+    // Always take the character at i as text: it is a marker that failed to
+    // close above, and a scan that starts on it would stop at once and never
+    // advance i.
+    let j = i + 1;
     while (
       j < len &&
       !text.startsWith("**", j) &&

@@ -240,6 +240,13 @@ describe("preset: telegram (MarkdownV2)", () => {
     expect(out).not.toContain("`node 1\\.0\\-x`");
   });
 
+  it("escapes a marker that never closes instead of looping forever", () => {
+    expect(transform("a*b", "telegram")).toBe("a\\*b");
+    expect(transform("* one\n* two", "telegram")).toBe("\\* one\n\\* two");
+    expect(transform("arr[0] and `x", "telegram")).toBe("arr\\[0\\] and \\`x");
+    expect(transform("**abc ~~d", "telegram")).toBe("\\*\\*abc \\~\\~d");
+  });
+
   it("converts tables to ``` pre blocks (no escapes inside)", () => {
     const out = transform(SAMPLE_MD, "telegram");
     expect(out).toMatch(/```\n[\s\S]+?\n```/);
