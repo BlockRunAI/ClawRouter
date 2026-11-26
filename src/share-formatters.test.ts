@@ -245,6 +245,7 @@ describe("preset: telegram (MarkdownV2)", () => {
     expect(transform("* one\n* two", "telegram")).toBe("\\* one\n\\* two");
     expect(transform("arr[0] and `x", "telegram")).toBe("arr\\[0\\] and \\`x");
     expect(transform("**abc ~~d", "telegram")).toBe("\\*\\*abc \\~\\~d");
+    expect(transform("**abc *def*", "telegram")).toBe("\\*\\*abc _def_");
   });
 
   it("converts tables to ``` pre blocks (no escapes inside)", () => {
