@@ -1538,12 +1538,12 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "google/gemini-4-argon",
     name: "Gemini 4 Argon",
     version: "4",
-    // ⏰ INTRO RATE, expires 2026-12-01. Google prices Argon at 2/10 through
-    // 2026-11-30 and 4/20 from 2026-12-01 (ai.google.dev/gemini-api/docs/pricing;
-    // blockrun's src/lib/models.ts carries the same dated note). Leaving 2/10 past
-    // that date under-reports spend 2x and lets maxCostPerRun run to twice its cap.
-    inputPrice: 2.0,
-    outputPrice: 10.0,
+    // Google's standard rate since 2026-12-01: 4/20 (cached input 0.20). The
+    // 2/10 intro rate ended 2026-11-30 (ai.google.dev/gemini-api/docs/pricing;
+    // blockrun's src/lib/models.ts repriced the same day). 2/10 past that date
+    // under-reported spend 2x and let maxCostPerRun run to twice its cap.
+    inputPrice: 4.0,
+    outputPrice: 20.0,
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,
@@ -1551,13 +1551,13 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     toolCalling: true,
   },
   {
-    // Gemini 4's top reasoning tier (blockrun added 2026-11-11). Same dated
-    // ⏰ INTRO RATE as Argon above: 2/10 through 2026-11-30, 4/20 from 2026-12-01.
+    // Gemini 4's top reasoning tier (blockrun added 2026-11-11). Same price as
+    // Argon above: 4/20 since 2026-12-01 (intro 2/10 ended 2026-11-30).
     id: "google/gemini-4-carbon",
     name: "Gemini 4 Carbon",
     version: "4",
-    inputPrice: 2.0,
-    outputPrice: 10.0,
+    inputPrice: 4.0,
+    outputPrice: 20.0,
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,

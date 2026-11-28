@@ -701,6 +701,18 @@ describe("GPT-6.2 Sol (router-core 53fe783 COMPLEX chains)", () => {
   });
 });
 
+describe("Gemini 4 Argon and Carbon at Google's standard rate (2026-12-01)", () => {
+  // Google's 2/10 intro rate ended 2026-11-30; blockrun repriced both to 4/20
+  // on 2026-12-01. A stale 2/10 here halves estimateAmount() and lets
+  // maxCostPerRun run to twice its cap.
+  it.each(["google/gemini-4-argon", "google/gemini-4-carbon"])("prices %s at 4/20", (id) => {
+    expect(BLOCKRUN_MODELS.find((x) => x.id === id)).toMatchObject({
+      inputPrice: 4,
+      outputPrice: 20,
+    });
+  });
+});
+
 describe("router-core 53fe783 tool fallbacks (GPT-6.2 Astra, Gemini 4 Neon and Hydrogen)", () => {
   // blockrun src/lib/models.ts: Astra listed 2026-11-17 ($8/$40, 1.05M/128K),
   // Hydrogen 2026-11-17 ($1.50/$7.50, 1M/65K), Neon 2026-11-19 ($3/$15, 1M/65K).
