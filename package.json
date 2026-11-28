@@ -48,7 +48,7 @@
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ scripts/",
+    "lint": "eslint src/ scripts/ apps/desktop/",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:resilience:errors": "tsx test/resilience-errors.ts",

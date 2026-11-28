@@ -7,6 +7,12 @@ import { ensureNpmPackage, findCommand } from "../core/runtime.js";
 import type { AdapterContext, AgentAdapter, AgentStatus, InstallOptions } from "../core/types.js";
 import { assertCommand, statusShape } from "./shared.js";
 
+/** The parts of DSH's settings.yaml that verify reads. Anything else may be there too. */
+type DshSettings = {
+  "llm-pi-ai"?: { providers?: { clawrouter?: { baseURL?: unknown } } };
+  "agent-default-model"?: { provider?: unknown };
+};
+
 export class DshAdapter implements AgentAdapter {
   readonly id = "dsh" as const;
   readonly name = "DeepSeek Harness";
@@ -59,7 +65,7 @@ export class DshAdapter implements AgentAdapter {
 
   async verify(context: AdapterContext): Promise<{ ok: boolean; details: string[] }> {
     try {
-      const settings = parse(await readText(this.managedPaths(context)[0]!)) as Record<string, any>;
+      const settings = parse(await readText(this.managedPaths(context)[0]!)) as DshSettings | null;
       const provider = settings?.["llm-pi-ai"]?.providers?.clawrouter;
       const selected = settings?.["agent-default-model"];
       const ok = provider?.baseURL === context.proxyBaseUrl && selected?.provider === "clawrouter";

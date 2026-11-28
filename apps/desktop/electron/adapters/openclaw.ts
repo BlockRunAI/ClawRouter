@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { hasOpenClawConfig, removeOpenClawConfig } from "../core/config.js";
 import { readText } from "../core/files.js";
 import { CLAWROUTER_PACKAGE_VERSION, findCommand } from "../core/runtime.js";
-import type { AdapterContext, AgentAdapter, AgentStatus, InstallOptions } from "../core/types.js";
+import type { AdapterContext, AgentAdapter, AgentStatus } from "../core/types.js";
 import { assertCommand, statusShape } from "./shared.js";
 
 export class OpenClawAdapter implements AgentAdapter {
@@ -56,7 +56,7 @@ export class OpenClawAdapter implements AgentAdapter {
     assertCommand(result, "BlockRun ClawRouter plugin uninstall");
   }
 
-  async install(context: AdapterContext, _options: InstallOptions): Promise<void> {
+  async install(context: AdapterContext): Promise<void> {
     if (!(await findCommand(context, "openclaw")))
       throw new Error("OpenClaw CLI was not found on PATH");
     const result = await context.runCommand(

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { niceCeiling, normalizeStats, windowLabel, type UsageDay } from "./usage-stats.js";
+import { niceCeiling, normalizeStats, windowLabel } from "./usage-stats.js";
 
 import type {
   AgentId,
