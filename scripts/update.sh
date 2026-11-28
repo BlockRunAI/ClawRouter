@@ -990,12 +990,12 @@ try {
   // >>> modelPolicy.allow sync (same rule as src/openclaw-model-policy.ts)
   // OpenClaw 2026.8+ reads agents.defaults.modelPolicy.allow instead of the keys above once it
   // has migrated them, so models added only above never reach /model. Mirror the blockrun/* set
-  // there, but only where OpenClaw already wrote an allow list: older OpenClaw rejects a config
-  // carrying modelPolicy, and no allow list means no restriction.
+  // there, but only where OpenClaw already wrote a non-empty allow list: older OpenClaw rejects a
+  // config carrying modelPolicy, and an absent or empty list means no restriction.
   let policySynced = false;
   const policy = config.agents.defaults.modelPolicy;
   if (policy && typeof policy === 'object' && !Array.isArray(policy) && Array.isArray(policy.allow) &&
-      !policy.allow.some(e => typeof e === 'string' && (e.trim() === '*' || e.trim() === 'blockrun/*'))) {
+      policy.allow.length > 0 && !policy.allow.some(e => typeof e === 'string' && (e.trim() === '*' || e.trim() === 'blockrun/*'))) {
     const ownedRef = e => typeof e === 'string' && e.trim().startsWith('blockrun/') && !e.trim().endsWith('*');
     const kept = policy.allow.filter(e => !ownedRef(e) || currentKeys.has(e.trim()));
     const present = new Set(kept.filter(ownedRef).map(e => e.trim()));

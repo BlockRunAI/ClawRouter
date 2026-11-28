@@ -52,6 +52,12 @@ describe("syncBlockrunModelPolicyAllow", () => {
     expect(defaults.modelPolicy).toEqual({ deny: ["x/y"] });
   });
 
+  it("leaves an empty allow list empty: OpenClaw reads it as every model allowed", () => {
+    const defaults = { modelPolicy: { allow: [] as unknown[] } };
+    expect(syncBlockrunModelPolicyAllow(defaults, EXPECTED)).toEqual({ added: 0, pruned: 0 });
+    expect(defaults.modelPolicy.allow).toEqual([]);
+  });
+
   it("leaves the list alone when a wildcard already admits every BlockRun model", () => {
     for (const wildcard of ["blockrun/*", "*", " blockrun/* "]) {
       const defaults = { modelPolicy: { allow: [wildcard, "blockrun/openai/o3"] } };
