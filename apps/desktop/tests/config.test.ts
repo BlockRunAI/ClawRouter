@@ -34,6 +34,109 @@ describe("agent configuration writers", () => {
     expect(result).toContain("[profiles.clawrouter]");
   });
 
+  it("replaces an existing root model and model_provider instead of repeating the key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(
+      path,
+      [
+        'model = "gpt-5-codex"',
+        'model_provider = "openai"',
+        'model_reasoning_effort = "high"',
+        "",
+        "[profiles.fast]",
+        'model = "o3"',
+        "",
+      ].join("\n"),
+    );
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result.match(/^model = /gm)).toHaveLength(3);
+    expect(result.match(/^model_provider = /gm)).toHaveLength(2);
+    expect(result).toContain('model_reasoning_effort = "high"');
+    expect(result).toContain('model = "o3"');
+    expect(result).not.toContain("gpt-5-codex");
+  });
+
+  it("keeps multi-line strings and arrays that hold model-looking lines", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    const user = [
+      'developer_instructions = """',
+      'model = "inside a basic string"',
+      "[fake]",
+      '"""',
+      "notes = '''",
+      'model_provider = "inside a literal string"',
+      "'''",
+      "matrix = [",
+      "  [1],",
+      "  [2]",
+      "]",
+    ].join("\n");
+    await writeFile(path, `${user}\nmodel = "gpt-5-codex"\n\n[profiles.fast]\nmodel = "o3"\n`);
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).toContain(user);
+    expect(result).not.toContain("gpt-5-codex");
+    expect(result).toContain('model = "o3"');
+  });
+
+  it("reads a quoted table header that holds an escaped quote", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    const user = '[profiles."a\\"b"]\nmodel = "o3"\nmodel_provider = "openai"';
+    await writeFile(path, `model = "gpt-5-codex"\n\n${user}\n`);
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).toContain(user);
+    expect(result).not.toContain("gpt-5-codex");
+  });
+
+  it("decodes escapes in a quoted root key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(
+      path,
+      '"mod\\u0065l" = "gpt-5-codex"\n"model_provider" = "openai"\n"my\\u0020model" = "keep"\n',
+    );
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).not.toContain("gpt-5-codex");
+    expect(result).not.toContain('"openai"');
+    expect(result).toContain('"my\\u0020model" = "keep"');
+  });
+
+  it("drops a root model value that spans several lines", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(path, 'model = """\nold\n"""\nmodel_reasoning_effort = "high"\n');
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).not.toContain("old");
+    expect(result).toContain('model_reasoning_effort = "high"');
+  });
+
+  it("leaves an existing root model alone when no default is requested", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(path, 'model = "gpt-5-codex"\n');
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", false);
+
+    expect(await readFile(path, "utf8")).toContain('model = "gpt-5-codex"');
+  });
+
   it("escapes control characters instead of allowing TOML line injection", async () => {
     const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
     const path = join(root, "config.toml");
