@@ -5,9 +5,10 @@ import { dirname, join } from "node:path";
 import { parse } from "yaml";
 import { describe, expect, it, vi } from "vitest";
 
+import { CodexAdapter } from "../electron/adapters/codex.js";
 import { ClawRouterManager } from "../electron/core/manager.js";
 import { CLAWROUTER_PACKAGE_VERSION } from "../electron/core/runtime.js";
-import type { CommandRunner } from "../electron/core/types.js";
+import type { AdapterContext, CommandRunner } from "../electron/core/types.js";
 
 function response(body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -54,22 +55,50 @@ describe("ClawRouterManager adapter flow", () => {
     expect(await readFile(config, "utf8")).toBe(original);
   });
 
-  it("rolls Codex back instead of reporting success on a config Codex would refuse", async () => {
+  it("connects over a config @blockrun/clawrouter-codex already set up, and restores it exactly", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-manager-"));
     const codexDir = join(home, ".codex");
     await mkdir(codexDir, { recursive: true });
     const config = join(codexDir, "config.toml");
-    // Written by hand, outside Desktop's managed block, so the writer keeps it.
-    const original =
-      '[model_providers.clawrouter]\nname = "mine"\nbase_url = "http://127.0.0.1:8403/v1"\n';
+    // What `clawrouter-codex desktop on` writes: its own provider table, outside Desktop's block.
+    const original = [
+      'model = "blockrun/auto"',
+      'model_provider = "clawrouter"',
+      'model_catalog_json = "/home/u/.codex/clawrouter-catalog.json"',
+      "",
+      "[model_providers.clawrouter]",
+      'name = "ClawRouter"',
+      'base_url = "http://localhost:8403/v1"',
+      'wire_api = "responses"',
+      "requires_openai_auth = true",
+      "",
+    ].join("\n");
     await writeFile(config, original);
     const manager = fixtureManager(home, async (command) => command === "codex");
 
     const installed = await manager.install("codex", { setDefault: true, model: "blockrun/auto" });
+    expect(installed, installed.message).toMatchObject({ ok: true });
+    const written = await readFile(config, "utf8");
+    expect(written.match(/^\[model_providers\.clawrouter\]/gm)).toHaveLength(1);
+    expect(written).not.toContain("requires_openai_auth = true");
 
-    expect(installed).toMatchObject({ ok: false, rolledBack: true });
-    expect(installed.message).toContain('"model_providers.clawrouter" is defined 2 times');
+    const restored = await manager.uninstall("codex");
+    expect(restored.ok).toBe(true);
     expect(await readFile(config, "utf8")).toBe(original);
+  });
+
+  it("fails Codex verification on a config Codex would refuse to load", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-verify-"));
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await writeFile(
+      join(home, ".codex", "config.toml"),
+      '[model_providers.clawrouter]\nbase_url = "http://127.0.0.1:8403/v1"\n\n[model_providers.clawrouter]\nname = "again"\n',
+    );
+
+    const result = await new CodexAdapter().verify({ homeDir: home } as AdapterContext);
+
+    expect(result.ok).toBe(false);
+    expect(result.details.join("; ")).toContain('"model_providers.clawrouter" is defined 2 times');
   });
 
   it("does not claim rollback when startup fails before configuration starts", async () => {

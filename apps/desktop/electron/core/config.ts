@@ -23,9 +23,13 @@ export async function upsertCodexConfig(
     "g",
   );
   const unmanaged = original.replace(managedPattern, "").replace(rootPattern, "");
-  // The managed root block sets `model_provider` and `model`. TOML rejects a
-  // repeated key, so an existing root assignment of either must go first.
-  const clean = (setDefault ? withoutRootModelKeys(unmanaged) : unmanaged).trim();
+  // The managed blocks define these keys and tables, and TOML rejects a repeated definition, so
+  // any already in the file must go first: the user's own root `model`, or a provider table that
+  // another tool wrote (`clawrouter-codex desktop on` writes its own [model_providers.clawrouter]).
+  const clean = withoutDefinitions(
+    unmanaged,
+    setDefault ? CODEX_OWNED_PATHS : CODEX_TABLE_PATHS,
+  ).trim();
   const rootDefaults = setDefault
     ? `${ROOT_START}\nmodel_provider = "clawrouter"\nmodel = "${tomlString(model)}"\n${ROOT_END}\n\n`
     : "";
@@ -267,11 +271,11 @@ const CODEX_ROOT_KEYS = ["model", "model_provider"];
  * Every key or table the Codex writer puts in config.toml. TOML rejects defining any of them twice,
  * and Codex then refuses to load the whole file, so each must appear at most once.
  */
-const CODEX_OWNED_PATHS = [
-  ...CODEX_ROOT_KEYS.map((key) => [key]),
+const CODEX_TABLE_PATHS = [
   ["model_providers", "clawrouter"],
   ["profiles", "clawrouter"],
 ];
+const CODEX_OWNED_PATHS = [...CODEX_ROOT_KEYS.map((key) => [key]), ...CODEX_TABLE_PATHS];
 
 /**
  * Each key or table the Codex writer owns that `toml` defines more than once, e.g.
@@ -287,15 +291,10 @@ export function codexConfigConflicts(toml: string): string[] {
     let count = 0;
     let dotted = false;
     for (const line of lines) {
-      if (line.header) {
-        if (samePath(line.header, owned)) count++;
-      } else if (line.key && !startsWith(line.table, owned)) {
-        // A key inside the owned table only fills it. A key from a parent table defines it:
-        // as a value when the path ends there, or as a dotted table that later dotted keys extend.
-        const path = [...line.table, ...line.key];
-        if (samePath(path, owned)) count++;
-        else if (startsWith(path, owned)) dotted = true;
-      }
+      if (!definesPath(line, owned)) continue;
+      // Dotted keys such as `clawrouter.a` and `clawrouter.b` extend one table: one definition.
+      if (line.key && !samePath([...line.table, ...line.key], owned)) dotted = true;
+      else count++;
     }
     if (dotted) count++;
     return count > 1 ? [`"${owned.join(".")}" is defined ${count} times`] : [];
@@ -303,23 +302,35 @@ export function codexConfigConflicts(toml: string): string[] {
 }
 
 /**
- * Drop root-level `model` and `model_provider` keys, dotted ones such as `model.sub` included:
- * the managed root block sets both. Lines of a value that spans several lines go with their key.
+ * Drop every definition of `paths`: a table's header and keys, a root key such as `model` or
+ * `model.sub`, and a definition from a parent table (`[profiles]` then `clawrouter = {…}`).
+ * Lines of a multi-line value go with their key. Comments, blank lines and sub-tables such as
+ * `[profiles.clawrouter.extra]` stay.
  */
-function withoutRootModelKeys(toml: string): string {
+function withoutDefinitions(toml: string, paths: string[][]): string {
   let dropping = false;
   const kept: string[] = [];
   for (const line of scanTomlLines(toml)) {
     if (!line.continuation) {
-      dropping =
-        !line.header &&
-        line.table.length === 0 &&
-        !!line.key &&
-        CODEX_ROOT_KEYS.includes(line.key[0]!);
+      dropping = paths.some(
+        (owned) => definesPath(line, owned) || (!!line.key && samePath(line.table, owned)),
+      );
     }
     if (!dropping) kept.push(line.text);
   }
   return kept.join("\n");
+}
+
+/**
+ * Whether `line` defines `owned`: its table header, or a key from a parent table, which defines
+ * it as a value when the path ends there and as a dotted table when it goes on. A key inside the
+ * owned table only fills it.
+ */
+function definesPath(line: TomlLine, owned: string[]): boolean {
+  if (line.header) return samePath(line.header, owned);
+  return (
+    !!line.key && !startsWith(line.table, owned) && startsWith([...line.table, ...line.key], owned)
+  );
 }
 
 type TomlLine = {
