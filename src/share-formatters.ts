@@ -342,7 +342,11 @@ function applyTelegramText(text: string): string {
         continue;
       }
     }
-    let j = i;
+    // Always take the marker at i as text: it failed to close above, and a
+    // scan that starts on it would stop at once and never advance i. An
+    // unclosed `**` or `~~` is taken whole, so its second character cannot
+    // pair with a later marker.
+    let j = peek("**") || peek("~~") ? i + 2 : i + 1;
     while (
       j < len &&
       !text.startsWith("**", j) &&
