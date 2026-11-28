@@ -4,6 +4,30 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.327 — November 27, 2026
+
+### Desktop connects Codex for users of `@blockrun/clawrouter-codex`
+
+`clawrouter-codex desktop on` writes its own `[model_providers.clawrouter]`
+table into `~/.codex/config.toml`, and its older setup wrote
+`[profiles.clawrouter]` there too. Desktop added the same tables in its own
+block, so Codex refused the file. Before v0.12.325 Desktop still reported
+success; since v0.12.325 the connect rolled back, so anyone using both tools
+could not connect at all. Desktop now replaces those tables with its own,
+keeping your comments and any sub-tables such as
+`[profiles.clawrouter.extra]`. Disconnecting still restores the original file
+exactly.
+
+### Telegram share stays fast on text full of unclosed `[`
+
+Each unclosed `[` made the Telegram formatter search the rest of the text
+again, so the time grew with the square of the response size. 1 MB of
+`arr[0` blocked the proxy for 12.9 s; it now takes about 20 ms. The output is
+unchanged: 100,000 random inputs, across all five presets, format
+identically to v0.12.326. CodeRabbit raised this on #656.
+
+---
+
 ## v0.12.326 — November 27, 2026
 
 ### Routing moves to the current model generation
