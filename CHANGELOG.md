@@ -4,6 +4,29 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.329 — November 27, 2026
+
+### New BlockRun models show up in `/model` on OpenClaw 2026.8+
+
+OpenClaw 2026.8 moved the model allowlist. The first time it writes
+`openclaw.json`, it copies `agents.defaults.models` into
+`agents.defaults.modelPolicy.allow` and from then on reads only that list.
+ClawRouter kept adding new models to `agents.defaults.models`, so every model
+shipped after your OpenClaw migrated was missing from `/model`.
+
+ClawRouter now keeps the BlockRun entries of `modelPolicy.allow` in step with
+the models it ships, adding new ones and removing retired ones, on gateway
+start, `clawrouter setup`, `reinstall.sh` and `update.sh`. Uninstalling
+(plugin, `uninstall.sh`, or Desktop's disconnect) removes them again. It only
+edits a list OpenClaw has already created, so older OpenClaw versions are
+untouched. Your other providers' entries, wildcards such as `blockrun/*`, and
+your deny list are left as they are.
+
+Also fixed: `reinstall.sh` did not save a sync that only removed retired
+models.
+
+---
+
 ## v0.12.328 — November 27, 2026
 
 ### Short model names follow the current generation
