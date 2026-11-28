@@ -2,7 +2,7 @@
 
 ClawRouter offers four routing profiles to balance cost vs quality. Prices are in **$/M tokens** (input/output), taken from `src/models.ts` (which mirrors the live BlockRun catalog).
 
-Routing decisions are made by [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core **V3.4**, the constraint-first portfolio router), which ClawRouter inlines at build time and pins by commit SHA. `src/router/index.ts` simply re-exports it. Nothing below calls a network or a second model: classification, eligibility filtering and ranking all run locally in about a quarter of a millisecond.
+Routing decisions are made by [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core **V3.5**, the constraint-first portfolio router), which ClawRouter inlines at build time and pins by commit SHA. `src/router/index.ts` simply re-exports it. Nothing below calls a network or a second model: classification, eligibility filtering and ranking all run locally in about a quarter of a millisecond.
 
 ## How a request is routed
 
@@ -11,7 +11,7 @@ Routing decisions are made by [`@blockrun/router-core`](https://github.com/Block
 3. **Rank.** Survivors are scored on task quality, capability, estimated cost, speed, reliability and a small curated-order prior. The weights differ per profile (see [Profile weights](#profile-weights)).
 4. **Recover.** The full ranked list stays on the decision as `candidates`. The proxy walks it on a timeout or 5xx, so a provider outage costs a retry, not the task.
 
-The tables show each tier's **curated primary** and its fallback chain as configured in router-core. Under the portfolio strategy the primary is the head of the candidate pool and carries the curated-order prior; it is the usual winner, not a guarantee — a request that needs vision or a 1M context can legitimately land on a fallback.
+The tables show each tier's **curated primary** and its fallback chain as configured in router-core `DEFAULT_ROUTING_CONFIG` at commit `53fe783`, generated from that config rather than written by hand. Under the portfolio strategy the primary is the head of the candidate pool and carries the curated-order prior; it is the usual winner, not a guarantee — a request that needs vision or a 1M context can legitimately land on a fallback.
 
 ---
 
@@ -19,12 +19,12 @@ The tables show each tier's **curated primary** and its fallback chain as config
 
 Use `blockrun/auto` (or `/model auto`) for the best quality/price balance.
 
-| Tier      | Primary Model              | Input | Output | Fallback chain (in order)                                                                                                                                                                                          |
-| --------- | -------------------------- | ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SIMPLE    | google/gemini-2.5-flash    | $0.30 | $2.50  | gemini-3-flash-preview → gemini-3.5-flash-lite → deepseek-chat → gemini-3.1-flash-lite → gpt-5.6-luna → gpt-5.4-nano → gemini-2.5-flash-lite → nemotron-3.5-lightning (free)                                       |
-| MEDIUM    | google/gemini-3.5-flash    | $1.50 | $9.00  | gemini-3.6-flash → glm-5.3-flash → gpt-5.6-terra → gemini-3-flash-preview → deepseek-chat → gemini-2.5-flash → minimax-m3 → gemini-3.1-flash-lite → gpt-5.6-luna → gemini-2.5-flash-lite                           |
-| COMPLEX   | google/gemini-3.1-pro      | $2.00 | $12.00 | gemini-3.6-flash → gemini-3.5-flash → claude-sonnet-5 → grok-4.5 → gemini-2.5-pro → claude-sonnet-4.6 → gpt-5.6-terra → gpt-5.5 → gpt-5.4 → glm-5.3 → kimi-k3 → deepseek-v4-pro → deepseek-chat → gemini-2.5-flash |
-| REASONING | deepseek/deepseek-reasoner | $0.14 | $0.28  | deepseek-v4-pro → grok-4.3 → qwen3.7-plus → gemini-3.5-flash → o4-mini → o3                                                                                                                                        |
+| Tier      | Primary Model                | Input | Output | Fallback chain (in order)                                                                                                                                                                              |
+| --------- | ---------------------------- | ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SIMPLE    | google/gemini-3.5-flash-lite | $0.30 | $2.50  | gemini-3-flash-preview → deepseek-chat → gemini-3.1-flash-lite → gpt-5.6-luna → gpt-6-luna → gemini-2.5-flash-lite → nemotron-3.5-lightning (free)                                                     |
+| MEDIUM    | google/gemini-3.6-flash      | $0.75 | $3.75  | glm-5.3-flash → gpt-5.6-terra → gemini-3-flash-preview → deepseek-chat → gemini-3.5-flash-lite → minimax-m3 → gemini-3.1-flash-lite → gpt-5.6-luna → gemini-2.5-flash-lite                             |
+| COMPLEX   | google/gemini-3.1-pro        | $2.00 | $12.00 | gemini-3.6-flash → claude-sonnet-5 → grok-4.7 → gemini-3.8-flash → claude-sonnet-5.5 → gpt-5.6-terra → gpt-6.2-sol → glm-5.3 → kimi-k3.1-pro → deepseek-v4-pro → deepseek-chat → gemini-3.5-flash-lite |
+| REASONING | deepseek/deepseek-reasoner   | $0.14 | $0.28  | deepseek-v4-pro → grok-4.3 → qwen3.7-plus → gemini-3.6-flash → gpt-5.4-mini                                                                                                                            |
 
 ---
 
@@ -32,12 +32,12 @@ Use `blockrun/auto` (or `/model auto`) for the best quality/price balance.
 
 Use `blockrun/eco` for maximum cost savings. The first stop is the free tier, so simple requests can cost $0.00.
 
-| Tier      | Primary Model               | Input | Output | Fallback chain (in order)                                                                                                 |
-| --------- | --------------------------- | ----- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
-| SIMPLE    | free/nemotron-3.5-lightning | $0.00 | $0.00  | nemotron-3-nano-omni (free) → gemini-2.5-flash-lite → glm-5.3-flash → gpt-5.6-luna → gpt-5.4-nano → gemini-3.1-flash-lite |
-| MEDIUM    | zai/glm-5.3-flash           | $0.15 | $0.50  | deepseek-chat → gemini-3.1-flash-lite → gpt-5.6-luna → gpt-5.4-nano → gemini-2.5-flash-lite → gemini-2.5-flash            |
-| COMPLEX   | zai/glm-5.3-flash           | $0.15 | $0.50  | deepseek-chat → minimax-m3 → deepseek-v4-pro → gemini-3.1-flash-lite → gemini-2.5-flash                                   |
-| REASONING | deepseek/deepseek-reasoner  | $0.14 | $0.28  | deepseek-v4-pro → qwen3.7-plus → minimax-m3 → glm-5.3-flash                                                               |
+| Tier      | Primary Model               | Input | Output | Fallback chain (in order)                                                                                               |
+| --------- | --------------------------- | ----- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| SIMPLE    | free/nemotron-3.5-lightning | $0.00 | $0.00  | nemotron-3-nano-omni (free) → gemini-2.5-flash-lite → glm-5.3-flash → gpt-5.6-luna → gpt-6-luna → gemini-3.1-flash-lite |
+| MEDIUM    | zai/glm-5.3-flash           | $0.15 | $0.50  | deepseek-chat → gemini-3.1-flash-lite → gpt-5.6-luna → gpt-6-luna → gemini-2.5-flash-lite → gemini-3.5-flash-lite       |
+| COMPLEX   | zai/glm-5.3-flash           | $0.15 | $0.50  | deepseek-chat → minimax-m3 → deepseek-v4-pro → gemini-3.1-flash-lite → gemini-3.5-flash-lite                            |
+| REASONING | deepseek/deepseek-reasoner  | $0.14 | $0.28  | deepseek-v4-pro → qwen3.7-plus → minimax-m3 → glm-5.3-flash                                                             |
 
 The two free rungs at the head of ECO SIMPLE follow NVIDIA's free hosting, which retires models without notice (deepseek-v4-flash 410'd 2026-08-12, seed-oss-36b 2026-08-03, gpt-oss-120b hung 2026-08-16, and on 2026-08-30 NVIDIA retired FOUR of the five visible free models at once). Each retirement retargets the free rungs to the current free tier; the paid rungs never move. `src/router/free-model-liveness.test.ts` fails the build if a chain names a free model the picker no longer lists.
 
@@ -45,14 +45,14 @@ The two free rungs at the head of ECO SIMPLE follow NVIDIA's free hosting, which
 
 ## PREMIUM (Best Quality)
 
-Use `blockrun/premium` for maximum quality. Codex for complex coding, Gemini 3.5 Flash for simple work, Sonnet 5 for reasoning/instructions, Fable/Opus for architecture, audits and PM-grade work.
+Use `blockrun/premium` for maximum quality. Gemini 3.6 Flash for simple work, Codex for everyday coding, Opus 5.5 for architecture, audits and PM-grade work, Sonnet 5 for reasoning/instructions.
 
-| Tier      | Primary Model             | Input  | Output | Fallback chain (in order)                                                                                                                                                                                                                    |
-| --------- | ------------------------- | ------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SIMPLE    | google/gemini-3.5-flash   | $1.50  | $9.00  | gemini-3.6-flash → claude-haiku-4.5 → glm-5.3 → gemini-2.5-flash → gemini-3.5-flash-lite → deepseek-chat                                                                                                                                     |
-| MEDIUM    | openai/gpt-5.3-codex      | $1.75  | $14.00 | claude-sonnet-5 → kimi-k3 → glm-5.3 → gemini-3.6-flash → gemini-3.5-flash → gemini-2.5-pro → grok-4.5 → claude-sonnet-4.6 → gpt-5.6-terra                                                                                                    |
-| COMPLEX   | anthropic/claude-fable-5  | $10.00 | $50.00 | claude-opus-5 → claude-opus-4.8 → claude-opus-4.7 → claude-sonnet-5 → claude-sonnet-4.6 → grok-4.5 → kimi-k3 → gpt-5.6-terra → gpt-5.5 → gpt-5.4 → gpt-5.3-codex → glm-5.3 → deepseek-v4-pro → deepseek-chat → nemotron-3.5-lightning (free) |
-| REASONING | anthropic/claude-sonnet-5 | $2.00  | $10.00 | claude-sonnet-4.6 → claude-opus-5 → claude-opus-4.8 → claude-opus-4.7 → grok-4.5 → deepseek-v4-pro → grok-4.3 → o4-mini → o3                                                                                                                 |
+| Tier      | Primary Model             | Input | Output | Fallback chain (in order)                                                                                                                                                                                |
+| --------- | ------------------------- | ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SIMPLE    | google/gemini-3.6-flash   | $0.75 | $3.75  | claude-haiku-4.5 → glm-5.3 → gemini-3.5-flash-lite → deepseek-chat                                                                                                                                       |
+| MEDIUM    | openai/gpt-5.3-codex      | $1.75 | $14.00 | claude-sonnet-5 → kimi-k3.1-pro → glm-5.3 → gemini-3.6-flash → gemini-3.8-flash → grok-4.7 → claude-sonnet-5.5 → gpt-5.6-terra                                                                           |
+| COMPLEX   | anthropic/claude-opus-5.5 | $4.00 | $20.00 | claude-opus-5 → claude-sonnet-5 → claude-sonnet-5.5 → grok-4.7 → kimi-k3.1-pro → gpt-5.6-terra → gpt-6.2-sol → gpt-5.3-codex → glm-5.3 → deepseek-v4-pro → deepseek-chat → nemotron-3.5-lightning (free) |
+| REASONING | anthropic/claude-sonnet-5 | $2.00 | $10.00 | claude-sonnet-5.5 → claude-opus-5.5 → claude-opus-5 → grok-4.7 → deepseek-v4-pro → grok-4.3 → gpt-5.4-mini                                                                                               |
 
 The premium COMPLEX chain is deliberately de-Gemini'd: Google's "high demand" 503s correlate with Anthropic outages (everyone falls back to Google at the same time), so the chain prefers the in-family Opus hot swaps, then xAI, Moonshot, OpenAI and Z.AI — providers on independent infrastructure.
 
@@ -62,12 +62,12 @@ The premium COMPLEX chain is deliberately de-Gemini'd: Google's "high demand" 50
 
 Not a profile you pick — router-core switches to these tiers when the turn actually needs its attached tools (`inferToolRequirement`: `tool_choice: "none"` is authoritative, and host tool _descriptions_ alone do not trigger it). Primaries favour models that keep going instead of stopping to ask.
 
-| Tier      | Primary Model             | Input | Output | Fallback chain (in order)                                                                                                                                                                                                  |
-| --------- | ------------------------- | ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SIMPLE    | openai/gpt-4o-mini        | $0.15 | $0.60  | gpt-5.6-luna → glm-5.3-flash → claude-haiku-4.5 → gemini-2.5-flash                                                                                                                                                         |
-| MEDIUM    | openai/gpt-5-mini         | $0.25 | $2.00  | gemini-3.5-flash → glm-5.3-flash → gpt-5.6-terra → gpt-4o-mini → claude-haiku-4.5 → deepseek-chat → kimi-k3                                                                                                                |
-| COMPLEX   | anthropic/claude-sonnet-5 | $2.00 | $10.00 | claude-sonnet-4.6 → claude-opus-5 → claude-opus-4.8 → claude-opus-4.7 → grok-4.5 → kimi-k3 → gpt-5.6-terra → gpt-5.5 → gpt-5.4 → gpt-5.3-codex → glm-5.3 → deepseek-v4-pro → deepseek-chat → nemotron-3.5-lightning (free) |
-| REASONING | anthropic/claude-sonnet-5 | $2.00 | $10.00 | claude-sonnet-4.6 → claude-opus-5 → claude-opus-4.8 → claude-opus-4.7 → grok-4.5 → deepseek-v4-pro → deepseek-reasoner                                                                                                     |
+| Tier      | Primary Model             | Input | Output | Fallback chain (in order)                                                                                                                                                                                |
+| --------- | ------------------------- | ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SIMPLE    | openai/gpt-4o-mini        | $0.15 | $0.60  | gpt-5.6-luna → glm-5.3-flash → claude-haiku-4.5 → gemini-3.5-flash-lite                                                                                                                                  |
+| MEDIUM    | openai/gpt-5.6-luna       | $0.20 | $1.20  | gemini-3.6-flash → glm-5.3-flash → gpt-5.6-terra → gpt-4o-mini → claude-haiku-4.5 → deepseek-chat → kimi-k3.1-pro                                                                                        |
+| COMPLEX   | anthropic/claude-sonnet-5 | $2.00 | $10.00 | claude-sonnet-5.5 → claude-opus-5.5 → claude-opus-5 → grok-4.7 → kimi-k3.1-pro → gpt-5.6-terra → gpt-6.2-sol → gpt-5.3-codex → glm-5.3 → deepseek-v4-pro → deepseek-chat → nemotron-3.5-lightning (free) |
+| REASONING | anthropic/claude-sonnet-5 | $2.00 | $10.00 | claude-sonnet-5.5 → claude-opus-5.5 → claude-opus-5 → grok-4.7 → deepseek-v4-pro → deepseek-reasoner                                                                                                     |
 
 Set `routing.overrides.agenticMode: false` to disable the agentic tier set, or `true` to force it.
 
@@ -109,9 +109,9 @@ Combined input + output rate per 1M tokens, primaries only:
 | Tier      | ECO   | AUTO   | Savings  |
 | --------- | ----- | ------ | -------- |
 | SIMPLE    | FREE  | $2.80  | **100%** |
-| MEDIUM    | $1.75 | $4.95  | **65%**  |
-| COMPLEX   | $1.75 | $14.00 | **88%**  |
-| REASONING | $0.70 | $0.70  | 0%       |
+| MEDIUM    | $0.65 | $4.50  | **86%**  |
+| COMPLEX   | $0.65 | $14.00 | **95%**  |
+| REASONING | $0.42 | $0.42  | 0%       |
 
 The published savings claim (**84%** on `auto`, **98%** on `eco`, against pinning Claude Opus 5) is blended across a stated workload mix and priced on the live catalog — see [`savings-mix.json`](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json). Per-tier numbers above are illustrative; the blended figure is the one to quote.
 
@@ -135,4 +135,4 @@ See [configuration.md](./configuration.md#routing-configuration) for the YAML.
 
 ---
 
-_Last updated: v0.12.250 — router-core V3.4 (commit `d7bc10c`)_
+_Last updated: 2026-11-27 — router-core V3.5 (commit `53fe783`)_

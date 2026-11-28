@@ -4,6 +4,51 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.328 — November 27, 2026
+
+### Short model names follow the current generation
+
+The generic shorthands now name the newest model in their family. Each one
+costs the same or less than before and keeps the same context window and
+output limit, so no quote goes up and no per-call cost cap is crossed:
+
+- `sonnet`, `claude`, `br-sonnet`, `anthropic/claude` and `anthropic/sonnet`
+  → Claude Sonnet 5.5 ($2/$10 per 1M tokens, was Sonnet 4.6 at $3/$15).
+- `opus` and `anthropic/opus` → Claude Opus 5.5 ($4/$20, was Opus 5 at
+  $5/$25).
+- `grok` → Grok 4.7 (same $2/$6 as Grok 4.5).
+- `nano` → GPT-6 Luna ($0.10/$0.50, was GPT-5.4 Nano at $0.20/$1.25). It
+  also reads images.
+
+Version pins still name the model they always did: `sonnet-4.6`, `opus-5`,
+`opus-4.8`, `opus-4.7`, `grok-4.5`, `gpt-5.4-nano` and so on. `sonnet-4` and
+`opus-4` name the 4-series and stay on Sonnet 4.6 and Opus 4.8, as the gateway
+does. `fable` stays on Claude Fable 5, and `gpt-5-nano` is unchanged.
+`clawrouter doctor` asks Sonnet 5.5 (or Opus 5.5 with `doctor opus`).
+
+### GPT-6.2 Astra, Gemini 4 Neon and Gemini 4 Hydrogen in the catalog
+
+router-core can hand a turn that needs its tools to any of these three, so
+ClawRouter now prices them; the balance check and `maxCostPerRun` only count
+spend on models they can price. A new test fails the build if router-core
+knows a model ClawRouter cannot price.
+
+- `openai/gpt-6.2-astra`: OpenAI's GPT-6.2 flagship, $8/$40, 1M context,
+  128K output. Pin it with `/model gpt-6.2-astra`.
+- `google/gemini-4-neon`: Google's newest Gemini 4, $3/$15, 1M context.
+- `google/gemini-4-hydrogen`: the fast Gemini 4, $1.50/$7.50, 1M context.
+
+All three, and Gemini 4 Carbon, are now in the model picker.
+
+### Docs match the router again
+
+The routing-profile tables are regenerated from router-core 53fe783 (Router
+Core V3.5). The README, the ClawRouter skill and the feature, configuration,
+architecture, troubleshooting and subscription-failover guides no longer name
+retired or superseded models in their examples.
+
+---
+
 ## v0.12.327 — November 27, 2026
 
 ### Desktop connects Codex for users of `@blockrun/clawrouter-codex`

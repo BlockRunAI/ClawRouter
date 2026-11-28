@@ -13,14 +13,19 @@ import { TOP_MODELS } from "./top-models.js";
 
 /**
  * Model aliases for convenient shorthand access.
- * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4-6`.
+ * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-5.5`.
  */
 export const MODEL_ALIASES: Record<string, string> = {
-  // Claude - flagship opus is 5; bare sonnet stays at 4.6 (sonnet-5 is opt-in
-  // via explicit `sonnet-5` — not promoted to the bare alias pending benchmarks)
-  claude: "anthropic/claude-sonnet-4.6",
-  "br-sonnet": "anthropic/claude-sonnet-4.6",
-  sonnet: "anthropic/claude-sonnet-4.6",
+  // Claude - bare `sonnet`/`claude`/`br-sonnet` PROMOTED 4.6 -> 5.5 (2026-11-27,
+  // the generation refresh router-core 53fe783 ships). Same rule as `opus`
+  // 4.8 -> 5 and `glm` 5.2 -> 5.3: Sonnet 5.5 is CHEAPER ($2/$10 vs $3/$15)
+  // with an identical 1M ctx / 128K maxOutput envelope, so nothing can bill
+  // more or truncate differently for a caller who never typed a version.
+  // `sonnet-4` names the 4-series generation and stays on 4.6 (the gateway
+  // redirects claude-sonnet-4 there too); every version pin keeps its model.
+  claude: "anthropic/claude-sonnet-5.5",
+  "br-sonnet": "anthropic/claude-sonnet-5.5",
+  sonnet: "anthropic/claude-sonnet-5.5",
   "sonnet-4": "anthropic/claude-sonnet-4.6",
   "sonnet-4.6": "anthropic/claude-sonnet-4.6",
   "sonnet-4-6": "anthropic/claude-sonnet-4.6",
@@ -28,8 +33,7 @@ export const MODEL_ALIASES: Record<string, string> = {
   "sonnet-5": "anthropic/claude-sonnet-5",
   "sonnet-5.0": "anthropic/claude-sonnet-5",
   "sonnet-5-0": "anthropic/claude-sonnet-5",
-  // Sonnet 5.5 (2026-10) — explicit pins only. Bare `sonnet`/`claude` stay on
-  // 4.6 (routing/alias promotion is product policy, not a catalog sync).
+  // Sonnet 5.5 (2026-10) — also the bare `sonnet`/`claude` target (above).
   "sonnet-5.5": "anthropic/claude-sonnet-5.5",
   "sonnet-5-5": "anthropic/claude-sonnet-5.5",
   "anthropic/claude-sonnet-5-5": "anthropic/claude-sonnet-5.5",
@@ -60,15 +64,18 @@ export const MODEL_ALIASES: Record<string, string> = {
   // caller through a cap. BlockRun repointed `clawrouter-premium` → opus-5 for
   // the same reason. (Unit price only: adaptive thinking may emit more output
   // tokens per call, which raises realized spend without changing the cap math.)
-  // `opus-4` and
-  // `anthropic/claude-opus-4` stay on 4.8 — they name the 4-series generation.
+  // Bare `opus` PROMOTED again, 5 -> 5.5 (2026-11-27, with router-core
+  // 53fe783, which leads premium COMPLEX with Opus 5.5): $4/$20 is CHEAPER than
+  // Opus 5's $5/$25 and the 1M/128K envelope is identical, so the cap argument
+  // above still holds. `opus-5` keeps naming Opus 5. `opus-4` and
+  // `anthropic/claude-opus-4` stay on 4.8 — they name the 4-series generation,
+  // and the gateway's own MODEL_REDIRECTS sends claude-opus-4 to 4.8 as well.
   // Note: `anthropic/claude-opus-5` must NOT be an alias key (see fable note).
-  opus: "anthropic/claude-opus-5",
+  opus: "anthropic/claude-opus-5.5",
   "opus-5": "anthropic/claude-opus-5",
   "opus-5.0": "anthropic/claude-opus-5",
   "opus-5-0": "anthropic/claude-opus-5",
-  // Opus 5.5 (2026-10) — $4/$20, cheaper than Opus 5. Explicit pins only: bare
-  // `opus` stays on 5 until that promotion is decided on its own.
+  // Opus 5.5 (2026-10) — $4/$20, cheaper than Opus 5; also the bare `opus`.
   "opus-5.5": "anthropic/claude-opus-5.5",
   "opus-5-5": "anthropic/claude-opus-5.5",
   "anthropic/claude-opus-5-5": "anthropic/claude-opus-5.5",
@@ -81,16 +88,17 @@ export const MODEL_ALIASES: Record<string, string> = {
   "opus-4-6": "anthropic/claude-opus-4.6",
   haiku: "anthropic/claude-haiku-4.5",
   // Claude - provider/shortname patterns (common in agent frameworks)
-  "anthropic/sonnet": "anthropic/claude-sonnet-4.6",
+  "anthropic/sonnet": "anthropic/claude-sonnet-5.5",
   // fable-5 relisted 2026-07-06 (see note above)
   "anthropic/fable": "anthropic/claude-fable-5",
   "anthropic/claude-fable-5.0": "anthropic/claude-fable-5",
-  "anthropic/opus": "anthropic/claude-opus-5",
+  "anthropic/opus": "anthropic/claude-opus-5.5",
   "anthropic/claude-opus-5.0": "anthropic/claude-opus-5",
   "anthropic/claude-opus-5-0": "anthropic/claude-opus-5",
   "anthropic/haiku": "anthropic/claude-haiku-4.5",
-  "anthropic/claude": "anthropic/claude-sonnet-4.6",
-  // Backward compatibility - generic opus-4 and older flagships point at 4.8;
+  "anthropic/claude": "anthropic/claude-sonnet-5.5",
+  // Backward compatibility - the 4-series generation names (claude-sonnet-4,
+  // claude-opus-4) point at the newest 4.x, mirroring the gateway's redirects;
   // explicit version pins (claude-opus-4-7) stay on their version since server still routes them.
   "anthropic/claude-sonnet-4": "anthropic/claude-sonnet-4.6",
   "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-4.6",
@@ -137,6 +145,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // knowledge. Explicit pin only, same rule as above.
   "gpt-6.2-sol": "openai/gpt-6.2-sol",
   "gpt-6-2-sol": "openai/gpt-6.2-sol",
+  // GPT-6.2 Astra (blockrun 2026-11-17): the GPT-6.2 flagship, $8/$40.
+  // Explicit pin only, same rule as above.
+  "gpt-6.2-astra": "openai/gpt-6.2-astra",
+  "gpt-6-2-astra": "openai/gpt-6.2-astra",
   "gpt-5.5": "openai/gpt-5.5",
   "gpt-5.5-pro": "openai/gpt-5.5-pro",
   // ChatGPT Instant. `chat-latest` is a rolling upstream id — pinning it means
@@ -147,7 +159,11 @@ export const MODEL_ALIASES: Record<string, string> = {
   "gpt-5.1": "openai/gpt-5.1",
   "gpt-5.4-pro": "openai/gpt-5.4-pro",
   "gpt-5.4-nano": "openai/gpt-5.4-nano",
-  nano: "openai/gpt-5.4-nano",
+  // Bare `nano` (OpenAI's smallest tier) follows the generation refresh to
+  // GPT-6 Luna (2026-11-27): $0.10/$0.50 against gpt-5.4-nano's $0.20/$1.25,
+  // the same 1.05M/128K envelope, and it adds vision. `gpt-5.4-nano` still
+  // pins the old model.
+  nano: "openai/gpt-6-luna",
   // gpt-5-nano: OpenAI shuts it down on 2026-12-11, but the gateways keep
   // serving it at its own $0.05/$0.40 from Azure until 2027-02-09 (owner
   // decision 2026-11-24: every live OpenAI model is dearer on input). So the
@@ -305,14 +321,16 @@ export const MODEL_ALIASES: Record<string, string> = {
   // 4-fast/4-1-fast families are hidden in the backend catalog; direct full
   // IDs still resolve for pinned users).
   // `grok` tracks xAI's current flagship, promoted to 4.5 on 2026-07-14 (added
-  // upstream 2026-07-13). This is a deliberate cost increase: 4.5 is $2.50/$9.00
-  // vs 4.3's $1.50/$4.00, and upstream re-prices the WHOLE request at $5/$18 once
-  // prompt tokens reach 200K. What it buys is a direct-xAI SKU — 4.3 is
-  // OpenRouter-only and silently drops Live Search. Pin `grok-4.3` to opt out.
-  grok: "xai/grok-4.5",
+  // upstream 2026-07-13). That was a deliberate cost increase over 4.3, bought
+  // for a direct-xAI SKU — 4.3 is OpenRouter-only and silently drops Live
+  // Search. Pin `grok-4.3` to opt out. Promoted again to 4.7 on 2026-11-27 with
+  // router-core 53fe783: same $2/$6 (and the same $4/$12 whole-request reprice
+  // past 200K prompt tokens) and the same 500K/16K envelope as 4.5, so the
+  // move costs nothing. `grok-4.5` still pins the old model.
+  grok: "xai/grok-4.7",
   "grok-4.5": "xai/grok-4.5",
   "grok-4-5": "xai/grok-4.5",
-  // Grok 4.6 / 4.7 (2026-10) — explicit pins. Bare `grok` stays on 4.5.
+  // Grok 4.6 / 4.7 (2026-10) — explicit pins (4.7 is also bare `grok`).
   "grok-4.7": "xai/grok-4.7",
   "grok-4-7": "xai/grok-4.7",
   "grok-4.6": "xai/grok-4.6",
@@ -617,9 +635,9 @@ export const MODEL_ALIASES: Record<string, string> = {
  * Resolve a model alias to its full model ID.
  * Also strips "blockrun/" prefix for direct model paths.
  * Examples:
- *   - "claude" -> "anthropic/claude-sonnet-4-6" (alias)
- *   - "blockrun/claude" -> "anthropic/claude-sonnet-4-6" (alias with prefix)
- *   - "blockrun/anthropic/claude-sonnet-4-6" -> "anthropic/claude-sonnet-4-6" (prefix stripped)
+ *   - "claude" -> "anthropic/claude-sonnet-5.5" (alias)
+ *   - "blockrun/claude" -> "anthropic/claude-sonnet-5.5" (alias with prefix)
+ *   - "blockrun/anthropic/claude-sonnet-5.5" -> "anthropic/claude-sonnet-5.5" (prefix stripped)
  *   - "openai/gpt-4o" -> "openai/gpt-4o" (unchanged)
  */
 export function resolveModelAlias(model: string): string {
@@ -634,7 +652,7 @@ export function resolveModelAlias(model: string): string {
     if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
 
     // Even if not an alias, strip the prefix for direct model paths
-    // e.g., "blockrun/anthropic/claude-sonnet-4-6" -> "anthropic/claude-sonnet-4-6"
+    // e.g., "blockrun/anthropic/claude-sonnet-5.5" -> "anthropic/claude-sonnet-5.5"
     return withoutPrefix;
   }
 
@@ -852,6 +870,25 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "6.1",
     inputPrice: 2.0,
     outputPrice: 10.0,
+    contextWindow: 1050000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    // GPT-6.2 Astra (blockrun 2026-11-17, knowledge to 2026-05): the GPT-6.2
+    // flagship at $8/$40 (cached input $0.40), 1.05M/128K, reasoning + vision
+    // + tools. Catalogued because router-core 53fe783 lists it among the
+    // verified tool fallbacks: an uncatalogued candidate skips the balance
+    // check and maxCostPerRun. Long tier (>272K prompt: $16/$60) is telemetry
+    // only, as on the rest of the family — the charge is 402.
+    id: "openai/gpt-6.2-astra",
+    name: "GPT-6.2 Astra",
+    version: "6.2",
+    inputPrice: 8.0,
+    outputPrice: 40.0,
     contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,
@@ -1521,6 +1558,39 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "4",
     inputPrice: 2.0,
     outputPrice: 10.0,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // Gemini 4 Neon (blockrun 2026-11-19): Google's newest Gemini 4, $3/$15
+    // (cached $0.15), 1M/65K, no long-context tier and no dated reprice.
+    // Catalogued because router-core 53fe783 lists it among the verified tool
+    // fallbacks: an uncatalogued candidate skips the balance check and
+    // maxCostPerRun.
+    id: "google/gemini-4-neon",
+    name: "Gemini 4 Neon",
+    version: "4",
+    inputPrice: 3.0,
+    outputPrice: 15.0,
+    contextWindow: 1048576,
+    maxOutput: 65536,
+    reasoning: true,
+    vision: true,
+    toolCalling: true,
+  },
+  {
+    // Gemini 4 Hydrogen (blockrun 2026-11-17): the fast, efficient Gemini 4,
+    // $1.50/$7.50 (cached $0.075), 1M/65K. Not part of Argon/Carbon's
+    // 2026-12-01 reprice: no end date on Google's list. Catalogued for the
+    // same reason as Neon above (router-core 53fe783 tool fallback).
+    id: "google/gemini-4-hydrogen",
+    name: "Gemini 4 Hydrogen",
+    version: "4",
+    inputPrice: 1.5,
+    outputPrice: 7.5,
     contextWindow: 1048576,
     maxOutput: 65536,
     reasoning: true,

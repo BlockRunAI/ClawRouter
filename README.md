@@ -215,7 +215,7 @@ models:
       - apply
 ```
 
-To pin a specific model, replace `blockrun/auto` with any model from [blockrun.ai/models](https://blockrun.ai/models), e.g. `anthropic/claude-opus-5`, `xai/grok-4.5`.
+To pin a specific model, replace `blockrun/auto` with any model from [blockrun.ai/models](https://blockrun.ai/models), e.g. `anthropic/claude-opus-5.5`, `xai/grok-4.7`.
 
 Both `provider: openai` and `provider: clawrouter` work — just make sure `apiBase` ends with `/v1/`.
 
@@ -270,7 +270,7 @@ Choose your routing strategy with `/model <profile>`:
 | `/model eco`     | Cheapest possible  | **<!-- br:savings.ecoVsBaselinePct -->98<!-- /br:savings.ecoVsBaselinePct -->%**   | Maximum savings      |
 | `/model premium` | Best quality       | 0%                                                                                 | Mission-critical     |
 
-**Shortcuts:** `/model grok`, `/model br-sonnet`, `/model gpt5`, `/model o3`
+**Shortcuts:** `/model grok`, `/model br-sonnet`, `/model gpt5`, `/model opus`
 
 ---
 
@@ -516,7 +516,9 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | qwen/qwen3.7-max            | 1M      | reasoning, agentic, tools (Qwen flagship)   |
 | qwen/qwen3.8-max            | 1M      | reasoning (Qwen 3.8 flagship)               |
 | xai/grok-4.3                | 1M      | reasoning, vision, agentic, tools           |
+| google/gemini-4-hydrogen    | 1M      | reasoning, vision, tools (fast Gemini 4)    |
 | google/gemini-4-argon       | 1M      | reasoning, vision, tools (Google frontier)  |
+| google/gemini-4-carbon      | 1M      | reasoning, vision, tools (top Gemini 4)     |
 | google/gemini-3.8-flash     | 1M      | reasoning, vision, tools (newest Flash)     |
 | google/gemini-3.6-flash     | 1M      | reasoning, vision, tools (thinking mode)    |
 | xai/grok-4.5                | 500K    | reasoning, vision, agentic, tools           |
@@ -527,7 +529,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | openai/gpt-5.3-codex        | 400K    | agentic, tools                              |
 | openai/gpt-5.1              | 400K    | reasoning, vision, agentic, tools           |
 | openai/gpt-4.1              | 128K    | vision, tools                               |
-| openai/o3                   | 200K    | reasoning, tools                            |
+| openai/o3                   | 200K    | reasoning, tools (retires 2026-12-11)       |
 | google/gemini-3.1-pro       | 1M      | reasoning, vision, tools                    |
 | openai/gpt-4o               | 128K    | vision, agentic, tools                      |
 | openai/gpt-5.4              | 1M      | reasoning, vision, agentic, tools           |
@@ -543,12 +545,14 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | Model                       | Context | Features                                               |
 | --------------------------- | ------- | ------------------------------------------------------ |
 | anthropic/claude-sonnet-4.6 | 1M      | reasoning, vision, agentic, tools                      |
+| google/gemini-4-neon        | 1M      | reasoning, vision, tools (newest Gemini 4)             |
 | anthropic/claude-opus-5.5   | 1M      | reasoning, vision, agentic, tools                      |
 | anthropic/claude-opus-5     | 1M      | reasoning, vision, agentic, tools                      |
 | anthropic/claude-opus-4.8   | 1M      | reasoning, vision, agentic, tools                      |
 | openai/gpt-5.6-sol          | 1M      | reasoning, vision, agentic, tools                      |
 | openai/gpt-5.6-sol-pro      | 1M      | reasoning, vision, agentic, tools                      |
 | openai/gpt-5.5              | 1M      | reasoning, vision, agentic, tools                      |
+| openai/gpt-6.2-astra        | 1M      | reasoning, vision, agentic, tools (GPT-6.2 flagship)   |
 | openai/gpt-6-astra          | 1M      | reasoning, vision, agentic, tools (GPT-6 flagship)     |
 | anthropic/claude-fable-5.1  | 1M      | reasoning, vision, agentic, tools (always-on thinking) |
 | moonshot/kimi-k3.1-pro      | 1M      | reasoning, vision, agentic, tools                      |
@@ -798,7 +802,7 @@ Block specific models from being routed to. Useful if a model doesn't follow you
 ```bash
 /exclude add free/nemotron-3.5-lightning   # Block a free model (e.g. not for your workload)
 /exclude add grok-4                # Aliases work — blocks all grok-4 variants
-/exclude add gpt-5.4               # Skip expensive models
+/exclude add gpt-6.2-sol           # Skip a model you'd rather not pay for
 /exclude                           # Show current exclusions
 /exclude remove grok-4             # Unblock a model
 /exclude clear                     # Remove all exclusions
@@ -833,7 +837,7 @@ Network
   ✓ BlockRun API: reachable (142ms)
   ✗ Local proxy: not running on :8402
 
-📤 Sending to Claude Sonnet 4.6 (~$0.003)...
+📤 Sending to Claude Sonnet 5.5 (~$0.002)...
 
 🤖 AI Analysis:
 The local proxy isn't running. Run `openclaw gateway restart` to fix.

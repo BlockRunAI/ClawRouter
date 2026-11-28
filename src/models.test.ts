@@ -11,11 +11,13 @@ import { TOP_MODELS } from "./top-models.js";
 
 describe("resolveModelAlias", () => {
   it("maps Claude aliases to current flagship versions", () => {
-    // Sonnet → 4.6, Opus → 4.8 (new flagship), Haiku → 4.5
-    expect(resolveModelAlias("claude")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("br-sonnet")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-5");
+    // Sonnet → 5.5, Opus → 5.5 (generation refresh 2026-11-27), Haiku → 4.5
+    expect(resolveModelAlias("claude")).toBe("anthropic/claude-sonnet-5.5");
+    expect(resolveModelAlias("br-sonnet")).toBe("anthropic/claude-sonnet-5.5");
+    expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-5.5");
+    expect(resolveModelAlias("anthropic/sonnet")).toBe("anthropic/claude-sonnet-5.5");
+    expect(resolveModelAlias("anthropic/claude")).toBe("anthropic/claude-sonnet-5.5");
+    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-5.5");
     expect(resolveModelAlias("haiku")).toBe("anthropic/claude-haiku-4.5");
   });
 
@@ -50,26 +52,35 @@ describe("resolveModelAlias", () => {
     expect(BLOCKRUN_MODELS.some((m) => m.id === "google/gemini-3.1-pro")).toBe(true);
   });
 
-  // grok → 4.5 is a deliberate cost decision (4.5 is $2.50/$9.00 vs 4.3's $1.50/$4.00,
-  // and 2x above 200K prompt tokens). It buys a direct-xAI SKU; 4.3 is OpenRouter-only
-  // and silently drops Live Search. Pinning it so the tradeoff can't be flipped silently.
-  it("maps the generic grok shorthand to the 4.5 flagship, with 4.3 still pinnable", () => {
-    expect(resolveModelAlias("grok")).toBe("xai/grok-4.5");
+  // grok → 4.5 was a deliberate cost decision over 4.3: it buys a direct-xAI SKU; 4.3 is
+  // OpenRouter-only and silently drops Live Search. grok → 4.7 (2026-11-27) is
+  // cost-neutral: same $2/$6 and the same 500K/16K envelope as 4.5.
+  it("maps the generic grok shorthand to the 4.7 flagship, with 4.5 and 4.3 still pinnable", () => {
+    const price = (id: string) => BLOCKRUN_MODELS.find((m) => m.id === id)!;
+    expect(price("xai/grok-4.7")).toMatchObject({
+      inputPrice: price("xai/grok-4.5").inputPrice,
+      outputPrice: price("xai/grok-4.5").outputPrice,
+      contextWindow: price("xai/grok-4.5").contextWindow,
+      maxOutput: price("xai/grok-4.5").maxOutput,
+    });
+    expect(resolveModelAlias("grok")).toBe("xai/grok-4.7");
     expect(resolveModelAlias("grok-4.5")).toBe("xai/grok-4.5");
     expect(resolveModelAlias("grok-4-5")).toBe("xai/grok-4.5");
     expect(resolveModelAlias("grok-4.3")).toBe("xai/grok-4.3");
   });
 
   it("resolves aliases even when sent with blockrun/ prefix", () => {
-    expect(resolveModelAlias("blockrun/claude")).toBe("anthropic/claude-sonnet-4.6");
+    expect(resolveModelAlias("blockrun/claude")).toBe("anthropic/claude-sonnet-5.5");
     expect(resolveModelAlias("blockrun/sonnet-4.6")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("blockrun/opus")).toBe("anthropic/claude-opus-5");
+    expect(resolveModelAlias("blockrun/opus")).toBe("anthropic/claude-opus-5.5");
   });
 
   it("keeps explicit version pins routable, promotes generic opus-4 to 4-series flagship 4.8", () => {
     expect(resolveModelAlias("anthropic/claude-sonnet-4")).toBe("anthropic/claude-sonnet-4.6");
     // `opus-4` names the 4-series generation, so it stays on 4.8 even though the
-    // bare `opus` alias has moved on to Opus 5.
+    // bare `opus` alias has moved on to Opus 5.5 (the gateway's MODEL_REDIRECTS
+    // sends claude-opus-4 to 4.8 too). Same for `sonnet-4` → 4.6.
+    expect(resolveModelAlias("sonnet-4")).toBe("anthropic/claude-sonnet-4.6");
     expect(resolveModelAlias("anthropic/claude-opus-4")).toBe("anthropic/claude-opus-4.8");
     expect(resolveModelAlias("opus-4")).toBe("anthropic/claude-opus-4.8");
     expect(resolveModelAlias("opus-4.8")).toBe("anthropic/claude-opus-4.8");
@@ -93,8 +104,8 @@ describe("resolveModelAlias", () => {
   });
 
   it("strips openai/ prefix from aliases", () => {
-    expect(resolveModelAlias("openai/claude")).toBe("anthropic/claude-sonnet-4.6");
-    expect(resolveModelAlias("openai/sonnet")).toBe("anthropic/claude-sonnet-4.6");
+    expect(resolveModelAlias("openai/claude")).toBe("anthropic/claude-sonnet-5.5");
+    expect(resolveModelAlias("openai/sonnet")).toBe("anthropic/claude-sonnet-5.5");
   });
 
   it("redirects delisted grok-code-fast-1 IDs to deepseek", () => {
@@ -103,31 +114,31 @@ describe("resolveModelAlias", () => {
     expect(resolveModelAlias("grok-code-fast-1")).toBe("deepseek/deepseek-chat");
   });
 
-  it("promotes bare opus to Opus 5 while every 4.x pin stays routable", () => {
-    // Opus 5 takes the bare alias because the move is cost-neutral: $5/$25 and a
-    // 1M/128K envelope, identical to Opus 4.8 — so no per-call-cap wallet changes
-    // behavior. BlockRun made the same call upstream, repointing its
-    // `clawrouter-premium` redirect to anthropic/claude-opus-5 on launch day.
-    // Contrast `kimi`, deliberately left on K2.7 because K3 is ~5x the price.
-    const opus5 = BLOCKRUN_MODELS.find((m) => m.id === "anthropic/claude-opus-5");
-    expect(opus5).toBeDefined();
-    expect(opus5?.inputPrice).toBe(5.0);
-    expect(opus5?.outputPrice).toBe(25.0);
-    expect(opus5?.contextWindow).toBe(1000000);
-    expect(opus5?.maxOutput).toBe(128000);
+  it("promotes bare opus to Opus 5.5 while every 5 and 4.x pin stays routable", () => {
+    // Opus 5.5 takes the bare alias because the move can only lower a quote:
+    // $4/$20 against Opus 5's $5/$25, with the same 1M/128K envelope — so no
+    // per-call-cap wallet can be pushed through its cap. (Opus 4.8 → 5 was
+    // cost-neutral on the same argument.) Contrast `kimi`, deliberately left on
+    // K2.7 because K3 is ~5x the price.
+    const opus5 = BLOCKRUN_MODELS.find((m) => m.id === "anthropic/claude-opus-5")!;
+    const opus55 = BLOCKRUN_MODELS.find((m) => m.id === "anthropic/claude-opus-5.5")!;
+    expect(opus55.inputPrice).toBeLessThanOrEqual(opus5.inputPrice);
+    expect(opus55.outputPrice).toBeLessThanOrEqual(opus5.outputPrice);
+    expect(opus55.contextWindow).toBe(opus5.contextWindow);
+    expect(opus55.maxOutput).toBe(opus5.maxOutput);
 
+    for (const alias of ["opus", "anthropic/opus", "blockrun/opus", "openai/opus"]) {
+      expect(resolveModelAlias(alias), alias).toBe("anthropic/claude-opus-5.5");
+    }
+    // Explicit Opus 5 pins keep naming Opus 5.
     for (const alias of [
-      "opus",
       "opus-5",
       "opus-5.0",
       "opus-5-0",
-      "anthropic/opus",
       "anthropic/claude-opus-5.0",
       "anthropic/claude-opus-5-0",
-      "blockrun/opus",
-      "openai/opus",
     ]) {
-      expect(resolveModelAlias(alias)).toBe("anthropic/claude-opus-5");
+      expect(resolveModelAlias(alias), alias).toBe("anthropic/claude-opus-5");
     }
     // The catalog id must survive resolution untouched — it is not an alias key.
     expect(resolveModelAlias("anthropic/claude-opus-5")).toBe("anthropic/claude-opus-5");
@@ -140,13 +151,24 @@ describe("resolveModelAlias", () => {
     expect(resolveModelAlias("anthropic/claude-opus-4.5")).toBe("anthropic/claude-opus-4.5");
   });
 
-  it("keeps sonnet-4.5 as a distinct pin while bare sonnet stays on 4.6", () => {
+  it("keeps sonnet-4.5 and sonnet-4.6 as distinct pins while bare sonnet moves to 5.5", () => {
     // BlockRun hosts 4.5 as a separate public model ($3/$15) — the pin must
     // not silently upgrade to 4.6.
     expect(resolveModelAlias("sonnet-4.5")).toBe("anthropic/claude-sonnet-4.5");
     expect(resolveModelAlias("anthropic/claude-sonnet-4-5")).toBe("anthropic/claude-sonnet-4.5");
     expect(BLOCKRUN_MODELS.some((m) => m.id === "anthropic/claude-sonnet-4.5")).toBe(true);
-    expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
+    expect(resolveModelAlias("sonnet-4.6")).toBe("anthropic/claude-sonnet-4.6");
+    expect(resolveModelAlias("sonnet-4-6")).toBe("anthropic/claude-sonnet-4.6");
+    expect(resolveModelAlias("anthropic/claude-sonnet-4-6")).toBe("anthropic/claude-sonnet-4.6");
+    // Sonnet 5.5 is cheaper than 4.6 with the same 1M/128K envelope, so the
+    // bare-alias move can only lower a quote.
+    const s46 = BLOCKRUN_MODELS.find((m) => m.id === "anthropic/claude-sonnet-4.6")!;
+    const s55 = BLOCKRUN_MODELS.find((m) => m.id === "anthropic/claude-sonnet-5.5")!;
+    expect(s55.inputPrice).toBeLessThanOrEqual(s46.inputPrice);
+    expect(s55.outputPrice).toBeLessThanOrEqual(s46.outputPrice);
+    expect(s55.contextWindow).toBe(s46.contextWindow);
+    expect(s55.maxOutput).toBe(s46.maxOutput);
+    expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-5.5");
   });
 
   it("registers Qwen3.7 Max with its public aliases and gateway pricing", () => {
@@ -406,12 +428,19 @@ describe("2026-10 gateway catalog sync (blockrun #781)", () => {
     }
   });
 
-  it("leaves the bare family shorthands where they were", () => {
+  it("moves the bare family shorthands only by the owner-approved generation refresh", () => {
     // Promoting a bare alias is a product decision, not part of a catalog sync.
-    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-5");
-    expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-4.6");
+    // 2026-11-27 (owner-approved): sonnet/opus/grok/nano follow router-core
+    // 53fe783 to same-or-cheaper successors. Fable stays on 5 (5.2 is
+    // Base-only), and gpt5 stays on Terra.
+    expect(resolveModelAlias("opus")).toBe("anthropic/claude-opus-5.5");
+    expect(resolveModelAlias("sonnet")).toBe("anthropic/claude-sonnet-5.5");
     expect(resolveModelAlias("fable")).toBe("anthropic/claude-fable-5");
-    expect(resolveModelAlias("grok")).toBe("xai/grok-4.5");
+    expect(resolveModelAlias("fable-5")).toBe("anthropic/claude-fable-5");
+    expect(resolveModelAlias("anthropic/fable")).toBe("anthropic/claude-fable-5");
+    expect(resolveModelAlias("grok")).toBe("xai/grok-4.7");
+    expect(resolveModelAlias("nano")).toBe("openai/gpt-6-luna");
+    expect(resolveModelAlias("gpt-5.4-nano")).toBe("openai/gpt-5.4-nano");
     expect(resolveModelAlias("gpt5")).toBe("openai/gpt-5.6-terra");
     expect(resolveModelAlias("gpt-6")).toBe("gpt-6");
   });
@@ -669,5 +698,40 @@ describe("GPT-6.2 Sol (router-core 53fe783 COMPLEX chains)", () => {
     expect(resolveModelAlias("gpt-6-2-sol")).toBe("openai/gpt-6.2-sol");
     expect(resolveModelAlias("openai/gpt-6.2-sol")).toBe("openai/gpt-6.2-sol");
     expect(TOP_MODELS).toContain("openai/gpt-6.2-sol");
+  });
+});
+
+describe("router-core 53fe783 tool fallbacks (GPT-6.2 Astra, Gemini 4 Neon and Hydrogen)", () => {
+  // blockrun src/lib/models.ts: Astra listed 2026-11-17 ($8/$40, 1.05M/128K),
+  // Hydrogen 2026-11-17 ($1.50/$7.50, 1M/65K), Neon 2026-11-19 ($3/$15, 1M/65K).
+  // All three are reasoning + vision + tools upstream.
+  const entries: Array<[string, number, number, number, number]> = [
+    ["openai/gpt-6.2-astra", 8, 40, 1_050_000, 128_000],
+    ["google/gemini-4-neon", 3, 15, 1_048_576, 65_536],
+    ["google/gemini-4-hydrogen", 1.5, 7.5, 1_048_576, 65_536],
+  ];
+
+  it.each(entries)(
+    "carries %s at gateway pricing so the cost cap sees it",
+    (id, i, o, ctx, out) => {
+      const m = BLOCKRUN_MODELS.find((x) => x.id === id);
+      expect(m).toMatchObject({
+        inputPrice: i,
+        outputPrice: o,
+        contextWindow: ctx,
+        maxOutput: out,
+        reasoning: true,
+        vision: true,
+        toolCalling: true,
+      });
+      expect(m?.deprecated).toBeUndefined();
+      expect(resolveModelAlias(id)).toBe(id);
+      expect(TOP_MODELS).toContain(id);
+    },
+  );
+
+  it("pins GPT-6.2 Astra explicitly", () => {
+    expect(resolveModelAlias("gpt-6.2-astra")).toBe("openai/gpt-6.2-astra");
+    expect(resolveModelAlias("gpt-6-2-astra")).toBe("openai/gpt-6.2-astra");
   });
 });

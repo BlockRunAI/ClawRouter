@@ -22,7 +22,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_ROUTING_CONFIG } from "@blockrun/router-core";
+import { DEFAULT_MODEL_CAPABILITIES, DEFAULT_ROUTING_CONFIG } from "@blockrun/router-core";
 
 import { BLOCKRUN_MODELS, MODEL_ALIASES } from "../models.js";
 
@@ -76,6 +76,24 @@ describe("router chain models are in the local catalog", () => {
             `(mirroring blockrun's src/lib/models.ts). Do NOT silence this by ` +
             `removing the model from the router — the router is downstream of ` +
             `blockrun's catalog, this repo is what has to catch up.`,
+    ).toEqual([]);
+  });
+
+  it("can price every model router-core may rescue a tool turn with", () => {
+    // Outside the tier chains, router-core's portfolio strategy appends its
+    // verified tool fallbacks (gemini-4-hydrogen, gpt-6.2-astra, ...) when a
+    // tool-required turn runs out of chain candidates. That list is not
+    // exported, but every entry carries a DEFAULT_MODEL_CAPABILITIES row, so
+    // pricing every capability row covers it. Same fail-open as above.
+    const uncatalogued = Object.keys(DEFAULT_MODEL_CAPABILITIES).filter(
+      (model) => !resolvesToCatalogEntry(model),
+    );
+    expect(Object.keys(DEFAULT_MODEL_CAPABILITIES).length).toBeGreaterThan(0);
+    expect(
+      uncatalogued,
+      `router-core knows capabilities for models ClawRouter cannot price:\n  ` +
+        uncatalogued.join("\n  ") +
+        `\n\nAdd them to BLOCKRUN_MODELS in src/models.ts (mirroring blockrun's src/lib/models.ts).`,
     ).toEqual([]);
   });
 });

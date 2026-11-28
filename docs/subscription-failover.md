@@ -88,7 +88,7 @@ Response returned to user
 
 ```bash
 # Option A: Using Claude subscription
-openclaw models set anthropic/claude-sonnet-4.6
+openclaw models set anthropic/claude-sonnet-5.5
 
 # Option B: Using ChatGPT Plus (via OpenAI provider)
 openclaw models set openai/gpt-4o
@@ -104,7 +104,7 @@ openclaw models set <provider>/<model>
 openclaw models fallbacks add blockrun/auto
 
 # Or specify a specific model
-openclaw models fallbacks add blockrun/google/gemini-2.5-pro
+openclaw models fallbacks add blockrun/google/gemini-3.8-flash
 ```
 
 #### Step 3: Verify Configuration
@@ -116,7 +116,7 @@ openclaw models show
 Expected output:
 
 ```
-Primary: anthropic/claude-sonnet-4.6
+Primary: anthropic/claude-sonnet-5.5
 Fallbacks:
   1. blockrun/auto
 ```
@@ -137,7 +137,7 @@ To verify failover works:
 #### Configure Multiple Fallbacks
 
 ```bash
-openclaw models fallbacks add blockrun/google/gemini-2.5-flash  # Fast & cheap
+openclaw models fallbacks add blockrun/google/gemini-3.5-flash-lite  # Fast & cheap
 openclaw models fallbacks add blockrun/deepseek/deepseek-chat   # Even cheaper
 openclaw models fallbacks add blockrun/free/nemotron-3.5-lightning  # Free tier
 ```
@@ -151,14 +151,14 @@ Edit `~/.openclaw/openclaw.json`:
   "agents": {
     "main": {
       "model": {
-        "primary": "anthropic/claude-opus-4.6",
+        "primary": "anthropic/claude-opus-5.5",
         "fallbacks": ["blockrun/auto"]
       }
     },
     "coding": {
       "model": {
-        "primary": "anthropic/claude-sonnet-4.6",
-        "fallbacks": ["blockrun/google/gemini-2.5-pro", "blockrun/deepseek/deepseek-chat"]
+        "primary": "anthropic/claude-sonnet-5.5",
+        "fallbacks": ["blockrun/google/gemini-3.8-flash", "blockrun/deepseek/deepseek-chat"]
       }
     }
   }
@@ -167,14 +167,14 @@ Edit `~/.openclaw/openclaw.json`:
 
 #### Tier-Based Configuration (ClawRouter Smart Routing)
 
-When using `blockrun/auto`, ClawRouter automatically classifies your request and picks the cheapest capable model:
+When using `blockrun/auto`, ClawRouter automatically classifies your request and picks the cheapest capable model. Curated primaries and first fallbacks (router-core 53fe783):
 
-- **SIMPLE** queries → Gemini 2.5 Flash, DeepSeek Chat (~$0.0001/req)
-- **MEDIUM** queries → GPT-4o-mini, Gemini Flash (~$0.001/req)
-- **COMPLEX** queries → Claude Sonnet, Gemini Pro (~$0.01/req)
-- **REASONING** queries → DeepSeek R1, o3-mini (~$0.05/req)
+- **SIMPLE** queries → Gemini 3.5 Flash-Lite, Gemini 3 Flash Preview
+- **MEDIUM** queries → Gemini 3.6 Flash, GLM-5.3 Flash
+- **COMPLEX** queries → Gemini 3.1 Pro, Gemini 3.6 Flash, Claude Sonnet 5
+- **REASONING** queries → DeepSeek Reasoner, DeepSeek V4 Pro
 
-Learn more: [ClawRouter Smart Routing](./smart-routing.md)
+Learn more: [Routing profiles](./routing-profiles.md)
 
 ## Monitoring & Troubleshooting
 

@@ -100,28 +100,30 @@ const cache = new ResponseCache({
 
 ## Agentic Auto-Detection
 
-ClawRouter automatically detects multi-step agentic tasks and routes to models optimized for autonomous execution:
+ClawRouter switches to models optimized for autonomous execution when a turn actually needs its attached tools. On the `auto` profile, router-core 53fe783 picks:
 
 ```
-"what is 2+2"                    → gemini-flash (standard)
-"build the project then run tests" → kimi-k2.5 (auto-agentic)
-"fix the bug and make sure it works" → kimi-k2.5 (auto-agentic)
+"build the project then run tests", no tools attached  → gemini-3.5-flash-lite (auto SIMPLE)
+"build the project then run tests", a bash tool        → claude-sonnet-5 (agentic SIMPLE)
+"Check the weather in Paris", get_weather, tool_choice "auto"     → gemini-3.5-flash-lite (auto SIMPLE)
+"Check the weather in Paris", get_weather, tool_choice "required" → claude-sonnet-5 (agentic SIMPLE)
 ```
 
 **How it works:**
 
-- Detects agentic keywords: file ops ("read", "edit"), execution ("run", "test", "deploy"), iteration ("fix", "debug", "verify")
-- Threshold: 2+ signals triggers auto-switch to agentic tiers
+- The switch keys on tool need, not on keywords: router-core's `inferToolRequirement` decides whether this turn has to call one of the attached tools. `tool_choice: "none"` is authoritative, and host tool _descriptions_ alone do not trigger it.
 - No config needed — works automatically
 
 **Agentic tier models** (optimized for multi-step autonomy):
 
-| Tier      | Agentic Model     | Why                            |
-| --------- | ----------------- | ------------------------------ |
-| SIMPLE    | claude-haiku-4.5  | Fast + reliable tool use       |
-| MEDIUM    | kimi-k2.5         | 200+ tool chains, 76% cheaper  |
-| COMPLEX   | claude-sonnet-4.6 | Best balance for complex tasks |
-| REASONING | kimi-k2.5         | Extended reasoning + execution |
+| Tier      | Agentic Model   |
+| --------- | --------------- |
+| SIMPLE    | gpt-4o-mini     |
+| MEDIUM    | gpt-5.6-luna    |
+| COMPLEX   | claude-sonnet-5 |
+| REASONING | claude-sonnet-5 |
+
+Curated primaries from router-core's `DEFAULT_ROUTING_CONFIG.agenticTiers`; full fallback chains in [routing-profiles.md](./routing-profiles.md#agentic-multi-step-tool-use).
 
 ### Force Agentic Mode
 
@@ -141,17 +143,18 @@ plugins:
 
 ## Tool Detection
 
-When your request includes a `tools` array (function calling), ClawRouter automatically switches to agentic tiers:
+When your request includes a `tools` array (function calling) and the turn has to call one, ClawRouter switches to agentic tiers and drops every candidate without tool calling:
 
 ```typescript
-// Request with tools → auto-agentic mode
+// Request that must use its tool → agentic tiers
 {
   model: "blockrun/auto",
-  messages: [{ role: "user", content: "Check the weather" }],
-  tools: [{ type: "function", function: { name: "get_weather", ... } }]
+  messages: [{ role: "user", content: "Check the weather in Paris" }],
+  tools: [{ type: "function", function: { name: "get_weather", ... } }],
+  tool_choice: "required"
 }
-// → Routes to claude-haiku-4.5 (excellent tool use)
-// → Instead of gemini-flash (may produce malformed tool calls)
+// → Routes to claude-sonnet-5 (agentic SIMPLE, router-core 53fe783)
+// → With tool_choice "auto" the same turn stays on gemini-3.5-flash-lite (auto SIMPLE)
 ```
 
 **Why this matters:** Some models (like `deepseek-reasoner`) are optimized for chain-of-thought reasoning but can generate malformed tool calls. Tool detection ensures requests with functions go to models proven to handle tool use correctly.
@@ -179,19 +182,19 @@ Use short aliases instead of full model paths:
 
 ```bash
 /model free      # free/nemotron-3.5-lightning (FREE!)
-/model br-sonnet # anthropic/claude-sonnet-4.6
-/model opus      # anthropic/claude-opus-5; /model opus-5.5 for Opus 5.5 ($4/$20)
+/model br-sonnet # anthropic/claude-sonnet-5.5; /model sonnet-4.6 pins the older Sonnet
+/model opus      # anthropic/claude-opus-5.5; /model opus-5 or opus-4.8 pins an older Opus
 /model haiku     # anthropic/claude-haiku-4.5
 /model gpt       # openai/gpt-4o
 /model gpt5      # openai/gpt-5.6-terra; /model gpt-6-astra, gpt-6-sol, gpt-6-luna for GPT-6
-/model deepseek  # deepseek/deepseek-chat
+/model deepseek  # deepseek/deepseek-v4.1-flash
 /model reasoner  # deepseek/deepseek-reasoner
 /model kimi      # moonshot/kimi-k2.7; /model kimi-k3.1-pro for the 1M-ctx flagship
 /model glm       # zai/glm-5.3
-/model gemini    # google/gemini-2.5-pro
-/model flash     # google/gemini-2.5-flash
-/model grok      # xai/grok-4.5; /model grok-4.7 or grok-4.6 for the newer pins
-/model grok-fast # xai/grok-4-fast-reasoning
+/model gemini    # google/gemini-3.8-flash
+/model flash     # google/gemini-3.5-flash-lite (text only; /model gemini-3.6-flash for images)
+/model grok      # xai/grok-4.7; /model grok-4.6 or grok-4.5 pins an older Grok
+/model grok-fast # xai/grok-4-1-fast-reasoning
 ```
 
 All aliases work with `/model blockrun/xxx` or just `/model xxx`.
@@ -219,9 +222,9 @@ You'll never get blocked by an empty wallet — the free tier keeps you running.
 For multi-turn conversations, ClawRouter pins the model to prevent mid-task switching:
 
 ```
-Turn 1: "Build a React component" → claude-sonnet-4.6
-Turn 2: "Add dark mode support"   → claude-sonnet-4.6 (pinned)
-Turn 3: "Now add tests"           → claude-sonnet-4.6 (pinned)
+Turn 1: "Build a React component" → claude-sonnet-5.5
+Turn 2: "Add dark mode support"   → claude-sonnet-5.5 (pinned)
+Turn 3: "Now add tests"           → claude-sonnet-5.5 (pinned)
 ```
 
 Sessions are identified by conversation ID and persist for 1 hour of inactivity.
