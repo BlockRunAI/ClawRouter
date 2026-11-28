@@ -152,6 +152,63 @@ describe("agent configuration writers", () => {
     expect(codexConfigConflicts(result)).toEqual([]);
   });
 
+  it("replaces ClawRouter tables written outside the managed block, keeping comments and sub-tables", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(
+      path,
+      [
+        'model_catalog_json = "/home/u/.codex/clawrouter-catalog.json"',
+        "",
+        "# provider from clawrouter-codex",
+        "[model_providers.clawrouter]",
+        'base_url = "http://localhost:8403/v1"',
+        "requires_openai_auth = true",
+        "",
+        "# legacy profile",
+        "[profiles.clawrouter]",
+        'model = "old-model"',
+        "",
+        "[profiles.clawrouter.extra]",
+        "flag = true",
+        "",
+        "[profiles]",
+        'clawrouter.model_provider = "dotted-old"',
+        'fast.model = "o3"',
+        "",
+        '[projects."/work"]',
+        'trust_level = "trusted"',
+      ].join("\n"),
+    );
+
+    for (const setDefault of [false, true]) {
+      await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", setDefault);
+      const result = await readFile(path, "utf8");
+
+      expect(codexConfigConflicts(result)).toEqual([]);
+      expect(result.match(/^\[model_providers\.clawrouter\]/gm)).toHaveLength(1);
+      expect(result.match(/^\[profiles\.clawrouter\]/gm)).toHaveLength(1);
+      for (const gone of [
+        "localhost:8403",
+        "requires_openai_auth = true",
+        "old-model",
+        "dotted-old",
+      ]) {
+        expect(result).not.toContain(gone);
+      }
+      for (const kept of [
+        "model_catalog_json",
+        "# provider from clawrouter-codex",
+        "# legacy profile",
+        "[profiles.clawrouter.extra]",
+        'fast.model = "o3"',
+        '[projects."/work"]',
+      ]) {
+        expect(result).toContain(kept);
+      }
+    }
+  });
+
   it("finds no conflicts in what the Codex writer produces", async () => {
     const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
     const path = join(root, "config.toml");
