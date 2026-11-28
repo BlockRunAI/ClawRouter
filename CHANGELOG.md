@@ -18,9 +18,10 @@ ClawRouter now keeps the BlockRun entries of `modelPolicy.allow` in step with
 the models it ships, adding new ones and removing retired ones, on gateway
 start, `clawrouter setup`, `reinstall.sh` and `update.sh`. Uninstalling
 (plugin, `uninstall.sh`, or Desktop's disconnect) removes them again. It only
-edits a list OpenClaw has already created, so older OpenClaw versions are
-untouched. Your other providers' entries, wildcards such as `blockrun/*`, and
-your deny list are left as they are.
+edits a non-empty list OpenClaw has already created, so older OpenClaw
+versions are untouched, and an empty list (which OpenClaw reads as "every model
+allowed") stays empty. Your other providers' entries, wildcards such as
+`blockrun/*`, and your deny list are left as they are.
 
 Also fixed: `reinstall.sh` did not save a sync that only removed retired
 models.

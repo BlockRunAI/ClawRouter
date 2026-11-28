@@ -51,7 +51,12 @@ export function syncBlockrunModelPolicyAllow(
   const found = explicitAllow(defaults);
   if (!found) return { added: 0, pruned: 0 };
   const { policy, allow } = found;
-  if (allow.some((entry) => typeof entry === "string" && COVERING_WILDCARDS.has(entry.trim()))) {
+  // An empty list admits every model, as does a wildcard covering BlockRun: nothing to add, and
+  // filling an empty list with BlockRun models would lock out every other provider.
+  if (
+    allow.length === 0 ||
+    allow.some((entry) => typeof entry === "string" && COVERING_WILDCARDS.has(entry.trim()))
+  ) {
     return { added: 0, pruned: 0 };
   }
 
