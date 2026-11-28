@@ -292,6 +292,7 @@ function applyTelegramText(text: string): string {
   let i = 0;
   const len = text.length;
   const peek = (s: string) => text.startsWith(s, i);
+  let linkCanClose = true;
 
   while (i < len) {
     if (peek("**")) {
@@ -318,7 +319,7 @@ function applyTelegramText(text: string): string {
         continue;
       }
     }
-    if (peek("[")) {
+    if (peek("[") && linkCanClose) {
       const close = text.indexOf("](", i + 1);
       if (close !== -1) {
         const end = text.indexOf(")", close + 2);
@@ -333,6 +334,10 @@ function applyTelegramText(text: string): string {
           continue;
         }
       }
+      // A later `[` would find the same `](`, or one further on, and its `)` search
+      // would start no earlier, so it fails too. Searching again for every `[` made
+      // many unclosed brackets cost quadratic time on the proxy thread.
+      linkCanClose = false;
     }
     if (text[i] === "*" && text[i + 1] !== "*") {
       const end = text.indexOf("*", i + 1);
