@@ -110,16 +110,17 @@ const decision = route(prompt, systemPrompt, maxTokens, {
   hasVision,
 });
 
+// "What is the capital of France?", maxTokens 1024, router-core 53fe783:
 // decision = {
-//   model: "google/gemini-2.5-flash",
+//   model: "google/gemini-3.5-flash-lite",
 //   tier: "SIMPLE",
 //   taskType: "chat",
-//   confidence: 0.92,
+//   confidence: 0.77,
 //   method: "portfolio",
 //   routerVersion: "v3-portfolio",
-//   candidates: ["google/gemini-2.5-flash", "google/gemini-3-flash-preview", ...],
-//   savings: 0.99,
-//   costEstimate: 0.0012,
+//   candidates: ["google/gemini-3.5-flash-lite", "google/gemini-3-flash-preview", ...],
+//   savings: 0.9,
+//   costEstimate: 0.0026,
 // }
 ```
 

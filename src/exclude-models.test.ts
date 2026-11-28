@@ -90,12 +90,12 @@ describe("ExcludeModels", () => {
     expect(set.size).toBe(1);
   });
 
-  it("resolves aliases — 'claude' becomes 'anthropic/claude-sonnet-4.6'", () => {
+  it("resolves aliases — 'claude' becomes 'anthropic/claude-sonnet-5.5'", () => {
     const resolved = addExclusion("claude", filePath);
-    expect(resolved).toBe("anthropic/claude-sonnet-4.6");
+    expect(resolved).toBe("anthropic/claude-sonnet-5.5");
 
     const set = loadExcludeList(filePath);
-    expect(set.has("anthropic/claude-sonnet-4.6")).toBe(true);
+    expect(set.has("anthropic/claude-sonnet-5.5")).toBe(true);
   });
 
   it("remove resolves aliases too", () => {

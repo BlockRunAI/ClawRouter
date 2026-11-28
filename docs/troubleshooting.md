@@ -157,7 +157,7 @@ openclaw logs --follow
 You should see model selection for each request:
 
 ```
-[plugins] [SIMPLE] google/gemini-2.5-flash $0.0012 (saved 99%)
+[plugins] [SIMPLE] google/gemini-3.5-flash-lite $0.0012 (saved 99%)
 [plugins] [MEDIUM] deepseek/deepseek-chat $0.0003 (saved 99%)
 [plugins] [REASONING] deepseek/deepseek-reasoner $0.0005 (saved 99%)
 ```

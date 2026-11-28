@@ -613,12 +613,12 @@ plugins:
 
 Curated primaries from router-core's `DEFAULT_ROUTING_CONFIG.tiers`; chains truncated. The full chains for every profile — and the eco / premium / agentic tier sets — are in [routing-profiles.md](./routing-profiles.md).
 
-| Tier      | Primary Model                | Fallback Chain (head)                                              |
-| --------- | ---------------------------- | ------------------------------------------------------------------ |
-| SIMPLE    | `google/gemini-2.5-flash`    | `google/gemini-3-flash-preview`, `google/gemini-3.5-flash-lite`, … |
-| MEDIUM    | `google/gemini-3.5-flash`    | `google/gemini-3.6-flash`, `zai/glm-5.3-flash`, …                  |
-| COMPLEX   | `google/gemini-3.1-pro`      | `google/gemini-3.6-flash`, `google/gemini-3.5-flash`, …            |
-| REASONING | `deepseek/deepseek-reasoner` | `deepseek/deepseek-v4-pro`, `xai/grok-4.3`, …                      |
+| Tier      | Primary Model                  | Fallback Chain (head)                                        |
+| --------- | ------------------------------ | ------------------------------------------------------------ |
+| SIMPLE    | `google/gemini-3.5-flash-lite` | `google/gemini-3-flash-preview`, `deepseek/deepseek-chat`, … |
+| MEDIUM    | `google/gemini-3.6-flash`      | `zai/glm-5.3-flash`, `openai/gpt-5.6-terra`, …               |
+| COMPLEX   | `google/gemini-3.1-pro`        | `google/gemini-3.6-flash`, `anthropic/claude-sonnet-5`, …    |
+| REASONING | `deepseek/deepseek-reasoner`   | `deepseek/deepseek-v4-pro`, `xai/grok-4.3`, …                |
 
 ### Fallback Chain
 
@@ -626,8 +626,8 @@ The ranked candidate list is returned on every decision (`decision.candidates`).
 
 ```
 Request → gemini-3.1-pro (503)
-       → gemini-3-flash-preview (rate limited)
-       → grok-4-0709 (success)
+       → gemini-3.6-flash (rate limited)
+       → claude-sonnet-5 (success)
 ```
 
 Candidates that fail a hard constraint (no tool calling on a tool turn, no vision on image input, too small a context window) are removed before ranking, so a fallback never lands on a model that cannot serve the request.

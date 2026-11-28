@@ -504,14 +504,14 @@ type DoctorModel = "sonnet" | "opus";
 
 const DOCTOR_MODELS: Record<DoctorModel, { id: string; name: string; cost: string }> = {
   sonnet: {
-    id: "anthropic/claude-sonnet-4.6",
-    name: "Claude Sonnet 4.6",
-    cost: "~$0.003",
+    id: "anthropic/claude-sonnet-5.5",
+    name: "Claude Sonnet 5.5",
+    cost: "~$0.002",
   },
   opus: {
-    id: "anthropic/claude-opus-5",
-    name: "Claude Opus 5",
-    cost: "~$0.01",
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    cost: "~$0.008",
   },
 };
 

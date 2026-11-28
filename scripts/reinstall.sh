@@ -980,10 +980,10 @@ else
 fi
 echo ""
 echo "Model aliases available:"
-echo "  /model sonnet    → claude-sonnet-4.6"
-echo "  /model opus      → claude-opus-5"
+echo "  /model sonnet    → claude-sonnet-5.5"
+echo "  /model opus      → claude-opus-5.5"
 echo "  /model codex     → openai/gpt-5.3-codex"
-echo "  /model deepseek  → deepseek/deepseek-chat"
+echo "  /model deepseek  → deepseek/deepseek-v4.1-flash"
 echo "  /model free      → nemotron-3.5-lightning (default free)"
 echo ""
 echo "Free models (no wallet needed):"

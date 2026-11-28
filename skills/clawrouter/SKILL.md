@@ -117,7 +117,7 @@ openclaw models set openai/gpt-4o
 
 ## How Routing Works
 
-Routing is done locally by [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.4, constraint-first), inlined into ClawRouter and pinned by commit. No network call, no second model — about a quarter of a millisecond per request.
+Routing is done locally by [`@blockrun/router-core`](https://github.com/BlockRunAI/router-core) (Router Core V3.5, constraint-first), inlined into ClawRouter and pinned by commit. No network call, no second model — about a quarter of a millisecond per request.
 
 1. A 15-dimension weighted scorer classifies each request into one of four tiers, and a task classifier labels the shape of the work (chat, extraction, code_edit, code_agent, tool_agent, reasoning_math, long_context, vision, …).
 2. Models that cannot satisfy the request — no tool calling, no vision, too small a context window or max-output, incompatible structured output — are removed before anything is scored.
@@ -125,12 +125,12 @@ Routing is done locally by [`@blockrun/router-core`](https://github.com/BlockRun
 
 Curated primaries on the default `auto` profile:
 
-- **SIMPLE** — factual lookups, greetings, translations → gemini-2.5-flash
-- **MEDIUM** — summaries, explanations, data extraction → kimi-k2.7
+- **SIMPLE** — factual lookups, greetings, translations → gemini-3.5-flash-lite
+- **MEDIUM** — summaries, explanations, data extraction → gemini-3.6-flash
 - **COMPLEX** — code generation, multi-step analysis → gemini-3.1-pro
-- **REASONING** — proofs, formal logic, multi-step math → grok-4-1-fast-reasoning
+- **REASONING** — proofs, formal logic, multi-step math → deepseek-reasoner
 
-Turns that actually need their attached tools switch to agent-tuned tiers (gpt-4o-mini → kimi-k2.7 → claude-sonnet-4.6). `eco` opens on the free tier (nemotron-3.5-lightning); `premium` climbs to gpt-5.3-codex / claude-fable-5 / claude-sonnet-4.6. Full chains: [docs/routing-profiles.md](../../docs/routing-profiles.md).
+Turns that actually need their attached tools switch to agent-tuned tiers (gpt-4o-mini → gpt-5.6-luna → claude-sonnet-5). `eco` opens on the free tier (nemotron-3.5-lightning); `premium` climbs to gpt-5.3-codex / claude-opus-5.5 / claude-sonnet-5. Full chains: [docs/routing-profiles.md](../../docs/routing-profiles.md).
 
 Per-tier
 savings percentages are deliberately not quoted here: the published figure is
@@ -140,7 +140,7 @@ it against a baseline nobody wrote down. See
 
 ## Available Models
 
-<!-- br:models.chatVisible -->91<!-- /br:models.chatVisible --> models including: gpt-6-astra [GPT-6 flagship, 1M ctx], gpt-6-sol, gpt-6.1-sol, gpt-6.2-sol [newest Sol], gpt-6-luna [fast], gpt-5.6-terra [balanced, stable default], gpt-5.6-sol [flagship], gpt-5.6-luna [cost-efficient], gpt-5.6-sol/terra/luna-pro [pro reasoning tiers], gpt-5.5, gpt-5.5-pro [max compute], chat-latest [ChatGPT Instant], gpt-5.4, gpt-5.1, gpt-4o, o3, claude-fable-5.1, claude-fable-5, claude-opus-5.5 [newest Opus], claude-opus-5 [1M ctx], claude-opus-4.8, claude-opus-4.7, claude-opus-4.5, claude-sonnet-5.5, claude-sonnet-5, claude-sonnet-4.6, gemini-3.1-pro, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-2.5-flash, deepseek-v4-pro, deepseek-chat, grok-4.7, grok-4.6, grok-4.5, grok-4.3, grok-build-0.1, glm-5.3 [Z.AI flagship, 1M ctx], glm-5.3-flash [natively multimodal, 1M ctx], glm-5.2, minimax-m3, kimi-k3.1-pro [1M ctx flagship], kimi-k2.7, qwen3.8-max [Qwen 3.8 flagship, 1M ctx], qwen3.7-max, qwen3.7-plus, qwen3.7-flash, mimo [Xiaomi MiMo-V2.5 Pro, 1M ctx], mistral-large-4 [Mistral flagship, 512K ctx, vision], hy4-preview [Tencent, 770B MoE], laguna-s-2.1 [Poolside, coding], and <!-- br:models.free -->8<!-- /br:models.free --> free open-weight models (nemotron-3.5-lightning [1M ctx, thinking mode — the free default], nemotron-3-ultra-550b [550B/55B MoE, 1M ctx — the largest free model], nemotron-3.5-bolt [about a second to answer, reads images], nemotron-3-super-120b [reasoning], nemotron-3-nano-omni-30b-a3b-reasoning [256K ctx], north-mini-code [Cohere, coding, sub-second], laguna-xs-2.1 [Poolside, coding, ~161 tok/s], muse-glimmer-30b [Meta Muse, reasoning]). Only Bolt is flagged for vision: pin it with `/model vision-free`. Otherwise image turns route to a paid vision model, because the other free models the catalogs advertise as vision-capable don't pass a solid-colour probe on both chains.
+<!-- br:models.chatVisible -->91<!-- /br:models.chatVisible --> models including: gpt-6.2-astra [GPT-6.2 flagship, 1M ctx], gpt-6-astra, gpt-6-sol, gpt-6.1-sol, gpt-6.2-sol [newest Sol], gpt-6-luna [fast], gpt-5.6-terra [balanced, stable default], gpt-5.6-sol [flagship], gpt-5.6-luna [cost-efficient], gpt-5.6-sol/terra/luna-pro [pro reasoning tiers], gpt-5.5, gpt-5.5-pro [max compute], chat-latest [ChatGPT Instant], gpt-5.4, gpt-5.1, gpt-4o, claude-fable-5.1, claude-fable-5, claude-opus-5.5 [newest Opus], claude-opus-5 [1M ctx], claude-opus-4.8, claude-opus-4.7, claude-opus-4.5, claude-sonnet-5.5, claude-sonnet-5, claude-sonnet-4.6, gemini-4-neon [newest Gemini 4], gemini-4-carbon, gemini-4-argon, gemini-4-hydrogen, gemini-3.1-pro, gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, deepseek-v4-pro, deepseek-chat, grok-4.7, grok-4.6, grok-4.5, grok-4.3, grok-build-0.1, glm-5.3 [Z.AI flagship, 1M ctx], glm-5.3-flash [natively multimodal, 1M ctx], glm-5.2, minimax-m3, kimi-k3.1-pro [1M ctx flagship], kimi-k2.7, qwen3.8-max [Qwen 3.8 flagship, 1M ctx], qwen3.7-max, qwen3.7-plus, qwen3.7-flash, mimo [Xiaomi MiMo-V2.5 Pro, 1M ctx], mistral-large-4 [Mistral flagship, 512K ctx, vision], hy4-preview [Tencent, 770B MoE], laguna-s-2.1 [Poolside, coding], and <!-- br:models.free -->8<!-- /br:models.free --> free open-weight models (nemotron-3.5-lightning [1M ctx, thinking mode — the free default], nemotron-3-ultra-550b [550B/55B MoE, 1M ctx — the largest free model], nemotron-3.5-bolt [about a second to answer, reads images], nemotron-3-super-120b [reasoning], nemotron-3-nano-omni-30b-a3b-reasoning [256K ctx], north-mini-code [Cohere, coding, sub-second], laguna-xs-2.1 [Poolside, coding, ~161 tok/s], muse-glimmer-30b [Meta Muse, reasoning]). Only Bolt is flagged for vision: pin it with `/model vision-free`. Otherwise image turns route to a paid vision model, because the other free models the catalogs advertise as vision-capable don't pass a solid-colour probe on both chains.
 
 ## Model Prices — Look Them Up Live
 
@@ -262,6 +262,6 @@ egress by default, so it works out of the box in geoblocked regions).
 ## Example Output
 
 ```
-[ClawRouter] google/gemini-2.5-flash (SIMPLE, rules, confidence=0.92)
+[ClawRouter] google/gemini-3.5-flash-lite (SIMPLE, rules, confidence=0.92)
              Cost: $0.0025 | Baseline: $0.308 | Saved: 99.2%
 ```

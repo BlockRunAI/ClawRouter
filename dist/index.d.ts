@@ -371,16 +371,16 @@ type OpenClawPluginDefinition = {
 
 /**
  * Model aliases for convenient shorthand access.
- * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4-6`.
+ * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-5.5`.
  */
 declare const MODEL_ALIASES: Record<string, string>;
 /**
  * Resolve a model alias to its full model ID.
  * Also strips "blockrun/" prefix for direct model paths.
  * Examples:
- *   - "claude" -> "anthropic/claude-sonnet-4-6" (alias)
- *   - "blockrun/claude" -> "anthropic/claude-sonnet-4-6" (alias with prefix)
- *   - "blockrun/anthropic/claude-sonnet-4-6" -> "anthropic/claude-sonnet-4-6" (prefix stripped)
+ *   - "claude" -> "anthropic/claude-sonnet-5.5" (alias)
+ *   - "blockrun/claude" -> "anthropic/claude-sonnet-5.5" (alias with prefix)
+ *   - "blockrun/anthropic/claude-sonnet-5.5" -> "anthropic/claude-sonnet-5.5" (prefix stripped)
  *   - "openai/gpt-4o" -> "openai/gpt-4o" (unchanged)
  */
 declare function resolveModelAlias(model: string): string;
