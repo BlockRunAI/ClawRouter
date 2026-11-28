@@ -109,6 +109,10 @@ export class BalanceMonitor {
   private cachedBalance: bigint | null = null;
   /** Timestamp when cache was last updated */
   private cachedAt = 0;
+  /** Shared in-flight RPC read so concurrent checks do not stampede the RPC. */
+  private inflightFetch: Promise<bigint> | null = null;
+  /** Incremented on invalidate() so a superseded in-flight read cannot repopulate the cache. */
+  private cacheEpoch = 0;
 
   constructor(walletAddress: string, chain: EvmBalanceChain = "base", fetchImpl?: typeof fetch) {
     this.walletAddress = walletAddress as `0x${string}`;
@@ -146,13 +150,32 @@ export class BalanceMonitor {
       return this.buildInfo(this.cachedBalance);
     }
 
-    // Fetch from RPC
-    const balance = await this.fetchBalance();
-    if (balance > 0n) {
-      this.cachedBalance = balance;
-      this.cachedAt = now;
+    // Fetch from RPC, coalescing concurrent callers into one in-flight read.
+    let pending = this.inflightFetch;
+    if (!pending) {
+      const epoch = this.cacheEpoch;
+      pending = this.fetchBalance()
+        .then((balance) => {
+          if (this.cacheEpoch === epoch) {
+            if (balance > 0n) {
+              this.cachedBalance = balance;
+              this.cachedAt = Date.now();
+            } else {
+              this.cachedBalance = null;
+              this.cachedAt = 0;
+            }
+          }
+          return balance;
+        })
+        .finally(() => {
+          if (this.inflightFetch === pending) {
+            this.inflightFetch = null;
+          }
+        });
+      this.inflightFetch = pending;
     }
 
+    const balance = await pending;
     return this.buildInfo(balance);
   }
 
@@ -193,8 +216,10 @@ export class BalanceMonitor {
    * Call this after a payment failure to get accurate balance.
    */
   invalidate(): void {
+    this.cacheEpoch++;
     this.cachedBalance = null;
     this.cachedAt = 0;
+    this.inflightFetch = null;
   }
 
   /**

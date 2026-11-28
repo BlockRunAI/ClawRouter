@@ -32,6 +32,8 @@ export class SolanaBalanceMonitor {
   private readonly walletAddress: string;
   private cachedBalance: bigint | null = null;
   private cachedAt = 0;
+  private inflightFetch: Promise<bigint> | null = null;
+  private cacheEpoch = 0;
 
   constructor(walletAddress: string, rpcUrl?: string) {
     this.walletAddress = walletAddress;
@@ -48,13 +50,34 @@ export class SolanaBalanceMonitor {
     ) {
       return this.buildInfo(this.cachedBalance);
     }
-    // Zero balance is never cached — always re-fetch so a funded wallet is
+    // Zero balance is never cached: always re-fetch so a funded wallet is
     // detected on the next request without waiting for cache expiry.
-    const balance = await this.fetchBalance();
-    if (balance > 0n) {
-      this.cachedBalance = balance;
-      this.cachedAt = now;
+    // Coalesce concurrent callers into one in-flight RPC read.
+    let pending = this.inflightFetch;
+    if (!pending) {
+      const epoch = this.cacheEpoch;
+      pending = this.fetchBalance()
+        .then((balance) => {
+          if (this.cacheEpoch === epoch) {
+            if (balance > 0n) {
+              this.cachedBalance = balance;
+              this.cachedAt = Date.now();
+            } else {
+              this.cachedBalance = null;
+              this.cachedAt = 0;
+            }
+          }
+          return balance;
+        })
+        .finally(() => {
+          if (this.inflightFetch === pending) {
+            this.inflightFetch = null;
+          }
+        });
+      this.inflightFetch = pending;
     }
+
+    const balance = await pending;
     return this.buildInfo(balance);
   }
 
@@ -65,8 +88,10 @@ export class SolanaBalanceMonitor {
   }
 
   invalidate(): void {
+    this.cacheEpoch++;
     this.cachedBalance = null;
     this.cachedAt = 0;
+    this.inflightFetch = null;
   }
 
   async refresh(): Promise<SolanaBalanceInfo> {
