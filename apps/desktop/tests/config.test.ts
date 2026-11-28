@@ -381,6 +381,11 @@ describe("agent configuration writers", () => {
           defaults: {
             models: { "blockrun/auto": {}, "openai/native": {} },
             model: { primary: "blockrun/auto" },
+            // OpenClaw 2026.8+ keeps the allowlist here once it has migrated `models`.
+            modelPolicy: {
+              allow: ["blockrun/auto", "openai/native", "blockrun/openai/*"],
+              deny: ["x/y"],
+            },
           },
         },
         theme: "dark",
@@ -413,6 +418,10 @@ describe("agent configuration writers", () => {
       theme: "dark",
     });
     expect(config.agents.defaults.models).toHaveProperty("openai/native");
+    expect(config.agents.defaults.modelPolicy).toEqual({
+      allow: ["openai/native", "blockrun/openai/*"],
+      deny: ["x/y"],
+    });
     expect(config.agents.defaults.model.primary).toBeUndefined();
     expect(auth.profiles).toHaveProperty("keep");
     expect(auth.profiles).not.toHaveProperty("blockrun:default");

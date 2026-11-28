@@ -31,6 +31,10 @@ import type {
   VideoGenerationProviderPlugin,
   VideoGenerationRequest,
 } from "./types.js";
+import {
+  removeBlockrunModelPolicyAllow,
+  syncBlockrunModelPolicyAllow,
+} from "./openclaw-model-policy.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
 import { startProxy, getProxyPort } from "./proxy.js";
 import {
@@ -431,6 +435,15 @@ function injectModelsConfig(
     if (addedCount > 0) {
       logger.info(`Added ${addedCount} models to allowlist (${visibleIds.length} total)`);
     }
+  }
+  // OpenClaw 2026.8+ reads `agents.defaults.modelPolicy.allow` instead of the keys above once
+  // it has migrated them, so mirror the same blockrun/* set there (see openclaw-model-policy.ts).
+  const policySync = syncBlockrunModelPolicyAllow(defaults, [...expectedBlockrunKeys]);
+  if (policySync.added > 0 || policySync.pruned > 0) {
+    needsWrite = true;
+    logger.info(
+      `Synced modelPolicy.allow: +${policySync.added} / -${policySync.pruned} blockrun/* models`,
+    );
   }
 
   // Plugin-id migration (#305) on the gateway-start path.
@@ -2719,6 +2732,7 @@ const plugin: OpenClawPluginDefinition = {
             if (key.startsWith("blockrun/")) delete config.agents.defaults.models[key];
           }
         }
+        if (config.agents?.defaults) removeBlockrunModelPolicyAllow(config.agents.defaults);
 
         // Reset default model if it's blockrun
         if (config.agents?.defaults?.model?.primary?.startsWith("blockrun/")) {

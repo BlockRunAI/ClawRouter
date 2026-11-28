@@ -987,6 +987,28 @@ try {
     }
   }
 
+  // >>> modelPolicy.allow sync (same rule as src/openclaw-model-policy.ts)
+  // OpenClaw 2026.8+ reads agents.defaults.modelPolicy.allow instead of the keys above once it
+  // has migrated them, so models added only above never reach /model. Mirror the blockrun/* set
+  // there, but only where OpenClaw already wrote an allow list: older OpenClaw rejects a config
+  // carrying modelPolicy, and no allow list means no restriction.
+  let policySynced = false;
+  const policy = config.agents.defaults.modelPolicy;
+  if (policy && typeof policy === 'object' && !Array.isArray(policy) && Array.isArray(policy.allow) &&
+      !policy.allow.some(e => typeof e === 'string' && (e.trim() === '*' || e.trim() === 'blockrun/*'))) {
+    const ownedRef = e => typeof e === 'string' && e.trim().startsWith('blockrun/') && !e.trim().endsWith('*');
+    const kept = policy.allow.filter(e => !ownedRef(e) || currentKeys.has(e.trim()));
+    const present = new Set(kept.filter(ownedRef).map(e => e.trim()));
+    const missing = TOP_MODELS.map(id => 'blockrun/' + id).filter(k => !present.has(k));
+    const prunedCount = policy.allow.length - kept.length;
+    if (missing.length > 0 || prunedCount > 0) {
+      policy.allow = [...kept, ...missing];
+      policySynced = true;
+      console.log('  Synced modelPolicy.allow: +' + missing.length + ' / -' + prunedCount + ' blockrun models');
+    }
+  }
+  // <<< modelPolicy.allow sync
+
   // Atomic write
   const tmpPath = configPath + '.tmp.' + process.pid;
   fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });

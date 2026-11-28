@@ -150,6 +150,23 @@ try {
     }
   }
 
+  // >>> modelPolicy.allow removal (same rule as src/openclaw-model-policy.ts)
+  // OpenClaw 2026.8+ keeps the allowlist in agents.defaults.modelPolicy.allow. Drop exact
+  // blockrun/* refs; drop the key when nothing else is left (OpenClaw reads [] and no key alike).
+  const policy = config.agents?.defaults?.modelPolicy;
+  if (policy && typeof policy === 'object' && !Array.isArray(policy) && Array.isArray(policy.allow)) {
+    const ownedRef = e => typeof e === 'string' && e.trim().startsWith('blockrun/') && !e.trim().endsWith('*');
+    const kept = policy.allow.filter(e => !ownedRef(e));
+    const removedRefs = policy.allow.length - kept.length;
+    if (removedRefs > 0) {
+      if (kept.length > 0) policy.allow = kept;
+      else delete policy.allow;
+      console.log('  Removed ' + removedRefs + ' blockrun models from modelPolicy.allow');
+      changed = true;
+    }
+  }
+  // <<< modelPolicy.allow removal
+
   if (changed) {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
     fs.chmodSync(configPath, 0o600);
