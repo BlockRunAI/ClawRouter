@@ -5,6 +5,7 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 import {
+  codexConfigConflicts,
   hasHermesConfig,
   hasOpenClawConfig,
   removeHermesConfig,
@@ -135,6 +136,81 @@ describe("agent configuration writers", () => {
     await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", false);
 
     expect(await readFile(path, "utf8")).toContain('model = "gpt-5-codex"');
+  });
+
+  it("drops a dotted root model key, which would clash with the managed root model", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(path, 'model.sub = 1\nmodel . "other" = 2\napproval_policy = "never"\n');
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    const result = await readFile(path, "utf8");
+
+    expect(result).not.toContain("model.sub");
+    expect(result).not.toContain('"other"');
+    expect(result).toContain('approval_policy = "never"');
+    expect(codexConfigConflicts(result)).toEqual([]);
+  });
+
+  it("finds no conflicts in what the Codex writer produces", async () => {
+    const root = await mkdtemp(join(tmpdir(), "clawrouter-codex-"));
+    const path = join(root, "config.toml");
+    await writeFile(
+      path,
+      'model = "gpt-5-codex"\nmodel_provider = "openai"\n\n[profiles.fast]\nmodel = "o3"\n',
+    );
+
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+    await upsertCodexConfig(path, "http://127.0.0.1:8403/v1", "blockrun/auto", true);
+
+    expect(codexConfigConflicts(await readFile(path, "utf8"))).toEqual([]);
+  });
+
+  it("reports each key or table the Codex writer owns that is defined more than once", () => {
+    expect(codexConfigConflicts('model = "a"\nmodel = "b"\n')).toEqual([
+      '"model" is defined 2 times',
+    ]);
+    expect(codexConfigConflicts('model = "a"\nmodel.sub = 1\n')).toEqual([
+      '"model" is defined 2 times',
+    ]);
+    expect(codexConfigConflicts('"model_provider" = "a"\n[model_provider]\nx = 1\n')).toEqual([
+      '"model_provider" is defined 2 times',
+    ]);
+    expect(
+      codexConfigConflicts(
+        '[model_providers.clawrouter]\nname = "mine"\n\n[model_providers . "clawrouter"]\nname = "ours"\n',
+      ),
+    ).toEqual(['"model_providers.clawrouter" is defined 2 times']);
+    expect(
+      codexConfigConflicts(
+        '[profiles]\nclawrouter = { model = "x" }\n\n[profiles.clawrouter]\nmodel = "y"\n',
+      ),
+    ).toEqual(['"profiles.clawrouter" is defined 2 times']);
+  });
+
+  it("does not count lines that TOML allows: sub-tables, dotted keys of one table, and values", () => {
+    const valid = [
+      'model = "a"',
+      'notes = """',
+      'model = "inside a string"',
+      "[profiles.clawrouter]",
+      '"""',
+      "matrix = [",
+      "  [1],",
+      "]",
+      "",
+      "[profiles]",
+      'clawrouter.model = "x"',
+      'clawrouter.model_provider = "y"',
+      "",
+      "[profiles.clawrouter.extra]",
+      "flag = true",
+      "",
+      "[model_providers.other]",
+      'model = "not the root model"',
+    ].join("\n");
+
+    expect(codexConfigConflicts(valid)).toEqual([]);
   });
 
   it("escapes control characters instead of allowing TOML line injection", async () => {

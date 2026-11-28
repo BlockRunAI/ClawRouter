@@ -1,6 +1,10 @@
 import { join } from "node:path";
 
-import { containsClawRouterConfig, upsertCodexConfig } from "../core/config.js";
+import {
+  codexConfigConflicts,
+  containsClawRouterConfig,
+  upsertCodexConfig,
+} from "../core/config.js";
 import { readText } from "../core/files.js";
 import { findCommand } from "../core/runtime.js";
 import type { AdapterContext, AgentAdapter, AgentStatus, InstallOptions } from "../core/types.js";
@@ -48,11 +52,19 @@ export class CodexAdapter implements AgentAdapter {
     const config = await readText(this.managedPaths(context)[0]!);
     const provider = /\[model_providers\.clawrouter\]/.test(config);
     const base = /base_url\s*=\s*["']http:\/\/127\.0\.0\.1:8403\/v1/.test(config);
+    // A key or table defined twice makes Codex refuse the whole file, so the two checks
+    // above can pass on a config Codex will not load.
+    const conflicts = codexConfigConflicts(config);
     return {
-      ok: provider && base,
+      ok: provider && base && conflicts.length === 0,
       details: [
         provider ? "Codex provider table detected" : "Codex provider table missing",
         base ? "Bridge URL is correct" : "Bridge URL is incorrect",
+        ...(conflicts.length
+          ? conflicts.map(
+              (conflict) => `config.toml: ${conflict}, so Codex would refuse to load it`,
+            )
+          : ["No repeated keys or tables"]),
       ],
     };
   }

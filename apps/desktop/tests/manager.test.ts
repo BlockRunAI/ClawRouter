@@ -54,6 +54,24 @@ describe("ClawRouterManager adapter flow", () => {
     expect(await readFile(config, "utf8")).toBe(original);
   });
 
+  it("rolls Codex back instead of reporting success on a config Codex would refuse", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clawrouter-manager-"));
+    const codexDir = join(home, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const config = join(codexDir, "config.toml");
+    // Written by hand, outside Desktop's managed block, so the writer keeps it.
+    const original =
+      '[model_providers.clawrouter]\nname = "mine"\nbase_url = "http://127.0.0.1:8403/v1"\n';
+    await writeFile(config, original);
+    const manager = fixtureManager(home, async (command) => command === "codex");
+
+    const installed = await manager.install("codex", { setDefault: true, model: "blockrun/auto" });
+
+    expect(installed).toMatchObject({ ok: false, rolledBack: true });
+    expect(installed.message).toContain('"model_providers.clawrouter" is defined 2 times');
+    expect(await readFile(config, "utf8")).toBe(original);
+  });
+
   it("does not claim rollback when startup fails before configuration starts", async () => {
     const home = await mkdtemp(join(tmpdir(), "clawrouter-preflight-failure-"));
     const manager = fixtureManager(home, async () => false);

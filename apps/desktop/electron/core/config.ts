@@ -260,53 +260,157 @@ function tomlString(value: string): string {
     .replaceAll("\r", "\\r");
 }
 
+/** Root keys the managed root block writes when ClawRouter is the default. */
+const CODEX_ROOT_KEYS = ["model", "model_provider"];
+
 /**
- * Drop root-level `model` and `model_provider` lines: everything before the first table header.
- * Lines inside a multi-line string or array belong to a value, so they are never read as keys or headers.
+ * Every key or table the Codex writer puts in config.toml. TOML rejects defining any of them twice,
+ * and Codex then refuses to load the whole file, so each must appear at most once.
+ */
+const CODEX_OWNED_PATHS = [
+  ...CODEX_ROOT_KEYS.map((key) => [key]),
+  ["model_providers", "clawrouter"],
+  ["profiles", "clawrouter"],
+];
+
+/**
+ * Each key or table the Codex writer owns that `toml` defines more than once, e.g.
+ * `"model" is defined 2 times`. Empty when the file is free of the clashes the writer can cause.
+ *
+ * Deliberately not a full TOML validator: Codex accepts TOML 1.1 (multi-line inline tables, `\e`),
+ * so a stricter parser would refuse configs that work. A repeated definition is invalid in every
+ * TOML version, so this check cannot refuse a file Codex would load.
+ */
+export function codexConfigConflicts(toml: string): string[] {
+  const lines = scanTomlLines(toml);
+  return CODEX_OWNED_PATHS.flatMap((owned) => {
+    let count = 0;
+    let dotted = false;
+    for (const line of lines) {
+      if (line.header) {
+        if (samePath(line.header, owned)) count++;
+      } else if (line.key && !startsWith(line.table, owned)) {
+        // A key inside the owned table only fills it. A key from a parent table defines it:
+        // as a value when the path ends there, or as a dotted table that later dotted keys extend.
+        const path = [...line.table, ...line.key];
+        if (samePath(path, owned)) count++;
+        else if (startsWith(path, owned)) dotted = true;
+      }
+    }
+    if (dotted) count++;
+    return count > 1 ? [`"${owned.join(".")}" is defined ${count} times`] : [];
+  });
+}
+
+/**
+ * Drop root-level `model` and `model_provider` keys, dotted ones such as `model.sub` included:
+ * the managed root block sets both. Lines of a value that spans several lines go with their key.
  */
 function withoutRootModelKeys(toml: string): string {
-  let inRoot = true;
   let dropping = false;
+  const kept: string[] = [];
+  for (const line of scanTomlLines(toml)) {
+    if (!line.continuation) {
+      dropping =
+        !line.header &&
+        line.table.length === 0 &&
+        !!line.key &&
+        CODEX_ROOT_KEYS.includes(line.key[0]!);
+    }
+    if (!dropping) kept.push(line.text);
+  }
+  return kept.join("\n");
+}
+
+type TomlLine = {
+  text: string;
+  /** The table this line belongs to; `[]` is the root. */
+  table: string[];
+  /** Set when the line is a `[table]` or `[[array]]` header. */
+  header?: string[];
+  /** Set when the line starts a key/value pair: the dotted key, decoded. */
+  key?: string[];
+  /** True inside a multi-line string or array: the line belongs to a value, never a key or header. */
+  continuation: boolean;
+};
+
+const TOML_KEY_PART = String.raw`(?:"(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+)`;
+const TOML_HEADER = /^\s*\[\[?((?:[^\]"']|"(?:[^"\\]|\\.)*"|'[^']*')+)\]\]?\s*(#.*)?\r?$/;
+const TOML_KEY = new RegExp(String.raw`^\s*(${TOML_KEY_PART}(?:\s*\.\s*${TOML_KEY_PART})*)\s*=`);
+
+/** Read TOML line by line, far enough to tell headers and keys from the lines of a value. */
+function scanTomlLines(toml: string): TomlLine[] {
+  let table: string[] = [];
   let multiline = ""; // the open `"""` or `'''`
   let depth = 0; // open `[` and `{` of a value that spans lines
-  const kept: string[] = [];
-  for (const line of toml.split("\n")) {
-    if (!multiline && depth === 0) {
-      if (/^\s*\[\[?(?:[^\]"']|"(?:[^"\\]|\\.)*"|'[^']*')+\]\]?\s*(#.*)?\r?$/.test(line))
-        inRoot = false;
-      const key = /^\s*("(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+)\s*=/.exec(line);
-      dropping = inRoot && !!key && ["model", "model_provider"].includes(tomlKey(key[1]));
+  const lines: TomlLine[] = [];
+  for (const text of toml.split("\n")) {
+    const line: TomlLine = { text, table, continuation: Boolean(multiline) || depth > 0 };
+    if (!line.continuation) {
+      const header = TOML_HEADER.exec(text);
+      if (header) {
+        // An unreadable header still ends the root, so its keys are never taken as root keys.
+        table = dottedKey(header[1]!) ?? [header[1]!.trim()];
+        line.table = table;
+        line.header = table;
+      } else {
+        const key = TOML_KEY.exec(text);
+        if (key) line.key = dottedKey(key[1]!) ?? undefined;
+      }
     }
-    for (let i = 0; i < line.length;) {
+    for (let i = 0; i < text.length;) {
       if (multiline) {
-        if (multiline === '"""' && line[i] === "\\") {
+        if (multiline === '"""' && text[i] === "\\") {
           i += 2;
-        } else if (line.startsWith(multiline, i)) {
-          for (i += 3; line[i] === multiline[0]; i++);
+        } else if (text.startsWith(multiline, i)) {
+          for (i += 3; text[i] === multiline[0]; i++);
           multiline = "";
         } else {
           i++;
         }
-      } else if (line[i] === "#") {
+      } else if (text[i] === "#") {
         break;
-      } else if (line.startsWith('"""', i) || line.startsWith("'''", i)) {
-        multiline = line.slice(i, i + 3);
+      } else if (text.startsWith('"""', i) || text.startsWith("'''", i)) {
+        multiline = text.slice(i, i + 3);
         i += 3;
-      } else if (line[i] === '"') {
-        for (i++; i < line.length && line[i] !== '"'; i += line[i] === "\\" ? 2 : 1);
+      } else if (text[i] === '"') {
+        for (i++; i < text.length && text[i] !== '"'; i += text[i] === "\\" ? 2 : 1);
         i++;
-      } else if (line[i] === "'") {
-        const end = line.indexOf("'", i + 1);
-        i = end < 0 ? line.length : end + 1;
+      } else if (text[i] === "'") {
+        const end = text.indexOf("'", i + 1);
+        i = end < 0 ? text.length : end + 1;
       } else {
-        if (line[i] === "[" || line[i] === "{") depth++;
-        if (line[i] === "]" || line[i] === "}") depth = Math.max(0, depth - 1);
+        if (text[i] === "[" || text[i] === "{") depth++;
+        if (text[i] === "]" || text[i] === "}") depth = Math.max(0, depth - 1);
         i++;
       }
     }
-    if (!dropping) kept.push(line);
+    lines.push(line);
   }
-  return kept.join("\n");
+  return lines;
+}
+
+/** Split a dotted TOML key such as `profiles . "click house"` into its decoded parts. */
+function dottedKey(raw: string): string[] | null {
+  const part = new RegExp(String.raw`\s*(${TOML_KEY_PART})\s*(\.|$)`, "y");
+  const parts: string[] = [];
+  for (let i = 0; i < raw.length;) {
+    part.lastIndex = i;
+    const match = part.exec(raw);
+    if (!match) return null;
+    parts.push(tomlKey(match[1]!));
+    i = part.lastIndex;
+    if (!match[2]) break;
+  }
+  return parts.length ? parts : null;
+}
+
+function samePath(a: string[], b: string[]): boolean {
+  return a.length === b.length && startsWith(a, b);
+}
+
+function startsWith(path: string[], prefix: string[]): boolean {
+  return prefix.length <= path.length && prefix.every((part, i) => path[i] === part);
 }
 
 /** The name a TOML key spells. A quoted key has its escapes decoded, so "mod\u0065l" is model. */
