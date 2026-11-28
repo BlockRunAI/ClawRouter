@@ -148,6 +148,18 @@ export async function removeOpenClawConfig(configPath: string, authPath: string)
         if (key.startsWith("blockrun/")) delete allowedModels[key];
       }
     }
+    // OpenClaw 2026.8+ keeps the allowlist in modelPolicy.allow once it has migrated `models`.
+    // Same rule as src/openclaw-model-policy.ts: exact blockrun/* refs go, wildcards stay, and
+    // an emptied list is dropped (OpenClaw reads [] and no list alike).
+    const modelPolicy = nestedObject(config, ["agents", "defaults", "modelPolicy"]);
+    if (modelPolicy && Array.isArray(modelPolicy.allow)) {
+      const kept = modelPolicy.allow.filter((entry: unknown) => {
+        const ref = typeof entry === "string" ? entry.trim() : "";
+        return !(ref.startsWith("blockrun/") && !ref.endsWith("*"));
+      });
+      if (kept.length > 0) modelPolicy.allow = kept;
+      else delete modelPolicy.allow;
+    }
     const defaultModel = nestedObject(config, ["agents", "defaults", "model"]);
     if (typeof defaultModel?.primary === "string" && defaultModel.primary.startsWith("blockrun/")) {
       delete defaultModel.primary;
