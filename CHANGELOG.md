@@ -4,6 +4,40 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.326 — November 27, 2026
+
+### Routing moves to the current model generation
+
+ClawRouter now ships router-core 53fe783. The fallback chains use the newest
+model in each family where it costs the same or less:
+
+- Claude Opus 5.5 ($4/$20) replaces Opus 4.8 and 4.7, with Opus 5 kept as a
+  backup. Sonnet 5.5 ($2/$10) replaces Sonnet 4.6.
+- Grok 4.7 replaces Grok 4.5 at the same price.
+- In the COMPLEX chains, one GPT-6.2 Sol rung ($2/$10) replaces the GPT-5.5 and
+  GPT-5.4 pair. GPT-6 Luna replaces GPT-5.4 Nano.
+- The **premium** profile's COMPLEX tier now starts on Claude Opus 5.5 instead
+  of Claude Fable 5. That makes the first attempt on a hard premium turn about
+  2.5x cheaper ($4/$20 vs $10/$50 per 1M tokens).
+- The models the router can fall back to on a turn that needs its tools now
+  include Gemini 4 Argon, Hydrogen and Neon, GPT-6.2 Astra and Sol, and GPT-5.6
+  Luna Pro, which all returned a correct tool call on 2026-11-27. GPT-6 Sol,
+  GPT-6.1 Sol and GPT-6 Astra leave that list in favour of the GPT-6.2 pair.
+
+Calibrated primaries do not change: Sonnet 5, GPT-4o Mini and Gemini 3.1 Pro
+stay where they were. Nothing was retired. Every model that left a chain still
+works when you pin it.
+
+### GPT-6.2 Sol in the catalog
+
+`openai/gpt-6.2-sol` (OpenAI's everyday GPT-6.2 model: $2/$10 per 1M, 1M
+context, 128K output, reasoning, vision and tools) is now in the local catalog
+and the model picker. You can pin it with `/model gpt-6.2-sol`. Because the
+router can now pick it, it has to be in the catalog: the balance check and
+`maxCostPerRun` only count spend on models they can price.
+
+---
+
 ## v0.12.325 — November 27, 2026
 
 ### Sharing a response to Telegram no longer freezes the proxy
