@@ -735,3 +735,29 @@ describe("router-core 53fe783 tool fallbacks (GPT-6.2 Astra, Gemini 4 Neon and H
     expect(resolveModelAlias("gpt-6-2-astra")).toBe("openai/gpt-6.2-astra");
   });
 });
+
+describe("GPT-6.1 Terra (router-core 92f77ec tool fallback)", () => {
+  // blockrun src/lib/models.ts, listed 2026-11-27: $1/$5, 1.05M context,
+  // 128K output, reasoning + vision. router-core 92f77ec tool-verified it, so
+  // it is a rescue candidate the cost cap has to be able to price.
+  it("is carried at gateway pricing so the cost cap sees it", () => {
+    const m = BLOCKRUN_MODELS.find((x) => x.id === "openai/gpt-6.1-terra");
+    expect(m).toMatchObject({
+      inputPrice: 1,
+      outputPrice: 5,
+      contextWindow: 1_050_000,
+      maxOutput: 128_000,
+      reasoning: true,
+      vision: true,
+      toolCalling: true,
+    });
+    expect(m?.deprecated).toBeUndefined();
+  });
+
+  it("is pinnable and in the picker", () => {
+    expect(resolveModelAlias("gpt-6.1-terra")).toBe("openai/gpt-6.1-terra");
+    expect(resolveModelAlias("gpt-6-1-terra")).toBe("openai/gpt-6.1-terra");
+    expect(resolveModelAlias("openai/gpt-6.1-terra")).toBe("openai/gpt-6.1-terra");
+    expect(TOP_MODELS).toContain("openai/gpt-6.1-terra");
+  });
+});

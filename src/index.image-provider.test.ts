@@ -84,6 +84,14 @@ describe("/cr-imagegen model aliases", () => {
     expect(IMAGE_MODEL_ALIASES["gpt-image-2.5"]).toBeUndefined();
   });
 
+  it("pins Nano Banana 2 Lite and 2.1 by name, leaving bare banana-2 where it was", () => {
+    expect(IMAGE_MODEL_ALIASES["banana-2-lite"]).toBe("google/nano-banana-2-lite");
+    expect(IMAGE_MODEL_ALIASES["nano-banana-2-lite"]).toBe("google/nano-banana-2-lite");
+    expect(IMAGE_MODEL_ALIASES["banana-2.1"]).toBe("google/nano-banana-2.1");
+    expect(IMAGE_MODEL_ALIASES["nano-banana-2.1"]).toBe("google/nano-banana-2.1");
+    expect(IMAGE_MODEL_ALIASES["banana-2"]).toBe("google/nano-banana-2");
+  });
+
   it("leaves bare grok-imagine on the $0.02 model — 2.0 is an explicit pin at 2x", () => {
     expect(IMAGE_MODEL_ALIASES["grok-imagine"]).toBe("xai/grok-imagine-image");
     expect(IMAGE_MODEL_ALIASES["grok-imagine-2"]).toBe("xai/grok-imagine-image-2.0");

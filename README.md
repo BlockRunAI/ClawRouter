@@ -335,6 +335,8 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | ---------------------------- | ----------------------------- | --------- |
 | `nano-banana`                | Google Gemini Flash           | 1024x1024 |
 | `banana-2`                   | Google Nano Banana 2          | 1024x1024 |
+| `banana-2-lite`              | Google Nano Banana 2 Lite     | 1024x1024 |
+| `banana-2.1`                 | Google Nano Banana 2.1        | 1024x1024 |
 | `banana-pro`                 | Google Gemini Pro             | 4096x4096 |
 | `gpt-image`                  | OpenAI GPT Image 1            | 1536x1024 |
 | `gpt-image-2`                | OpenAI GPT Image 2            | 1536x1024 |
@@ -397,12 +399,12 @@ Edit existing images with `/img2img`:
 /img2img --image ./cat.jpg --mask ./mask.png remove the background
 ```
 
-| Option            | Required | Description                                                                                                           |
-| ----------------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| `--image <path>`  | Yes      | Local image file path (supports `~/`)                                                                                 |
-| `--mask <path>`   | No       | Mask image (white = area to edit)                                                                                     |
-| `--model <model>` | No       | `gpt-image-1` (default), `gpt-image-2`, `sunburst`, `nano-banana`, `banana-2`, `banana-pro` — `--mask` is OpenAI-only |
-| `--size <WxH>`    | No       | Output size (default: `1024x1024`)                                                                                    |
+| Option            | Required | Description                                                                                                                                          |
+| ----------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--image <path>`  | Yes      | Local image file path (supports `~/`)                                                                                                                |
+| `--mask <path>`   | No       | Mask image (white = area to edit)                                                                                                                    |
+| `--model <model>` | No       | `gpt-image-1` (default), `gpt-image-2`, `sunburst`, `nano-banana`, `banana-2`, `banana-2-lite`, `banana-2.1`, `banana-pro` — `--mask` is OpenAI-only |
+| `--size <WxH>`    | No       | Output size (default: `1024x1024`)                                                                                                                   |
 
 **API endpoint:** `POST http://localhost:8402/v1/images/image2image` — see [full docs](docs/image-generation.md#post-v1imagesimage2image).
 
@@ -503,42 +505,43 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 
 ### Mid-Range Models
 
-| Model                       | Context | Features                                    |
-| --------------------------- | ------- | ------------------------------------------- |
-| anthropic/claude-haiku-4.5  | 200K    | vision, agentic, tools                      |
-| zai/glm-5                   | 200K    | reasoning, tools                            |
-| mistral/mistral-large-4     | 512K    | reasoning, vision, tools                    |
-| tencent/hy4-preview         | 1M      | reasoning (Tencent Hy4, 770B MoE)           |
-| openai/gpt-5.6-terra-pro    | 1M      | reasoning, vision, agentic, tools           |
-| zai/glm-5.2                 | 1M      | reasoning, coding, tools (flagship)         |
-| zai/glm-5.1                 | 200K    | reasoning, tools (promo ended 2026-06-05)   |
-| deepseek/deepseek-v4-pro    | 1M      | reasoning, agentic, tools (V4 flagship)     |
-| qwen/qwen3.7-max            | 1M      | reasoning, agentic, tools (Qwen flagship)   |
-| qwen/qwen3.8-max            | 1M      | reasoning (Qwen 3.8 flagship)               |
-| xai/grok-4.3                | 1M      | reasoning, vision, agentic, tools           |
-| google/gemini-4-hydrogen    | 1M      | reasoning, vision, tools (fast Gemini 4)    |
-| google/gemini-4-argon       | 1M      | reasoning, vision, tools (Google frontier)  |
-| google/gemini-4-carbon      | 1M      | reasoning, vision, tools (top Gemini 4)     |
-| google/gemini-3.8-flash     | 1M      | reasoning, vision, tools (newest Flash)     |
-| google/gemini-3.6-flash     | 1M      | reasoning, vision, tools (thinking mode)    |
-| xai/grok-4.5                | 500K    | reasoning, vision, agentic, tools           |
-| xai/grok-4.7                | 500K    | reasoning, vision, agentic, tools           |
-| xai/grok-4.6                | 500K    | reasoning, vision, agentic, tools           |
-| xai/grok-build-0.1          | 256K    | agentic coding, tools                       |
-| openai/gpt-5.2              | 400K    | reasoning, vision, agentic, tools           |
-| openai/gpt-5.3-codex        | 400K    | agentic, tools                              |
-| openai/gpt-5.1              | 400K    | reasoning, vision, agentic, tools           |
-| openai/gpt-4.1              | 128K    | vision, tools                               |
-| openai/o3                   | 200K    | reasoning, tools (retires 2026-12-11)       |
-| google/gemini-3.1-pro       | 1M      | reasoning, vision, tools                    |
-| openai/gpt-4o               | 128K    | vision, agentic, tools                      |
-| openai/gpt-5.4              | 1M      | reasoning, vision, agentic, tools           |
-| openai/gpt-5.6-terra        | 1M      | reasoning, vision, agentic, tools           |
-| openai/gpt-6-sol            | 1M      | reasoning, vision, agentic, tools (GPT-6)   |
-| openai/gpt-6.1-sol          | 1M      | reasoning, vision, agentic, tools (GPT-6.1) |
-| openai/gpt-6.2-sol          | 1M      | reasoning, vision, agentic, tools (GPT-6.2) |
-| anthropic/claude-sonnet-5.5 | 1M      | reasoning, vision, agentic, tools           |
-| anthropic/claude-sonnet-5   | 1M      | reasoning, vision, agentic, tools           |
+| Model                       | Context | Features                                                        |
+| --------------------------- | ------- | --------------------------------------------------------------- |
+| anthropic/claude-haiku-4.5  | 200K    | vision, agentic, tools                                          |
+| zai/glm-5                   | 200K    | reasoning, tools                                                |
+| mistral/mistral-large-4     | 512K    | reasoning, vision, tools                                        |
+| tencent/hy4-preview         | 1M      | reasoning (Tencent Hy4, 770B MoE)                               |
+| openai/gpt-5.6-terra-pro    | 1M      | reasoning, vision, agentic, tools                               |
+| zai/glm-5.2                 | 1M      | reasoning, coding, tools (flagship)                             |
+| zai/glm-5.1                 | 200K    | reasoning, tools (promo ended 2026-06-05)                       |
+| deepseek/deepseek-v4-pro    | 1M      | reasoning, agentic, tools (V4 flagship)                         |
+| qwen/qwen3.7-max            | 1M      | reasoning, agentic, tools (Qwen flagship)                       |
+| qwen/qwen3.8-max            | 1M      | reasoning (Qwen 3.8 flagship)                                   |
+| xai/grok-4.3                | 1M      | reasoning, vision, agentic, tools                               |
+| google/gemini-4-hydrogen    | 1M      | reasoning, vision, tools (fast Gemini 4)                        |
+| google/gemini-4-argon       | 1M      | reasoning, vision, tools (Google frontier)                      |
+| google/gemini-4-carbon      | 1M      | reasoning, vision, tools (top Gemini 4)                         |
+| google/gemini-3.8-flash     | 1M      | reasoning, vision, tools (newest Flash)                         |
+| google/gemini-3.6-flash     | 1M      | reasoning, vision, tools (thinking mode)                        |
+| xai/grok-4.5                | 500K    | reasoning, vision, agentic, tools                               |
+| xai/grok-4.7                | 500K    | reasoning, vision, agentic, tools                               |
+| xai/grok-4.6                | 500K    | reasoning, vision, agentic, tools                               |
+| xai/grok-build-0.1          | 256K    | agentic coding, tools                                           |
+| openai/gpt-5.2              | 400K    | reasoning, vision, agentic, tools                               |
+| openai/gpt-5.3-codex        | 400K    | agentic, tools                                                  |
+| openai/gpt-5.1              | 400K    | reasoning, vision, agentic, tools                               |
+| openai/gpt-4.1              | 128K    | vision, tools                                                   |
+| openai/o3                   | 200K    | reasoning, tools (retires 2026-12-11)                           |
+| google/gemini-3.1-pro       | 1M      | reasoning, vision, tools                                        |
+| openai/gpt-4o               | 128K    | vision, agentic, tools                                          |
+| openai/gpt-5.4              | 1M      | reasoning, vision, agentic, tools                               |
+| openai/gpt-5.6-terra        | 1M      | reasoning, vision, agentic, tools                               |
+| openai/gpt-6-sol            | 1M      | reasoning, vision, agentic, tools (GPT-6)                       |
+| openai/gpt-6.1-sol          | 1M      | reasoning, vision, agentic, tools (GPT-6.1)                     |
+| openai/gpt-6.1-terra        | 1M      | reasoning, vision, agentic, tools (GPT-6.1 cost-efficient tier) |
+| openai/gpt-6.2-sol          | 1M      | reasoning, vision, agentic, tools (GPT-6.2)                     |
+| anthropic/claude-sonnet-5.5 | 1M      | reasoning, vision, agentic, tools                               |
+| anthropic/claude-sonnet-5   | 1M      | reasoning, vision, agentic, tools                               |
 
 ### Premium Models
 

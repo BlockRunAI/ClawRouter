@@ -59,6 +59,8 @@ Display inline: `![generated image](http://localhost:8402/images/abc123.png)`
 | ------------------ | ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `nano-banana`      | `google/nano-banana`            | 1024×1024                       | Default — fast, cheap, good quality                                                                                |
 | `banana-2`         | `google/nano-banana-2`          | 1024×1024                       | Gemini 3.1 Flash imagegen — sharper than nano-banana at 1K                                                         |
+| `banana-2-lite`    | `google/nano-banana-2-lite`     | 1024×1024                       | Gemini 3.1 Flash Lite imagegen — the lowest-cost Nano Banana                                                       |
+| `banana-2.1`       | `google/nano-banana-2.1`        | 1024×1024                       | Nano Banana 2.1 — newer Flash-tier model with thinking                                                             |
 | `banana-pro`       | `google/nano-banana-pro`        | 1024×1024, 2048×2048, 4096×4096 | High-res, large format                                                                                             |
 | `gpt-image`        | `openai/gpt-image-1`            | 1024×1024, 1536×1024, 1024×1536 | Budget option; supports editing                                                                                    |
 | `gpt-image-2`      | `openai/gpt-image-2`            | 1024×1024, 1536×1024, 1024×1536 | Photorealistic, reasoning-driven, text rendering (slow — proxy polls up to 5min); legacy `dalle` alias routes here |
@@ -121,7 +123,7 @@ Response is identical to generation:
 }
 ```
 
-**Supported models for editing:** `openai/gpt-image-1` (default), `openai/gpt-image-2`, `openai/gpt-image-2.5-sunburst`, `google/nano-banana`, `google/nano-banana-2`, `google/nano-banana-pro`. `mask` works with the OpenAI models only. `openai/gpt-image-2.5-flare` cannot edit.
+**Supported models for editing:** `openai/gpt-image-1` (default), `openai/gpt-image-2`, `openai/gpt-image-2.5-sunburst`, `google/nano-banana`, `google/nano-banana-2`, `google/nano-banana-2-lite`, `google/nano-banana-2.1`, `google/nano-banana-pro`. `mask` works with the OpenAI models only. `openai/gpt-image-2.5-flare` cannot edit.
 
 ---
 

@@ -141,6 +141,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // gpt-6-sol's cached-input rate. Explicit pin only, same rule as above.
   "gpt-6.1-sol": "openai/gpt-6.1-sol",
   "gpt-6-1-sol": "openai/gpt-6.1-sol",
+  // GPT-6.1 Terra (blockrun 2026-11-27): the cost-efficient GPT-6.1 tier at
+  // $1/$5, half 6.1 Sol's rate. Explicit pin only, same rule as above.
+  "gpt-6.1-terra": "openai/gpt-6.1-terra",
+  "gpt-6-1-terra": "openai/gpt-6.1-terra",
   // GPT-6.2 Sol (blockrun 2026-11-17): same $2/$10 as 6.1 Sol, June 2026
   // knowledge. Explicit pin only, same rule as above.
   "gpt-6.2-sol": "openai/gpt-6.2-sol",
@@ -870,6 +874,27 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "6.1",
     inputPrice: 2.0,
     outputPrice: 10.0,
+    contextWindow: 1050000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    // GPT-6.1 Terra (blockrun 2026-11-27, knowledge to 2026-06): OpenAI's
+    // cost-efficient GPT-6.1 tier at $1/$5 (cached input $0.05), half 6.1
+    // Sol's rate, 1.05M/128K. Vision confirmed upstream with a 64x64 PNG.
+    // Catalogued because router-core 92f77ec tool-verified it, which puts it
+    // in DEFAULT_MODEL_CAPABILITIES: a rescue candidate ClawRouter cannot price
+    // skips the balance check and maxCostPerRun. Long tier (>272K prompt:
+    // $2/$7.50) is telemetry only, as on the rest of the family — the charge
+    // is 402.
+    id: "openai/gpt-6.1-terra",
+    name: "GPT-6.1 Terra",
+    version: "6.1",
+    inputPrice: 1.0,
+    outputPrice: 5.0,
     contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,

@@ -55,6 +55,8 @@ The returned URL is a publicly hosted image, ready to use in Telegram, Discord, 
 | ------------------------------- | ------------------ | ------------------ | ------------------------------------------------------------------------------------- | ----------------------------- |
 | `google/nano-banana`            | `nano-banana`      | $0.05/image        | 1024×1024                                                                             | Google Gemini Flash           |
 | `google/nano-banana-2`          | `banana-2`         | $0.09/image        | 1024×1024                                                                             | Google Nano Banana 2          |
+| `google/nano-banana-2-lite`     | `banana-2-lite`    | $0.05/image        | 1024×1024                                                                             | Google Nano Banana 2 Lite     |
+| `google/nano-banana-2.1`        | `banana-2.1`       | $0.07/image        | 1024×1024                                                                             | Google Nano Banana 2.1        |
 | `google/nano-banana-pro`        | `banana-pro`       | $0.10–$0.15/image  | 1024×1024, 2048×2048, 4096×4096                                                       | Google Gemini Pro             |
 | `openai/gpt-image-1`            | `gpt-image`        | $0.02–$0.04/image  | 1024×1024, 1536×1024, 1024×1536                                                       | OpenAI GPT Image 1            |
 | `openai/gpt-image-2`            | `gpt-image-2`      | $0.06–$0.12/image  | 1024×1024, 1536×1024, 1024×1536                                                       | OpenAI GPT Image 2            |
@@ -105,13 +107,13 @@ Edit an existing image using AI. Route via ClawRouter proxy (`http://localhost:8
 
 **Request body:**
 
-| Field    | Type     | Required | Description                                                                                                                                                                  |
-| -------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`  | `string` | No       | Model ID (default: `openai/gpt-image-1`). Also `openai/gpt-image-2`, `openai/gpt-image-2.5-sunburst`, `google/nano-banana`, `google/nano-banana-2`, `google/nano-banana-pro` |
-| `prompt` | `string` | Yes      | Text description of the edit to apply                                                                                                                                        |
-| `image`  | `string` | Yes      | Source image — see **Image input formats** below                                                                                                                             |
-| `mask`   | `string` | No       | Mask image (white = area to edit) — same formats as `image`                                                                                                                  |
-| `size`   | `string` | No       | Output dimensions, e.g. `"1024x1024"` (default)                                                                                                                              |
+| Field    | Type     | Required | Description                                                                                                                                                                                                                         |
+| -------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`  | `string` | No       | Model ID (default: `openai/gpt-image-1`). Also `openai/gpt-image-2`, `openai/gpt-image-2.5-sunburst`, `google/nano-banana`, `google/nano-banana-2`, `google/nano-banana-2-lite`, `google/nano-banana-2.1`, `google/nano-banana-pro` |
+| `prompt` | `string` | Yes      | Text description of the edit to apply                                                                                                                                                                                               |
+| `image`  | `string` | Yes      | Source image — see **Image input formats** below                                                                                                                                                                                    |
+| `mask`   | `string` | No       | Mask image (white = area to edit) — same formats as `image`                                                                                                                                                                         |
+| `size`   | `string` | No       | Output dimensions, e.g. `"1024x1024"` (default)                                                                                                                                                                                     |
 
 **Image input formats** — the `image` and `mask` fields accept any of:
 
@@ -363,12 +365,12 @@ When using ClawRouter with OpenClaw, generate and edit images directly from any 
 /img2img --image /tmp/portrait.png --size 1536x1024 add a hat
 ```
 
-| Flag      | Default       | Description                                                                       |
-| --------- | ------------- | --------------------------------------------------------------------------------- |
-| `--image` | _(required)_  | Local image file path (supports `~/`)                                             |
-| `--mask`  | _(none)_      | Mask image (white = area to edit)                                                 |
-| `--model` | `gpt-image-1` | `gpt-image-1`, `gpt-image-2`, `sunburst`, `nano-banana`, `banana-2`, `banana-pro` |
-| `--size`  | `1024x1024`   | Output size                                                                       |
+| Flag      | Default       | Description                                                                                                      |
+| --------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `--image` | _(required)_  | Local image file path (supports `~/`)                                                                            |
+| `--mask`  | _(none)_      | Mask image (white = area to edit)                                                                                |
+| `--model` | `gpt-image-1` | `gpt-image-1`, `gpt-image-2`, `sunburst`, `nano-banana`, `banana-2`, `banana-2-lite`, `banana-2.1`, `banana-pro` |
+| `--size`  | `1024x1024`   | Output size                                                                                                      |
 
 ### Model shorthands
 
@@ -376,6 +378,8 @@ When using ClawRouter with OpenClaw, generate and edit images directly from any 
 | -------------------------------------- | ------------------------------- |
 | `nano-banana`, `banana`                | `google/nano-banana`            |
 | `banana-2`, `nano-banana-2`            | `google/nano-banana-2`          |
+| `banana-2-lite`, `nano-banana-2-lite`  | `google/nano-banana-2-lite`     |
+| `banana-2.1`, `nano-banana-2.1`        | `google/nano-banana-2.1`        |
 | `banana-pro`, `nano-banana-pro`        | `google/nano-banana-pro`        |
 | `gpt-image`, `gpt-image-1`             | `openai/gpt-image-1`            |
 | `gpt-image-2`                          | `openai/gpt-image-2`            |
@@ -396,4 +400,4 @@ When using ClawRouter with OpenClaw, generate and edit images directly from any 
 - **Payment** — Each image costs the listed price in USDC, deducted from your wallet via x402. Make sure your wallet is funded before generating or editing.
 - **Content policy** — OpenAI image models (GPT Image 1/2) apply OpenAI's content policy. Use `nano-banana` or `grok-imagine` for more flexibility with generation.
 - **Size limits** — The gateway validates `size` per model before payment; a size outside the model's list returns an error and costs nothing. Check the table above before setting `--size`.
-- **Image editing** — The `/v1/images/image2image` endpoint supports `openai/gpt-image-1` (default), `openai/gpt-image-2`, `openai/gpt-image-2.5-sunburst` and the three `google/nano-banana*` models. `mask` is OpenAI-only (Nano Banana edits by prompt); `openai/gpt-image-2.5-flare` is generation-only. The `image` and `mask` fields accept local file paths (`~/photo.png`, `/abs/path.png`), HTTP/HTTPS URLs, or base64 data URIs. ClawRouter handles file reading and URL downloading automatically. Supported formats: PNG, JPG/JPEG, WebP.
+- **Image editing** — The `/v1/images/image2image` endpoint supports `openai/gpt-image-1` (default), `openai/gpt-image-2`, `openai/gpt-image-2.5-sunburst` and the five `google/nano-banana*` models. `mask` is OpenAI-only (Nano Banana edits by prompt); `openai/gpt-image-2.5-flare` is generation-only. The `image` and `mask` fields accept local file paths (`~/photo.png`, `/abs/path.png`), HTTP/HTTPS URLs, or base64 data URIs. ClawRouter handles file reading and URL downloading automatically. Supported formats: PNG, JPG/JPEG, WebP.
