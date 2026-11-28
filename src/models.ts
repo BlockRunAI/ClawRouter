@@ -141,6 +141,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // gpt-6-sol's cached-input rate. Explicit pin only, same rule as above.
   "gpt-6.1-sol": "openai/gpt-6.1-sol",
   "gpt-6-1-sol": "openai/gpt-6.1-sol",
+  // GPT-6.1 Terra (blockrun 2026-11-27): the cost-efficient GPT-6.1 tier at
+  // $1/$5, half 6.1 Sol's rate. Explicit pin only, same rule as above.
+  "gpt-6.1-terra": "openai/gpt-6.1-terra",
+  "gpt-6-1-terra": "openai/gpt-6.1-terra",
   // GPT-6.2 Sol (blockrun 2026-11-17): same $2/$10 as 6.1 Sol, June 2026
   // knowledge. Explicit pin only, same rule as above.
   "gpt-6.2-sol": "openai/gpt-6.2-sol",
@@ -870,6 +874,27 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     version: "6.1",
     inputPrice: 2.0,
     outputPrice: 10.0,
+    contextWindow: 1050000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    // GPT-6.1 Terra (blockrun 2026-11-27, knowledge to 2026-06): OpenAI's
+    // cost-efficient GPT-6.1 tier at $1/$5 (cached input $0.05), half 6.1
+    // Sol's rate, 1.05M/128K. Vision confirmed upstream with a 64x64 PNG.
+    // Catalogued because router-core 92f77ec tool-verified it, which puts it
+    // in DEFAULT_MODEL_CAPABILITIES: a rescue candidate ClawRouter cannot price
+    // skips the balance check and maxCostPerRun. Long tier (>272K prompt:
+    // $2/$7.50) is telemetry only, as on the rest of the family — the charge
+    // is 402.
+    id: "openai/gpt-6.1-terra",
+    name: "GPT-6.1 Terra",
+    version: "6.1",
+    inputPrice: 1.0,
+    outputPrice: 5.0,
     contextWindow: 1050000,
     maxOutput: 128000,
     reasoning: true,
@@ -2730,8 +2755,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   // ── 2026-10 paid additions (blockrun live catalog, read 2026-10-20) ─────
   // All four were listed upstream 2026-10-02..07 and are resold through
   // blockrun's OpenRouter pool at cost; the fields below are the gateway's
-  // own numbers. `toolCalling` is set only where blockrun recorded a
-  // structured tool_calls probe (Mistral Large 4); the rest stay opt-in.
+  // own numbers. `toolCalling` is set only where a structured tool_calls probe
+  // is on record: Mistral Large 4 (blockrun), then Qwen3.8 Max and Hy4 Preview
+  // in router-core 92f77ec's funded re-probe (2026-11-28). Laguna S 2.1 stays
+  // opt-in: it answered 500 after payment on that probe, so it has no evidence.
   {
     // The 3.8 generation's flagship. Upstream also takes image/video input,
     // but blockrun lists it text-only until an image probe on its route.
@@ -2743,6 +2770,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1000000,
     maxOutput: 131072,
     reasoning: true,
+    // Well-formed tool call in router-core 92f77ec's funded re-probe (2026-11-28).
+    toolCalling: true,
   },
   {
     // 770B / 49B-active MoE, Apache 2.0. maxOutput is 64,000 — the smallest
@@ -2757,6 +2786,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1048576,
     maxOutput: 64000,
     reasoning: true,
+    // Well-formed tool call in router-core 92f77ec's funded re-probe (2026-11-28).
+    toolCalling: true,
   },
   {
     // $1.36/$4.18, Mistral's list rate. Listed 2026-10-07 at its $0.68/$2.09

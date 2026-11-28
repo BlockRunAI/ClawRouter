@@ -2052,6 +2052,11 @@ const IMAGE_PRICING: Record<string, { default: number; sizes?: Record<string, nu
   "google/nano-banana": { default: 0.05, sizes: { "1024x1024": 0.05 } },
   // Nano Banana 2 (Gemini 3.1 Flash imagegen, blockrun #329): $0.09/image at 1K.
   "google/nano-banana-2": { default: 0.09, sizes: { "1024x1024": 0.09 } },
+  // Nano Banana 2 Lite and 2.1 (blockrun #1080, live-probed 2026-11-16 on AI
+  // Studio). 1K only: the gateway sends no imageSize, so Google always draws
+  // its default 1024x1024. Lite is priced like nano-banana; 2.1 adds thinking.
+  "google/nano-banana-2-lite": { default: 0.05, sizes: { "1024x1024": 0.05 } },
+  "google/nano-banana-2.1": { default: 0.07, sizes: { "1024x1024": 0.07 } },
   "google/nano-banana-pro": {
     default: 0.1,
     sizes: { "1024x1024": 0.1, "2048x2048": 0.1, "4096x4096": 0.15 },
@@ -2124,6 +2129,10 @@ export const IMAGE_MODEL_ALIASES: Record<string, string> = Object.freeze({
   "nano-banana": "google/nano-banana",
   "banana-2": "google/nano-banana-2",
   "nano-banana-2": "google/nano-banana-2",
+  "banana-2-lite": "google/nano-banana-2-lite",
+  "nano-banana-2-lite": "google/nano-banana-2-lite",
+  "banana-2.1": "google/nano-banana-2.1",
+  "nano-banana-2.1": "google/nano-banana-2.1",
   "banana-pro": "google/nano-banana-pro",
   "nano-banana-pro": "google/nano-banana-pro",
   "grok-imagine": "xai/grok-imagine-image",
@@ -5658,6 +5667,8 @@ async function proxyRequest(
             "Models:",
             "  nano-banana       Google Gemini Flash — $0.05/image",
             "  banana-2          Google Nano Banana 2 — $0.09/image",
+            "  banana-2-lite     Google Nano Banana 2 Lite — $0.05/image",
+            "  banana-2.1        Google Nano Banana 2.1 — $0.07/image",
             "  banana-pro        Google Gemini Pro — $0.10/image (up to 4K)",
             "  gpt-image         OpenAI GPT Image 1 — $0.02/image",
             "  gpt-image-2       OpenAI GPT Image 2 — $0.06/image",
@@ -5979,6 +5990,8 @@ async function proxyRequest(
             "gpt-image-2.5-sunburst": "openai/gpt-image-2.5-sunburst",
             "nano-banana": "google/nano-banana",
             "banana-2": "google/nano-banana-2",
+            "banana-2-lite": "google/nano-banana-2-lite",
+            "banana-2.1": "google/nano-banana-2.1",
             "banana-pro": "google/nano-banana-pro",
           };
           img2imgModel = IMG2IMG_ALIASES[raw] ?? raw;
@@ -6000,6 +6013,8 @@ async function proxyRequest(
           "  sunburst         OpenAI GPT Image 2.5 Sunburst (precision edits) — $0.28/image",
           "  nano-banana      Google Gemini Flash — $0.05/image (no --mask)",
           "  banana-2         Google Nano Banana 2 — $0.09/image (no --mask)",
+          "  banana-2-lite    Google Nano Banana 2 Lite — $0.05/image (no --mask)",
+          "  banana-2.1       Google Nano Banana 2.1 — $0.07/image (no --mask)",
           "  banana-pro       Google Gemini Pro — $0.10/image (no --mask)",
           "",
           "Examples:",

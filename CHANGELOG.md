@@ -4,6 +4,42 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.330 — November 28, 2026
+
+### router-core 92f77ec: five more models verified for tool calls
+
+ClawRouter now ships router-core 92f77ec. A funded re-probe on 2026-11-28
+confirmed that Mistral Large 4, Qwen 3.8 Max, Qwen 3.8 Flash, Tencent HY4
+Preview and GPT-6.1 Terra each return a well-formed tool call. Poolside Laguna
+S 2.1 answered 500 after payment twice, so it has no tool evidence and stays
+out of turns that need tools until a probe succeeds.
+
+ClawRouter hands router-core its own capability flags, so its catalog now
+agrees on all five: Qwen 3.8 Max and HY4 Preview are marked tool-capable
+(Mistral Large 4, Qwen 3.8 Flash and GPT-6.1 Terra already were). Without that,
+the re-probe would not have reached ClawRouter for those two. `/v1/models` now
+reports `tool_calling: true` for them. None of these models is in a fallback
+chain, so no routing decision changes.
+The model picker data moves to model-catalog 2026.11.27.1 as well.
+
+### GPT-6.1 Terra in the catalog
+
+`openai/gpt-6.1-terra` (OpenAI's cost-efficient GPT-6.1 model: $1/$5 per 1M,
+1M context, 128K output, reasoning, vision and tools) is now in the local
+catalog and the model picker. Pin it with `/model gpt-6.1-terra`. Because
+router-core can now pick it for a turn that needs tools, ClawRouter has to be
+able to price it: the balance check and `maxCostPerRun` only count spend on
+models they can price.
+
+### Nano Banana 2 Lite and 2.1 for image generation
+
+`google/nano-banana-2-lite` ($0.05/image) and `google/nano-banana-2.1`
+($0.07/image, with thinking) are now in the image picker, `/cr-imagegen`
+(`--model banana-2-lite` / `banana-2.1`) and `/img2img`. Both draw at
+1024x1024. ClawRouter now offers all 14 image models BlockRun serves.
+
+---
+
 ## v0.12.329 — November 27, 2026
 
 ### New BlockRun models show up in `/model` on OpenClaw 2026.8+

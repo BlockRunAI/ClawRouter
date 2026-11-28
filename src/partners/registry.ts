@@ -636,10 +636,11 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
     name: "Image Generation",
     partner: "BlockRun",
     category: "Image & Video",
-    shortDescription: "12 image models (Nano Banana, GPT Image, ...)",
+    shortDescription: "14 image models (Nano Banana, GPT Image, ...)",
     description:
       "Generate an image from a text prompt. Models available: google/nano-banana (default), " +
-      "google/nano-banana-2, google/nano-banana-pro (up to 4K), openai/gpt-image-1, " +
+      "google/nano-banana-2, google/nano-banana-2-lite, google/nano-banana-2.1, " +
+      "google/nano-banana-pro (up to 4K), openai/gpt-image-1, " +
       "openai/gpt-image-2, openai/gpt-image-2.5-flare, openai/gpt-image-2.5-sunburst, " +
       "bytedance/seedream-5-pro, xai/grok-imagine-image, xai/grok-imagine-image-2.0, " +
       "xai/grok-imagine-image-pro, zai/cogview-4. " +
@@ -694,7 +695,8 @@ export const PARTNER_SERVICES: PartnerServiceDefinition[] = [
     description:
       "Edit or re-style an existing image. Models: openai/gpt-image-1 (default), " +
       "openai/gpt-image-2, openai/gpt-image-2.5-sunburst, google/nano-banana, " +
-      "google/nano-banana-2, google/nano-banana-pro. " +
+      "google/nano-banana-2, google/nano-banana-2-lite, google/nano-banana-2.1, " +
+      "google/nano-banana-pro. " +
       "Supply `image` as a data URI, https URL, or local file path; optional `mask` for " +
       "inpainting (OpenAI models only — Nano Banana edits by prompt).",
     proxyPath: "/images/image2image",

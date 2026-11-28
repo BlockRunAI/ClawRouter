@@ -1411,6 +1411,8 @@ export function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
     models: [
       "google/nano-banana",
       "google/nano-banana-2",
+      "google/nano-banana-2-lite",
+      "google/nano-banana-2.1",
       "google/nano-banana-pro",
       "openai/gpt-image-1",
       "openai/gpt-image-2",
@@ -1430,7 +1432,7 @@ export function buildImageGenerationProvider(): ImageGenerationProviderPlugin {
         supportsResolution: false,
       },
       // Edit is served for gpt-image-1, gpt-image-2, gpt-image-2.5-sunburst and
-      // the three nano-banana models (blockrun EDIT_SUPPORTED_MODELS; Flare is
+      // the five nano-banana models (blockrun EDIT_SUPPORTED_MODELS; Flare is
       // rejected); OpenClaw's UI picks a compatible model at edit time via
       // /v1/images/image2image.
       edit: { enabled: true },

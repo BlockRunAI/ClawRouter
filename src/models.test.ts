@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_MODEL_CAPABILITIES } from "@blockrun/router-core";
+
 import {
   BLOCKRUN_MODELS,
   MODEL_ALIASES,
@@ -494,12 +496,13 @@ describe("2026-10-20 live catalog sync", () => {
     },
   );
 
-  it("sets toolCalling only where the gateway recorded a structured tool_calls probe", () => {
+  it("sets toolCalling only where a structured tool_calls probe is on record", () => {
     const tools = (id: string) => BLOCKRUN_MODELS.find((m) => m.id === id)?.toolCalling;
     expect(tools("openai/gpt-6.1-sol")).toBe(true);
     expect(tools("mistral/mistral-large-4")).toBe(true);
-    expect(tools("qwen/qwen3.8-max")).toBeUndefined();
-    expect(tools("tencent/hy4-preview")).toBeUndefined();
+    // Qwen3.8 Max and Hy4 Preview: router-core 92f77ec's funded re-probe.
+    expect(tools("qwen/qwen3.8-max")).toBe(true);
+    expect(tools("tencent/hy4-preview")).toBe(true);
     expect(tools("poolside/laguna-s-2.1")).toBeUndefined();
     expect(tools("free/muse-glimmer-30b")).toBeUndefined();
   });
@@ -733,5 +736,62 @@ describe("router-core 53fe783 tool fallbacks (GPT-6.2 Astra, Gemini 4 Neon and H
   it("pins GPT-6.2 Astra explicitly", () => {
     expect(resolveModelAlias("gpt-6.2-astra")).toBe("openai/gpt-6.2-astra");
     expect(resolveModelAlias("gpt-6-2-astra")).toBe("openai/gpt-6.2-astra");
+  });
+});
+
+describe("GPT-6.1 Terra (router-core 92f77ec tool fallback)", () => {
+  // blockrun src/lib/models.ts, listed 2026-11-27: $1/$5, 1.05M context,
+  // 128K output, reasoning + vision. router-core 92f77ec tool-verified it, so
+  // it is a rescue candidate the cost cap has to be able to price.
+  it("is carried at gateway pricing so the cost cap sees it", () => {
+    const m = BLOCKRUN_MODELS.find((x) => x.id === "openai/gpt-6.1-terra");
+    expect(m).toMatchObject({
+      inputPrice: 1,
+      outputPrice: 5,
+      contextWindow: 1_050_000,
+      maxOutput: 128_000,
+      reasoning: true,
+      vision: true,
+      toolCalling: true,
+    });
+    expect(m?.deprecated).toBeUndefined();
+  });
+
+  it("is pinnable and in the picker", () => {
+    expect(resolveModelAlias("gpt-6.1-terra")).toBe("openai/gpt-6.1-terra");
+    expect(resolveModelAlias("gpt-6-1-terra")).toBe("openai/gpt-6.1-terra");
+    expect(resolveModelAlias("openai/gpt-6.1-terra")).toBe("openai/gpt-6.1-terra");
+    expect(TOP_MODELS).toContain("openai/gpt-6.1-terra");
+  });
+});
+
+describe("router-core 92f77ec funded re-probe: tool flags agree", () => {
+  // 2026-11-28: each of these returned a well-formed tool call, so router-core
+  // marks them supportsTools. ClawRouter's own tool filter reads the local
+  // `toolCalling` flag, so a model router-core trusts with tools but the flag
+  // omits would still be dropped from every tool turn here.
+  const reprobed = [
+    "mistral/mistral-large-4",
+    "qwen/qwen3.8-max",
+    "qwen/qwen3.8-flash",
+    "tencent/hy4-preview",
+    "openai/gpt-6.1-terra",
+  ];
+
+  it.each(reprobed)("%s carries toolCalling and matches router-core", (id) => {
+    const m = BLOCKRUN_MODELS.find((x) => x.id === id);
+    const caps = DEFAULT_MODEL_CAPABILITIES[id];
+    expect(caps?.supportsTools).toBe(true);
+    expect(m?.toolCalling).toBe(true);
+    expect(m?.vision ?? false).toBe(caps?.supportsVision ?? false);
+    expect(m?.contextWindow).toBe(caps?.contextWindow);
+    expect(m?.maxOutput).toBe(caps?.maxOutputTokens);
+  });
+
+  it("keeps poolside/laguna-s-2.1 off tool turns, as router-core does", () => {
+    expect(DEFAULT_MODEL_CAPABILITIES["poolside/laguna-s-2.1"]?.supportsTools).toBe(false);
+    expect(
+      BLOCKRUN_MODELS.find((x) => x.id === "poolside/laguna-s-2.1")?.toolCalling,
+    ).toBeUndefined();
   });
 });
