@@ -635,6 +635,10 @@ declare class BalanceMonitor {
     private cachedBalance;
     /** Timestamp when cache was last updated */
     private cachedAt;
+    /** Shared in-flight RPC read so concurrent checks do not stampede the RPC. */
+    private inflightFetch;
+    /** Incremented on invalidate() so a superseded in-flight read cannot repopulate the cache. */
+    private cacheEpoch;
     constructor(walletAddress: string, chain?: EvmBalanceChain, fetchImpl?: typeof fetch);
     /** Which chain's USDC this monitor reads. */
     getChain(): EvmBalanceChain;
@@ -735,6 +739,8 @@ declare class SolanaBalanceMonitor {
     private readonly walletAddress;
     private cachedBalance;
     private cachedAt;
+    private inflightFetch;
+    private cacheEpoch;
     constructor(walletAddress: string, rpcUrl?: string);
     checkBalance(): Promise<SolanaBalanceInfo>;
     deductEstimated(amountMicros: bigint): void;

@@ -4,6 +4,43 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.325 — November 27, 2026
+
+### Sharing a response to Telegram no longer freezes the proxy
+
+`/share/last?as=telegram` (and `/share/<id>?as=telegram`) looped forever on any
+response with a Markdown marker that never closes: `2*3 = 6`, a `* item` list,
+`arr[0]`, a lone backtick. The loop ran on the proxy's own event loop, so every
+agent's requests stalled (even `/health` stopped answering) until the process
+ran out of memory. An unclosed marker is now escaped as plain text, and output
+for every input that finished before is unchanged (#656, fixes #655).
+
+### Concurrent balance checks share one RPC read
+
+When the 30-second balance cache is cold, concurrent requests now wait on one
+balance read instead of each starting their own. Against live RPCs, five
+requests 15 ms apart went from five reads to one on both Base and Solana, which
+eases the 429s on the public Solana RPC. A read that was in flight when a
+failed payment invalidated the cache can no longer write its older balance
+back (#652).
+
+### Desktop: connecting Codex keeps config.toml loadable
+
+- With "set as default", Desktop added its own root `model` and
+  `model_provider` on top of the user's, and Codex refused the file as a
+  duplicate key. The user's root `model` and `model_provider` are now replaced,
+  dotted forms such as `model.sub` included. Disconnecting still restores the
+  original file (#651, fixes #650).
+- The Codex connection check now fails when config.toml defines any key or
+  table Desktop writes more than once. Before, it looked only for the provider
+  table and the bridge URL, so a config Codex would not load reported success.
+  Now the install rolls config.toml back and says which key clashed. A
+  hand-written `[profiles.clawrouter]` outside Desktop's block was one such case.
+
+Thanks to @goranai for #656 and #651, and to @Tyagiquamar for #652.
+
+---
+
 ## v0.12.324 — November 24, 2026
 
 ### Routing moves off the models retiring in December
