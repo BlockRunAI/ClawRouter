@@ -224,31 +224,36 @@ function displayModelName(id: string): string {
   return id.split("/").at(-1)?.replaceAll("-", " ") ?? id;
 }
 
-function parseJsonObject(raw: string, label: string): Record<string, any> {
+function parseJsonObject(raw: string, label: string): Record<string, unknown> {
   if (!raw.trim()) return {};
   try {
     const value = JSON.parse(raw) as unknown;
     if (!isJsonObject(value)) throw new Error("the root value must be an object");
     return value;
   } catch (error) {
-    throw new Error(`Invalid ${label}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid ${label}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
   }
 }
 
-function isJsonObject(value: unknown): value is Record<string, any> {
+function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function nestedObject(root: Record<string, any>, path: string[]): Record<string, any> | undefined {
+function nestedObject(
+  root: Record<string, unknown>,
+  path: string[],
+): Record<string, unknown> | undefined {
   let current: unknown = root;
   for (const key of path) {
     if (!isJsonObject(current) || !isJsonObject(current[key])) return undefined;
     current = current[key];
   }
-  return current as Record<string, any>;
+  return current as Record<string, unknown>;
 }
 
-function deleteNestedKey(root: Record<string, any>, path: string[], key: string): void {
+function deleteNestedKey(root: Record<string, unknown>, path: string[], key: string): void {
   const parent = nestedObject(root, path);
   if (parent) delete parent[key];
 }
