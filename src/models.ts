@@ -2755,8 +2755,10 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   // ── 2026-10 paid additions (blockrun live catalog, read 2026-10-20) ─────
   // All four were listed upstream 2026-10-02..07 and are resold through
   // blockrun's OpenRouter pool at cost; the fields below are the gateway's
-  // own numbers. `toolCalling` is set only where blockrun recorded a
-  // structured tool_calls probe (Mistral Large 4); the rest stay opt-in.
+  // own numbers. `toolCalling` is set only where a structured tool_calls probe
+  // is on record: Mistral Large 4 (blockrun), then Qwen3.8 Max and Hy4 Preview
+  // in router-core 92f77ec's funded re-probe (2026-11-28). Laguna S 2.1 stays
+  // opt-in: it answered 500 after payment on that probe, so it has no evidence.
   {
     // The 3.8 generation's flagship. Upstream also takes image/video input,
     // but blockrun lists it text-only until an image probe on its route.
@@ -2768,6 +2770,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1000000,
     maxOutput: 131072,
     reasoning: true,
+    // Well-formed tool call in router-core 92f77ec's funded re-probe (2026-11-28).
+    toolCalling: true,
   },
   {
     // 770B / 49B-active MoE, Apache 2.0. maxOutput is 64,000 — the smallest
@@ -2782,6 +2786,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 1048576,
     maxOutput: 64000,
     reasoning: true,
+    // Well-formed tool call in router-core 92f77ec's funded re-probe (2026-11-28).
+    toolCalling: true,
   },
   {
     // $1.36/$4.18, Mistral's list rate. Listed 2026-10-07 at its $0.68/$2.09

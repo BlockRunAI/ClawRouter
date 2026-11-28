@@ -14,7 +14,12 @@ Preview and GPT-6.1 Terra each return a well-formed tool call. Poolside Laguna
 S 2.1 answered 500 after payment twice, so it has no tool evidence and stays
 out of turns that need tools until a probe succeeds.
 
-None of these models is in a fallback chain, so no routing decision changes.
+ClawRouter hands router-core its own capability flags, so its catalog now
+agrees on all five: Qwen 3.8 Max and HY4 Preview are marked tool-capable
+(Mistral Large 4, Qwen 3.8 Flash and GPT-6.1 Terra already were). Without that,
+the re-probe would not have reached ClawRouter for those two. `/v1/models` now
+reports `tool_calling: true` for them. None of these models is in a fallback
+chain, so no routing decision changes.
 The model picker data moves to model-catalog 2026.11.27.1 as well.
 
 ### GPT-6.1 Terra in the catalog
