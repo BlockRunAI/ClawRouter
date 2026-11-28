@@ -133,6 +133,10 @@ export const MODEL_ALIASES: Record<string, string> = {
   // gpt-6-sol's cached-input rate. Explicit pin only, same rule as above.
   "gpt-6.1-sol": "openai/gpt-6.1-sol",
   "gpt-6-1-sol": "openai/gpt-6.1-sol",
+  // GPT-6.2 Sol (blockrun 2026-11-17): same $2/$10 as 6.1 Sol, June 2026
+  // knowledge. Explicit pin only, same rule as above.
+  "gpt-6.2-sol": "openai/gpt-6.2-sol",
+  "gpt-6-2-sol": "openai/gpt-6.2-sol",
   "gpt-5.5": "openai/gpt-5.5",
   "gpt-5.5-pro": "openai/gpt-5.5-pro",
   // ChatGPT Instant. `chat-latest` is a rolling upstream id — pinning it means
@@ -846,6 +850,25 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     id: "openai/gpt-6.1-sol",
     name: "GPT-6.1 Sol",
     version: "6.1",
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 1050000,
+    maxOutput: 128000,
+    reasoning: true,
+    vision: true,
+    agentic: true,
+    toolCalling: true,
+  },
+  {
+    // GPT-6.2 Sol (blockrun 2026-11-17, knowledge to 2026-06): the refreshed
+    // Sol at the same $2/$10 and 1.05M/128K envelope as gpt-6.1-sol, cached
+    // input $0.10. Catalogued because router-core 53fe783 puts it in the
+    // auto/premium/agentic COMPLEX chains; an uncatalogued chain model skips
+    // the balance check and maxCostPerRun. Long tier (>272K prompt: $4/$15)
+    // is telemetry only, as on the rest of the family — the charge is 402.
+    id: "openai/gpt-6.2-sol",
+    name: "GPT-6.2 Sol",
+    version: "6.2",
     inputPrice: 2.0,
     outputPrice: 10.0,
     contextWindow: 1050000,

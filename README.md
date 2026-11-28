@@ -296,7 +296,7 @@ Request → 15-dimension scorer → tier + task shape
 | --------- | --------------------------------- | --------------------- | ---------------- | --------------- |
 | SIMPLE    | nemotron-3.5-lightning (**FREE**) | gemini-3.5-flash-lite | gemini-3.6-flash | gpt-4o-mini     |
 | MEDIUM    | glm-5.3-flash                     | gemini-3.6-flash      | gpt-5.3-codex    | gpt-5.6-luna    |
-| COMPLEX   | glm-5.3-flash                     | gemini-3.1-pro        | claude-fable-5   | claude-sonnet-5 |
+| COMPLEX   | glm-5.3-flash                     | gemini-3.1-pro        | claude-opus-5.5  | claude-sonnet-5 |
 | REASONING | deepseek-reasoner                 | deepseek-reasoner     | claude-sonnet-5  | claude-sonnet-5 |
 
 † Withheld from `/v1/models` — since Router Core V3.5 no chain names such a model: every primary and every fallback rung above is a model you can find on the public pricing page. [savings-mix.json](https://github.com/BlockRunAI/blockrun/blob/main/src/brand/savings-mix.json) prices the published savings claim on the same visible models.
@@ -534,6 +534,7 @@ Live per-model prices: [blockrun.ai/pricing](https://blockrun.ai/pricing) (agent
 | openai/gpt-5.6-terra        | 1M      | reasoning, vision, agentic, tools           |
 | openai/gpt-6-sol            | 1M      | reasoning, vision, agentic, tools (GPT-6)   |
 | openai/gpt-6.1-sol          | 1M      | reasoning, vision, agentic, tools (GPT-6.1) |
+| openai/gpt-6.2-sol          | 1M      | reasoning, vision, agentic, tools (GPT-6.2) |
 | anthropic/claude-sonnet-5.5 | 1M      | reasoning, vision, agentic, tools           |
 | anthropic/claude-sonnet-5   | 1M      | reasoning, vision, agentic, tools           |
 

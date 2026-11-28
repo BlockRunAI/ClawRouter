@@ -648,3 +648,26 @@ describe("2026-11-24 retirements", () => {
     }
   });
 });
+
+describe("GPT-6.2 Sol (router-core 53fe783 COMPLEX chains)", () => {
+  // blockrun src/lib/models.ts, listed 2026-11-17: $2/$10, 1.05M context,
+  // 128K output, reasoning + vision + tools.
+  it("is carried at gateway pricing so the cost cap sees it", () => {
+    expect(BLOCKRUN_MODELS.find((m) => m.id === "openai/gpt-6.2-sol")).toMatchObject({
+      inputPrice: 2,
+      outputPrice: 10,
+      contextWindow: 1_050_000,
+      maxOutput: 128_000,
+      reasoning: true,
+      vision: true,
+      toolCalling: true,
+    });
+  });
+
+  it("is pinnable and in the picker", () => {
+    expect(resolveModelAlias("gpt-6.2-sol")).toBe("openai/gpt-6.2-sol");
+    expect(resolveModelAlias("gpt-6-2-sol")).toBe("openai/gpt-6.2-sol");
+    expect(resolveModelAlias("openai/gpt-6.2-sol")).toBe("openai/gpt-6.2-sol");
+    expect(TOP_MODELS).toContain("openai/gpt-6.2-sol");
+  });
+});
