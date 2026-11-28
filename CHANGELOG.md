@@ -4,6 +4,18 @@ All notable changes to ClawRouter.
 
 ---
 
+## v0.12.331 — December 1, 2026
+
+### Gemini 4 Argon and Carbon priced at $4/$20
+
+Google's introductory $2/$10 per 1M tokens for `google/gemini-4-argon` and
+`google/gemini-4-carbon` ended on November 30, and BlockRun charges $4/$20
+(cached input $0.20) for both from December 1. ClawRouter's cost estimates now
+use the new price, so the balance check and `maxCostPerRun` see what a call
+to either model really costs. Before this, both were estimated at half.
+
+---
+
 ## v0.12.329 — November 27, 2026
 
 ### New BlockRun models show up in `/model` on OpenClaw 2026.8+
