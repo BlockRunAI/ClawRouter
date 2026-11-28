@@ -248,6 +248,17 @@ describe("preset: telegram (MarkdownV2)", () => {
     expect(transform("**abc *def*", "telegram")).toBe("\\*\\*abc _def_");
   });
 
+  it("formats many unclosed [ in linear time", () => {
+    // Each unclosed `[` used to rescan the rest of the text for `](`: about 5s at 1MB, on the proxy thread.
+    const text = "see " + "arr[0 ".repeat(170_000);
+    const started = performance.now();
+    const out = transform(text, "telegram");
+    expect(performance.now() - started).toBeLessThan(1_500);
+    expect(out.startsWith("see arr\\[0 arr\\[0 ")).toBe(true);
+    expect(transform("[a [b](c) [d", "telegram")).toBe(transform("[a [b](c) [d", "telegram"));
+    expect(transform("x [y z [link](http://e.com) end", "telegram")).toContain("](http://e.com)");
+  });
+
   it("converts tables to ``` pre blocks (no escapes inside)", () => {
     const out = transform(SAMPLE_MD, "telegram");
     expect(out).toMatch(/```\n[\s\S]+?\n```/);
